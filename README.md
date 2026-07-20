@@ -29,3 +29,10 @@ Production-grade monorepo foundation for a large-scale enterprise AI platform.
 - `make test` run test suites
 - `make fmt` apply formatting
 - `make migrate` run database migrations per service
+
+## AEOS CLI
+
+- Health check: `python tools/aeos/src/aeos/cli.py doctor`
+- Initialize workspace: `python tools/aeos/src/aeos/cli.py init`
+- Generate service: `python tools/aeos/src/aeos/cli.py new service <name>`
+- Generate docs/openapi: `python tools/aeos/src/aeos/cli.py docs`

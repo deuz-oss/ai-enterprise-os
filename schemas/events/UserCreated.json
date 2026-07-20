@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UserCreated",
+  "description": "Identity user created event.",
+  "type": "object",
+  "required": ["event_type", "event_version", "event_id", "occurred_at", "data"],
+  "properties": {
+    "event_type": { "const": "UserCreated" },
+    "event_version": { "const": "v1" },
+    "event_id": { "type": "string" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string" },
+    "data": {
+      "type": "object",
+      "required": ["user_id", "email"],
+      "properties": {
+        "user_id": { "type": "string" },
+        "email": { "type": "string", "format": "email" }
+      }
+    }
+  }
+}

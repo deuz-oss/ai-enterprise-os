@@ -1,0 +1,11 @@
+[project]
+name = "__NAME__"
+version = "0.1.0"
+description = "Generated Python package template."
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

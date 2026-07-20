@@ -1,10 +1,16 @@
 from fastapi.testclient import TestClient
-
 from identity_service.main import app
 
+client = TestClient(app)
 
-def test_healthz() -> None:
-    client = TestClient(app)
-    response = client.get("/healthz")
+
+def test_health_live() -> None:
+    response = client.get("/health/live")
     assert response.status_code == 200
-    assert response.json()["service"] == "identity-service"
+    assert response.json() == {"status": "ok", "service": "identity-service"}
+
+
+def test_health_ready() -> None:
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "identity-service"}

@@ -4,12 +4,26 @@ from pydantic import BaseModel
 app = FastAPI(title="workflow-service", version="0.1.0")
 
 
-class HealthResponse(BaseModel):
+class StatusResponse(BaseModel):
     status: str
     service: str
 
 
-@app.get("/healthz", response_model=HealthResponse)
-def healthz() -> HealthResponse:
-    return HealthResponse(status="ok", service="workflow-service")
+@app.get("/health/live", response_model=StatusResponse)
+def health_live() -> StatusResponse:
+    return StatusResponse(status="ok", service="workflow-service")
 
+
+@app.get("/health/ready", response_model=StatusResponse)
+def health_ready() -> StatusResponse:
+    return StatusResponse(status="ok", service="workflow-service")
+
+
+@app.get("/version")
+def version() -> dict[str, str]:
+    return {"service": "workflow-service", "version": "0.1.0"}
+
+
+@app.get("/metrics")
+def metrics() -> dict[str, object]:
+    return {"service": "workflow-service", "requests_total": 0, "errors_total": 0}

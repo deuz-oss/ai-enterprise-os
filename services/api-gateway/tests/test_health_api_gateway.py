@@ -1,10 +1,16 @@
-from fastapi.testclient import TestClient
 from api_gateway.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
 
-def test_healthz() -> None:
-    response = client.get("/healthz")
+def test_health_live() -> None:
+    response = client.get("/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "api-gateway"}
+
+
+def test_health_ready() -> None:
+    response = client.get("/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "api-gateway"}

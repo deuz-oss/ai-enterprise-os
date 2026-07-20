@@ -1,6 +1,5 @@
-from pathlib import Path
 import sys
-
+from pathlib import Path
 
 SERVICES_ROOT = Path(__file__).parent
 
