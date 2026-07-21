@@ -1,0 +1,199 @@
+name: ai-enterprise-os
+
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [core]
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [core]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports: ["6379:6379"]
+    networks: [core]
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports: ["4222:4222", "8222:8222"]
+    networks: [core]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - minio:/data
+    networks: [core]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports: ["6333:6333"]
+    volumes:
+      - qdrant:/qdrant/storage
+    networks: [core]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.6
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports: ["8081:8080"]
+    networks: [core]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+    networks: [core]
+
+  loki:
+    image: grafana/loki:3.1.1
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports: ["3100:3100"]
+    networks: [core]
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    ports: ["3200:3200", "4317:4317", "4318:4318"]
+    networks: [core]
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/grafana/provisioning/datasources/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus, loki, tempo]
+    networks: [core]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes:
+      - ollama:/root/.ollama
+    networks: [core]
+
+  identity-service:
+    build: ./services/identity-service
+    environment: &service-env
+      APP_PORT: "8000"
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      NATS_URL: nats://nats:4222
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+    depends_on: [postgres, redis, nats]
+    ports: ["8101:8000"]
+    networks: [core]
+
+  organization-service:
+    build: ./services/organization-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8102:8000"]
+    networks: [core]
+
+  workflow-service:
+    build: ./services/workflow-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8103:8000"]
+    networks: [core]
+
+  rules-service:
+    build: ./services/rules-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8104:8000"]
+    networks: [core]
+
+  audit-service:
+    build: ./services/audit-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8105:8000"]
+    networks: [core]
+
+  notification-service:
+    build: ./services/notification-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8106:8000"]
+    networks: [core]
+
+  knowledge-service:
+    build: ./services/knowledge-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats]
+    ports: ["8107:8000"]
+    networks: [core]
+
+  search-service:
+    build: ./services/search-service
+    environment: *service-env
+    depends_on: [postgres, redis, nats, qdrant]
+    ports: ["8108:8000"]
+    networks: [core]
+
+  ai-gateway:
+    build: ./services/ai-gateway
+    environment: *service-env
+    depends_on: [nats, ollama]
+    ports: ["8109:8000"]
+    networks: [core]
+
+  api-gateway:
+    build: ./services/api-gateway
+    environment: *service-env
+    depends_on:
+      - identity-service
+      - organization-service
+      - workflow-service
+      - rules-service
+      - audit-service
+      - notification-service
+      - knowledge-service
+      - search-service
+      - ai-gateway
+    ports: ["8110:8000"]
+    networks: [core]
+
+networks:
+  core:
+    driver: bridge
+
+volumes:
+  pgdata:
+  minio:
+  qdrant:
+  ollama:

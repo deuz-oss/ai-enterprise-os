@@ -1,0 +1,14 @@
+[project]
+name = "organization-service"
+version = "0.1.0"
+description = "AI Enterprise OS organization service."
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.115.0,<0.116.0",
+  "uvicorn[standard]>=0.30.6,<0.31.0",
+  "pydantic>=2.9.2,<3.0.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

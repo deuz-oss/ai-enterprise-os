@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkflowStarted",
+  "description": "Workflow started event.",
+  "type": "object",
+  "required": ["event_type", "event_version", "event_id", "occurred_at", "data"],
+  "properties": {
+    "event_type": { "const": "WorkflowStarted" },
+    "event_version": { "const": "v1" },
+    "event_id": { "type": "string" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string" },
+    "data": {
+      "type": "object",
+      "required": ["workflow_id", "initiator_id"],
+      "properties": {
+        "workflow_id": { "type": "string" },
+        "initiator_id": { "type": "string" }
+      }
+    }
+  }
+}

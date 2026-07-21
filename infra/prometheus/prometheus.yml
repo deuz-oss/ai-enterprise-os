@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  - job_name: services
+    static_configs:
+      - targets:
+          - identity-service:8000
+          - organization-service:8000
+          - workflow-service:8000
+          - rules-service:8000
+          - audit-service:8000
+          - notification-service:8000
+          - knowledge-service:8000
+          - search-service:8000
+          - ai-gateway:8000
+          - api-gateway:8000

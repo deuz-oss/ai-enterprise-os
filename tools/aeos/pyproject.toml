@@ -1,0 +1,13 @@
+[project]
+name = "aeos-cli"
+version = "0.1.0"
+description = "AI Enterprise OS developer platform CLI."
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+aeos = "aeos.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

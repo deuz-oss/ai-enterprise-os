@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NotificationSent",
+  "description": "Notification dispatch event.",
+  "type": "object",
+  "required": ["event_type", "event_version", "event_id", "occurred_at", "data"],
+  "properties": {
+    "event_type": { "const": "NotificationSent" },
+    "event_version": { "const": "v1" },
+    "event_id": { "type": "string" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string" },
+    "data": {
+      "type": "object",
+      "required": ["notification_id", "channel", "recipient"],
+      "properties": {
+        "notification_id": { "type": "string" },
+        "channel": { "type": "string", "enum": ["email", "sms", "push", "webhook"] },
+        "recipient": { "type": "string" }
+      }
+    }
+  }
+}

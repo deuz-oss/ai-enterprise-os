@@ -1,0 +1,17 @@
+{
+  "name": "ai-enterprise-os",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/web-admin",
+    "apps/web-portal",
+    "packages/typescript-common/ui",
+    "packages/typescript-common/api-client",
+    "packages/typescript-common/types"
+  ],
+  "scripts": {
+    "lint": "npm run -ws lint",
+    "test": "npm run -ws test --if-present",
+    "fmt": "npm run -ws format --if-present"
+  }
+}

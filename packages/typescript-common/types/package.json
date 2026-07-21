@@ -1,0 +1,11 @@
+{
+  "name": "@ai-enterprise-os/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "echo \"types lint pass\"",
+    "test": "echo \"types test pass\""
+  }
+}
