@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
+import Employees from "./pages/Employees";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/clients" element={<Clients />} />
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/candidates" element={<Candidates />} />
+            <Route path="/employees" element={<Employees />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
