@@ -1,38 +1,69 @@
 # AI Enterprise OS
 
-Production-grade monorepo foundation for a large-scale enterprise AI platform.
+Sistem operasional end-to-end untuk perusahaan **outsourcing (manpower services)**:
+pipeline calon klien → onboarding klien + dokumen legalitas → rekrutmen
+(job order, kandidat, placement) → HRD → payrol & PPh21 → finance & akunting.
+
+> Status: **Fase 1 (MVP) dalam pengembangan** — Pre-sales s/d Rekrutmen.
+> Lihat [PRD](docs/02-product/PRD.md) untuk ruang lingkup lengkap per fase.
 
 ## Quick start
 
-1. Copy environment file: `cp .env.example .env`
-2. Start platform stack: `docker compose up -d --build`
-3. Check services: `docker compose ps`
+### Mode lokal (tanpa Docker — direkomendasikan untuk mulai)
 
-## Repository domains
+```bash
+# 1. Buka folder ini di VS Code, lalu buka Terminal (Ctrl+`)
 
-- `apps/` frontend and mobile applications
-- `services/` backend platform services (FastAPI)
-- `agents/` autonomous AI agent runtimes
-- `packages/` shared Python/TypeScript libraries
-- `sdk/` external developer SDKs
-- `infra/` local platform infrastructure configuration
-- `tools/` internal developer tooling
-- `scripts/` operational scripts
-- `docs/` architecture and engineering standards
+# 2. Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
+pip install -e ".[dev]"
+copy ..\.env.example .env         # lalu edit SECRET_KEY & ADMIN_PASSWORD
+uvicorn app.main:app --reload     # http://localhost:8000/docs
 
-## Developer commands
+# 3. Terminal baru — Frontend
+cd frontend
+npm install
+npm run dev                       # http://localhost:5173
+```
 
-- `make dev` start the full platform
-- `make down` stop and remove runtime stack
-- `make logs` stream compose logs
-- `make lint` run Python and JS lint checks
-- `make test` run test suites
-- `make fmt` apply formatting
-- `make migrate` run database migrations per service
+Semua data tersimpan **di dalam folder proyek** pada `data/`:
+- `data/aeos.db` — database SQLite
+- `data/uploads/` — dokumen legalitas & CV yang di-upload
 
-## AEOS CLI
+Tidak perlu Docker, PostgreSQL, maupun MinIO untuk memulai.
 
-- Health check: `python tools/aeos/src/aeos/cli.py doctor`
-- Initialize workspace: `python tools/aeos/src/aeos/cli.py init`
-- Generate service: `python tools/aeos/src/aeos/cli.py new service <name>`
-- Generate docs/openapi: `python tools/aeos/src/aeos/cli.py docs`
+### Mode Docker (PostgreSQL + MinIO)
+
+```bash
+cp .env.example .env      # isi POSTGRES_* & STORAGE_* lalu docker compose up -d --build
+docker compose up -d --build
+docker compose ps         # backend :8000, frontend :3000, MinIO console :9001
+```
+
+Login pertama menggunakan `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+## Perintah umum
+
+| Perintah | Fungsi |
+|----------|--------|
+| `make dev` | Start seluruh stack via Docker Compose |
+| `make down` | Stop stack |
+| `make logs` | Streaming log |
+| `make lint` | Ruff + mypy (backend) |
+| `make test` | Pytest (backend) |
+| `make fmt` | Format otomatis |
+
+## Struktur repo
+
+```
+backend/    FastAPI modular monolith (module per domain bisnis)
+frontend/   React SPA tunggal (admin & internal)
+docs/       PRD, vision, roadmap, standar engineering
+scripts/    Skrip operasional
+```
+
+Menambah modul domain baru: copy pola dari `backend/app/modules/presales`
+(`models.py → schemas.py → service.py → router.py`), daftarkan router di
+`backend/app/main.py`, tambahkan model ke `alembic/env.py` target metadata.

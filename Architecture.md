@@ -1,46 +1,42 @@
 # Architecture
 
-AI Enterprise OS uses a domain-oriented monorepo with clear separation between product applications, platform services, AI runtime, and infrastructure.
+Aplikasi **modular monolith**: satu backend FastAPI dengan module per domain bisnis,
+satu frontend React SPA, PostgreSQL untuk data, MinIO (S3-compatible) untuk dokumen.
 
 ```mermaid
-flowchart TD
-  A[Apps: Web Admin / Web Portal / Mobile] --> G[API Gateway]
-  G --> S1[Identity Service]
-  G --> S2[Organization Service]
-  G --> S3[Workflow Service]
-  G --> S4[Rules Service]
-  G --> S5[Audit Service]
-  G --> S6[Notification Service]
-  G --> S7[Knowledge Service]
-  G --> S8[Search Service]
-  G --> S9[AI Gateway]
-  S1 --> P[(PostgreSQL)]
-  S2 --> P
-  S3 --> P
-  S4 --> P
-  S5 --> P
-  S6 --> R[(Redis)]
-  S7 --> Q[(Qdrant)]
-  S8 --> Q
-  S9 --> O[Ollama]
-  S1 --> N[(NATS JetStream)]
-  S2 --> N
-  S3 --> N
-  S4 --> N
-  S5 --> N
-  S6 --> N
-  S7 --> N
-  S8 --> N
-  S9 --> N
-  M[MinIO]:::infra
-  K[Keycloak]:::infra
-  OBS[Prometheus + Loki + Tempo + Grafana]:::infra
-  classDef infra fill:#f8f8f8,stroke:#888;
+flowchart LR
+  U[Tim internal<br/>Browser] --> F[Frontend React SPA]
+  F -->|REST /api/v1| B[Backend FastAPI]
+  B --> P[(PostgreSQL)]
+  B --> M[(MinIO<br/>dokumen & CV)]
 ```
 
-## Design decisions
+## Backend
 
-- Service-per-domain boundaries to support independent scale and ownership.
-- Shared package layers for cross-service consistency (logging, config, security, telemetry, event contracts).
-- Docker Compose as local orchestration baseline for fast onboarding.
-- Build and lint automation centralized via `Makefile`, pre-commit, and GitHub Actions.
+- **Modul domain** (`backend/app/modules/<domain>/`): setiap modul berisi
+  `models.py` (SQLAlchemy), `schemas.py` (Pydantic), `service.py` (logika bisnis),
+  `router.py` (endpoint). Modul MVP: `auth`, `presales`, `clients`, `recruitment`,
+  `dashboard`.
+- **Core** (`backend/app/core/`): konfigurasi (`config.py`), database session
+  (`database.py`), keamanan JWT & password hashing (`security.py`), object storage
+  client (`storage.py`), bootstrap admin (`bootstrap.py`).
+- **Migrasi**: Alembic siap pakai; di mode dev tabel dibuat via `create_all`.
+
+## Mengapa modular monolith
+
+Sistem ERP-like dengan relasi antar domain yang kuat (placement → payrol → invoice)
+lebih cepat dan aman dibangun dalam satu deployable. Batas modul dijaga disiplin
+(modul hanya boleh mengimpor modul lain lewat `service.py`, bukan langsung ke model),
+sehingga jika suatu saat perlu, modul dapat diekstrak menjadi service terpisah.
+
+## Keputusan penting
+
+| Keputusan | Alasan |
+|-----------|--------|
+| FastAPI sync + SQLAlchemy 2.0 | Ekosistem matang, cocok pola CRUD + laporan |
+| JWT stateless + role enum | Cukup untuk tim internal < 50 user tanpa IAM eksternal |
+| Dual-mode storage & database | Dev lokal: SQLite + folder `data/uploads` (zero-setup). Production: PostgreSQL + MinIO/S3 — cukup ganti env, kode sama |
+| Docker Compose | Onboarding cepat; path ke Kubernetes tetap terbuka |
+
+Rencana arsitektur fase lanjut (payrol, finance, akunting) mengikuti pola modul yang
+sama — lihat [PRD §4](docs/02-product/PRD.md).

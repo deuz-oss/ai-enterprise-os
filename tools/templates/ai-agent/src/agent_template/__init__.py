@@ -1,2 +1,0 @@
-"""Generated AI agent package."""
-

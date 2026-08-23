@@ -1,2 +1,0 @@
-"""Generated Python package template."""
-

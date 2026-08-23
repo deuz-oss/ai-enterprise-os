@@ -1,0 +1,122 @@
+from datetime import date, datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
+from app.modules.recruitment.models import (
+    CandidateStatus,
+    JobOrderStatus,
+    PlacementStatus,
+)
+
+
+class JobOrderCreate(BaseModel):
+    client_id: UUID
+    title: str
+    headcount: int = 1
+    description: str | None = None
+    requirements: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    due_date: date | None = None
+
+
+class JobOrderUpdate(BaseModel):
+    title: str | None = None
+    headcount: int | None = None
+    description: str | None = None
+    requirements: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    due_date: date | None = None
+    status: JobOrderStatus | None = None
+
+
+class JobOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    client_id: UUID
+    title: str
+    headcount: int
+    description: str | None
+    requirements: str | None
+    salary_min: float | None
+    salary_max: float | None
+    due_date: date | None
+    status: JobOrderStatus
+    created_at: datetime
+
+
+class CandidateCreate(BaseModel):
+    full_name: str
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    education: str | None = None
+    experience_years: int | None = 0
+    current_company: str | None = None
+    expected_salary: float | None = None
+    skills: str | None = None
+    source: str | None = None
+    notes: str | None = None
+
+
+class CandidateUpdate(BaseModel):
+    full_name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    education: str | None = None
+    experience_years: int | None = None
+    current_company: str | None = None
+    expected_salary: float | None = None
+    skills: str | None = None
+    source: str | None = None
+    status: CandidateStatus | None = None
+    notes: str | None = None
+
+
+class CandidateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    phone: str | None
+    email: str | None
+    city: str | None
+    education: str | None
+    experience_years: int | None
+    current_company: str | None
+    expected_salary: float | None
+    skills: str | None
+    source: str | None
+    cv_file_name: str | None
+    status: CandidateStatus
+    notes: str | None
+    created_at: datetime
+
+
+class PlacementCreate(BaseModel):
+    candidate_id: UUID
+    job_order_id: UUID
+    offered_salary: float | None = None
+    start_date: date | None = None
+
+
+class PlacementUpdate(BaseModel):
+    status: PlacementStatus
+    offered_salary: float | None = None
+    start_date: date | None = None
+
+
+class PlacementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    candidate_id: UUID
+    job_order_id: UUID
+    offered_salary: float | None
+    start_date: date | None
+    status: PlacementStatus
+    created_at: datetime

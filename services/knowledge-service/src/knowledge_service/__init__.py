@@ -1,2 +1,0 @@
-"""Knowledge service package."""
-

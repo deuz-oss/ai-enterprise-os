@@ -4,15 +4,17 @@
 
 1. Create a feature branch from `main`.
 2. Keep changes scoped to one concern.
-3. Run `make lint` and `make test`.
-4. Open a pull request with architecture impact notes.
+3. Run `make lint` and `make test` before opening a PR.
+4. Open a pull request with notes on any architecture impact.
 
 ## Engineering standards
 
-- Follow repository standards and ASF specifications in `docs/`.
-- Preserve domain boundaries across `apps/`, `services/`, `packages/`, and `infra/`.
-- Keep APIs versioned and documented.
-- Add tests for all behavior changes.
+- Backend: tambahkan modul domain di `backend/app/modules/<nama>/` mengikuti pola
+  `models.py → schemas.py → service.py → router.py` (contoh: `presales/`).
+- Frontend: satu halaman = satu file di `frontend/src/pages/`; komponen generik
+  ditaruh di `src/components/`.
+- Endpoint baru wajib berada di bawah `/api/v1` dan (kecuali auth) terlindungi JWT.
+- Tambahkan test untuk setiap perubahan perilaku (`backend/tests/`).
 
 ## Commit quality
 

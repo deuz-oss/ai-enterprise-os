@@ -30,6 +30,9 @@ build/
 *.pem
 *.key
 
+# Data runtime lokal (SQLite + dokumen upload mode lokal)
+data/
+
 # Logs
 *.log
 logs/

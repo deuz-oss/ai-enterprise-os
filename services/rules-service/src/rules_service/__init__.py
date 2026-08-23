@@ -1,2 +1,0 @@
-"""Rules service package."""
-

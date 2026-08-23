@@ -1,32 +1,22 @@
-[tool.black]
-line-length = 100
-target-version = ["py313"]
-
-[tool.isort]
-profile = "black"
-line_length = 100
-
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py312"
+exclude = ["frontend", "docs", "tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: pola Depends() di default argumen adalah standar FastAPI
+ignore = ["B008", "UP042"]
 
 [tool.mypy]
-python_version = "3.13"
-warn_return_any = true
+python_version = "3.12"
 warn_unused_configs = true
-disallow_untyped_defs = true
-exclude = [
-  "^apps/",
-  "^infra/",
-]
+# Santai untuk scaffolding awal; ketatkan bertahap saat codebase matang:
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = ["frontend", "docs", "tools", "backend/alembic"]
 
 [tool.pytest.ini_options]
-testpaths = ["services", "packages/python-common/tests"]
+testpaths = ["backend/tests"]
 addopts = ["--import-mode=importlib"]
-pythonpath = [
-  ".",
-  "packages/python-common/src",
-]
+pythonpath = ["backend"]
