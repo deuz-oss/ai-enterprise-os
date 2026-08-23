@@ -5,6 +5,7 @@ import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
+import Finance from "./pages/Finance";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/payroll" element={<Payroll />} />
+            <Route path="/finance" element={<Finance />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

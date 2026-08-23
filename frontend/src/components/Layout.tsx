@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/candidates", label: "Kandidat" },
   { to: "/employees", label: "Karyawan" },
   { to: "/payroll", label: "Payroll" },
+  { to: "/finance", label: "Finance" },
 ];
 
 export default function Layout() {
