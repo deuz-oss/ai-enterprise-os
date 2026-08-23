@@ -1,0 +1,141 @@
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.security import get_current_user, require_roles
+from app.modules.hrd import service
+from app.modules.hrd.models import EmployeeStatus, HrDocumentType
+from app.modules.hrd.schemas import (
+    ContractCreate,
+    ContractOut,
+    ContractUpdate,
+    DocumentOut,
+    EmployeeCreate,
+    EmployeeOut,
+    EmployeeUpdate,
+    OnboardCreate,
+)
+
+router = APIRouter(
+    prefix="/employees",
+    tags=["hrd"],
+    dependencies=[Depends(get_current_user), Depends(require_roles("hr", "management"))],
+)
+
+
+@router.get("", response_model=list[EmployeeOut])
+def list_employees(
+    q: str | None = Query(None, max_length=100),
+    status_filter: EmployeeStatus | None = Query(None, alias="status"),
+    db: Session = Depends(get_db),
+):
+    return service.list_employees(db, q=q, status=status_filter)
+
+
+@router.post("", response_model=EmployeeOut, status_code=status.HTTP_201_CREATED)
+def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
+    return service.create_employee(db, payload)
+
+
+@router.post("/onboard", response_model=EmployeeOut, status_code=201)
+def onboard_employee(payload: OnboardCreate, db: Session = Depends(get_db)):
+    """Angkat kandidat hasil placement menjadi karyawan aktif."""
+    return service.onboard_from_placement(db, payload)
+
+
+@router.get("/contracts/expiring", response_model=list[dict])
+def expiring_contracts(
+    within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)
+):
+    return service.expiring_contracts(db, within_days)
+
+
+@router.get("/{employee_id}", response_model=EmployeeOut)
+def get_employee(employee_id: str, db: Session = Depends(get_db)):
+    return service.get_employee(db, employee_id)
+
+
+@router.patch("/{employee_id}", response_model=EmployeeOut)
+def update_employee(
+    employee_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)
+):
+    return service.update_employee(db, employee_id, payload)
+
+
+@router.delete("/{employee_id}", status_code=204)
+def delete_employee(employee_id: str, db: Session = Depends(get_db)):
+    service.delete_employee(db, employee_id)
+
+
+# ---------- Kontrak kerja ----------
+
+
+@router.post("/{employee_id}/contracts", response_model=ContractOut, status_code=201)
+def create_contract(
+    employee_id: str, payload: ContractCreate, db: Session = Depends(get_db)
+):
+    return service.create_contract(db, employee_id, payload)
+
+
+@router.get("/{employee_id}/contracts", response_model=list[ContractOut])
+def list_contracts(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_contracts(db, employee_id)
+
+
+@router.patch("/contracts/{contract_id}", response_model=ContractOut)
+def update_contract(
+    contract_id: str, payload: ContractUpdate, db: Session = Depends(get_db)
+):
+    return service.update_contract(db, contract_id, payload)
+
+
+@router.delete("/contracts/{contract_id}", status_code=204)
+def delete_contract(contract_id: str, db: Session = Depends(get_db)):
+    service.delete_contract(db, contract_id)
+
+
+@router.post("/contracts/{contract_id}/sign", response_model=ContractOut)
+def sign_contract(contract_id: str, db: Session = Depends(get_db)):
+    return service.sign_contract(db, contract_id)
+
+
+@router.post("/contracts/{contract_id}/file", response_model=ContractOut)
+async def upload_contract_file(
+    contract_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return await service.upload_contract_file(db, contract_id, file)
+
+
+@router.get("/contracts/{contract_id}/download-url")
+def contract_download_url(contract_id: str, db: Session = Depends(get_db)):
+    return {"url": service.contract_file_download_url(db, contract_id)}
+
+
+# ---------- Dokumen HR ----------
+
+
+@router.post("/{employee_id}/documents", response_model=DocumentOut, status_code=201)
+async def upload_document(
+    employee_id: str,
+    file: UploadFile = File(...),
+    document_type: HrDocumentType = Form(HrDocumentType.other),
+    title: str = Form(""),
+    notes: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await service.upload_document(
+        db, employee_id, document_type, title, file, notes, current_user.id
+    )
+
+
+@router.get("/{employee_id}/documents", response_model=list[DocumentOut])
+def list_documents(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_documents(db, employee_id)
+
+
+@router.get("/documents/{document_id}/download-url")
+def download_url(document_id: str, db: Session = Depends(get_db)):
+    return {"url": service.document_download_url(db, document_id)}
