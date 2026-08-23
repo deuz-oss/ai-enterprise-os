@@ -21,6 +21,8 @@ make fmt         # ruff format + ruff check --fix
 - Single test: `cd backend && python -m pytest tests/test_presales.py::test_name -q`
 - Frontend verification (also the TS typecheck): `cd frontend && npm run build` (runs `tsc && vite build`)
 - Tests don't need Docker/DB services: `conftest.py` swaps in in-memory SQLite via `dependency_overrides[get_db]` and sets `APP_ENV=test`.
+- CI (`.github/workflows/ci.yml`) runs ruff on `backend`, mypy on `backend/app`, pytest from repo root, frontend build, and Docker builds — mirror these locally before pushing.
+- Test auth helper `_auth_header` seeds an admin **directly via DB**, then logs in: `/auth/register` is admin-only by design.
 
 ## Config & environment quirks
 
