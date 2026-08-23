@@ -2,7 +2,16 @@ import enum
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -11,6 +20,13 @@ from app.core.database import Base
 class EmployeeStatus(str, enum.Enum):
     active = "aktif"
     resigned = "resign"
+
+
+class MaritalStatus(str, enum.Enum):
+    """Untuk perhitungan PPh 21: `tk` = tidak kawin, `k` = kawin."""
+
+    single = "tk"
+    married = "k"
 
 
 class ContractSignStatus(str, enum.Enum):
@@ -46,6 +62,12 @@ class Employee(Base):
     bank_name: Mapped[str | None] = mapped_column(String(100))
     bank_account: Mapped[str | None] = mapped_column(String(100))
     join_date: Mapped[date | None] = mapped_column(Date, default=None)
+    marital_status: Mapped[MaritalStatus | None] = mapped_column(
+        Enum(MaritalStatus, native_enum=False, length=50), default=None
+    )
+    dependents: Mapped[int] = mapped_column(Integer, default=0)
+    # Gaji pokok bulanan jadi dasar payrol (Fase 3); boleh diisi manual.
+    base_salary: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     status: Mapped[EmployeeStatus] = mapped_column(
         Enum(EmployeeStatus, native_enum=False, length=50),
         default=EmployeeStatus.active,

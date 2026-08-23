@@ -7,6 +7,7 @@ from app.modules.hrd.models import (
     ContractSignStatus,
     EmployeeStatus,
     HrDocumentType,
+    MaritalStatus,
 )
 
 
@@ -23,6 +24,9 @@ class EmployeeCreate(BaseModel):
     bank_name: str | None = None
     bank_account: str | None = None
     join_date: date | None = None
+    marital_status: MaritalStatus | None = None
+    dependents: int = 0
+    base_salary: float = 0
 
 
 class EmployeeUpdate(BaseModel):
@@ -38,6 +42,9 @@ class EmployeeUpdate(BaseModel):
     bank_account: str | None = None
     join_date: date | None = None
     status: EmployeeStatus | None = None
+    marital_status: MaritalStatus | None = None
+    dependents: int | None = None
+    base_salary: float | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -56,6 +63,9 @@ class EmployeeOut(BaseModel):
     bank_name: str | None
     bank_account: str | None
     join_date: date | None
+    marital_status: MaritalStatus | None
+    dependents: int
+    base_salary: float
     status: EmployeeStatus
     created_at: datetime
     updated_at: datetime

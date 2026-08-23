@@ -3,6 +3,7 @@ from logging.config import fileConfig
 import app.modules.auth.models  # noqa: F401
 import app.modules.clients.models  # noqa: F401
 import app.modules.hrd.models  # noqa: F401
+import app.modules.payroll.models  # noqa: F401
 import app.modules.presales.models  # noqa: F401
 import app.modules.recruitment.models  # noqa: F401
 from alembic import context
