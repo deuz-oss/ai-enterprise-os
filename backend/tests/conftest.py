@@ -8,6 +8,8 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only")
 import pytest
 from app.core.database import Base, get_db
 from app.main import create_app
+from app.modules.auth.schemas import UserCreate
+from app.modules.auth.service import create_user
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -45,16 +47,20 @@ def client(db_engine):
 
 
 def _auth_header(client: TestClient) -> dict[str, str]:
-    resp = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "brian@outsourcing.co.id",
-            "full_name": "Brian",
-            "password": "rahasia-123",
-            "role": "admin",
-        },
-    )
-    assert resp.status_code == 201, resp.text
+    """Seed admin langsung via DB — endpoint /auth/register khusus admin."""
+    db = client.testing_session()
+    try:
+        create_user(
+            db,
+            UserCreate(
+                email="brian@outsourcing.co.id",
+                full_name="Brian",
+                password="rahasia-123",
+                role="admin",
+            ),
+        )
+    finally:
+        db.close()
     login = client.post(
         "/api/v1/auth/login",
         json={"email": "brian@outsourcing.co.id", "password": "rahasia-123"},
