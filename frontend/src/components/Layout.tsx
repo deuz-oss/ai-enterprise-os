@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: "/employees", label: "Karyawan" },
   { to: "/payroll", label: "Payroll" },
   { to: "/finance", label: "Finance" },
+  { to: "/accounting", label: "Akunting" },
 ];
 
 export default function Layout() {
