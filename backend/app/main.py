@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    from app.modules.accounting.router import router as accounting_router
     from app.modules.auth.router import router as auth_router
     from app.modules.clients.router import router as clients_router
     from app.modules.dashboard.router import router as dashboard_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(hrd_router, prefix="/api/v1")
     app.include_router(payroll_router, prefix="/api/v1")
     app.include_router(finance_router, prefix="/api/v1")
+    app.include_router(accounting_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(files_router, prefix="/api/v1")
 

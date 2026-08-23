@@ -1,5 +1,6 @@
 from logging.config import fileConfig
 
+import app.modules.accounting.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.clients.models  # noqa: F401
 import app.modules.finance.models  # noqa: F401
