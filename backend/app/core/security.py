@@ -66,3 +66,17 @@ def get_current_user(
     if user is None or not user.is_active:
         raise unauthorized
     return user
+
+
+def require_roles(*allowed_roles: str):
+    """Dependency pembatas akses per role. Admin selalu diizinkan."""
+
+    def dependency(user=Depends(get_current_user)):
+        if user.role == "admin" or user.role.value in allowed_roles:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role Anda tidak memiliki akses ke fitur ini",
+        )
+
+    return dependency

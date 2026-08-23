@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_roles
+from app.modules.clients.schemas import ClientOut
 from app.modules.presales import service
 from app.modules.presales.models import LeadStage
 from app.modules.presales.schemas import (
@@ -14,7 +15,11 @@ from app.modules.presales.schemas import (
     LeadUpdate,
 )
 
-router = APIRouter(prefix="/leads", tags=["presales"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/leads",
+    tags=["presales"],
+    dependencies=[Depends(get_current_user), Depends(require_roles("business_dev", "management"))],
+)
 
 
 @router.get("", response_model=list[LeadOut])
@@ -49,6 +54,12 @@ def update_lead(lead_id: str, payload: LeadUpdate, db: Session = Depends(get_db)
 @router.delete("/{lead_id}", status_code=204)
 def delete_lead(lead_id: str, db: Session = Depends(get_db)):
     service.delete_lead(db, lead_id)
+
+
+@router.post("/{lead_id}/convert", response_model=ClientOut, status_code=201)
+def convert_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Konversi lead menjadi klien (untuk lead yang sudah deal)."""
+    return service.convert_lead_to_client(db, lead_id)
 
 
 @router.post("/{lead_id}/activities", response_model=ActivityOut, status_code=201)

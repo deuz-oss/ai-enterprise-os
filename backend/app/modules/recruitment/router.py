@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_roles
 from app.modules.recruitment import service
 from app.modules.recruitment.models import (
     CandidateStatus,
@@ -22,7 +22,9 @@ from app.modules.recruitment.schemas import (
 )
 
 router = APIRouter(
-    prefix="/recruitment", tags=["recruitment"], dependencies=[Depends(get_current_user)]
+    prefix="/recruitment",
+    tags=["recruitment"],
+    dependencies=[Depends(get_current_user), Depends(require_roles("recruiter", "management"))],
 )
 
 # ---------- Job orders ----------

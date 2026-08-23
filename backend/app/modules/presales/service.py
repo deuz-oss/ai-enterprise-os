@@ -91,3 +91,30 @@ def funnel_stats(db: Session) -> FunnelStats:
         won_leads=counts.get(LeadStage.won, 0),
         lost_leads=counts.get(LeadStage.lost, 0),
     )
+
+
+def convert_lead_to_client(db: Session, lead_id: str):
+    """Mengubah lead menjadi klien (dipakai saat lead mencapai tahap deal).
+
+    Data PIC dan nama perusahaan disalin ke master klien; lead ditandai `deal`
+    dan terhubung ke klien hasil konversi. Konversi ganda ditolak.
+    """
+    from app.modules.clients.models import Client
+
+    lead = _get(db, lead_id)
+    existing = db.execute(select(Client).where(Client.lead_id == lead.id)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Lead ini sudah dikonversi menjadi klien")
+
+    client = Client(
+        name=lead.company_name,
+        pic_name=lead.contact_name,
+        pic_phone=lead.contact_phone,
+        pic_email=lead.contact_email,
+        lead_id=lead.id,
+    )
+    lead.stage = LeadStage.won
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+    return client
