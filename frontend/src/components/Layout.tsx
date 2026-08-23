@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: "/job-orders", label: "Job Orders" },
   { to: "/candidates", label: "Kandidat" },
   { to: "/employees", label: "Karyawan" },
+  { to: "/payroll", label: "Payroll" },
 ];
 
 export default function Layout() {

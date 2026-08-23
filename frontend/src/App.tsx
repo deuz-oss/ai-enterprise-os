@@ -8,6 +8,7 @@ import Employees from "./pages/Employees";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
+import Payroll from "./pages/Payroll";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/employees" element={<Employees />} />
+            <Route path="/payroll" element={<Payroll />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
