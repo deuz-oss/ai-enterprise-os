@@ -4,8 +4,9 @@ Sistem operasional end-to-end untuk perusahaan **outsourcing (manpower services)
 pipeline calon klien → onboarding klien + dokumen legalitas → rekrutmen
 (job order, kandidat, placement) → HRD → payrol & PPh21 → finance & akunting.
 
-> Status: **Fase 1 (MVP) dalam pengembangan** — Pre-sales s/d Rekrutmen.
-> Lihat [PRD](docs/02-product/PRD.md) untuk ruang lingkup lengkap per fase.
+> Status: **Semua fase roadmap selesai** (MVP s/d AI Layer + platform:
+> multi-tenant SaaS, TTE, BPJS, mobile app internal).
+> Lihat [PRD](docs/02-product/PRD.md) & [roadmap](docs/02-product/FEATURE_ROADMAP.md).
 
 ## Quick start
 
@@ -44,6 +45,11 @@ docker compose ps         # backend :8000, frontend :3000, MinIO console :9001
 
 Login pertama menggunakan `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
+### Deployment produksi
+
+Lihat [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — compose produksi dengan
+TLS otomatis (Caddy), migrasi idempoten, dan prosedur backup/restore.
+
 ## Perintah umum
 
 | Perintah | Fungsi |
@@ -60,7 +66,9 @@ Login pertama menggunakan `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 ```
 backend/    FastAPI modular monolith (module per domain bisnis)
 frontend/   React SPA tunggal (admin & internal)
-docs/       PRD, vision, roadmap, standar engineering
+mobile/     Flutter app internal staff (butuh `flutter create .` untuk build)
+deploy/     Caddyfile, skrip backup/restore produksi
+docs/       PRD, vision, roadmap, standar engineering, panduan deployment
 scripts/    Skrip operasional
 ```
 

@@ -14,10 +14,17 @@ from app.core.tenancy import TenantContextMiddleware
 async def lifespan(app: FastAPI):
     settings = get_settings()
     if settings.app_env != "test":
-        Base.metadata.create_all(bind=engine)
-        ensure_storage()
-        with SessionLocal() as db:
-            run_bootstrap(db)
+        if settings.app_env == "production":
+            # Skema dikelola Alembic (dijalankan entrypoint container).
+            # create_all TIDAK dipanggil agar tidak mendahului migrasi.
+            ensure_storage()
+            with SessionLocal() as db:
+                run_bootstrap(db)
+        else:
+            Base.metadata.create_all(bind=engine)
+            ensure_storage()
+            with SessionLocal() as db:
+                run_bootstrap(db)
     yield
 
 

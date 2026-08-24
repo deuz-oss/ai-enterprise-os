@@ -1,0 +1,16 @@
+# Reverse proxy dengan TLS otomatis (Let's Encrypt) via Caddy.
+# Variabel DOMAIN dibaca dari environment container.
+
+{$DOMAIN} {
+	encode gzip
+
+	# API & dokumen lokal → backend
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# SPA frontend (nginx statis)
+	handle {
+		reverse_proxy frontend:80
+	}
+}
