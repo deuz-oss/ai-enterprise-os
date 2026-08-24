@@ -228,6 +228,7 @@ export default function Employees() {
       ktp_no: form.get("ktp_no") || null,
       npwp_no: form.get("npwp_no") || null,
       join_date: form.get("join_date") || null,
+      jkk_risk_category: Number(form.get("jkk_risk_category")) || null,
     });
   }
 
@@ -247,6 +248,14 @@ export default function Employees() {
           <input name="join_date" type="date" placeholder="Tanggal masuk" className="input" />
           <input name="ktp_no" placeholder="No. KTP" className="input" />
           <input name="npwp_no" placeholder="No. NPWP" className="input" />
+          <select name="jkk_risk_category" defaultValue="" className="input">
+            <option value="">Kelas risiko JKK (default II)</option>
+            {[1, 2, 3, 4, 5].map((k) => (
+              <option key={k} value={k}>
+                Kelas {["I", "II", "III", "IV", "V"][k - 1]}
+              </option>
+            ))}
+          </select>
           <p className="self-center text-xs text-slate-400">
             Nomor induk karyawan dibuat otomatis bila dikosongkan.
           </p>

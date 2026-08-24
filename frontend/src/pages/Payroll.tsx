@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatRupiah } from "../api/client";
+import { api, downloadFile, formatRupiah } from "../api/client";
 
 interface EmployeeRow {
   id: string;
@@ -40,6 +40,25 @@ interface SlipRow {
   net_pay: number;
 }
 
+interface BpjsRow {
+  employee_id: string;
+  full_name: string;
+  bpjs_kesehatan_no: string | null;
+  bpjs_ketenagakerjaan_no: string | null;
+  salary_kesehatan: number;
+  breakdown: Record<string, number>;
+  employer_total: number;
+  employee_total: number;
+  grand_total: number;
+}
+
+interface BpjsRecap {
+  year: number;
+  month: number;
+  rows: BpjsRow[];
+  summary: { employer_total: number; employee_total: number; grand_total: number };
+}
+
 export default function Payroll() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState({ year: 2026, month: 8 });
@@ -64,6 +83,11 @@ export default function Payroll() {
     queryKey: ["slips", selectedRunId],
     queryFn: () => api.get<SlipRow[]>(`/payroll/runs/${selectedRunId}/slips`),
     enabled: Boolean(selectedRunId),
+  });
+  const { data: bpjsRecap } = useQuery({
+    queryKey: ["bpjs", period],
+    queryFn: () =>
+      api.get<BpjsRecap>(`/bpjs/contributions/${period.year}/${period.month}`),
   });
 
   const invalidateAll = () => {
@@ -301,6 +325,73 @@ export default function Payroll() {
           </table>
         </div>
       )}
+
+      <div className="card p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
+          <h2 className="font-semibold text-slate-700">
+            Rekap Iuran BPJS — {period.year}-{String(period.month).padStart(2, "0")}
+          </h2>
+          <div className="flex gap-2">
+            <button
+              className="btn-secondary text-xs"
+              onClick={() =>
+                downloadFile(`/bpjs/contributions/${period.year}/${period.month}/export`)
+              }
+            >
+              Unduh CSV Iuran
+            </button>
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => downloadFile("/bpjs/enrollments/export")}
+            >
+              Unduh Data Peserta
+            </button>
+          </div>
+        </div>
+        <table className="w-full">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <th className="th">Karyawan</th>
+              <th className="th">No BPJS TK</th>
+              <th className="th">Gaji Kes (cap)</th>
+              <th className="th">Iuran Perusahaan</th>
+              <th className="th">Potongan Karyawan</th>
+              <th className="th">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(bpjsRecap?.rows ?? []).map((r) => (
+              <tr key={r.employee_id}>
+                <td className="td font-medium">{r.full_name}</td>
+                <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
+                <td className="td">{formatRupiah(r.salary_kesehatan)}</td>
+                <td className="td text-slate-600">{formatRupiah(r.employer_total)}</td>
+                <td className="td text-rose-600">-{formatRupiah(r.employee_total)}</td>
+                <td className="td font-semibold">{formatRupiah(r.grand_total)}</td>
+              </tr>
+            ))}
+            {bpjsRecap && bpjsRecap.rows.length > 0 && (
+              <tr className="bg-slate-50 font-bold">
+                <td className="td" colSpan={3}>
+                  Total
+                </td>
+                <td className="td">{formatRupiah(bpjsRecap.summary.employer_total)}</td>
+                <td className="td text-rose-700">
+                  -{formatRupiah(bpjsRecap.summary.employee_total)}
+                </td>
+                <td className="td">{formatRupiah(bpjsRecap.summary.grand_total)}</td>
+              </tr>
+            )}
+            {bpjsRecap?.rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="td py-8 text-center text-slate-400">
+                  Tidak ada karyawan aktif.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -68,6 +68,8 @@ class Employee(Base):
     dependents: Mapped[int] = mapped_column(Integer, default=0)
     # Gaji pokok bulanan jadi dasar payrol (Fase 3); boleh diisi manual.
     base_salary: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    # Kelas risiko JKK BPJS Ketenagakerjaan (I–V); kosong = default modul bpjs.
+    jkk_risk_category: Mapped[int | None] = mapped_column(Integer, default=None)
     status: Mapped[EmployeeStatus] = mapped_column(
         Enum(EmployeeStatus, native_enum=False, length=50),
         default=EmployeeStatus.active,

@@ -54,6 +54,26 @@ export const api = {
     request<T>(path, { method: "POST", body: formData }),
 };
 
+/** Unduh file (mis. CSV ekspor BPJS) dengan header auth lalu simpan via browser. */
+export async function downloadFile(path: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${API_URL}${path}`, { headers });
+  if (!resp.ok) throw new ApiError(resp.status, `Gagal mengunduh (${resp.status})`);
+  const disposition = resp.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = match?.[1] ?? "unduhan.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function formatRupiah(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("id-ID", {

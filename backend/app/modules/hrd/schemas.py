@@ -27,6 +27,7 @@ class EmployeeCreate(BaseModel):
     marital_status: MaritalStatus | None = None
     dependents: int = 0
     base_salary: float = 0
+    jkk_risk_category: int | None = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -45,6 +46,7 @@ class EmployeeUpdate(BaseModel):
     marital_status: MaritalStatus | None = None
     dependents: int | None = None
     base_salary: float | None = None
+    jkk_risk_category: int | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -66,6 +68,7 @@ class EmployeeOut(BaseModel):
     marital_status: MaritalStatus | None
     dependents: int
     base_salary: float
+    jkk_risk_category: int | None
     status: EmployeeStatus
     created_at: datetime
     updated_at: datetime
