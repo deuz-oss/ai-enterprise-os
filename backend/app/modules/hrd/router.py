@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -69,6 +69,32 @@ def list_leave_requests(
 ):
     return ess_service.hr_list_leave_requests(
         db, status_filter=status_filter, employee_id=employee_id
+    )
+
+
+@router.get("/reports/leave")
+def export_leave_csv(year: int | None = Query(None), db: Session = Depends(get_db)):
+    """CSV rekap pengajuan cuti/izin satu tahun (default tahun berjalan)."""
+    content, filename = ess_service.leave_recap_csv(db, year)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/attendance")
+def export_attendance_csv(
+    year: int | None = Query(None),
+    month: int | None = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """CSV rekap kehadiran/lembur; tanpa filter = seluruh periode."""
+    content, filename = ess_service.attendance_recap_csv(db, year=year, month=month)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

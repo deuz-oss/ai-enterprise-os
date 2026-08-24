@@ -1,4 +1,6 @@
-from datetime import UTC, datetime
+import csv
+import io
+from datetime import UTC, date, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -173,6 +175,18 @@ def create_leave_request(db: Session, user, payload: LeaveCreate) -> LeaveReques
             "end_date": str(leave.end_date),
         },
     )
+    from app.modules.notifications import service as notification_service
+
+    employee = leave.employee
+    notification_service.notify_hr_users(
+        db,
+        title="Pengajuan cuti/izin baru",
+        body=(
+            f"{employee.full_name} ({employee.employee_no}) mengajukan "
+            f"{leave.leave_type.value} {leave.start_date} s.d. {leave.end_date}"
+        ),
+        entity_id=leave.id,
+    )
     return leave
 
 
@@ -252,6 +266,22 @@ def decide_leave_request(
         entity_id=leave.id,
         detail={"approved": approved, "status": leave.status.value},
     )
+    from app.modules.notifications import service as notification_service
+
+    if leave.employee.user_id is not None:
+        keputusan = "disetujui" if approved else "ditolak"
+        notification_service.notify(
+            db,
+            user_id=leave.employee.user_id,
+            title=f"Pengajuan cuti Anda {keputusan}",
+            body=(
+                f"{leave.leave_type.value} {leave.start_date} s.d. {leave.end_date}"
+                + (f" — catatan: {leave.decision_note}" if leave.decision_note else "")
+            ),
+            category="leave",
+            entity_type="leave_request",
+            entity_id=leave.id,
+        )
     return leave
 
 
@@ -335,6 +365,109 @@ def get_own_leave_balance(db: Session, user, year: int | None) -> LeaveBalance |
     own_id = get_own_employee(db, user).id
     effective_year = year or datetime.now(UTC).year
     return _balance_for(db, own_id, effective_year)
+
+
+# ---------- Ekspor CSV untuk HR ----------
+
+
+def leave_recap_csv(db: Session, year: int | None = None) -> tuple[str, str]:
+    """CSV seluruh pengajuan cuti/izin dalam satu tahun (semua karyawan)."""
+    from app.modules.hrd.models import Employee
+
+    effective_year = year or datetime.now(UTC).year
+    rows = db.execute(
+        select(LeaveRequest, Employee)
+        .join(Employee, LeaveRequest.employee_id == Employee.id)
+        .where(LeaveRequest.start_date >= date(effective_year, 1, 1))
+        .where(LeaveRequest.start_date <= date(effective_year, 12, 31))
+        .order_by(LeaveRequest.start_date, LeaveRequest.created_at)
+    ).all()
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(
+        [
+            "No Induk",
+            "Nama Karyawan",
+            "Jenis",
+            "Mulai",
+            "Selesai",
+            "Jumlah Hari",
+            "Status",
+            "Alasan",
+            "Catatan Keputusan",
+            "Diajukan",
+            "Diputuskan",
+        ]
+    )
+    for leave, employee in rows:
+        writer.writerow(
+            [
+                employee.employee_no,
+                employee.full_name,
+                leave.leave_type.value,
+                leave.start_date.isoformat(),
+                leave.end_date.isoformat(),
+                (leave.end_date - leave.start_date).days + 1,
+                leave.status.value,
+                leave.reason or "",
+                leave.decision_note or "",
+                leave.created_at.strftime("%Y-%m-%d %H:%M"),
+                leave.decided_at.strftime("%Y-%m-%d %H:%M") if leave.decided_at else "",
+            ]
+        )
+    filename = f"rekap-cuti-{effective_year}.csv"
+    return buffer.getvalue(), filename
+
+
+def attendance_recap_csv(
+    db: Session, year: int | None = None, month: int | None = None
+) -> tuple[str, str]:
+    """CSV rekap kehadiran/lembur; filter tahun & bulan opsional."""
+    from app.modules.hrd.models import Employee
+
+    stmt = (
+        select(AttendanceSummary, Employee)
+        .join(Employee, AttendanceSummary.employee_id == Employee.id)
+        .order_by(AttendanceSummary.year, AttendanceSummary.month, Employee.employee_no)
+    )
+    if year is not None:
+        stmt = stmt.where(AttendanceSummary.year == year)
+    if month is not None:
+        stmt = stmt.where(AttendanceSummary.month == month)
+    rows = db.execute(stmt).all()
+
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(
+        [
+            "No Induk",
+            "Nama Karyawan",
+            "Tahun",
+            "Bulan",
+            "Hari Hadir",
+            "Jam Lembur",
+            "Approval Klien",
+            "Catatan",
+        ]
+    )
+    for summary, employee in rows:
+        writer.writerow(
+            [
+                employee.employee_no,
+                employee.full_name,
+                summary.year,
+                summary.month,
+                summary.present_days,
+                summary.overtime_hours,
+                "ya" if summary.client_approved else "belum",
+                summary.notes or "",
+            ]
+        )
+    period = f"{year}" if year is not None else "semua"
+    if month is not None:
+        period = f"{year}{month:02d}"
+    filename = f"rekap-absensi-{period}.csv"
+    return buffer.getvalue(), filename
 
 
 def list_selfservice_accounts(db: Session) -> list[User]:

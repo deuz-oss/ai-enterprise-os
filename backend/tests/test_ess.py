@@ -332,6 +332,125 @@ def test_annual_leave_without_balance_still_allowed(client):
     assert decided.status_code == 200
 
 
+# ---------- Notifikasi keputusan & pengajuan cuti ----------
+
+
+def test_leave_decision_notifies_employee(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Penerima Notifikasi"}
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    leave = _submit_leave(client, headers).json()
+    decided = client.patch(
+        f"/api/v1/employees/leave-requests/{leave['id']}/decision",
+        headers=admin,
+        json={"approved": True, "note": "Silakan istirahat"},
+    )
+    assert decided.status_code == 200, decided.text
+
+    notifs = client.get("/api/v1/me/notifications", headers=headers).json()
+    assert len(notifs) == 1
+    assert "disetujui" in notifs[0]["title"]
+    assert notifs[0]["read_at"] is None
+
+    assert client.get("/api/v1/me/notifications/unread-count", headers=headers).json() == {
+        "count": 1
+    }
+
+    marked = client.post(f"/api/v1/me/notifications/{notifs[0]['id']}/read", headers=headers)
+    assert marked.status_code == 200
+    assert marked.json()["read_at"] is not None
+    assert client.get("/api/v1/me/notifications/unread-count", headers=headers).json() == {
+        "count": 0
+    }
+
+    read_all = client.post("/api/v1/me/notifications/read-all", headers=headers)
+    assert read_all.json() == {"marked": 0}
+
+
+def test_leave_submission_notifies_hr_and_isolation(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Pengajukan Cuti"}
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    created = _submit_leave(client, headers)
+    assert created.status_code == 201, created.text
+
+    hr_notifs = client.get("/api/v1/me/notifications", headers=admin).json()
+    assert any("Pengajuan cuti/izin baru" in n["title"] for n in hr_notifs)
+
+    # notifikasi milik HR tidak bisa ditandai dibaca oleh karyawan lain
+    target = next(n for n in hr_notifs if n["read_at"] is None)
+    forbidden = client.post(f"/api/v1/me/notifications/{target['id']}/read", headers=headers)
+    assert forbidden.status_code == 404
+
+    # karyawan yang mengajukan tidak menerima notifikasi pengajuannya sendiri
+    own = client.get("/api/v1/me/notifications", headers=headers).json()
+    assert all("Pengajuan cuti/izin baru" not in n["title"] for n in own)
+
+
+# ---------- Ekspor CSV rekap untuk HR ----------
+
+
+def test_csv_exports_for_hr(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees",
+        headers=admin,
+        json={"full_name": "Diekspor", "base_salary": 5_000_000},
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    leave = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={
+            "leave_type": "cuti_tahunan",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-08",
+            "reason": "Acara keluarga",
+        },
+    ).json()
+    client.patch(
+        f"/api/v1/employees/leave-requests/{leave['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    upsert_att = client.post(
+        "/api/v1/payroll/attendance",
+        headers=admin,
+        json={"employee_id": emp["id"], "year": 2026, "month": 9, "present_days": 20},
+    )
+    assert upsert_att.status_code == 201, upsert_att.text
+
+    leave_csv = client.get("/api/v1/employees/reports/leave", headers=admin, params={"year": 2026})
+    assert leave_csv.status_code == 200
+    assert 'filename="rekap-cuti-2026.csv"' in leave_csv.headers["content-disposition"]
+    body = leave_csv.text
+    assert "No Induk" in body and "Nama Karyawan" in body
+    assert "Diekspor" in body and "cuti_tahunan" in body and "disetujui" in body
+
+    attendance_csv = client.get(
+        "/api/v1/employees/reports/attendance",
+        headers=admin,
+        params={"year": 2026, "month": 9},
+    )
+    assert attendance_csv.status_code == 200
+    assert 'filename="rekap-absensi-202609.csv"' in attendance_csv.headers["content-disposition"]
+    assert "Diekspor" in attendance_csv.text and "belum" in attendance_csv.text
+
+    # role karyawan tidak boleh mengekspor data lintas karyawan
+    forbidden = client.get("/api/v1/employees/reports/leave", headers=headers)
+    assert forbidden.status_code == 403
+
+
 def test_platform_admin_blocked_from_portal(client):
     headers = _platform_admin_header(client)
     assert client.get("/api/v1/me/profile", headers=headers).status_code == 403

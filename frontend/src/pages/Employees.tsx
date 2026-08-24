@@ -1,6 +1,6 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, downloadFile } from "../api/client";
 
 export interface EmployeeRow {
   id: string;
@@ -143,6 +143,10 @@ export default function Employees() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [askResult, setAskResult] = useState<AskResult | null>(null);
   const [tteContract, setTteContract] = useState<{ id: string; name: string } | null>(null);
+  const [exportPeriod, setExportPeriod] = useState({
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const docTypeRef = useRef<HTMLSelectElement>(null);
 
@@ -421,8 +425,48 @@ export default function Employees() {
 
       {(leaveRequests ?? []).length > 0 && (
         <div className="card overflow-x-auto p-0">
-          <div className="border-b border-slate-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
             <h2 className="font-semibold text-slate-700">Pengajuan Cuti / Izin</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                value={exportPeriod.month}
+                min={1}
+                max={12}
+                onChange={(e) =>
+                  setExportPeriod({ ...exportPeriod, month: Number(e.target.value) })
+                }
+                className="input w-16"
+                title="Bulan (untuk rekap absensi)"
+              />
+              <input
+                type="number"
+                value={exportPeriod.year}
+                onChange={(e) =>
+                  setExportPeriod({ ...exportPeriod, year: Number(e.target.value) })
+                }
+                className="input w-20"
+                title="Tahun"
+              />
+              <button
+                className="btn-secondary text-xs"
+                onClick={() =>
+                  downloadFile(`/employees/reports/leave?year=${exportPeriod.year}`)
+                }
+              >
+                Unduh CSV Cuti
+              </button>
+              <button
+                className="btn-secondary text-xs"
+                onClick={() =>
+                  downloadFile(
+                    `/employees/reports/attendance?year=${exportPeriod.year}&month=${exportPeriod.month}`
+                  )
+                }
+              >
+                Unduh CSV Absensi
+              </button>
+            </div>
           </div>
           <table className="w-full">
             <thead className="border-b border-slate-200 bg-slate-50">

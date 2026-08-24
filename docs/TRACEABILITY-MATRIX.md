@@ -309,6 +309,26 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Frontend | Form "Jatah Cuti Tahunan" di `Employees.tsx`; kartu "Sisa Cuti Tahunan" di `MyPortal.tsx` |
 | Aturan | Hanya `cuti_tahunan` memotong kuota; sisa kurang → approval 422; tanpa balance → tak dibatasi |
 
+### 12.3 Notifikasi Cuti & Ekspor Rekap
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Notifikasi in-app alur cuti; ekspor CSV rekap cuti/absensi untuk HR |
+| Source Code | `backend/app/modules/notifications`, fungsi CSV di `backend/app/modules/ess/service.py` |
+| API Karyawan | `GET /me/notifications`, `GET /me/notifications/unread-count`, `POST .../{id}/read`, `POST .../read-all` |
+| API HR | `GET /employees/reports/leave?year=`, `GET /employees/reports/attendance?year=&month=` (CSV `;`) |
+| Frontend | Kartu "Notifikasi" di Portal Saya; tombol "Unduh CSV Cuti/Absensi" di halaman Karyawan |
+| Migrasi | `d6e3f2a8c471` (tabel `notifications`) |
+
+### 12.4 Aplikasi Mobile — Tab Portal
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Konsumsi endpoint portal `/me/*` di aplikasi Flutter internal staff |
+| Source Code | `mobile/lib/screens/portal_tab.dart`, model di `mobile/lib/models/models.dart`, tab terdaftar di `home_shell.dart` (role karyawan + admin) |
+| Cakupan | Profil ringkas, sisa cuti, form ajukan/batal cuti, slip gaji, notifikasi (tandai dibaca) |
+| Build | Butuh Flutter SDK; jalankan `flutter create . --org id.aeos` dulu (lihat AGENTS.md) — verifikasi build di mesin dengan SDK |
+
 ---
 
 # End of Requirement Traceability Matrix

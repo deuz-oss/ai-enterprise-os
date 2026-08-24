@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Notifikasi & Ekspor CSV
+
+- Modul `notifications` (tabel `notifications`, migrasi `d6e3f2a8c471`) dengan endpoint `/me/notifications`: daftar, unread-count, tandai dibaca per item, dan read-all.
+- Pengajuan cuti/izin kini menotifikasi semua akun admin & HR tenant; keputusan HR (setujui/tolak) menotifikasi karyawan pemohon lewat portal.
+- Ekspor CSV untuk HR di `/employees/reports/*` (pola sama dengan ekspor BPJS, delimiter `;`):
+  - `GET /employees/reports/leave?year=` — rekap pengajuan cuti satu tahun.
+  - `GET /employees/reports/attendance?year=&month=` — rekap kehadiran/lembur.
+- Tombol unduh CSV di kartu "Pengajuan Cuti / Izin" halaman Karyawan; kartu "Notifikasi" di Portal Saya.
+
 ### Added — Jatah Cuti Tahunan (kuota)
 
 - Model `LeaveBalance` (per karyawan per tahun) + migrasi `c5d1f8a9b263`.

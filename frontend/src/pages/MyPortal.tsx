@@ -99,6 +99,14 @@ interface LeaveBalanceRow {
   remaining: number;
 }
 
+interface AppNotification {
+  id: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
 async function openDownload(path: string) {
   const { url } = await api.get<{ url: string }>(path);
   window.open(url, "_blank");
@@ -148,6 +156,19 @@ export default function MyPortal() {
     queryKey: ["me-leave-balance", today.getFullYear()],
     queryFn: () =>
       api.get<LeaveBalanceRow | null>("/me/leave-balance"),
+  });
+  const { data: notifications } = useQuery({
+    queryKey: ["me-notifications"],
+    queryFn: () => api.get<AppNotification[]>("/me/notifications"),
+  });
+
+  const markNotification = useMutation({
+    mutationFn: (id: string) => api.post(`/me/notifications/${id}/read`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me-notifications"] }),
+  });
+  const markAllNotifications = useMutation({
+    mutationFn: () => api.post<{ marked: number }>("/me/notifications/read-all"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me-notifications"] }),
   });
 
   const invalidateLeaves = () => {
@@ -499,6 +520,54 @@ export default function MyPortal() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-700">Notifikasi</h2>
+          {(notifications ?? []).some((n) => !n.read_at) && (
+            <button
+              onClick={() => markAllNotifications.mutate()}
+              disabled={markAllNotifications.isPending}
+              className="btn-secondary text-xs"
+            >
+              Tandai semua dibaca
+            </button>
+          )}
+        </div>
+        <ul className="mt-3 space-y-2">
+          {(notifications ?? []).map((n) => (
+            <li
+              key={n.id}
+              className={`rounded-lg p-3 text-sm ${
+                n.read_at ? "bg-slate-50" : "bg-indigo-50/70"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className={`font-medium ${n.read_at ? "text-slate-500" : "text-slate-800"}`}>
+                    {n.title}
+                  </p>
+                  {n.body && <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>}
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {new Date(n.created_at).toLocaleString("id-ID")}
+                  </p>
+                </div>
+                {!n.read_at && (
+                  <button
+                    onClick={() => markNotification.mutate(n.id)}
+                    className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    Tandai dibaca
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+          {notifications?.length === 0 && (
+            <li className="text-sm text-slate-400">Belum ada notifikasi.</li>
+          )}
+        </ul>
       </div>
 
       <div className="card max-w-xl">

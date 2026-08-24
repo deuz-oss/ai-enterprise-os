@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     from app.modules.files import router as files_router
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import router as hrd_router
+    from app.modules.notifications.router import router as notifications_router
     from app.modules.payroll.router import router as payroll_router
     from app.modules.platform.router import router as platform_router
     from app.modules.presales.router import router as presales_router
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_finance_router, prefix="/api/v1")
     app.include_router(hrd_router, prefix="/api/v1")
     app.include_router(ess_router, prefix="/api/v1")
+    app.include_router(notifications_router, prefix="/api/v1")
     app.include_router(esign_router, prefix="/api/v1")
     app.include_router(esign_webhook_router, prefix="/api/v1")
     app.include_router(payroll_router, prefix="/api/v1")
