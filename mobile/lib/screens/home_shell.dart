@@ -7,6 +7,7 @@ import 'contracts_tab.dart';
 import 'dashboard_tab.dart';
 import 'login_screen.dart';
 import 'payroll_tab.dart';
+import 'portal_tab.dart';
 
 class _TabSpec {
   _TabSpec(this.label, this.icon, this.allowedRoles, this.builder);
@@ -50,6 +51,8 @@ class _HomeShellState extends State<HomeShell> {
         {'admin', 'hr', 'management'},
         (_) => const ContractsTab(),
       ),
+      // Portal self-service: karyawan (dan admin untuk preview).
+      _TabSpec('Portal', Icons.person_outline, {'karyawan', 'admin'}, (_) => const PortalTab()),
     ];
   }
 
