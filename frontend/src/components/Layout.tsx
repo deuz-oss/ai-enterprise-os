@@ -14,6 +14,8 @@ const NAV_ITEMS = [
   { to: "/accounting", label: "Akunting" },
   // Jejak audit sensitif — disembunyikan dari role non-management.
   { to: "/audit", label: "Audit", roles: ["admin", "management"] },
+  // Portal self-service karyawan — hanya untuk akun role karyawan.
+  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"] },
 ];
 
 // Platform admin hanya melihat manajemen tenant.
@@ -32,9 +34,14 @@ export default function Layout() {
   if (!getToken()) return <Navigate to="/login" replace />;
 
   const isPlatform = me.data?.role === "platform_admin";
+  const isKaryawan = me.data?.role === "karyawan";
   // Platform admin tidak punya dashboard bisnis — langsung ke halaman tenant.
   if (isPlatform && location.pathname === "/") {
     return <Navigate to="/platform" replace />;
+  }
+  // Karyawan hanya butuh portal self-service — tanpa dashboard internal.
+  if (isKaryawan && location.pathname === "/") {
+    return <Navigate to="/portal-saya" replace />;
   }
   const items = isPlatform
     ? PLATFORM_NAV_ITEMS

@@ -281,4 +281,23 @@ Dokumen ini harus diperbarui setiap kali ada requirement baru, perubahan arsitek
 
 ---
 
+# 12. Implementation Log — Modul Aktual
+
+Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan template).
+
+## 12.1 Portal Self-Service Karyawan (`backend/app/modules/ess`)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Self-service karyawan: profil, kontrak, dokumen, slip gaji, absensi, cuti |
+| Source Code | `backend/app/modules/ess/{models,schemas,service,router}.py` |
+| API Karyawan (`/me/*`) | profile, contracts (+download-url), documents (+download-url), payslips, attendance, leave-requests (POST/GET/cancel) |
+| API HR (`/employees/*`) | selfservice-accounts, leave-requests (list + decision) |
+| Frontend | `frontend/src/pages/MyPortal.tsx` (route `/portal-saya`, role karyawan); kelola akun & approval cuti di `Employees.tsx` |
+| Keamanan | Data selalu dari akun login (`Employee.user_id`); platform_admin diblokir; payslip hanya run final; download diverifikasi kepemilikan + audit log |
+| Migrasi | `a7f2d94c1e58` (kolom `employees.user_id`), `b3c8e5a2f741` (tabel `leave_requests`) |
+| Test | `backend/tests/test_ess.py` |
+
+---
+
 # End of Requirement Traceability Matrix

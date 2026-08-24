@@ -73,6 +73,8 @@ class Employee(TenantMixin, Base):
     base_salary: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     # Kelas risiko JKK BPJS Ketenagakerjaan (I–V); kosong = default modul bpjs.
     jkk_risk_category: Mapped[int | None] = mapped_column(Integer, default=None)
+    # Akun login self-service (role karyawan) — dibuat oleh HR, opsional.
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None, unique=True)
     status: Mapped[EmployeeStatus] = mapped_column(
         Enum(EmployeeStatus, native_enum=False, length=50),
         default=EmployeeStatus.active,

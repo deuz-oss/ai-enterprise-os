@@ -75,3 +75,12 @@ scripts/    Skrip operasional
 Menambah modul domain baru: copy pola dari `backend/app/modules/presales`
 (`models.py → schemas.py → service.py → router.py`), daftarkan router di
 `backend/app/main.py`, tambahkan model ke `alembic/env.py` target metadata.
+
+## Portal self-service karyawan
+
+Karyawan dengan akun role `karyawan` (dibuat admin lewat menu Pengguna,
+kemudian ditautkan HR di halaman Karyawan) mendapat akses **Portal Saya**:
+profil & dokumen pribadi, kontrak kerja, slip gaji yang sudah difinalisasi,
+rekap kehadiran, pengajuan cuti/izin (dengan approval HR), dan ganti password.
+Endpoint-nya ada di modul `backend/app/modules/ess` (`/api/v1/me/*`) dan hanya
+melayani data milik akun yang sedang login.

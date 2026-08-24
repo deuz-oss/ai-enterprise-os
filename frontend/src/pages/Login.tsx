@@ -19,7 +19,13 @@ export default function Login() {
         user: { role: string };
       }>("/auth/login", { email, password });
       setToken(data.access_token);
-      navigate(data.user.role === "platform_admin" ? "/platform" : "/");
+      const target =
+        data.user.role === "platform_admin"
+          ? "/platform"
+          : data.user.role === "karyawan"
+            ? "/portal-saya"
+            : "/";
+      navigate(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
     } finally {

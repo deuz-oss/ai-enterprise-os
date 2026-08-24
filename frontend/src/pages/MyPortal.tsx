@@ -1,0 +1,512 @@
+import { FormEvent, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, formatRupiah } from "../api/client";
+
+const MONTHS = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+interface Profile {
+  id: string;
+  employee_no: string;
+  full_name: string;
+  ktp_no: string | null;
+  npwp_no: string | null;
+  bpjs_kesehatan_no: string | null;
+  bpjs_ketenagakerjaan_no: string | null;
+  phone: string | null;
+  address: string | null;
+  bank_name: string | null;
+  bank_account: string | null;
+  join_date: string | null;
+  marital_status: string | null;
+  dependents: number;
+  status: string;
+}
+
+interface ContractRow {
+  id: string;
+  contract_no: string;
+  start_date: string | null;
+  end_date: string | null;
+  sign_status: string;
+  file_name: string | null;
+}
+
+interface DocumentRow {
+  id: string;
+  document_type: string;
+  title: string;
+  version: number;
+  file_name: string;
+  uploaded_at: string;
+}
+
+interface PayslipRow {
+  id: string;
+  year: number;
+  month: number;
+  base_salary: number;
+  allowance: number;
+  overtime_hours: number;
+  overtime_amount: number;
+  deductions: number;
+  gross: number;
+  pph21_method: string;
+  tax_pph21: number;
+  net_pay: number;
+}
+
+interface AttendanceRow {
+  id: string;
+  year: number;
+  month: number;
+  present_days: number;
+  overtime_hours: number;
+  client_approved: boolean;
+  notes: string | null;
+}
+
+const LEAVE_TYPES = [
+  { value: "cuti_tahunan", label: "Cuti Tahunan" },
+  { value: "izin", label: "Izin" },
+  { value: "sakit", label: "Sakit" },
+  { value: "cuti_tak_berbayar", label: "Cuti Tak Berbayar" },
+];
+
+const LEAVE_STATUS_BADGES: Record<string, string> = {
+  menunggu: "bg-amber-100 text-amber-700",
+  disetujui: "bg-emerald-100 text-emerald-700",
+  ditolak: "bg-rose-100 text-rose-700",
+  dibatalkan: "bg-slate-100 text-slate-500",
+};
+
+interface LeaveRow {
+  id: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
+}
+
+async function openDownload(path: string) {
+  const { url } = await api.get<{ url: string }>(path);
+  window.open(url, "_blank");
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 text-sm text-slate-700">{value}</dd>
+    </div>
+  );
+}
+
+export default function MyPortal() {
+  const qc = useQueryClient();
+  const today = new Date();
+  const [attPeriod, setAttPeriod] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 });
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { data: profile, error, isLoading } = useQuery({
+    queryKey: ["me-profile"],
+    queryFn: () => api.get<Profile>("/me/profile"),
+    retry: false,
+  });
+  const { data: contracts } = useQuery({
+    queryKey: ["me-contracts"],
+    queryFn: () => api.get<ContractRow[]>("/me/contracts"),
+  });
+  const { data: documents } = useQuery({
+    queryKey: ["me-documents"],
+    queryFn: () => api.get<DocumentRow[]>("/me/documents"),
+  });
+  const { data: payslips } = useQuery({
+    queryKey: ["me-payslips"],
+    queryFn: () => api.get<PayslipRow[]>("/me/payslips"),
+  });
+  const { data: attendance } = useQuery({
+    queryKey: ["me-attendance", attPeriod],
+    queryFn: () =>
+      api.get<AttendanceRow[]>(`/me/attendance?year=${attPeriod.year}&month=${attPeriod.month}`),
+  });
+  const { data: leaves } = useQuery({
+    queryKey: ["me-leaves"],
+    queryFn: () => api.get<LeaveRow[]>("/me/leave-requests"),
+  });
+
+  const invalidateLeaves = () => {
+    qc.invalidateQueries({ queryKey: ["me-leaves"] });
+    qc.invalidateQueries({ queryKey: ["me-attendance"] });
+  };
+
+  const submitLeave = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/me/leave-requests", body),
+    onSuccess: invalidateLeaves,
+  });
+  const cancelLeave = useMutation({
+    mutationFn: (id: string) => api.post(`/me/leave-requests/${id}/cancel`, {}),
+    onSuccess: invalidateLeaves,
+  });
+  const changePassword = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post("/auth/change-password", body),
+    onSuccess: () =>
+      setPasswordMsg({ ok: true, text: "Password berhasil diganti." }),
+    onError: (err) =>
+      setPasswordMsg({ ok: false, text: err instanceof Error ? err.message : "Gagal" }),
+  });
+
+  if (isLoading) return <p className="text-slate-500">Memuat portal...</p>;
+  if (error || !profile) {
+    return (
+      <div className="card">
+        <h1 className="text-xl font-bold text-slate-800">Portal Saya</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Akun ini belum tertaut ke data karyawan. Silakan hubungi HR untuk
+          mengaktifkan portal Anda.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold text-slate-800">Portal Saya</h1>
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-700">Data Pribadi</h2>
+          <span className="badge bg-emerald-100 text-emerald-700">{profile.status}</span>
+        </div>
+        <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Nomor Induk" value={profile.employee_no} />
+          <Field label="Nama Lengkap" value={profile.full_name} />
+          <Field
+            label="Tanggal Masuk"
+            value={profile.join_date ?? "-"}
+          />
+          <Field label="Telepon" value={profile.phone ?? "-"} />
+          <Field label="Alamat" value={profile.address ?? "-"} />
+          <Field
+            label="Status Perkawinan"
+            value={profile.marital_status ? `${profile.marital_status} · ${profile.dependents} tanggungan` : "-"}
+          />
+          <Field label="No. KTP" value={profile.ktp_no ?? "-"} />
+          <Field label="No. NPWP" value={profile.npwp_no ?? "-"} />
+          <Field label="Rekening Gaji" value={profile.bank_name ? `${profile.bank_name} · ${profile.bank_account ?? "-"}` : "-"} />
+          <Field label="BPJS Kesehatan" value={profile.bpjs_kesehatan_no ?? "-"} />
+          <Field label="BPJS Ketenagakerjaan" value={profile.bpjs_ketenagakerjaan_no ?? "-"} />
+        </dl>
+      </div>
+
+      <div className="card overflow-x-auto p-0">
+        <div className="border-b border-slate-200 p-4">
+          <h2 className="font-semibold text-slate-700">Kontrak Kerja</h2>
+        </div>
+        <table className="w-full">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <th className="th">Nomor Kontrak</th>
+              <th className="th">Periode</th>
+              <th className="th">Status TTD</th>
+              <th className="th">File</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(contracts ?? []).map((c) => (
+              <tr key={c.id}>
+                <td className="td font-medium">{c.contract_no}</td>
+                <td className="td">
+                  {c.start_date ?? "-"} s.d. {c.end_date ?? "-"}
+                </td>
+                <td className="td">{c.sign_status}</td>
+                <td className="td">
+                  {c.file_name ? (
+                    <button
+                      onClick={() => openDownload(`/me/contracts/${c.id}/download-url`)}
+                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Unduh
+                    </button>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+              </tr>
+            ))}
+            {contracts?.length === 0 && (
+              <tr>
+                <td colSpan={4} className="td py-8 text-center text-slate-400">
+                  Belum ada kontrak kerja.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card overflow-x-auto p-0">
+        <div className="border-b border-slate-200 p-4">
+          <h2 className="font-semibold text-slate-700">Dokumen Saya</h2>
+        </div>
+        <table className="w-full">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <th className="th">Judul</th>
+              <th className="th">Jenis</th>
+              <th className="th">Versi</th>
+              <th className="th">Diunggah</th>
+              <th className="th">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(documents ?? []).map((d) => (
+              <tr key={d.id}>
+                <td className="td font-medium">{d.title}</td>
+                <td className="td">{d.document_type}</td>
+                <td className="td">v{d.version}</td>
+                <td className="td">{new Date(d.uploaded_at).toLocaleDateString("id-ID")}</td>
+                <td className="td">
+                  <button
+                    onClick={() => openDownload(`/me/documents/${d.id}/download-url`)}
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    Unduh
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {documents?.length === 0 && (
+              <tr>
+                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                  Belum ada dokumen.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card overflow-x-auto p-0">
+        <div className="border-b border-slate-200 p-4">
+          <h2 className="font-semibold text-slate-700">Riwayat Slip Gaji</h2>
+        </div>
+        <table className="w-full">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <th className="th">Periode</th>
+              <th className="th">Gaji Pokok</th>
+              <th className="th">Tunjangan</th>
+              <th className="th">Lembur</th>
+              <th className="th">Bruto</th>
+              <th className="th">PPh21</th>
+              <th className="th">Potongan</th>
+              <th className="th">Diterima</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(payslips ?? []).map((s) => (
+              <tr key={s.id}>
+                <td className="td font-medium">
+                  {MONTHS[s.month - 1]} {s.year}
+                </td>
+                <td className="td">{formatRupiah(Number(s.base_salary))}</td>
+                <td className="td">{formatRupiah(Number(s.allowance))}</td>
+                <td className="td">
+                  {s.overtime_hours > 0
+                    ? `${s.overtime_hours} jam · ${formatRupiah(Number(s.overtime_amount))}`
+                    : "-"}
+                </td>
+                <td className="td">{formatRupiah(Number(s.gross))}</td>
+                <td className="td text-rose-600">-{formatRupiah(Number(s.tax_pph21))}</td>
+                <td className="td text-rose-600">-{formatRupiah(Number(s.deductions))}</td>
+                <td className="td font-semibold text-emerald-700">
+                  {formatRupiah(Number(s.net_pay))}
+                </td>
+              </tr>
+            ))}
+            {payslips?.length === 0 && (
+              <tr>
+                <td colSpan={8} className="td py-8 text-center text-slate-400">
+                  Belum ada slip gaji yang difinalisasi.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-700">Rekap Kehadiran</h2>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={attPeriod.month}
+              onChange={(e) =>
+                setAttPeriod({ ...attPeriod, month: Number(e.target.value) })
+              }
+              className="input w-20"
+            />
+            <input
+              type="number"
+              value={attPeriod.year}
+              onChange={(e) =>
+                setAttPeriod({ ...attPeriod, year: Number(e.target.value) })
+              }
+              className="input w-24"
+            />
+          </div>
+        </div>
+        {(attendance ?? []).map((a) => (
+          <div key={a.id} className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field label="Hari Hadir" value={String(a.present_days)} />
+            <Field label="Jam Lembur" value={`${a.overtime_hours} jam`} />
+            <Field
+              label="Approval Klien"
+              value={a.client_approved ? "disetujui" : "menunggu"}
+            />
+            <Field label="Catatan" value={a.notes ?? "-"} />
+          </div>
+        ))}
+        {attendance?.length === 0 && (
+          <p className="mt-3 text-sm text-slate-400">
+            Belum ada rekap kehadiran untuk periode ini.
+          </p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2 className="font-semibold text-slate-700">Ajukan Cuti / Izin</h2>
+        <form
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto]"
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            submitLeave.mutate({
+              leave_type: form.get("leave_type"),
+              start_date: form.get("start_date"),
+              end_date: form.get("end_date"),
+              reason: form.get("reason") || null,
+            });
+            e.currentTarget.reset();
+          }}
+        >
+          <select name="leave_type" className="input w-auto" defaultValue="cuti_tahunan">
+            {LEAVE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <input name="start_date" type="date" required className="input" />
+          <input name="end_date" type="date" required className="input" />
+          <input name="reason" placeholder="Alasan (opsional)" className="input" />
+          <button disabled={submitLeave.isPending} className="btn">
+            Ajukan
+          </button>
+        </form>
+        {submitLeave.error && (
+          <p className="mt-2 text-sm text-red-600">{(submitLeave.error as Error).message}</p>
+        )}
+        <table className="mt-3 w-full">
+          <thead>
+            <tr>
+              <th className="th">Jenis</th>
+              <th className="th">Tanggal</th>
+              <th className="th">Status</th>
+              <th className="th">Catatan HR</th>
+              <th className="th">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(leaves ?? []).map((lv) => (
+              <tr key={lv.id}>
+                <td className="td">
+                  {LEAVE_TYPES.find((t) => t.value === lv.leave_type)?.label ?? lv.leave_type}
+                </td>
+                <td className="td">
+                  {lv.start_date} s.d. {lv.end_date}
+                  {lv.reason ? ` · ${lv.reason}` : ""}
+                </td>
+                <td className="td">
+                  <span className={`badge ${LEAVE_STATUS_BADGES[lv.status] ?? ""}`}>
+                    {lv.status}
+                  </span>
+                </td>
+                <td className="td">{lv.decision_note ?? "-"}</td>
+                <td className="td">
+                  {lv.status === "menunggu" && (
+                    <button
+                      onClick={() => cancelLeave.mutate(lv.id)}
+                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {leaves?.length === 0 && (
+              <tr>
+                <td colSpan={5} className="td py-6 text-center text-slate-400">
+                  Belum ada pengajuan cuti/izin.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card max-w-xl">
+        <h2 className="font-semibold text-slate-700">Ganti Password</h2>
+        <form
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            changePassword.mutate({
+              old_password: form.get("old_password"),
+              new_password: form.get("new_password"),
+            });
+            e.currentTarget.reset();
+          }}
+        >
+          <input
+            name="old_password"
+            type="password"
+            required
+            placeholder="Password lama"
+            className="input"
+          />
+          <input
+            name="new_password"
+            type="password"
+            required
+            minLength={8}
+            placeholder="Password baru (min. 8 karakter)"
+            className="input"
+          />
+          <button disabled={changePassword.isPending} className="btn sm:col-span-2">
+            Simpan Password Baru
+          </button>
+        </form>
+        {passwordMsg && (
+          <p
+            className={`mt-2 text-sm ${
+              passwordMsg.ok ? "text-emerald-600" : "text-red-600"
+            }`}
+          >
+            {passwordMsg.text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

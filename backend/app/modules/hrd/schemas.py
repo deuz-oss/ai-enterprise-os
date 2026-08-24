@@ -47,6 +47,8 @@ class EmployeeUpdate(BaseModel):
     dependents: int | None = None
     base_salary: float | None = None
     jkk_risk_category: int | None = None
+    # Taut/lepas akun login self-service (role karyawan); null = lepas tautan.
+    user_id: UUID | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -69,6 +71,7 @@ class EmployeeOut(BaseModel):
     dependents: int
     base_salary: float
     jkk_risk_category: int | None
+    user_id: UUID | None
     status: EmployeeStatus
     created_at: datetime
     updated_at: datetime

@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
@@ -63,9 +64,7 @@ def create_employee(db: Session, payload: EmployeeCreate) -> Employee:
             select(Employee).where(Employee.placement_id == placement.id)
         ).scalar_one_or_none()
         if existing is not None:
-            raise HTTPException(
-                status_code=409, detail="Placement ini sudah menjadi data karyawan"
-            )
+            raise HTTPException(status_code=409, detail="Placement ini sudah menjadi data karyawan")
     employee = Employee(employee_no=employee_no, **data)
     db.add(employee)
     db.commit()
@@ -97,11 +96,54 @@ def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> E
     if new_no is not None and new_no != employee.employee_no:
         _ensure_unique_employee_no(db, new_no, exclude_id=employee.id)
         employee.employee_no = new_no
+    if "user_id" in data:
+        data["user_id"] = _resolve_linked_user(db, employee, data["user_id"])
     for field, value in data.items():
         setattr(employee, field, value)
     db.commit()
     db.refresh(employee)
     return employee
+
+
+def _resolve_linked_user(db: Session, employee: Employee, user_id: UUID | None) -> UUID | None:
+    """Validasi tautan akun self-service; None berarti melepas tautan."""
+    from app.core.tenancy import get_tenant
+    from app.modules.auth.models import User, UserRole
+
+    if user_id is None:
+        audit.log_event(
+            db,
+            action="ess.account_unlinked",
+            entity_type="employee",
+            entity_id=employee.id,
+            detail={"employee_no": employee.employee_no},
+        )
+        return None
+    user = db.get(User, parse_uuid(str(user_id)))
+    if user is None or (user.tenant_id and get_tenant() and user.tenant_id != get_tenant()):
+        raise HTTPException(status_code=404, detail="Akun tidak ditemukan")
+    if user.role != UserRole.employee:
+        raise HTTPException(
+            status_code=422, detail="Hanya akun dengan role karyawan yang bisa ditautkan"
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=422, detail="Akun tidak aktif")
+    taken = db.execute(
+        select(Employee).where(Employee.user_id == user.id, Employee.id != employee.id)
+    ).scalar_one_or_none()
+    if taken is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Akun sudah tertaut ke karyawan lain",
+        )
+    audit.log_event(
+        db,
+        action="ess.account_linked",
+        entity_type="employee",
+        entity_id=employee.id,
+        detail={"user_id": str(user.id), "email": user.email},
+    )
+    return user.id
 
 
 def delete_employee(db: Session, employee_id: str) -> None:
@@ -156,24 +198,21 @@ def _get_contract(db: Session, contract_id: str) -> EmploymentContract:
 
 
 def _generate_contract_no(db: Session, employee: Employee) -> str:
-    seq = db.scalar(
-        select(func.count(EmploymentContract.id)).where(
-            EmploymentContract.employee_id == employee.id
+    seq = (
+        db.scalar(
+            select(func.count(EmploymentContract.id)).where(
+                EmploymentContract.employee_id == employee.id
+            )
         )
-    ) or 0
+        or 0
+    )
     return f"KON/{employee.employee_no}/{seq + 1:02d}"
 
 
-def create_contract(
-    db: Session, employee_id: str, payload: ContractCreate
-) -> EmploymentContract:
+def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> EmploymentContract:
     employee = _get_employee(db, employee_id)
     data = payload.model_dump()
-    if (
-        data.get("start_date")
-        and data.get("end_date")
-        and data["end_date"] < data["start_date"]
-    ):
+    if data.get("start_date") and data.get("end_date") and data["end_date"] < data["start_date"]:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
     if not (data.get("contract_no") or "").strip():
         data["contract_no"] = _generate_contract_no(db, employee)
@@ -189,17 +228,11 @@ def list_contracts(db: Session, employee_id: str) -> list[EmploymentContract]:
     return list(employee.contracts)
 
 
-def update_contract(
-    db: Session, contract_id: str, payload: ContractUpdate
-) -> EmploymentContract:
+def update_contract(db: Session, contract_id: str, payload: ContractUpdate) -> EmploymentContract:
     contract = _get_contract(db, contract_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(contract, field, value)
-    if (
-        contract.start_date
-        and contract.end_date
-        and contract.end_date < contract.start_date
-    ):
+    if contract.start_date and contract.end_date and contract.end_date < contract.start_date:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
     if contract.sign_status == ContractSignStatus.signed and contract.signed_at is None:
         contract.signed_at = datetime.now(UTC)

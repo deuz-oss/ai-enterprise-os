@@ -11,7 +11,39 @@ export interface EmployeeRow {
   npwp_no: string | null;
   join_date: string | null;
   status: string;
+  user_id: string | null;
 }
+
+interface SelfserviceAccount {
+  id: string;
+  email: string;
+  full_name: string;
+}
+
+interface LeaveRequestRow {
+  id: string;
+  employee_id: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
+}
+
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  cuti_tahunan: "Cuti Tahunan",
+  izin: "Izin",
+  sakit: "Sakit",
+  cuti_tak_berbayar: "Cuti Tak Berbayar",
+};
+
+const LEAVE_STATUS_BADGES: Record<string, string> = {
+  menunggu: "bg-amber-100 text-amber-700",
+  disetujui: "bg-emerald-100 text-emerald-700",
+  ditolak: "bg-rose-100 text-rose-700",
+  dibatalkan: "bg-slate-100 text-slate-500",
+};
 
 interface ContractRow {
   id: string;
@@ -138,11 +170,28 @@ export default function Employees() {
     queryFn: () => api.get<EsignRequestRow[]>("/esign/requests"),
     enabled: Boolean(esignConfig?.provider),
   });
+  const { data: selfserviceAccounts } = useQuery({
+    queryKey: ["selfservice-accounts"],
+    queryFn: () =>
+      api.get<SelfserviceAccount[]>("/employees/selfservice-accounts"),
+  });
+  const { data: leaveRequests } = useQuery({
+    queryKey: ["leave-requests"],
+    queryFn: () => api.get<LeaveRequestRow[]>("/employees/leave-requests"),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees"] });
     qc.invalidateQueries({ queryKey: ["contracts-expiring"] });
+    qc.invalidateQueries({ queryKey: ["selfservice-accounts"] });
   };
+
+  const linkAccount = useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string | null }) =>
+      api.patch(`/employees/${id}`, { user_id: userId }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["selfservice-accounts"] }),
+  });
 
   const createEmployee = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/employees", body),
@@ -218,6 +267,17 @@ export default function Employees() {
       api.post(`/esign/requests/${requestId}/simulate-complete`),
     onSuccess: invalidateEsign,
   });
+
+  const decideLeave = useMutation({
+    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
+      api.patch(`/employees/leave-requests/${id}/decision`, {
+        approved,
+        note: null,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-requests"] }),
+  });
+
+  const selected = employees?.find((e) => e.id === selectedId);
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -337,6 +397,73 @@ export default function Employees() {
         )}
       </div>
 
+      {(leaveRequests ?? []).length > 0 && (
+        <div className="card overflow-x-auto p-0">
+          <div className="border-b border-slate-200 p-4">
+            <h2 className="font-semibold text-slate-700">Pengajuan Cuti / Izin</h2>
+          </div>
+          <table className="w-full">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="th">Karyawan</th>
+                <th className="th">Jenis</th>
+                <th className="th">Tanggal</th>
+                <th className="th">Alasan</th>
+                <th className="th">Status</th>
+                <th className="th">Keputusan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(leaveRequests ?? []).map((lv) => {
+                const emp = employees?.find((e) => e.id === lv.employee_id);
+                return (
+                  <tr key={lv.id}>
+                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
+                    <td className="td">
+                      {LEAVE_TYPE_LABELS[lv.leave_type] ?? lv.leave_type}
+                    </td>
+                    <td className="td">
+                      {lv.start_date} s.d. {lv.end_date}
+                    </td>
+                    <td className="td">{lv.reason ?? "-"}</td>
+                    <td className="td">
+                      <span
+                        className={`badge ${LEAVE_STATUS_BADGES[lv.status] ?? ""}`}
+                      >
+                        {lv.status}
+                      </span>
+                    </td>
+                    <td className="td whitespace-nowrap">
+                      {lv.status === "menunggu" ? (
+                        <>
+                          <button
+                            onClick={() => decideLeave.mutate({ id: lv.id, approved: true })}
+                            disabled={decideLeave.isPending}
+                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                          >
+                            Setujui
+                          </button>
+                          {" · "}
+                          <button
+                            onClick={() => decideLeave.mutate({ id: lv.id, approved: false })}
+                            disabled={decideLeave.isPending}
+                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                          >
+                            Tolak
+                          </button>
+                        </>
+                      ) : (
+                        (lv.decision_note ?? "-")
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-slate-200 bg-slate-50">
@@ -386,6 +513,7 @@ export default function Employees() {
       </div>
 
       {selectedId && (
+        <>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="card">
             <h2 className="font-semibold text-slate-700">Kontrak Kerja</h2>
@@ -608,6 +736,65 @@ export default function Employees() {
             </ul>
           </div>
         </div>
+
+        <div className="card">
+          <h2 className="font-semibold text-slate-700">Akun Portal Karyawan</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            Tautkan akun login (role karyawan) agar karyawan bisa memakai
+            Portal Saya: profil, slip gaji, cuti, dan dokumen.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {selected?.user_id ? (
+              <>
+                <span className="badge bg-emerald-100 text-emerald-700">
+                  Akun portal aktif
+                </span>
+                <button
+                  onClick={() => linkAccount.mutate({ id: selected.id, userId: null })}
+                  disabled={linkAccount.isPending}
+                  className="btn-secondary text-xs"
+                >
+                  Lepas Tautan
+                </button>
+              </>
+            ) : (selfserviceAccounts ?? []).length > 0 ? (
+              <form
+                className="flex flex-wrap gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = new FormData(e.currentTarget);
+                  const userId = String(form.get("user_id") || "");
+                  if (userId && selected) {
+                    linkAccount.mutate({ id: selected.id, userId });
+                    e.currentTarget.reset();
+                  }
+                }}
+              >
+                <select name="user_id" required className="input w-auto">
+                  {(selfserviceAccounts ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.email} · {a.full_name}
+                    </option>
+                  ))}
+                </select>
+                <button disabled={linkAccount.isPending} className="btn-secondary">
+                  Aktifkan Portal
+                </button>
+              </form>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Belum ada akun karyawan tersedia — buat lewat menu Pengguna
+                dengan role &ldquo;karyawan&rdquo;.
+              </p>
+            )}
+          </div>
+          {linkAccount.error && (
+            <p className="mt-2 text-sm text-red-600">
+              {(linkAccount.error as Error).message}
+            </p>
+          )}
+        </div>
+        </>
       )}
     </div>
   );

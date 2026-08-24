@@ -18,6 +18,8 @@ class UserRole(str, enum.Enum):
     management = "management"
     # Pengelola platform SaaS: tanpa tenant, hanya boleh ke /platform/*
     platform_admin = "platform_admin"
+    # Karyawan outsourcing: self-service (portal saya) — dibuat oleh HR
+    employee = "karyawan"
 
 
 class PasswordResetToken(Base):

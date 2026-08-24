@@ -11,6 +11,7 @@ import Finance from "./pages/Finance";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
+import MyPortal from "./pages/MyPortal";
 import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
 
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/finance" element={<Finance />} />
             <Route path="/accounting" element={<Accounting />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/portal-saya" element={<MyPortal />} />
             <Route path="/platform" element={<PlatformTenants />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

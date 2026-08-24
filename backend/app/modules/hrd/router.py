@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
+from app.modules.ess import service as ess_service
+from app.modules.ess.models import LeaveStatus
+from app.modules.ess.schemas import LeaveDecisionIn, LeaveOut, SelfserviceAccountOut
 from app.modules.hrd import service
 from app.modules.hrd.models import EmployeeStatus, HrDocumentType
 from app.modules.hrd.schemas import (
@@ -43,10 +46,41 @@ def onboard_employee(payload: OnboardCreate, db: Session = Depends(get_db)):
     return service.onboard_from_placement(db, payload)
 
 
-@router.get("/contracts/expiring", response_model=list[dict])
-def expiring_contracts(
-    within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)
+# ---------- Portal self-service: akun & cuti (statis, sebelum /{employee_id}) ----------
+
+
+@router.get("/selfservice-accounts", response_model=list[SelfserviceAccountOut])
+def selfservice_accounts(db: Session = Depends(get_db)):
+    """Akun role karyawan yang belum tertaut — kandidat untuk diaktifkan."""
+    return ess_service.list_selfservice_accounts(db)
+
+
+@router.get("/leave-requests", response_model=list[LeaveOut])
+def list_leave_requests(
+    status_filter: LeaveStatus | None = Query(None, alias="status"),
+    employee_id: str | None = Query(None),
+    db: Session = Depends(get_db),
 ):
+    return ess_service.hr_list_leave_requests(
+        db, status_filter=status_filter, employee_id=employee_id
+    )
+
+
+@router.patch("/leave-requests/{leave_id}/decision", response_model=LeaveOut)
+def decide_leave_request(
+    leave_id: str,
+    payload: LeaveDecisionIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Setujui/tolak pengajuan cuti-izin karyawan (wajib status menunggu)."""
+    return ess_service.decide_leave_request(
+        db, current_user, leave_id, payload.approved, payload.note
+    )
+
+
+@router.get("/contracts/expiring", response_model=list[dict])
+def expiring_contracts(within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
     return service.expiring_contracts(db, within_days)
 
 
@@ -56,9 +90,7 @@ def get_employee(employee_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{employee_id}", response_model=EmployeeOut)
-def update_employee(
-    employee_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)
-):
+def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)):
     return service.update_employee(db, employee_id, payload)
 
 
@@ -71,9 +103,7 @@ def delete_employee(employee_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{employee_id}/contracts", response_model=ContractOut, status_code=201)
-def create_contract(
-    employee_id: str, payload: ContractCreate, db: Session = Depends(get_db)
-):
+def create_contract(employee_id: str, payload: ContractCreate, db: Session = Depends(get_db)):
     return service.create_contract(db, employee_id, payload)
 
 
@@ -83,9 +113,7 @@ def list_contracts(employee_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/contracts/{contract_id}", response_model=ContractOut)
-def update_contract(
-    contract_id: str, payload: ContractUpdate, db: Session = Depends(get_db)
-):
+def update_contract(contract_id: str, payload: ContractUpdate, db: Session = Depends(get_db)):
     return service.update_contract(db, contract_id, payload)
 
 
