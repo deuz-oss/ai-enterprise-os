@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 import app.modules.accounting.models  # noqa: F401
@@ -18,7 +19,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Prioritas URL database:
+# 1. ALEMBIC_DATABASE_URL (mis. untuk CI/test)
+# 2. sqlalchemy.url yang sudah diset pemanggil Config
+# 3. effective_database_url dari settings (DATABASE_URL / fallback SQLite lokal)
+db_url = (
+    os.getenv("ALEMBIC_DATABASE_URL")
+    or config.get_main_option("sqlalchemy.url")
+    or get_settings().effective_database_url
+)
+config.set_main_option("sqlalchemy.url", db_url)
 target_metadata = Base.metadata
 
 

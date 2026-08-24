@@ -28,7 +28,7 @@ make fmt         # ruff format + ruff check --fix
 
 - Settings come from `backend/app/core/config.py` (pydantic-settings). It loads **both** `backend/.env` and the repo-root `.env`. Copy `.env.example` to repo-root `.env`.
 - Empty env vars are treated as **unset** (`_empty_to_none` validator): leaving `DATABASE_URL=` blank selects local mode — SQLite at `data/aeos.db`, uploads at `data/uploads/` (all gitignored).
-- On startup (non-test), the app runs `Base.metadata.create_all`, ensures storage, and creates the admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. There are **no Alembic migrations yet** (`alembic/versions/` is empty); local dev relies on `create_all`.
+- On startup (non-test), the app runs `Base.metadata.create_all`, ensures storage, and creates the admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Alembic has a **baseline migration** covering the whole schema (`alembic/versions/`); production/PostgreSQL should run `alembic upgrade head` (URL: `ALEMBIC_DATABASE_URL` → `DATABASE_URL` → local SQLite). After changing models, regenerate with `alembic revision --autogenerate` — `backend/tests/test_migrations.py` fails if migrations drift from `Base.metadata`.
 - `APP_ENV != "test"` gates startup side effects — keep this behavior when touching `main.py`.
 
 ## Adding a domain module
