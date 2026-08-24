@@ -113,3 +113,17 @@ def require_platform_admin():
         )
 
     return dependency
+
+
+def require_tenant_user():
+    """Wajib akun bertenanta — memblokir platform_admin dari data bisnis."""
+
+    def dependency(user=Depends(get_current_user)):
+        if user.role == "platform_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun platform tidak memiliki akses ke data tenant",
+            )
+        return user
+
+    return dependency

@@ -14,12 +14,12 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
-      const token = await api.post<{ access_token: string }>("/auth/login", {
-        email,
-        password,
-      });
-      setToken(token.access_token);
-      navigate("/");
+      const data = await api.post<{
+        access_token: string;
+        user: { role: string };
+      }>("/auth/login", { email, password });
+      setToken(data.access_token);
+      navigate(data.user.role === "platform_admin" ? "/platform" : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
     } finally {

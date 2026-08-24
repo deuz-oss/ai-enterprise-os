@@ -34,6 +34,9 @@ def test_platform_endpoint_butuh_platform_admin(client):
     assert resp.status_code == 403
     resp = client.get("/api/v1/employees", headers=plat)
     assert resp.status_code == 403
+    # termasuk agregat dashboard lintas-tenant
+    resp = client.get("/api/v1/overview", headers=plat)
+    assert resp.status_code == 403
 
 
 def test_provision_tenant_menghasilkan_admin_yang_bisa_login(client):

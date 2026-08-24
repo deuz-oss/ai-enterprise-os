@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 
 const NAV_ITEMS = [
@@ -16,8 +16,12 @@ const NAV_ITEMS = [
   { to: "/audit", label: "Audit", roles: ["admin", "management"] },
 ];
 
+// Platform admin hanya melihat manajemen tenant.
+const PLATFORM_NAV_ITEMS = [{ to: "/platform", label: "Tenant", end: true }];
+
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const me = useQuery({
     queryKey: ["me"],
     queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
@@ -27,6 +31,17 @@ export default function Layout() {
 
   if (!getToken()) return <Navigate to="/login" replace />;
 
+  const isPlatform = me.data?.role === "platform_admin";
+  // Platform admin tidak punya dashboard bisnis — langsung ke halaman tenant.
+  if (isPlatform && location.pathname === "/") {
+    return <Navigate to="/platform" replace />;
+  }
+  const items = isPlatform
+    ? PLATFORM_NAV_ITEMS
+    : NAV_ITEMS.filter(
+        (item) => !item.roles || (me.data && item.roles.includes(me.data.role))
+      );
+
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-60 shrink-0 flex-col bg-slate-900 text-slate-200">
@@ -35,9 +50,7 @@ export default function Layout() {
           <p className="mt-1 text-xs text-slate-400">Outsourcing Operations</p>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          {NAV_ITEMS.filter(
-            (item) => !item.roles || (me.data && item.roles.includes(me.data.role))
-          ).map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
