@@ -8,8 +8,8 @@ from app.core import storage
 from app.core.database import parse_uuid
 from app.modules import audit
 from app.modules.auth.models import User, UserRole
-from app.modules.ess.models import LeaveRequest, LeaveStatus
-from app.modules.ess.schemas import LeaveCreate
+from app.modules.ess.models import LeaveBalance, LeaveRequest, LeaveStatus, LeaveType
+from app.modules.ess.schemas import LeaveBalanceUpsertIn, LeaveCreate
 from app.modules.hrd.models import Employee, EmployeeDocument, EmploymentContract
 from app.modules.payroll.models import (
     AttendanceSummary,
@@ -227,12 +227,18 @@ def hr_list_leave_requests(
 def decide_leave_request(
     db: Session, user, leave_id: str, approved: bool, note: str | None
 ) -> LeaveRequest:
-    """HR menyetujui/menolak pengajuan yang masih pending."""
+    """HR menyetujui/menolak pengajuan yang masih pending.
+
+    Approval cuti tahunan memotong jatah cuti bila kuota untuk tahun
+    terkait sudah diatur; tanpa baris balance, approval tidak dibatasi.
+    """
     leave = db.get(LeaveRequest, parse_uuid(leave_id))
     if leave is None:
         raise HTTPException(status_code=404, detail="Pengajuan tidak ditemukan")
     if leave.status != LeaveStatus.pending:
         raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+    if approved and leave.leave_type == LeaveType.annual:
+        _consume_balance(db, leave)
     leave.status = LeaveStatus.approved if approved else LeaveStatus.rejected
     leave.decided_by = user.id
     leave.decided_at = datetime.now(UTC)
@@ -247,6 +253,88 @@ def decide_leave_request(
         detail={"approved": approved, "status": leave.status.value},
     )
     return leave
+
+
+def _consume_balance(db: Session, leave: LeaveRequest) -> None:
+    """Validasi & potong jatah cuti tahunan (dipanggil sebelum status berubah)."""
+    days = (leave.end_date - leave.start_date).days + 1
+    balance = _balance_for(db, leave.employee_id, leave.start_date.year)
+    if balance is None:
+        return  # kuota belum diatur HR → tidak dibatasi
+    if balance.used_days + days > balance.total_days:
+        sisa = balance.total_days - balance.used_days
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Jatah cuti {balance.year} tidak cukup: butuh {days} hari, sisa {sisa} hari"),
+        )
+    balance.used_days += days
+
+
+# ---------- Jatah cuti ----------
+
+
+def _balance_for(db: Session, employee_id, year: int) -> LeaveBalance | None:
+    return db.execute(
+        select(LeaveBalance)
+        .where(LeaveBalance.employee_id == parse_uuid(str(employee_id)))
+        .where(LeaveBalance.year == year)
+    ).scalar_one_or_none()
+
+
+def upsert_leave_balance(
+    db: Session, employee_id: str, payload: LeaveBalanceUpsertIn
+) -> LeaveBalance:
+    """HR membuat/memperbarui jatah cuti tahunan; used_days tidak direset."""
+    from app.modules.hrd.models import Employee
+
+    employee = db.get(Employee, parse_uuid(employee_id))
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
+    balance = _balance_for(db, employee.id, payload.year)
+    if balance is None:
+        balance = LeaveBalance(
+            employee_id=employee.id, year=payload.year, total_days=payload.total_days
+        )
+        db.add(balance)
+    else:
+        if payload.total_days < balance.used_days:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Jatah baru lebih kecil dari yang sudah terpakai ({balance.used_days} hari)"
+                ),
+            )
+        balance.total_days = payload.total_days
+    db.commit()
+    db.refresh(balance)
+    audit.log_event(
+        db,
+        action="leave.balance_upserted",
+        entity_type="leave_balance",
+        entity_id=balance.id,
+        detail={
+            "employee_id": str(employee.id),
+            "year": balance.year,
+            "total_days": balance.total_days,
+        },
+    )
+    return balance
+
+
+def get_employee_leave_balance(db: Session, employee_id: str, year: int) -> LeaveBalance | None:
+    from app.modules.hrd.models import Employee
+
+    employee = db.get(Employee, parse_uuid(employee_id))
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
+    return _balance_for(db, employee.id, year)
+
+
+def get_own_leave_balance(db: Session, user, year: int | None) -> LeaveBalance | None:
+    """Jatah cuti milik akun sendiri; default tahun berjalan. Null = belum diatur."""
+    own_id = get_own_employee(db, user).id
+    effective_year = year or datetime.now(UTC).year
+    return _balance_for(db, own_id, effective_year)
 
 
 def list_selfservice_accounts(db: Session) -> list[User]:

@@ -197,6 +197,141 @@ def test_payslips_only_from_finalized_runs(client):
     assert float(mine[0]["net_pay"]) == 6_000_000 - float(mine[0]["tax_pph21"])
 
 
+# ---------- Jatah cuti tahunan (kuota) ----------
+
+
+def test_leave_balance_flow(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Pemegang Kuota"}
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    # HR mengatur jatah 12 hari untuk 2026
+    set_balance = client.post(
+        f"/api/v1/employees/{emp['id']}/leave-balance",
+        headers=admin,
+        json={"year": 2026, "total_days": 12},
+    )
+    assert set_balance.status_code == 200, set_balance.text
+    assert set_balance.json()["remaining"] == 12
+
+    # portal melihat jatahnya sendiri
+    mine = client.get("/api/v1/me/leave-balance", headers=headers, params={"year": 2026}).json()
+    assert mine["total_days"] == 12 and mine["used_days"] == 0
+
+    # cuti tahunan 3 hari → approve memotong kuota
+    annual = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={"leave_type": "cuti_tahunan", "start_date": "2026-09-01", "end_date": "2026-09-03"},
+    )
+    assert annual.status_code == 201, annual.text
+    approved = client.patch(
+        f"/api/v1/employees/leave-requests/{annual.json()['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert approved.status_code == 200, approved.text
+    after = client.get("/api/v1/me/leave-balance", headers=headers, params={"year": 2026}).json()
+    assert after["used_days"] == 3
+    assert after["remaining"] == 9
+
+    # izin tidak memotong kuota
+    permission = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={"leave_type": "izin", "start_date": "2026-10-01", "end_date": "2026-10-02"},
+    )
+    assert permission.status_code == 201
+    ok = client.patch(
+        f"/api/v1/employees/leave-requests/{permission.json()['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert ok.status_code == 200
+    still = client.get("/api/v1/me/leave-balance", headers=headers, params={"year": 2026}).json()
+    assert still["used_days"] == 3
+
+    # cuti melebihi sisa kuota ditolak saat approval, status tetap menunggu
+    big = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={
+            "leave_type": "cuti_tahunan",
+            "start_date": "2026-11-02",
+            "end_date": "2026-11-20",
+        },
+    )
+    assert big.status_code == 201
+    rejected_approval = client.patch(
+        f"/api/v1/employees/leave-requests/{big.json()['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert rejected_approval.status_code == 422
+    assert "tidak cukup" in rejected_approval.json()["detail"]
+    pending = client.get(
+        "/api/v1/employees/leave-requests", headers=admin, params={"status": "menunggu"}
+    ).json()
+    assert [row["id"] for row in pending] == [big.json()["id"]]
+
+    # HR menaikkan jatah menjadi 25 hari lalu approval berhasil
+    raised = client.post(
+        f"/api/v1/employees/{emp['id']}/leave-balance",
+        headers=admin,
+        json={"year": 2026, "total_days": 25},
+    )
+    assert raised.status_code == 200
+    assert raised.json()["remaining"] == 22
+    approved_again = client.patch(
+        f"/api/v1/employees/leave-requests/{big.json()['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert approved_again.status_code == 200
+    final = client.get("/api/v1/me/leave-balance", headers=headers, params={"year": 2026}).json()
+    assert final["used_days"] == 22
+
+    # jatah baru di bawah pemakaian ditolak
+    too_small = client.post(
+        f"/api/v1/employees/{emp['id']}/leave-balance",
+        headers=admin,
+        json={"year": 2026, "total_days": 5},
+    )
+    assert too_small.status_code == 422
+
+
+def test_annual_leave_without_balance_still_allowed(client):
+    """Tanpa baris balance, approval cuti tahunan tidak dibatasi (opt-in HR)."""
+    admin = _auth_header(client)
+    emp = client.post("/api/v1/employees", headers=admin, json={"full_name": "Tanpa Kuota"}).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    none_balance = client.get("/api/v1/me/leave-balance", headers=headers, params={"year": 2030})
+    assert none_balance.status_code == 200
+    assert none_balance.json() is None
+
+    req = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={
+            "leave_type": "cuti_tahunan",
+            "start_date": "2030-01-02",
+            "end_date": "2030-01-31",
+        },
+    )
+    assert req.status_code == 201
+    decided = client.patch(
+        f"/api/v1/employees/leave-requests/{req.json()['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert decided.status_code == 200
+
+
 def test_platform_admin_blocked_from_portal(client):
     headers = _platform_admin_header(client)
     assert client.get("/api/v1/me/profile", headers=headers).status_code == 403

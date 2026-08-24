@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Jatah Cuti Tahunan (kuota)
+
+- Model `LeaveBalance` (per karyawan per tahun) + migrasi `c5d1f8a9b263`.
+- HR: `POST|GET /employees/{id}/leave-balance` untuk mengatur/melihat jatah; UI form di halaman Karyawan.
+- Approval cuti tahunan otomatis memotong kuota dan ditolak (422) bila sisa tidak cukup; izin/sakit/unpaid bebas kuota; tanpa baris balance, approval tidak dibatasi (opt-in HR).
+- Portal: kartu "Sisa Cuti Tahunan" via `GET /me/leave-balance`.
+- Tes: alur potong kuota, penolakan melebihi jatah, kenaikan jatah, proteksi jatah di bawah pemakaian.
+
 ### Added — Portal Self-Service Karyawan (v2)
 
 - Modul backend `ess` dengan endpoint `/api/v1/me/*`:

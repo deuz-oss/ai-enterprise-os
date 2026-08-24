@@ -92,6 +92,13 @@ interface LeaveRow {
   decision_note: string | null;
 }
 
+interface LeaveBalanceRow {
+  year: number;
+  total_days: number;
+  used_days: number;
+  remaining: number;
+}
+
 async function openDownload(path: string) {
   const { url } = await api.get<{ url: string }>(path);
   window.open(url, "_blank");
@@ -136,6 +143,11 @@ export default function MyPortal() {
   const { data: leaves } = useQuery({
     queryKey: ["me-leaves"],
     queryFn: () => api.get<LeaveRow[]>("/me/leave-requests"),
+  });
+  const { data: leaveBalance } = useQuery({
+    queryKey: ["me-leave-balance", today.getFullYear()],
+    queryFn: () =>
+      api.get<LeaveBalanceRow | null>("/me/leave-balance"),
   });
 
   const invalidateLeaves = () => {
@@ -378,6 +390,31 @@ export default function MyPortal() {
         {attendance?.length === 0 && (
           <p className="mt-3 text-sm text-slate-400">
             Belum ada rekap kehadiran untuk periode ini.
+          </p>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-700">
+            Sisa Cuti Tahunan {today.getFullYear()}
+          </h2>
+          {leaveBalance && (
+            <span className="badge bg-indigo-100 text-indigo-700">
+              sisa {leaveBalance.remaining} hari
+            </span>
+          )}
+        </div>
+        {leaveBalance ? (
+          <div className="mt-3 grid grid-cols-3 gap-4">
+            <Field label="Total Jatah" value={`${leaveBalance.total_days} hari`} />
+            <Field label="Terpakai" value={`${leaveBalance.used_days} hari`} />
+            <Field label="Sisa" value={`${leaveBalance.remaining} hari`} />
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-400">
+            Jatah cuti belum diatur HR — pengajuan cuti tahunan masih bisa
+            diajukan tanpa batas kuota.
           </p>
         )}
       </div>

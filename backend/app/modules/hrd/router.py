@@ -5,7 +5,13 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.modules.ess import service as ess_service
 from app.modules.ess.models import LeaveStatus
-from app.modules.ess.schemas import LeaveDecisionIn, LeaveOut, SelfserviceAccountOut
+from app.modules.ess.schemas import (
+    LeaveBalanceOut,
+    LeaveBalanceUpsertIn,
+    LeaveDecisionIn,
+    LeaveOut,
+    SelfserviceAccountOut,
+)
 from app.modules.hrd import service
 from app.modules.hrd.models import EmployeeStatus, HrDocumentType
 from app.modules.hrd.schemas import (
@@ -77,6 +83,30 @@ def decide_leave_request(
     return ess_service.decide_leave_request(
         db, current_user, leave_id, payload.approved, payload.note
     )
+
+
+@router.post(
+    "/{employee_id}/leave-balance",
+    response_model=LeaveBalanceOut,
+    status_code=200,
+)
+def upsert_leave_balance(
+    employee_id: str,
+    payload: LeaveBalanceUpsertIn,
+    db: Session = Depends(get_db),
+):
+    """Buat/perbarui jatah cuti tahunan karyawan untuk satu periode."""
+    return ess_service.upsert_leave_balance(db, employee_id, payload)
+
+
+@router.get("/{employee_id}/leave-balance", response_model=LeaveBalanceOut | None)
+def get_leave_balance(
+    employee_id: str,
+    year: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Jatah cuti karyawan untuk satu periode; null bila belum diatur."""
+    return ess_service.get_employee_leave_balance(db, employee_id, year)
 
 
 @router.get("/contracts/expiring", response_model=list[dict])

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from app.modules.ess.models import LeaveStatus, LeaveType
 from app.modules.hrd.models import EmployeeStatus, MaritalStatus
@@ -99,3 +99,39 @@ class SelfserviceAccountOut(BaseModel):
 class LeaveDecisionIn(BaseModel):
     approved: bool
     note: str | None = None
+
+
+class LeaveBalanceUpsertIn(BaseModel):
+    """HR mengatur jatah cuti tahunan karyawan untuk satu periode."""
+
+    year: int
+    total_days: int
+
+    @field_validator("year")
+    @classmethod
+    def _sane_year(cls, v: int) -> int:
+        if not 2000 <= v <= 2100:
+            raise ValueError("Tahun tidak wajar")
+        return v
+
+    @field_validator("total_days")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Jatah cuti tidak boleh negatif")
+        return v
+
+
+class LeaveBalanceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    year: int
+    total_days: int
+    used_days: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def remaining(self) -> int:
+        return self.total_days - self.used_days

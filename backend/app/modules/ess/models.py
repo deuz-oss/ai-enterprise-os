@@ -2,7 +2,16 @@ import enum
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -51,3 +60,22 @@ class LeaveRequest(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee = relationship("Employee", lazy="joined")
+
+
+class LeaveBalance(TenantMixin, Base):
+    """Jatah cuti tahunan satu karyawan per periode tahun.
+
+    Hanya pengajuan berjenis `cuti_tahunan` yang memotong kuota; izin,
+    sakit, dan cuti tak berbayar bebas kuota. Tanpa baris balance untuk
+    tahun terkait, approval cuti tidak dibatasi (opt-in oleh HR).
+    """
+
+    __tablename__ = "leave_balances"
+    __table_args__ = (UniqueConstraint("employee_id", "year", name="uq_leave_balance_period"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    total_days: Mapped[int] = mapped_column(Integer, default=0)
+    used_days: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_tenant_user
 from app.modules.ess import service
 from app.modules.ess.schemas import (
+    LeaveBalanceOut,
     LeaveCreate,
     LeaveOut,
     MyAttendanceOut,
@@ -94,3 +95,13 @@ def cancel_leave(
     db: Session = Depends(get_db),
 ):
     return service.cancel_own_leave_request(db, current_user, leave_id)
+
+
+@router.get("/leave-balance", response_model=LeaveBalanceOut | None)
+def my_leave_balance(
+    year: int | None = Query(None),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sisa jatah cuti tahunan sendiri; null bila HR belum mengatur kuota."""
+    return service.get_own_leave_balance(db, current_user, year)

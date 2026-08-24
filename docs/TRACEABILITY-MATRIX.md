@@ -295,8 +295,19 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | API HR (`/employees/*`) | selfservice-accounts, leave-requests (list + decision) |
 | Frontend | `frontend/src/pages/MyPortal.tsx` (route `/portal-saya`, role karyawan); kelola akun & approval cuti di `Employees.tsx` |
 | Keamanan | Data selalu dari akun login (`Employee.user_id`); platform_admin diblokir; payslip hanya run final; download diverifikasi kepemilikan + audit log |
-| Migrasi | `a7f2d94c1e58` (kolom `employees.user_id`), `b3c8e5a2f741` (tabel `leave_requests`) |
+| Migrasi | `a7f2d94c1e58` (kolom `employees.user_id`), `b3c8e5a2f741` (tabel `leave_requests`), `c5d1f8a9b263` (tabel `leave_balances`) |
 | Test | `backend/tests/test_ess.py` |
+
+### 12.2 Jatah Cuti Tahunan
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Kuota cuti tahunan per karyawan per periode; approval memotong kuota |
+| Source Code | `backend/app/modules/ess` (`LeaveBalance`, service, router) |
+| API HR | `POST/GET /employees/{id}/leave-balance` |
+| API Karyawan | `GET /me/leave-balance` |
+| Frontend | Form "Jatah Cuti Tahunan" di `Employees.tsx`; kartu "Sisa Cuti Tahunan" di `MyPortal.tsx` |
+| Aturan | Hanya `cuti_tahunan` memotong kuota; sisa kurang → approval 422; tanpa balance → tak dibatasi |
 
 ---
 

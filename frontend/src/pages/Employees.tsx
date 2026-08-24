@@ -31,6 +31,14 @@ interface LeaveRequestRow {
   decision_note: string | null;
 }
 
+interface LeaveBalanceRow {
+  id: string;
+  year: number;
+  total_days: number;
+  used_days: number;
+  remaining: number;
+}
+
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   cuti_tahunan: "Cuti Tahunan",
   izin: "Izin",
@@ -179,6 +187,14 @@ export default function Employees() {
     queryKey: ["leave-requests"],
     queryFn: () => api.get<LeaveRequestRow[]>("/employees/leave-requests"),
   });
+  const { data: selectedBalance } = useQuery({
+    queryKey: ["leave-balance", selectedId],
+    queryFn: () =>
+      api.get<LeaveBalanceRow | null>(
+        `/employees/${selectedId}/leave-balance?year=${new Date().getFullYear()}`
+      ),
+    enabled: Boolean(selectedId),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees"] });
@@ -275,6 +291,12 @@ export default function Employees() {
         note: null,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-requests"] }),
+  });
+
+  const saveBalance = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post<LeaveBalanceRow>(`/employees/${id}/leave-balance`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-balance"] }),
   });
 
   const selected = employees?.find((e) => e.id === selectedId);
@@ -735,6 +757,57 @@ export default function Employees() {
               )}
             </ul>
           </div>
+        </div>
+
+        <div className="card">
+          <h2 className="font-semibold text-slate-700">Jatah Cuti Tahunan</h2>
+          <form
+            className="mt-3 flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              saveBalance.mutate({
+                id: selectedId,
+                body: {
+                  year: Number(form.get("year")),
+                  total_days: Number(form.get("total_days")),
+                },
+              });
+            }}
+          >
+            <input
+              name="year"
+              type="number"
+              required
+              defaultValue={new Date().getFullYear()}
+              className="input w-24"
+            />
+            <input
+              key={`${selectedId}-${selectedBalance?.total_days ?? "x"}`}
+              name="total_days"
+              type="number"
+              min={0}
+              required
+              placeholder="Total hari"
+              defaultValue={selectedBalance?.total_days ?? ""}
+              className="input w-32"
+            />
+            <button disabled={saveBalance.isPending} className="btn-secondary">
+              Simpan Jatah
+            </button>
+          </form>
+          {selectedBalance && (
+            <p className="mt-2 text-xs text-slate-500">
+              Terpakai {selectedBalance.used_days} hari · sisa{" "}
+              <span className="font-semibold">{selectedBalance.remaining}</span> dari{" "}
+              {selectedBalance.total_days} hari ({selectedBalance.year})
+            </p>
+          )}
+          {saveBalance.error && (
+            <p className="mt-2 text-sm text-red-600">
+              {(saveBalance.error as Error).message}
+            </p>
+          )}
         </div>
 
         <div className="card">
