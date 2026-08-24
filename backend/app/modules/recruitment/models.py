@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class JobOrderStatus(str, enum.Enum):
@@ -45,7 +46,7 @@ class PlacementStatus(str, enum.Enum):
     cancelled = "dibatalkan"
 
 
-class JobOrder(Base):
+class JobOrder(TenantMixin, Base):
     __tablename__ = "job_orders"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -71,7 +72,7 @@ class JobOrder(Base):
     placements: Mapped[list["Placement"]] = relationship(back_populates="job_order")
 
 
-class Candidate(Base):
+class Candidate(TenantMixin, Base):
     __tablename__ = "candidates"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -99,7 +100,7 @@ class Candidate(Base):
     )
 
 
-class Placement(Base):
+class Placement(TenantMixin, Base):
     __tablename__ = "placements"
     __table_args__ = (UniqueConstraint("candidate_id", "job_order_id", name="uq_candidate_jo"),)
 

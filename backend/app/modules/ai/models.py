@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class ScreeningVerdict(str, enum.Enum):
@@ -24,7 +25,7 @@ class ScreeningVerdict(str, enum.Enum):
     reject = "tidak_direkomendasikan"
 
 
-class AIScreening(Base):
+class AIScreening(TenantMixin, Base):
     """Hasil penilaian AI atas kandidat (screening CV / matching job order)."""
 
     __tablename__ = "ai_screenings"
@@ -57,7 +58,7 @@ class AIScreening(Base):
         return _load_list(self.risks_json)
 
 
-class AIDocumentChunk(Base):
+class AIDocumentChunk(TenantMixin, Base):
     """Potongan teks dokumen + vektor embedding untuk RAG Q&A kontrak."""
 
     __tablename__ = "ai_document_chunks"

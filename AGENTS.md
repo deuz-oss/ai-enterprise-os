@@ -32,6 +32,13 @@ make fmt         # ruff format + ruff check --fix
 - On startup (non-test), the app runs `Base.metadata.create_all`, ensures storage, and creates the admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Alembic has a **baseline migration** covering the whole schema (`alembic/versions/`); production/PostgreSQL should run `alembic upgrade head` (URL: `ALEMBIC_DATABASE_URL` → `DATABASE_URL` → local SQLite). After changing models, regenerate with `alembic revision --autogenerate` — `backend/tests/test_migrations.py` fails if migrations drift from `Base.metadata`.
 - `APP_ENV != "test"` gates startup side effects — keep this behavior when touching `main.py`.
 
+## Multi-tenancy
+
+- Shared schema: semua model bisnis mewarisi `TenantMixin` (`app/core/tenancy.py`), filter & injeksi `tenant_id` otomatis via listener SQLAlchemy; konteks tenant disetel `TenantContextMiddleware` dari klaim `tid` JWT.
+- Jangan tambahkan kolom/relasi bisnis tanpa `TenantMixin`, dan jangan pernah bypass filter kecuali lewat opsi eksplisit `include_with_loader_criteria=False` (dipakai auth/platform).
+- Endpoint `/platform/*` khusus role `platform_admin` (akun tanpa tenant, guard `require_platform_admin()` — bukan `require_roles`). Provisioning tenant membuat sekaligus admin pertamanya.
+- Email user unik **global** (batasan v1 agar login tanpa subdomain tetap sederhana); tenant ditangguhkan otomatis gagal login.
+
 ## Adding a domain module
 
 Follow the existing pattern exactly (template: `backend/app/modules/presales`):

@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class EsignStatus(str, enum.Enum):
@@ -17,7 +18,7 @@ class EsignStatus(str, enum.Enum):
     failed = "gagal"
 
 
-class EsignRequest(Base):
+class EsignRequest(TenantMixin, Base):
     """Permintaan tanda tangan elektronik atas kontrak kerja."""
 
     __tablename__ = "esign_requests"

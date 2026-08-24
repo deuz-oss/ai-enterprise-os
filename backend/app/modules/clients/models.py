@@ -6,6 +6,7 @@ from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class ClientStatus(str, enum.Enum):
@@ -21,7 +22,7 @@ class DocumentType(str, enum.Enum):
     other = "lainnya"
 
 
-class Client(Base):
+class Client(TenantMixin, Base):
     __tablename__ = "clients"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -47,7 +48,7 @@ class Client(Base):
     )
 
 
-class LegalDocument(Base):
+class LegalDocument(TenantMixin, Base):
     __tablename__ = "legal_documents"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

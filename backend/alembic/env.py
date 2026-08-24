@@ -9,6 +9,7 @@ import app.modules.esign.models  # noqa: F401
 import app.modules.finance.models  # noqa: F401
 import app.modules.hrd.models  # noqa: F401
 import app.modules.payroll.models  # noqa: F401
+import app.modules.platform.models  # noqa: F401
 import app.modules.presales.models  # noqa: F401
 import app.modules.recruitment.models  # noqa: F401
 from alembic import context

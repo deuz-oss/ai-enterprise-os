@@ -10,11 +10,13 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class EmployeeStatus(str, enum.Enum):
@@ -42,8 +44,9 @@ class HrDocumentType(str, enum.Enum):
     other = "lainnya"
 
 
-class Employee(Base):
+class Employee(TenantMixin, Base):
     __tablename__ = "employees"
+    __table_args__ = (UniqueConstraint("tenant_id", "employee_no", name="uq_employee_tenant_no"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     # Pintu masuk utama data karyawan adalah placement (Fase 1); boleh kosong
@@ -51,7 +54,7 @@ class Employee(Base):
     placement_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("placements.id"), default=None, index=True
     )
-    employee_no: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    employee_no: Mapped[str] = mapped_column(String(50), index=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     ktp_no: Mapped[str | None] = mapped_column(String(50))
     npwp_no: Mapped[str | None] = mapped_column(String(50))
@@ -92,7 +95,7 @@ class Employee(Base):
     )
 
 
-class EmploymentContract(Base):
+class EmploymentContract(TenantMixin, Base):
     """Kontrak kerja karyawan beserta status tanda tangan dan filenya."""
 
     __tablename__ = "employment_contracts"
@@ -118,7 +121,7 @@ class EmploymentContract(Base):
     employee: Mapped[Employee] = relationship(back_populates="contracts")
 
 
-class EmployeeDocument(Base):
+class EmployeeDocument(TenantMixin, Base):
     """Dokumen HR (KTP, NPWP, BPJS, dll.) dengan versioning per jenis dokumen."""
 
     __tablename__ = "employee_documents"

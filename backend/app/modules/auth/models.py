@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,13 +16,20 @@ class UserRole(str, enum.Enum):
     operations = "operations"
     finance = "finance"
     management = "management"
+    # Pengelola platform SaaS: tanpa tenant, hanya boleh ke /platform/*
+    platform_admin = "platform_admin"
 
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_user_tenant_email"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # NULL = akun level platform (platform_admin), bukan milik tenant manapun.
+    tenant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tenants.id"), nullable=True, index=True
+    )
+    email: Mapped[str] = mapped_column(String(255), index=True)
     full_name: Mapped[str] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(

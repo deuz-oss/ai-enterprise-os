@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class LeadStage(str, enum.Enum):
@@ -25,7 +26,7 @@ class ActivityType(str, enum.Enum):
     note = "catatan"
 
 
-class Lead(Base):
+class Lead(TenantMixin, Base):
     __tablename__ = "leads"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -51,7 +52,7 @@ class Lead(Base):
     )
 
 
-class LeadActivity(Base):
+class LeadActivity(TenantMixin, Base):
     __tablename__ = "lead_activities"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

@@ -3,10 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.bootstrap import ensure_admin_user
+from app.core.bootstrap import run_bootstrap
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.storage import ensure_storage
+from app.core.tenancy import TenantContextMiddleware
 
 
 @asynccontextmanager
@@ -16,7 +17,7 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
         ensure_storage()
         with SessionLocal() as db:
-            ensure_admin_user(db)
+            run_bootstrap(db)
     yield
 
 
@@ -24,6 +25,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.project_name, version="0.2.0", lifespan=lifespan)
 
+    # Konteks tenant harus terpasang sebelum dependency/endpoint dieksekusi.
+    app.add_middleware(TenantContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -52,10 +55,12 @@ def create_app() -> FastAPI:
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.payroll.router import router as payroll_router
+    from app.modules.platform.router import router as platform_router
     from app.modules.presales.router import router as presales_router
     from app.modules.recruitment.router import router as recruitment_router
 
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(platform_router, prefix="/api/v1")
     app.include_router(presales_router, prefix="/api/v1")
     app.include_router(clients_router, prefix="/api/v1")
     app.include_router(recruitment_router, prefix="/api/v1")

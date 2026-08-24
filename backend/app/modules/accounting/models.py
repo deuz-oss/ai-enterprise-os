@@ -5,9 +5,10 @@ from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
-class JournalEntry(Base):
+class JournalEntry(TenantMixin, Base):
     """Satu transaksi jurnal umum; total debit harus = total kredit."""
 
     __tablename__ = "journal_entries"
@@ -26,7 +27,7 @@ class JournalEntry(Base):
     )
 
 
-class JournalLine(Base):
+class JournalLine(TenantMixin, Base):
     __tablename__ = "journal_lines"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

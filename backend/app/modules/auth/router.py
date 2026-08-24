@@ -41,7 +41,20 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Email atau password salah"
         )
-    return Token(access_token=create_access_token(str(user.id)), user=UserOut.model_validate(user))
+    # Tolak akun dari tenant yang ditangguhkan (cek langsung tanpa konteks).
+    if user.tenant_id is not None:
+        from app.modules.platform.models import Tenant, TenantStatus
+
+        stmt = select(Tenant).where(Tenant.id == user.tenant_id).execution_options(
+            include_with_loader_criteria=False
+        )
+        tenant = db.execute(stmt).scalar_one_or_none()
+        if tenant is None or tenant.status != TenantStatus.active:
+            raise HTTPException(status_code=403, detail="Tenant sedang ditangguhkan")
+    return Token(
+        access_token=create_access_token(str(user.id), tenant_id=user.tenant_id),
+        user=UserOut.model_validate(user),
+    )
 
 
 @router.get("/me", response_model=UserOut)
@@ -65,6 +78,8 @@ def update_user(
     admin: User = Depends(admin_only),
 ):
     user = db.get(User, parse_uuid(user_id))
+    if user is not None and user.tenant_id != admin.tenant_id:
+        user = None  # lintas tenant: perlakukan sebagai tidak ada
     if user is None:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     data = payload.model_dump(exclude_unset=True)

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     admin_email: str = "admin@example.com"
     admin_password: str = "admin1234"
 
+    # Akun pengelola SaaS (tanpa tenant) — dibuat otomatis saat start.
+    platform_admin_email: str = "platform@example.com"
+    platform_admin_password: str | None = None
+
     # Folder untuk semua data lokal (database SQLite & dokumen upload),
     # relatif terhadap root proyek.
     data_dir: str = "./data"
@@ -57,7 +61,7 @@ class Settings(BaseSettings):
         "database_url", "storage_endpoint", "storage_access_key", "storage_secret_key",
         "ai_base_url", "ai_api_key",
         "privy_api_url", "privy_merchant_key", "privy_username", "privy_password",
-        "esign_webhook_secret",
+        "esign_webhook_secret", "platform_admin_password",
         mode="before",
     )
     @classmethod

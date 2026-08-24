@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class PayrollRunStatus(str, enum.Enum):
@@ -23,7 +24,7 @@ class PayrollRunStatus(str, enum.Enum):
     final = "final"
 
 
-class AttendanceSummary(Base):
+class AttendanceSummary(TenantMixin, Base):
     """Rekap kehadiran + lembur bulanan per karyawan.
 
     Klien menyetujui lembur/kehadiran (approval) sebelum angkanya
@@ -49,7 +50,7 @@ class AttendanceSummary(Base):
     employee = relationship("Employee", lazy="joined")
 
 
-class PayrollRun(Base):
+class PayrollRun(TenantMixin, Base):
     """Satu proses payrol untuk periode bulanan tertentu."""
 
     __tablename__ = "payroll_runs"
@@ -70,7 +71,7 @@ class PayrollRun(Base):
     )
 
 
-class Payslip(Base):
+class Payslip(TenantMixin, Base):
     """Slip gaji satu karyawan dalam satu payroll run."""
 
     __tablename__ = "payslips"

@@ -61,7 +61,13 @@ def ensure_storage() -> None:
 def new_object_key(prefix: str, file_name: str) -> str:
     stamp = datetime.now(UTC).strftime("%Y/%m/%d")
     safe_name = file_name.replace("\\", "_").replace("/", "_")
-    return f"{prefix}/{stamp}/{uuid4().hex}-{safe_name}"
+    # Multi-tenant: file di-namespace per tenant bila konteks tersedia.
+    tenant_part = ""
+    from app.core.tenancy import get_tenant
+
+    if get_tenant() is not None:
+        tenant_part = f"tenants/{get_tenant()}/"
+    return f"{tenant_part}{prefix}/{stamp}/{uuid4().hex}-{safe_name}"
 
 
 def put_object(object_key: str, data: bytes, content_type: str) -> str:

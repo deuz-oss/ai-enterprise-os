@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.tenancy import TenantMixin
 
 
 class InvoiceStatus(str, enum.Enum):
@@ -25,7 +26,7 @@ class InvoiceStatus(str, enum.Enum):
     cancelled = "dibatalkan"
 
 
-class Invoice(Base):
+class Invoice(TenantMixin, Base):
     """Tagihan bulanan ke klien: payrol + fee + PPN - PPh 23.
 
     `payroll_total` dihitung otomatis dari slip gaji karyawan milik klien
@@ -33,11 +34,14 @@ class Invoice(Base):
     """
 
     __tablename__ = "invoices"
-    __table_args__ = (UniqueConstraint("client_id", "year", "month", name="uq_invoice_period"),)
+    __table_args__ = (
+        UniqueConstraint("client_id", "year", "month", name="uq_invoice_period"),
+        UniqueConstraint("tenant_id", "invoice_no", name="uq_invoice_tenant_no"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), index=True)
-    invoice_no: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    invoice_no: Mapped[str] = mapped_column(String(50), index=True)
     year: Mapped[int] = mapped_column(Integer, index=True)
     month: Mapped[int] = mapped_column(Integer, index=True)
     payroll_total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
@@ -66,7 +70,7 @@ class CashFlowDirection(str, enum.Enum):
     outflow = "keluar"
 
 
-class CashFlowEntry(Base):
+class CashFlowEntry(TenantMixin, Base):
     """Catatan arus kas manual/otomatis untuk pemantauan likuiditas."""
 
     __tablename__ = "cash_flow_entries"
