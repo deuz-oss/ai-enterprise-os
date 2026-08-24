@@ -36,8 +36,23 @@ def register(
 
 @router.post("/login", response_model=Token)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    from app.modules import audit
+    from app.modules.auth.service import get_by_email
+
     user = authenticate(db, payload.email.lower(), payload.password)
     if user is None:
+        # Percobaan ke email yang terdaftar dicatat pada tenant pemilik akun
+        # agar terlihat oleh admin tenant; email tak dikenal tetap anonim.
+        known = get_by_email(db, payload.email.lower())
+        audit.log_event(
+            db,
+            action="auth.login_failed",
+            entity_type="user" if known else None,
+            entity_id=known.id if known else None,
+            actor=known.id if known else None,
+            tenant_id=known.tenant_id if known else None,
+            detail={"email": payload.email.lower()},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Email atau password salah"
         )
@@ -51,6 +66,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         tenant = db.execute(stmt).scalar_one_or_none()
         if tenant is None or tenant.status != TenantStatus.active:
             raise HTTPException(status_code=403, detail="Tenant sedang ditangguhkan")
+    audit.log_event(
+        db,
+        action="auth.login",
+        entity_type="user",
+        entity_id=user.id,
+        detail={"role": user.role.value},
+        actor=user.id,
+        tenant_id=user.tenant_id,
+    )
     return Token(
         access_token=create_access_token(str(user.id), tenant_id=user.tenant_id),
         user=UserOut.model_validate(user),

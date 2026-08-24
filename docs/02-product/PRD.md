@@ -95,7 +95,7 @@ Operations sehari-hari, menggantikan proses manual berbasis spreadsheet dan What
 | Arsitektur | Modular monolith (FastAPI), siap dipecah jadi microservices jika skala meminta |
 | Frontend | React SPA tunggal (admin & internal), responsif |
 | Data | PostgreSQL; file dokumen di object storage (MinIO, S3-compatible) |
-| Keamanan | Auth JWT, role-based access control, semua akses dokumen ter-audit |
+| Keamanan | Auth JWT, role-based access control, semua akses dokumen ter-audit ✅ (modul `audit`) |
 | Kepatuhan | Retensi dokumen sesuai regulasi; data tetap self-hosted (kebutuhan kerahasiaan klien) |
 | Deployment | Docker Compose untuk awal; path migrasi ke Kubernetes tersedia |
 | Bahasa UI | Bahasa Indonesia (istilah domain: PKS, addendum, PPh21, BPJS) |

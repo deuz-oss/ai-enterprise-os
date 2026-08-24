@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import storage
 from app.core.database import parse_uuid
+from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.recruitment.models import (
     Candidate,
@@ -105,6 +106,14 @@ async def upload_cv(
     candidate.cv_file_name = file_name
     db.commit()
     db.refresh(candidate)
+    audit.log_event(
+        db,
+        action="cv.upload",
+        entity_type="candidate",
+        entity_id=candidate.id,
+        object_key=candidate.cv_object_key,
+        detail={"file_name": file_name},
+    )
     return candidate
 
 
@@ -142,6 +151,14 @@ def cv_download_url(db: Session, candidate_id: str) -> str:
     candidate = _get_candidate(db, candidate_id)
     if not candidate.cv_object_key:
         raise HTTPException(status_code=404, detail="Kandidat belum punya CV")
+    audit.log_event(
+        db,
+        action="cv.download_url",
+        entity_type="candidate",
+        entity_id=candidate.id,
+        object_key=candidate.cv_object_key,
+        detail={"file_name": candidate.cv_file_name},
+    )
     return storage.presigned_get_url(candidate.cv_object_key)
 
 

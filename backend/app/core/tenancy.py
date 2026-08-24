@@ -31,6 +31,11 @@ from sqlalchemy.orm import (
 from sqlalchemy.orm.session import ORMExecuteState
 
 _current_tenant: ContextVar[UUID | None] = ContextVar("current_tenant_id", default=None)
+# Identitas pemanggil & asal request untuk kebutuhan audit (diisi middleware
+# dari klaim JWT + header, tanpa DB).
+_current_user: ContextVar[UUID | None] = ContextVar("current_user_id", default=None)
+_current_ip: ContextVar[str | None] = ContextVar("current_request_ip", default=None)
+_current_agent: ContextVar[str | None] = ContextVar("current_request_ua", default=None)
 
 
 def set_tenant(tenant_id: UUID | None) -> None:
@@ -41,8 +46,32 @@ def get_tenant() -> UUID | None:
     return _current_tenant.get()
 
 
+def set_requester(
+    *, user_id: UUID | None = None, ip: str | None = None, user_agent: str | None = None
+) -> None:
+    if user_id is not None:
+        _current_user.set(user_id)
+    if ip is not None:
+        _current_ip.set(ip)
+    if user_agent is not None:
+        _current_agent.set(user_agent[:300])
+
+
+def get_requester_user() -> UUID | None:
+    return _current_user.get()
+
+
+def get_request_meta() -> tuple[str | None, str | None]:
+    return _current_ip.get(), _current_agent.get()
+
+
 class TenantMixin:
-    """Mixin untuk model bisnis milik satu tenant."""
+    """Mixin untuk model bisnis milik satu tenant.
+
+    Catatan: subclass boleh meng-override `tenant_id` menjadi nullable
+    (mis. tabel audit untuk event pra-login) — tetap tercakup filter otomatis
+    karena kriteria loader menargetkan mixin ini.
+    """
 
     @declared_attr
     @classmethod
@@ -121,11 +150,27 @@ class TenantContextMiddleware:
         if scope["type"] == "http":
             from starlette.datastructures import Headers
 
-            auth = Headers(scope=scope).get("Authorization", "")
+            headers = Headers(scope=scope)
+            auth = headers.get("Authorization", "")
             if auth.startswith("Bearer "):
+                from app.core.security import decode_token_payload
+
+                payload = decode_token_payload(auth[len("Bearer ") :]) or {}
                 set_tenant(tenant_from_token(auth[len("Bearer ") :]))
+                sub = payload.get("sub")
+                try:
+                    requester = UUID(str(sub)) if sub else None
+                except ValueError:
+                    requester = None
             else:
                 set_tenant(None)
+                requester = None
+            client_host = (scope.get("client") or (None, None))[0]
+            set_requester(
+                user_id=requester,
+                ip=client_host,
+                user_agent=headers.get("user-agent"),
+            )
         try:
             await self.app(scope, receive, send)
         finally:

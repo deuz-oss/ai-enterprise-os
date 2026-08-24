@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import storage
 from app.core.database import parse_uuid
+from app.modules import audit
 from app.modules.hrd.models import (
     ContractSignStatus,
     Employee,
@@ -244,6 +245,14 @@ async def upload_contract_file(
     contract.file_size = len(data)
     db.commit()
     db.refresh(contract)
+    audit.log_event(
+        db,
+        action="contract.upload",
+        entity_type="employment_contract",
+        entity_id=contract.id,
+        object_key=object_key,
+        detail={"file_name": file_name},
+    )
     return contract
 
 
@@ -324,6 +333,18 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+    audit.log_event(
+        db,
+        action="employee_document.upload",
+        entity_type="employee_document",
+        entity_id=document.id,
+        object_key=document.object_key,
+        detail={
+            "employee_id": str(employee.id),
+            "title": document.title,
+            "version": document.version,
+        },
+    )
     return document
 
 
@@ -336,6 +357,14 @@ def document_download_url(db: Session, document_id: str) -> str:
     document = db.get(EmployeeDocument, parse_uuid(document_id))
     if document is None:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    audit.log_event(
+        db,
+        action="employee_document.download_url",
+        entity_type="employee_document",
+        entity_id=document.id,
+        object_key=document.object_key,
+        detail={"file_name": document.file_name},
+    )
     return storage.presigned_get_url(document.object_key)
 
 
@@ -343,4 +372,12 @@ def contract_file_download_url(db: Session, contract_id: str) -> str:
     contract = _get_contract(db, contract_id)
     if not contract.object_key:
         raise HTTPException(status_code=404, detail="Kontrak belum punya file")
+    audit.log_event(
+        db,
+        action="contract.download_url",
+        entity_type="employment_contract",
+        entity_id=contract.id,
+        object_key=contract.object_key,
+        detail={"file_name": contract.file_name},
+    )
     return storage.presigned_get_url(contract.object_key)

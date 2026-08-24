@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import storage
 from app.core.database import parse_uuid
+from app.modules import audit
 from app.modules.clients.models import Client, DocumentType, LegalDocument
 from app.modules.clients.schemas import ClientCreate, ClientUpdate
 
@@ -94,6 +95,14 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+    audit.log_event(
+        db,
+        action="legal_document.upload",
+        entity_type="legal_document",
+        entity_id=document.id,
+        object_key=object_key,
+        detail={"client_id": str(client.id), "file_name": file_name, "version": document.version},
+    )
     return document
 
 
@@ -106,6 +115,14 @@ def download_url(db: Session, document_id: str) -> str:
     document = db.get(LegalDocument, parse_uuid(document_id))
     if document is None:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    audit.log_event(
+        db,
+        action="legal_document.download_url",
+        entity_type="legal_document",
+        entity_id=document.id,
+        object_key=document.object_key,
+        detail={"client_id": str(document.client_id), "file_name": document.file_name},
+    )
     return storage.presigned_get_url(document.object_key)
 
 

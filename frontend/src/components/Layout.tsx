@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { to: "/payroll", label: "Payroll" },
   { to: "/finance", label: "Finance" },
   { to: "/accounting", label: "Akunting" },
+  // Jejak audit sensitif — disembunyikan dari role non-management.
+  { to: "/audit", label: "Audit", roles: ["admin", "management"] },
 ];
 
 export default function Layout() {
@@ -33,7 +35,9 @@ export default function Layout() {
           <p className="mt-1 text-xs text-slate-400">Outsourcing Operations</p>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter(
+            (item) => !item.roles || (me.data && item.roles.includes(me.data.role))
+          ).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

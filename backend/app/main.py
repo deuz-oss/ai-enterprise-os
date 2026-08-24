@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     from app.modules.ai.router import (
         recruitment_router as ai_recruitment_router,
     )
+    from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
     from app.modules.bpjs.router import router as bpjs_router
     from app.modules.clients.router import router as clients_router
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     from app.modules.recruitment.router import router as recruitment_router
 
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(audit_router, prefix="/api/v1")
     app.include_router(platform_router, prefix="/api/v1")
     app.include_router(presales_router, prefix="/api/v1")
     app.include_router(clients_router, prefix="/api/v1")

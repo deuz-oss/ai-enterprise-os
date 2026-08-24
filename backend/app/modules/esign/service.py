@@ -22,6 +22,7 @@ from app.core.esign.base import EsignAdapter
 from app.core.esign.privy import PrivyAdapter
 from app.core.esign.sandbox import SandboxAdapter
 from app.core.storage import get_object
+from app.modules import audit
 from app.modules.esign.models import EsignRequest, EsignStatus
 from app.modules.esign.schemas import EsignConfigOut
 from app.modules.hrd.models import ContractSignStatus, EmploymentContract
@@ -105,6 +106,17 @@ def send_contract(
     db.add(request)
     db.commit()
     db.refresh(request)
+    audit.log_event(
+        db,
+        action="esign.sent",
+        entity_type="employment_contract",
+        entity_id=contract.id,
+        detail={
+            "esign_request_id": str(request.id),
+            "provider_document_id": result.provider_document_id,
+            "signer_email": signer_email,
+        },
+    )
     return request
 
 
@@ -196,4 +208,11 @@ def _apply_status(
         esign_request.error = f"Dokumen {status.value} oleh penandatangan"
     db.commit()
     db.refresh(esign_request)
+    audit.log_event(
+        db,
+        action=f"esign.{status.value}",
+        entity_type="employment_contract",
+        entity_id=esign_request.contract_id,
+        detail={"esign_request_id": str(esign_request.id), "status": status.value},
+    )
     return esign_request
