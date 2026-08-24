@@ -59,6 +59,34 @@ interface AskResult {
   }[];
 }
 
+interface EsignConfig {
+  provider: string | null;
+  webhook_ready: boolean;
+}
+
+interface EsignRequestRow {
+  id: string;
+  contract_id: string;
+  provider: string;
+  provider_document_id: string;
+  signer_name: string;
+  signer_email: string;
+  sign_url: string | null;
+  status: string;
+  signed_at: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+const ESIGN_STATUS_BADGES: Record<string, string> = {
+  terkirim: "bg-amber-100 text-amber-700",
+  dilihat: "bg-blue-100 text-blue-700",
+  selesai: "bg-emerald-100 text-emerald-700",
+  ditolak: "bg-rose-100 text-rose-700",
+  kedaluwarsa: "bg-slate-100 text-slate-500",
+  gagal: "bg-red-100 text-red-600",
+};
+
 const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "lainnya"];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -74,6 +102,7 @@ export default function Employees() {
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [askResult, setAskResult] = useState<AskResult | null>(null);
+  const [tteContract, setTteContract] = useState<{ id: string; name: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const docTypeRef = useRef<HTMLSelectElement>(null);
 
@@ -99,6 +128,15 @@ export default function Employees() {
   const { data: indexed } = useQuery({
     queryKey: ["ai-indexed"],
     queryFn: () => api.get<IndexedContract[]>("/ai/contracts/indexed"),
+  });
+  const { data: esignConfig } = useQuery({
+    queryKey: ["esign-config"],
+    queryFn: () => api.get<EsignConfig>("/esign/config"),
+  });
+  const { data: esignRequests } = useQuery({
+    queryKey: ["esign-requests"],
+    queryFn: () => api.get<EsignRequestRow[]>("/esign/requests"),
+    enabled: Boolean(esignConfig?.provider),
   });
 
   const invalidate = () => {
@@ -147,6 +185,38 @@ export default function Employees() {
     mutationFn: (body: { question: string; employee_id: string | null }) =>
       api.post<AskResult>("/ai/contracts/ask", body),
     onSuccess: (data) => setAskResult(data),
+  });
+
+  const invalidateEsign = () => {
+    qc.invalidateQueries({ queryKey: ["esign-requests"] });
+    qc.invalidateQueries({ queryKey: ["employee-contracts", selectedId] });
+    qc.invalidateQueries({ queryKey: ["contracts-expiring"] });
+  };
+
+  const sendEsign = useMutation({
+    mutationFn: ({
+      contractId,
+      signerName,
+      signerEmail,
+    }: {
+      contractId: string;
+      signerName: string;
+      signerEmail: string;
+    }) =>
+      api.post(`/esign/contracts/${contractId}/send`, {
+        signer_name: signerName,
+        signer_email: signerEmail,
+      }),
+    onSuccess: () => {
+      setTteContract(null);
+      invalidateEsign();
+    },
+  });
+
+  const simulateEsign = useMutation({
+    mutationFn: (requestId: string) =>
+      api.post(`/esign/requests/${requestId}/simulate-complete`),
+    onSuccess: invalidateEsign,
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -330,47 +400,145 @@ export default function Employees() {
               <button className="btn-secondary">Tambah Kontrak</button>
             </form>
             <ul className="mt-3 space-y-2">
-              {(contracts ?? []).map((c) => (
-                <li
-                  key={c.id}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
-                >
-                  <div>
-                    <p className="font-medium text-slate-700">{c.contract_no}</p>
-                    <p className="text-xs text-slate-400">
-                      {c.start_date ?? "?"} s/d {c.end_date ?? "-"}
-                      {c.file_name ? ` · ${c.file_name}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {c.file_name && (
-                      <button
-                        onClick={() => indexContract.mutate(c.id)}
-                        disabled={indexContract.isPending}
-                        className="btn-secondary text-xs"
-                      >
-                        {indexContract.isPending ? "Mengindeks..." : "Index AI"}
-                      </button>
-                    )}
-                    {c.sign_status === "menunggu_ttd" ? (
-                      <button
-                        onClick={() => signContract.mutate(c.id)}
-                        className="btn-secondary text-xs"
-                      >
-                        Tandai TTD
-                      </button>
-                    ) : (
-                      <span className="badge bg-emerald-100 text-emerald-700">
-                        ditandatangani
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
+              {(contracts ?? []).map((c) => {
+                const req = (esignRequests ?? []).find((r) => r.contract_id === c.id);
+                const active = req && ["terkirim", "dilihat"].includes(req.status);
+                return (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-700">{c.contract_no}</p>
+                      <p className="text-xs text-slate-400">
+                        {c.start_date ?? "?"} s/d {c.end_date ?? "-"}
+                        {c.file_name ? ` · ${c.file_name}` : ""}
+                      </p>
+                      {req && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <span
+                            className={`badge border-0 ${
+                              ESIGN_STATUS_BADGES[req.status] ?? ""
+                            }`}
+                          >
+                            TTE: {req.status}
+                          </span>
+                          {active && req.sign_url && (
+                            <a
+                              href={req.sign_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                            >
+                              Halaman tanda tangan
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {c.file_name && (
+                        <button
+                          onClick={() => indexContract.mutate(c.id)}
+                          disabled={indexContract.isPending}
+                          className="btn-secondary text-xs"
+                        >
+                          {indexContract.isPending ? "Mengindeks..." : "Index AI"}
+                        </button>
+                      )}
+                      {esignConfig?.provider &&
+                        active &&
+                        esignConfig.provider === "sandbox" &&
+                        req && (
+                          <button
+                            onClick={() => simulateEsign.mutate(req.id)}
+                            disabled={simulateEsign.isPending}
+                            className="btn text-xs"
+                          >
+                            Simulasi Selesai
+                          </button>
+                        )}
+                      {esignConfig?.provider &&
+                      c.sign_status === "menunggu_ttd" &&
+                      !active ? (
+                        <button
+                          onClick={() =>
+                            setTteContract({
+                              id: c.id,
+                              name:
+                                employees?.find((e) => e.id === selectedId)?.full_name ?? "",
+                            })
+                          }
+                          className="btn-secondary text-xs"
+                        >
+                          Kirim TTE
+                        </button>
+                      ) : c.sign_status === "menunggu_ttd" ? (
+                        <button
+                          onClick={() => signContract.mutate(c.id)}
+                          className="btn-secondary text-xs"
+                        >
+                          Tandai TTD
+                        </button>
+                      ) : (
+                        <span className="badge bg-emerald-100 text-emerald-700">
+                          ditandatangani
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
               {contracts?.length === 0 && (
                 <li className="text-sm text-slate-400">Belum ada kontrak.</li>
               )}
             </ul>
+            {tteContract && (
+              <form
+                className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = new FormData(e.currentTarget);
+                  sendEsign.mutate({
+                    contractId: tteContract.id,
+                    signerName: String(form.get("signer_name") || ""),
+                    signerEmail: String(form.get("signer_email") || ""),
+                  });
+                }}
+              >
+                <input
+                  name="signer_name"
+                  required
+                  defaultValue={tteContract.name}
+                  placeholder="Nama penandatangan"
+                  className="input"
+                />
+                <input
+                  name="signer_email"
+                  type="email"
+                  required
+                  placeholder="Email penandatangan"
+                  className="input"
+                />
+                <div className="flex gap-2">
+                  <button className="btn" disabled={sendEsign.isPending}>
+                    {sendEsign.isPending ? "Mengirim..." : "Kirim"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setTteContract(null)}
+                  >
+                    Batal
+                  </button>
+                </div>
+                {sendEsign.error && (
+                  <p className="text-sm text-red-600 sm:col-span-3">
+                    {(sendEsign.error as Error).message}
+                  </p>
+                )}
+              </form>
+            )}
           </div>
 
           <div className="card">

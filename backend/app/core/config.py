@@ -43,9 +43,21 @@ class Settings(BaseSettings):
     ai_model: str = "gpt-4o-mini"
     ai_embedding_model: str = "text-embedding-3-small"
 
+    # Integrasi tanda tangan elektronik. Nilai ESIGN_PROVIDER:
+    # "" (nonaktif) | "sandbox" (simulasi lokal) | "privy" (PrivyID produksi)
+    esign_provider: str = ""
+    privy_api_url: str | None = None
+    privy_merchant_key: str | None = None
+    privy_username: str | None = None
+    privy_password: str | None = None
+    # Rahasia bersama untuk verifikasi header webhook dari penyedia TTE.
+    esign_webhook_secret: str | None = None
+
     @field_validator(
         "database_url", "storage_endpoint", "storage_access_key", "storage_secret_key",
         "ai_base_url", "ai_api_key",
+        "privy_api_url", "privy_merchant_key", "privy_username", "privy_password",
+        "esign_webhook_secret",
         mode="before",
     )
     @classmethod
@@ -83,6 +95,10 @@ class Settings(BaseSettings):
     @property
     def ai_configured(self) -> bool:
         return bool(self.ai_base_url)
+
+    @property
+    def esign_configured(self) -> bool:
+        return self.esign_provider in ("sandbox", "privy")
 
 
 @lru_cache

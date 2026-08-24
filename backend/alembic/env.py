@@ -5,6 +5,7 @@ import app.modules.accounting.models  # noqa: F401
 import app.modules.ai.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.clients.models  # noqa: F401
+import app.modules.esign.models  # noqa: F401
 import app.modules.finance.models  # noqa: F401
 import app.modules.hrd.models  # noqa: F401
 import app.modules.payroll.models  # noqa: F401
