@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     platform_admin_email: str = "platform@example.com"
     platform_admin_password: str | None = None
 
+    # Rate limit login (sliding window per proses, kunci IP|email)
+    login_rate_limit_max: int = 5
+    login_rate_limit_window_sec: int = 300
+    # Token reset password (satu kali pakai, dikirim via admin secara out-of-band)
+    password_reset_ttl_min: int = 30
+    # Rate limit endpoint reset password (per IP)
+    reset_rate_limit_max: int = 10
+
     # Folder untuk semua data lokal (database SQLite & dokumen upload),
     # relatif terhadap root proyek.
     data_dir: str = "./data"

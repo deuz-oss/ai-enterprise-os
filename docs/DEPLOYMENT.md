@@ -102,4 +102,11 @@ Uji restore berkala (disarangan bulanan):
 - **AI/TTE**: fitur nonaktif sampai `AI_BASE_URL` / `ESIGN_PROVIDER=privy`
   diisi. Webhook TTE membutuhkan URL publik:
   `https://<DOMAIN>/api/v1/esign/webhook`.
-- **Rate limit login / reset password**: belum ada (backlog keamanan).
+- **Role database**: runtime backend memakai role terbatas `aeos_app`
+  (bukan pemilik tabel) agar Row Level Security efektif. Skrip
+  `deploy/pg/init-roles.sh` hanya berjalan saat **inisialisasi volume
+  pertama**; untuk volume lama, jalankan isinya manual sekali:
+  `docker compose -f docker-compose.prod.yml exec -T postgres bash < deploy/pg/init-roles.sh`
+  (dengan env `APP_DB_PASSWORD` terisi). Lihat [SECURITY.md](SECURITY.md).
+- **Rate limit login / reset password**: aktif default (5 gagal/5 menit,
+  429 + Retry-After); counter per proses — lihat [SECURITY.md](SECURITY.md).

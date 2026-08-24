@@ -20,7 +20,7 @@ from contextvars import ContextVar
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, event
+from sqlalchemy import ForeignKey, event, text
 from sqlalchemy.orm import (
     Mapped,
     Session,
@@ -105,7 +105,26 @@ def tenant_from_token(token: str) -> UUID | None:
 
 def install_tenancy_listeners() -> None:
     """Pasang listener sekali untuk semua Session (termasuk session test)."""
-    """Pasang listener sekali untuk semua Session (termasuk session test)."""
+
+    @event.listens_for(Session, "after_transaction_create")
+    def _set_pg_rls_tenant(session: Session, transaction):
+        """PostgreSQL RLS lapis kedua: set app.current_tenant per transaksi.
+
+        Kebijakan RLS (dibuat migrasi) membandingkan tenant_id baris dengan
+        setting ini; set_config(..., true) = berlaku hanya untuk transaksi
+        sehingga koneksi pooled otomatis bersih setelah commit/rollback.
+        SQLite (dev/test) tidak punya RLS — dilewati.
+        """
+        if transaction.parent is not None:
+            return  # savepoint mewarisi setting transaksi induk
+        bind = session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return
+        tid = get_tenant()
+        transaction.connection.execute(
+            text("SELECT set_config('app.current_tenant', :v, true)"),
+            {"v": str(tid) if tid else ""},
+        )
 
     @event.listens_for(Session, "do_orm_execute")
     def _add_tenant_filter(execute_state: ORMExecuteState) -> None:

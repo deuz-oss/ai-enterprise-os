@@ -20,6 +20,19 @@ class UserRole(str, enum.Enum):
     platform_admin = "platform_admin"
 
 
+class PasswordResetToken(Base):
+    """Token reset password satu kali pakai (disimpan sebagai hash SHA-256)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_user_tenant_email"),)

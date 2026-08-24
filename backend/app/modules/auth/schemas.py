@@ -41,3 +41,18 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     is_active: bool | None = None
     new_password: str | None = None
+
+
+class ChangePasswordIn(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class PasswordResetIssueOut(BaseModel):
+    reset_token: str
+    expires_in_minutes: int
+
+
+class PasswordResetIn(BaseModel):
+    token: str
+    new_password: str
