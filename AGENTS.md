@@ -6,6 +6,7 @@ Guidance for AI coding agents working in this repo.
 
 - **Backend** (`backend/`): FastAPI modular monolith, Python 3.12+, SQLAlchemy 2, Alembic. Install with `pip install -e ".[dev]"` into `backend/.venv`.
 - **Frontend** (`frontend/`): React 18 + TypeScript + Vite + Tailwind + TanStack Query. No frontend test runner or ESLint is configured.
+- **Mobile** (`mobile/`): Flutter (internal staff app v1). Source ditulis manual tanpa SDK — sebelum build jalankan `flutter create . --org id.aeos --platforms=android,ios` untuk generate folder platform. Default API URL via `--dart-define=AEOS_API_URL`.
 - Tooling config lives in **two** places: root `pyproject.toml` (ruff/mypy/pytest) and `backend/pyproject.toml` (deps, pytest). Ruff line-length is 100.
 
 ## Commands

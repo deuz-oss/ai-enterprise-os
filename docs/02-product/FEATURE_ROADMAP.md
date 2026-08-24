@@ -10,7 +10,7 @@ Rujukan kebutuhan lengkap: [PRD](PRD.md).
 | 4 | Finance | Invoice otomatis dari payrol + fee, pajak (PPN/PPh23), aging & overdue tracking, cash flow | ✅ Selesai |
 | 5 | Akunting | Jurnal umum, buku besar, neraca saldo, laporan Neraca/Laba Rugi/Arus Kas | ✅ Selesai |
 | 6 | AI Layer | Screening CV otomatis, matching kandidat ↔ job order, Q&A dokumen kontrak (RAG), forecast cash flow | ✅ Selesai — LLM via API kompatibel OpenAI (`AI_BASE_URL` di .env); embedding untuk RAG via `AI_EMBEDDING_MODEL` |
-| Lanjutan | Platform | Mobile app (Flutter), multi-tenant SaaS untuk perusahaan outsourcing lain, integrasi API (e-signature, BPJS) | 🔄 Berjalan — TTE kontrak ✅ & rekap iuran BPJS + ekspor CSV portal ✅; koneksi API resmi BPJS/multi-tenant/mobile menyusul |
+| Lanjutan | Platform | Mobile app (Flutter), multi-tenant SaaS untuk perusahaan outsourcing lain, integrasi API (e-signature, BPJS) | 🔄 Berjalan — TTE kontrak ✅, rekap iuran BPJS + ekspor CSV portal ✅, mobile app internal v1 ✅ (`mobile/`, butuh `flutter create .` untuk build); API resmi BPJS & multi-tenant menyusul |
 
 ## Prinsip pengembangan
 
