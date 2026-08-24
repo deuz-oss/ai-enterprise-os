@@ -81,6 +81,25 @@ def put_object(object_key: str, data: bytes, content_type: str) -> str:
     return object_key
 
 
+def get_object(object_key: str) -> bytes:
+    """Baca kembali isi objek (mis. CV/ dokumen untuk diproses AI)."""
+    client = _client()
+    if client is None:
+        path = get_settings().uploads_root / object_key
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            logger.error("get_object lokal gagal: %s", exc)
+            raise HTTPException(status_code=404, detail="File tidak ditemukan di storage") from exc
+    try:
+        resp = client.get_object(Bucket=_bucket(), Key=object_key)
+        body: bytes = resp["Body"].read()
+        return body
+    except (ClientError, BotoCoreError) as exc:
+        logger.error("get_object failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Gagal membaca file dari storage") from exc
+
+
 def presigned_get_url(object_key: str, expires_seconds: int = 3600) -> str:
     client = _client()
     if client is None:

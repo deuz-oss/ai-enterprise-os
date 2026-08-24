@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { AiResultCard, ScoreBadge } from "../components/Ai";
+import type { MatchResult } from "../components/Ai";
 import type { ClientRow } from "./Clients";
 
 export interface JobOrder {
@@ -28,6 +30,7 @@ const BADGE_COLORS: Record<string, string> = {
 export default function JobOrders() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -54,6 +57,11 @@ export default function JobOrders() {
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/recruitment/job-orders/${id}`, { status }),
     onSuccess: invalidate,
+  });
+
+  const match = useMutation({
+    mutationFn: (id: string) => api.post<MatchResult>(`/ai/job-orders/${id}/match`),
+    onSuccess: (data) => setMatchResult(data),
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -116,6 +124,7 @@ export default function JobOrders() {
               <th className="th">Kebutuhan</th>
               <th className="th">Range Gaji</th>
               <th className="th">Status</th>
+              <th className="th">AI Matching</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -140,11 +149,20 @@ export default function JobOrders() {
                     ))}
                   </select>
                 </td>
+                <td className="td">
+                  <button
+                    className="btn-secondary py-1 text-xs"
+                    disabled={match.isPending}
+                    onClick={() => match.mutate(jo.id)}
+                  >
+                    {match.isPending ? "AI menilai..." : "Cari Kandidat"}
+                  </button>
+                </td>
               </tr>
             ))}
             {jobOrders?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={6} className="td py-8 text-center text-slate-400">
                   Belum ada job order.
                 </td>
               </tr>
@@ -152,6 +170,53 @@ export default function JobOrders() {
           </tbody>
         </table>
       </div>
+
+      {(match.isPending || match.error || matchResult) && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">Hasil AI Matching</h2>
+            {matchResult && (
+              <span className="text-xs text-slate-400">
+                {matchResult.evaluated} kandidat dinilai
+                {matchResult.reused > 0 && ` · ${matchResult.reused} memakai hasil sebelumnya`}
+              </span>
+            )}
+          </div>
+          {match.isPending && (
+            <p className="text-sm text-slate-500">
+              AI sedang menilai kandidat (bisa memakan waktu beberapa saat)...
+            </p>
+          )}
+          {match.error && (
+            <p className="text-sm text-red-600">{(match.error as Error).message}</p>
+          )}
+          {matchResult && (
+            <ol className="space-y-2">
+              {matchResult.results.map((item, idx) => (
+                <li key={item.candidate.id} className="flex gap-3">
+                  <span className="w-6 pt-4 text-right text-sm font-bold text-slate-400">
+                    {idx + 1}.
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700">
+                      {item.candidate.full_name}{" "}
+                      <span className={`ml-1 text-xs`}>
+                        (skor <ScoreBadge score={item.screening.score} />)
+                      </span>
+                    </p>
+                    <AiResultCard screening={item.screening} />
+                  </div>
+                </li>
+              ))}
+              {matchResult.results.length === 0 && (
+                <li className="text-sm text-slate-400">
+                  Tidak ada kandidat aktif untuk job order ini.
+                </li>
+              )}
+            </ol>
+          )}
+        </div>
+      )}
     </div>
   );
 }

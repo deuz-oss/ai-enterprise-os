@@ -36,8 +36,16 @@ class Settings(BaseSettings):
     storage_secret_key: str | None = None
     storage_bucket: str = "documents"
 
+    # Layanan LLM dengan API kompatibel OpenAI (OpenAI, vLLM, Ollama /v1, dll).
+    # AI_BASE_URL kosong => seluruh fitur AI nonaktif (endpoint memberi 503).
+    ai_base_url: str | None = None
+    ai_api_key: str | None = None
+    ai_model: str = "gpt-4o-mini"
+    ai_embedding_model: str = "text-embedding-3-small"
+
     @field_validator(
         "database_url", "storage_endpoint", "storage_access_key", "storage_secret_key",
+        "ai_base_url", "ai_api_key",
         mode="before",
     )
     @classmethod
@@ -71,6 +79,10 @@ class Settings(BaseSettings):
         return bool(
             self.storage_endpoint and self.storage_access_key and self.storage_secret_key
         )
+
+    @property
+    def ai_configured(self) -> bool:
+        return bool(self.ai_base_url)
 
 
 @lru_cache

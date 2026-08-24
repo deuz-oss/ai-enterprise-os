@@ -41,6 +41,24 @@ interface HrDoc {
   file_size: number;
 }
 
+interface IndexedContract {
+  contract_id: string;
+  file_name: string | null;
+  employee_name: string;
+  chunks: number;
+}
+
+interface AskResult {
+  answer: string;
+  sources: {
+    contract_id: string;
+    employee_name: string | null;
+    contract_no: string | null;
+    score: number;
+    snippet: string;
+  }[];
+}
+
 const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "lainnya"];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -55,6 +73,7 @@ export default function Employees() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [askResult, setAskResult] = useState<AskResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const docTypeRef = useRef<HTMLSelectElement>(null);
 
@@ -76,6 +95,10 @@ export default function Employees() {
     queryKey: ["contracts-expiring"],
     queryFn: () =>
       api.get<ExpiringContract[]>("/employees/contracts/expiring?within_days=30"),
+  });
+  const { data: indexed } = useQuery({
+    queryKey: ["ai-indexed"],
+    queryFn: () => api.get<IndexedContract[]>("/ai/contracts/indexed"),
   });
 
   const invalidate = () => {
@@ -113,6 +136,17 @@ export default function Employees() {
       qc.invalidateQueries({ queryKey: ["employee-docs", selectedId] });
       if (fileRef.current) fileRef.current.value = "";
     },
+  });
+
+  const indexContract = useMutation({
+    mutationFn: (contractId: string) => api.post(`/ai/contracts/${contractId}/index`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-indexed"] }),
+  });
+
+  const askAi = useMutation({
+    mutationFn: (body: { question: string; employee_id: string | null }) =>
+      api.post<AskResult>("/ai/contracts/ask", body),
+    onSuccess: (data) => setAskResult(data),
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -165,6 +199,64 @@ export default function Employees() {
           </ul>
         </div>
       )}
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-700">Tanya Kontrak (AI)</h2>
+          <span className="text-xs text-slate-400">
+            {indexed?.length
+              ? `${indexed.length} kontrak terindeks`
+              : "Belum ada kontrak terindeks — klik \"Index AI\" pada kontrak"}
+          </span>
+        </div>
+        <form
+          className="mt-3 flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            const q = String(form.get("question") ?? "").trim();
+            if (q) askAi.mutate({ question: q, employee_id: selectedId });
+          }}
+        >
+          <input
+            name="question"
+            required
+            placeholder={
+              selectedId
+                ? "Contoh: Berapa gaji pokok karyawan ini?"
+                : "Tanyakan apa pun tentang kontrak yang sudah diindeks"
+            }
+            className="input flex-1"
+          />
+          <button className="btn" disabled={askAi.isPending || !indexed?.length}>
+            {askAi.isPending ? "AI mencari..." : "Tanya"}
+          </button>
+        </form>
+        {selectedId && (
+          <p className="mt-1 text-xs text-slate-400">
+            Pertanyaan dibatasi pada kontrak karyawan yang sedang dipilih.
+          </p>
+        )}
+        {askAi.error && (
+          <p className="mt-2 text-sm text-red-600">{(askAi.error as Error).message}</p>
+        )}
+        {askResult && (
+          <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-4">
+            <p className="text-sm text-slate-700">{askResult.answer}</p>
+            {askResult.sources.length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-slate-500">
+                {askResult.sources.map((s, i) => (
+                  <li key={i}>
+                    Sumber: {s.employee_name} — {s.contract_no} (skor{" "}
+                    {(s.score * 100).toFixed(0)}%): “{s.snippet.slice(0, 120)}
+                    {s.snippet.length > 120 ? "..." : ""}”
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
@@ -250,16 +342,29 @@ export default function Employees() {
                       {c.file_name ? ` · ${c.file_name}` : ""}
                     </p>
                   </div>
-                  {c.sign_status === "menunggu_ttd" ? (
-                    <button
-                      onClick={() => signContract.mutate(c.id)}
-                      className="btn-secondary text-xs"
-                    >
-                      Tandai TTD
-                    </button>
-                  ) : (
-                    <span className="badge bg-emerald-100 text-emerald-700">ditandatangani</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {c.file_name && (
+                      <button
+                        onClick={() => indexContract.mutate(c.id)}
+                        disabled={indexContract.isPending}
+                        className="btn-secondary text-xs"
+                      >
+                        {indexContract.isPending ? "Mengindeks..." : "Index AI"}
+                      </button>
+                    )}
+                    {c.sign_status === "menunggu_ttd" ? (
+                      <button
+                        onClick={() => signContract.mutate(c.id)}
+                        className="btn-secondary text-xs"
+                      >
+                        Tandai TTD
+                      </button>
+                    ) : (
+                      <span className="badge bg-emerald-100 text-emerald-700">
+                        ditandatangani
+                      </span>
+                    )}
+                  </div>
                 </li>
               ))}
               {contracts?.length === 0 && (

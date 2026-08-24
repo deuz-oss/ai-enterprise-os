@@ -39,6 +39,25 @@ interface CashFlowRow {
   entry_date: string;
 }
 
+interface MonthlyFlow {
+  year: number;
+  month: number;
+  inflow: number;
+  outflow: number;
+  net: number;
+}
+
+interface ForecastResult {
+  history: MonthlyFlow[];
+  projection: MonthlyFlow[];
+  pending_receivables: number;
+  outlook: string;
+  summary: string;
+  risks: string[];
+  recommendations: string[];
+  model: string;
+}
+
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   draft: { label: "draft", cls: "bg-slate-100 text-slate-600" },
   terkirim: { label: "terkirim", cls: "bg-amber-100 text-amber-700" },
@@ -50,6 +69,7 @@ export default function Finance() {
   const qc = useQueryClient();
   const [showGenerate, setShowGenerate] = useState(false);
   const [cfYear, setCfYear] = useState(2026);
+  const [forecast, setForecast] = useState<ForecastResult | null>(null);
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
@@ -89,6 +109,13 @@ export default function Finance() {
   const addCashflow = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/finance/cashflow", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cashflow"] }),
+  });
+  const runForecast = useMutation({
+    mutationFn: (monthsAhead: number) =>
+      api.post<ForecastResult>("/ai/finance/forecast", {
+        months_ahead: monthsAhead,
+      }),
+    onSuccess: (data) => setForecast(data),
   });
 
   function handleGenerate(e: FormEvent<HTMLFormElement>) {
@@ -245,6 +272,121 @@ export default function Finance() {
             <li className="text-sm text-slate-400">Belum ada catatan arus kas.</li>
           )}
         </ul>
+      </div>
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold text-indigo-700">Forecast Arus Kas (AI)</h2>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              runForecast.mutate(Number(form.get("months_ahead")) || 3);
+            }}
+          >
+            <select name="months_ahead" defaultValue="3" className="input w-auto">
+              {[1, 2, 3, 6, 12].map((m) => (
+                <option key={m} value={m}>
+                  {m} bulan ke depan
+                </option>
+              ))}
+            </select>
+            <button className="btn" disabled={runForecast.isPending}>
+              {runForecast.isPending ? "AI menganalisis..." : "Hitung Forecast"}
+            </button>
+          </form>
+        </div>
+        {runForecast.isPending && (
+          <p className="mt-2 text-sm text-slate-400">AI sedang menganalisis tren arus kas...</p>
+        )}
+        {runForecast.error && (
+          <p className="mt-2 text-sm text-red-600">{(runForecast.error as Error).message}</p>
+        )}
+        {forecast && !runForecast.isPending && (
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`badge border-0 ${
+                  forecast.outlook === "positif"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : forecast.outlook === "negatif"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                Outlook: {forecast.outlook}
+              </span>
+              <span className="text-xs text-slate-400">
+                Piutang belum tertagih: {formatRupiah(forecast.pending_receivables)} · model:{" "}
+                {forecast.model}
+              </span>
+            </div>
+            <p className="text-sm text-slate-600">{forecast.summary}</p>
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="th">Bulan</th>
+                    <th className="th">Masuk</th>
+                    <th className="th">Keluar</th>
+                    <th className="th">Net</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {forecast.history.map((h) => (
+                    <tr key={`h-${h.year}-${h.month}`} className="text-slate-500">
+                      <td className="td">{`${h.year}-${String(h.month).padStart(2, "0")}`}</td>
+                      <td className="td">{formatRupiah(h.inflow)}</td>
+                      <td className="td">{formatRupiah(h.outflow)}</td>
+                      <td className="td">{formatRupiah(h.net)}</td>
+                    </tr>
+                  ))}
+                  {forecast.projection.map((p) => (
+                    <tr key={`p-${p.year}-${p.month}`} className="bg-indigo-50/40 font-medium">
+                      <td className="td">
+                        {`${p.year}-${String(p.month).padStart(2, "0")}`} (proyeksi)
+                      </td>
+                      <td className="td">{formatRupiah(p.inflow)}</td>
+                      <td className="td">{formatRupiah(p.outflow)}</td>
+                      <td className={`td ${p.net >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {formatRupiah(p.net)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(forecast.risks.length > 0 || forecast.recommendations.length > 0) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {forecast.risks.length > 0 && (
+                  <div className="rounded-lg bg-rose-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+                      Risiko
+                    </p>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">
+                      {forecast.risks.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {forecast.recommendations.length > 0 && (
+                  <div className="rounded-lg bg-emerald-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                      Rekomendasi
+                    </p>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">
+                      {forecast.recommendations.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

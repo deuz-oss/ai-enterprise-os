@@ -83,10 +83,10 @@ Operations sehari-hari, menggantikan proses manual berbasis spreadsheet dan What
 - Jurnal umum, buku besar, neraca saldo
 - Laporan keuangan standar: Neraca, Laba Rugi, Arus Kas
 
-### Fase 6+ — AI (ditunda)
-- Screening CV otomatis & matching kandidat ↔ job order
-- Asisten Q&A atas dokumen kontrak (RAG)
-- Forecast cash flow
+### Fase 6+ — AI ✅
+- Screening CV otomatis & matching kandidat ↔ job order ✅
+- Asisten Q&A atas dokumen kontrak (RAG) ✅
+- Forecast cash flow ✅
 
 ## 5. Kebutuhan Non-Fungsional
 
