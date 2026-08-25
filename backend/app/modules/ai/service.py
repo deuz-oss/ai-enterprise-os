@@ -130,13 +130,16 @@ def screen_candidate(
         get_object(candidate.cv_object_key), candidate.cv_file_name or ""
     )[:_MAX_CV_CHARS]
 
-    target = f"LOWONGAN YANG DITUJU:\n{_job_order_block(job_order)}" if job_order else (
-        "Belum ada lowongan spesifik. Nilai kualitas umum kandidat untuk posisi "
-        "tenaga kerja outsourcing."
+    target = (
+        f"LOWONGAN YANG DITUJU:\n{_job_order_block(job_order)}"
+        if job_order
+        else (
+            "Belum ada lowongan spesifik. Nilai kualitas umum kandidat untuk posisi "
+            "tenaga kerja outsourcing."
+        )
     )
     user_prompt = (
-        f"{target}\n\nPROFIL KANDIDAT:\n{_candidate_block(candidate)}\n\n"
-        f"ISI CV:\n{cv_text}"
+        f"{target}\n\nPROFIL KANDIDAT:\n{_candidate_block(candidate)}\n\nISI CV:\n{cv_text}"
     )
 
     result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True)

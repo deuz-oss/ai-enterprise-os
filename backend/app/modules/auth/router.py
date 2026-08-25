@@ -111,8 +111,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if user.tenant_id is not None:
         from app.modules.platform.models import Tenant, TenantStatus
 
-        stmt = select(Tenant).where(Tenant.id == user.tenant_id).execution_options(
-            include_with_loader_criteria=False
+        stmt = (
+            select(Tenant)
+            .where(Tenant.id == user.tenant_id)
+            .execution_options(include_with_loader_criteria=False)
         )
         tenant = db.execute(stmt).scalar_one_or_none()
         if tenant is None or tenant.status != TenantStatus.active:

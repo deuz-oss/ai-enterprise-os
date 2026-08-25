@@ -49,9 +49,11 @@ def test_internal_flow_unchanged(client):
     assert run["status"] == "draft"
 
     # Finalisasi langsung dari draft tetap didukung (kompatibilitas).
-    client.post("/api/v1/employees", headers=admin, json={"full_name": "Staf", "base_salary": 4_000_000})
+    client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Staf", "base_salary": 4_000_000}
+    )
     client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
-    fin = client.post("/api/v1/payroll/runs/{0}/start-processing".format(run["id"]), headers=admin)
+    fin = client.post(f"/api/v1/payroll/runs/{run['id']}/start-processing", headers=admin)
     assert fin.status_code == 200
     assert fin.json()["status"] == "finance_processing"
     finalized = client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=admin)
@@ -70,7 +72,9 @@ def test_proyek_lifecycle_dengan_token(client):
     admin, client_id, emp = _setup(client)
 
     # Payrol proyek wajib memilih klien
-    missing = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 6, "run_type": "proyek"})
+    missing = client.post(
+        "/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 6, "run_type": "proyek"}
+    )
     assert missing.status_code == 422
 
     run = client.post(
@@ -90,7 +94,9 @@ def test_proyek_lifecycle_dengan_token(client):
     assert early.status_code == 409
 
     # Submit ke klien → token
-    submitted = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={"days": 7})
+    submitted = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={"days": 7}
+    )
     assert submitted.status_code == 200, submitted.text
     body = submitted.json()
     assert body["status"] == "submitted_to_client"
@@ -107,7 +113,14 @@ def test_proyek_lifecycle_dengan_token(client):
     assert len(vbody["lines"]) == 1
 
     # Keputusan tanpa nama ditolak validasi
-    no_name = client.post(f"/payroll/client/{raw_token}/decision".replace("/payroll/client/", "/api/v1/payroll/client/") if False else f"/api/v1/payroll/client/{raw_token}/decision", json={"approved": True, "name": ""})
+    no_name = client.post(
+        f"/payroll/client/{raw_token}/decision".replace(
+            "/payroll/client/", "/api/v1/payroll/client/"
+        )
+        if False
+        else f"/api/v1/payroll/client/{raw_token}/decision",
+        json={"approved": True, "name": ""},
+    )
     assert no_name.status_code == 422
 
     # Klien menyetujui
@@ -121,7 +134,9 @@ def test_proyek_lifecycle_dengan_token(client):
     # Token sudah terpakai → tidak bisa dipakai lagi
     reuse = client.get(f"/api/v1/payroll/client/{raw_token}")
     assert reuse.status_code == 409
-    reuse_dec = client.post(f"/api/v1/payroll/client/{raw_token}/decision", json={"approved": False, "name": "X"})
+    reuse_dec = client.post(
+        f"/api/v1/payroll/client/{raw_token}/decision", json={"approved": False, "name": "X"}
+    )
     assert reuse_dec.status_code == 409
 
     # Mulai proses finance → finalisasi
@@ -140,7 +155,9 @@ def test_client_reject_then_resubmit(client):
     ).json()
     client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
 
-    sub1 = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    sub1 = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}
+    ).json()
     rej = client.post(
         f"/api/v1/payroll/client/{sub1['raw_token']}/decision",
         json={"approved": False, "name": "Klien", "note": "Ada selisih lembur"},
@@ -153,7 +170,9 @@ def test_client_reject_then_resubmit(client):
     regen = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
     assert regen.status_code in (200, 201, 409)  # 409 bila semua slip sudah ada
 
-    sub2 = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    sub2 = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}
+    ).json()
     assert sub2["status"] == "submitted_to_client"
     assert sub2["raw_token"] != sub1["raw_token"]
 
@@ -172,18 +191,17 @@ def test_expired_token_rejected(client):
         json={"year": 2026, "month": 8, "run_type": "proyek", "client_id": client_id},
     ).json()
     client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
-    sub = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={"days": 1}).json()
+    sub = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={"days": 1}
+    ).json()
 
     # Majukan waktu kedaluwarsa token secara manual via DB.
-    from sqlalchemy import update
-
     from app.modules.payroll.models import PayrollRunToken
+    from sqlalchemy import update
 
     db = client.testing_session()
     try:
-        db.execute(
-            update(PayrollRunToken).values(expires_at=datetime.now(UTC) - timedelta(days=1))
-        )
+        db.execute(update(PayrollRunToken).values(expires_at=datetime.now(UTC) - timedelta(days=1)))
         db.commit()
     finally:
         db.close()
@@ -214,7 +232,12 @@ def test_license_guard_per_run_type(client):
     proyek = client.post(
         "/api/v1/payroll/runs",
         headers=admin,
-        json={"year": 2026, "month": 9, "run_type": "proyek", "client_id": "00000000-0000-0000-0000-00000000dead"},
+        json={
+            "year": 2026,
+            "month": 9,
+            "run_type": "proyek",
+            "client_id": "00000000-0000-0000-0000-00000000dead",
+        },
     )
     assert proyek.status_code == 403
     assert "Operations & Billing" in proyek.json()["detail"]

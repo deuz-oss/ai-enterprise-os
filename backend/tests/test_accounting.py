@@ -21,9 +21,7 @@ def test_create_and_list_journal_entry(client):
     body = resp.json()
     assert len(body["lines"]) == 2
 
-    listed = client.get(
-        "/api/v1/accounting/journal", headers=headers, params={"year": 2026}
-    ).json()
+    listed = client.get("/api/v1/accounting/journal", headers=headers, params={"year": 2026}).json()
     assert len(listed) == 1
 
 
@@ -94,9 +92,7 @@ def test_trial_balance_and_income_statement(client):
 
 def test_balance_sheet(client):
     headers = _auth_header(client)
-    resp = client.post(
-        "/api/v1/accounting/journal", headers=headers, json=_entry_payload()
-    )
+    resp = client.post("/api/v1/accounting/journal", headers=headers, json=_entry_payload())
     assert resp.status_code == 201
 
     bs = client.get(

@@ -28,9 +28,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str, tenant_id: UUID | None = None) -> str:
-    expire = datetime.now(UTC) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
+    expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {"sub": subject, "exp": expire, "tid": str(tenant_id) if tenant_id else None}
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
@@ -72,8 +70,8 @@ def get_current_user(
     except ValueError:
         raise unauthorized from None
     # Cari user tanpa filter tenant (konteks belum ada pada titik ini).
-    stmt = select(User).where(User.id == user_id).execution_options(
-        include_with_loader_criteria=False
+    stmt = (
+        select(User).where(User.id == user_id).execution_options(include_with_loader_criteria=False)
     )
     user = db.execute(stmt).scalar_one_or_none()
     if user is None or not user.is_active:

@@ -48,25 +48,19 @@ def test_onboard_from_placement_creates_employee(client):
     assert body["phone"] == "081234567890"
 
     # onboard ganda untuk placement yang sama harus ditolak
-    dup = client.post(
-        "/api/v1/employees/onboard", headers=headers, json={"placement_id": pid}
-    )
+    dup = client.post("/api/v1/employees/onboard", headers=headers, json={"placement_id": pid})
     assert dup.status_code == 409
 
 
 def test_create_employee_generated_no_and_search(client):
     headers = _auth_header(client)
-    first = client.post(
-        "/api/v1/employees", headers=headers, json={"full_name": "Budi Santoso"}
-    )
+    first = client.post("/api/v1/employees", headers=headers, json={"full_name": "Budi Santoso"})
     assert first.status_code == 201, first.text
     assert first.json()["employee_no"].startswith("EMP-")
 
     client.post("/api/v1/employees", headers=headers, json={"full_name": "Ani Rahayu"})
 
-    listed = client.get(
-        "/api/v1/employees", headers=headers, params={"q": "budi"}
-    ).json()
+    listed = client.get("/api/v1/employees", headers=headers, params={"q": "budi"}).json()
     assert len(listed) == 1
     assert listed[0]["full_name"] == "Budi Santoso"
 
@@ -105,16 +99,12 @@ def test_contract_lifecycle_sign_and_expiring(client):
     assert expiring[0]["employee_name"] == "Dewi Anggraini"
     assert isinstance(expiring[0]["days_left"], int)
 
-    signed = client.post(
-        f"/api/v1/employees/contracts/{contract['id']}/sign", headers=headers
-    )
+    signed = client.post(f"/api/v1/employees/contracts/{contract['id']}/sign", headers=headers)
     assert signed.status_code == 200
     assert signed.json()["sign_status"] == "ditandatangani"
     assert signed.json()["signed_at"] is not None
 
-    again = client.post(
-        f"/api/v1/employees/contracts/{contract['id']}/sign", headers=headers
-    )
+    again = client.post(f"/api/v1/employees/contracts/{contract['id']}/sign", headers=headers)
     assert again.status_code == 409
 
 

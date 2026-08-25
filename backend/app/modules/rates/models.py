@@ -84,4 +84,6 @@ class BankFeeConfig(Base):
     fee: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=3500)
     is_mandiri_group: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())  # noqa: E501
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )  # noqa: E501

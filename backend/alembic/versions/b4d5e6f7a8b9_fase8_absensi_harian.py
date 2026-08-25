@@ -43,9 +43,7 @@ def upgrade() -> None:
         ),
         sa.Column("clock_in", sa.DateTime(timezone=True), nullable=True),
         sa.Column("clock_out", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "overtime_hours", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("overtime_hours", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "source",
             sa.Enum(
@@ -83,7 +81,9 @@ def upgrade() -> None:
         ["employee_id"],
         unique=False,
     )
-    op.create_index(op.f("ix_attendance_records_date"), "attendance_records", ["date"], unique=False)
+    op.create_index(
+        op.f("ix_attendance_records_date"), "attendance_records", ["date"], unique=False
+    )
     op.create_index(
         op.f("ix_attendance_records_status"), "attendance_records", ["status"], unique=False
     )

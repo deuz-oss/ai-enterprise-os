@@ -110,7 +110,7 @@ def test_purchase_bill_receive_and_pay(client):
         params={"year": 2026, "event_code": "purchase_received"},
     ).json()
     assert len(entries) == 1
-    lines = {l["account_code"]: l for l in entries[0]["lines"]}
+    lines = {ln["account_code"]: ln for ln in entries[0]["lines"]}
     assert float(lines["5-9000"]["debit"]) == 2_000_000
     assert float(lines["1-1400"]["debit"]) == ppn
     assert float(lines["2-1000"]["credit"]) == 2_000_000 + ppn
@@ -129,7 +129,7 @@ def test_purchase_bill_receive_and_pay(client):
         headers=admin,
         params={"year": 2026, "event_code": "purchase_paid"},
     ).json()
-    plines = {l["account_code"]: l for l in paid_events[0]["lines"]}
+    plines = {ln["account_code"]: ln for ln in paid_events[0]["lines"]}
     assert float(plines["2-1000"]["debit"]) == 2_000_000 + ppn
     assert float(plines["1-1100"]["credit"]) == 2_000_000 + ppn
 
@@ -163,9 +163,7 @@ def test_fixed_asset_lifecycle_depreciation_disposal(client):
     assert body["monthly_depreciation"] == 1_000_000
     assert body["book_value"] == 24_000_000
 
-    # Penyusutan Jan & Feb 2026
-    for m in ("2026-01-01",):
-        pass
+    # Penyusutan Jan 2026
     jan = client.post(
         f"/api/v1/accounting/assets/{body['id']}/depreciate",
         headers=admin,
@@ -215,7 +213,7 @@ def test_fixed_asset_lifecycle_depreciation_disposal(client):
         params={"year": 2026, "event_code": "asset_disposed"},
     ).json()
     assert len(disp_events) == 1
-    dlines = {l["account_code"]: l for l in disp_events[0]["lines"]}
+    dlines = {ln["account_code"]: ln for ln in disp_events[0]["lines"]}
     # Rugi 2jt masuk 6-1000
     assert float(dlines["6-1000"]["debit"]) == 2_000_000
 
@@ -254,7 +252,9 @@ def test_cash_flow_indirect_structure(client):
         resp = client.post("/api/v1/accounting/journal", headers=admin, json=fl)
         assert resp.status_code == 201, resp.text
 
-    cf = client.get("/api/v1/accounting/reports/cash-flow-indirect", headers=admin, params={"year": 2026}).json()
+    cf = client.get(
+        "/api/v1/accounting/reports/cash-flow-indirect", headers=admin, params={"year": 2026}
+    ).json()
     op = cf["operating_activities"]
     assert op["net_income"] == 8_000_000
     # Net change kas harus cocok dengan Δ saldo bank (50jt modal + 12jt fee - 4jt gaji = 58jt)

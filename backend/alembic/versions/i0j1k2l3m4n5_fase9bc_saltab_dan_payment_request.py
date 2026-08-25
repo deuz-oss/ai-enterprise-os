@@ -24,7 +24,14 @@ def upgrade() -> None:
         sa.Column("payslip_id", sa.Uuid(), nullable=False),
         sa.Column(
             "ctype",
-            sa.Enum("earnings", "deduction", "passthrough", name="payslipcomponenttype", native_enum=False, length=50),
+            sa.Enum(
+                "earnings",
+                "deduction",
+                "passthrough",
+                name="payslipcomponenttype",
+                native_enum=False,
+                length=50,
+            ),
             nullable=False,
         ),
         sa.Column("code", sa.String(length=50), nullable=False),
@@ -98,7 +105,9 @@ def upgrade() -> None:
         ["payroll_run_id"],
         unique=False,
     )
-    op.create_index(op.f("ix_payment_requests_status"), "payment_requests", ["status"], unique=False)
+    op.create_index(
+        op.f("ix_payment_requests_status"), "payment_requests", ["status"], unique=False
+    )
 
 
 def downgrade() -> None:

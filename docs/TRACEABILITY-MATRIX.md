@@ -433,6 +433,16 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Test | `backend/tests/test_accounting_fase10.py` |
 | Sisa Fase 10 | AI akuntansi (§8.8) — butuh LLM kalibrasi |
 
+### 12.16 Fase 10 — AI Layer Akuntansi (§8.8)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Asisten tutup buku, deteksi anomali & kepatuhan, kategori bill cerdas, narasi eksekutif, tanya laporan |
+| Source Code | `backend/app/modules/accounting/ai_accounting.py`, endpoint di `accounting/router.py` |
+| API | `GET /ai/close-checklist?year=&month=` · `GET /ai/anomalies?year=&month=` · `POST /ai/categorize-bill` · `GET /ai/executive-summary?year=[&month=]` · `POST /ai/ask` |
+| Aturan | Checklist & anomali 100% deterministik (tanpa LLM); narasi/tanya-laporan memakai LLM sebagai lapisan bahasa di atas angka terverifikasi dengan fallback template; kategori berbasis keyword + riwayat vendor |
+| LLM | Opsional via AI_BASE_URL; tanpa konfigurasi semua fitur tetap berfungsi kecuali narasi natural |
+
 ### 12.15 Fase 10 lanjutan — Kas & Bank, Pembelian, Aset Tetap, Arus Kas
 
 | Aspek | Detail |

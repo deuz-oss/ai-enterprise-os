@@ -76,9 +76,7 @@ class TenantMixin:
     @declared_attr
     @classmethod
     def tenant_id(cls) -> Mapped[UUID]:
-        return mapped_column(
-            ForeignKey("tenants.id"), nullable=False, index=True
-        )
+        return mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
 
 
 def tenant_from_token(token: str) -> UUID | None:

@@ -176,7 +176,5 @@ def test_role_hr_wajib_untuk_fitur_esign(client):
     token = client.post(
         "/api/v1/auth/login", json={"email": "rec@example.com", "password": "password123"}
     ).json()["access_token"]
-    resp = client.get(
-        "/api/v1/esign/config", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = client.get("/api/v1/esign/config", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403

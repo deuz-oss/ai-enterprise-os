@@ -47,9 +47,7 @@ def log_event(
                 tenant_id=tenant_id,
                 user_id=resolved_actor,
                 entity_type=entity_type,
-                entity_id=(
-                    entity_id if isinstance(entity_id, UUID) else UUID(str(entity_id))
-                )
+                entity_id=(entity_id if isinstance(entity_id, UUID) else UUID(str(entity_id)))
                 if entity_id
                 else None,
                 object_key=object_key[:500] if object_key else None,

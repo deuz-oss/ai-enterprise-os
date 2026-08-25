@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 10: AI Layer Akuntansi (§8.8)
+
+- **Asisten tutup buku** `GET /accounting/ai/close-checklist?year=&month=` — checklist deterministik tanpa LLM: jurnal memorial belum diposting, invoice/payrol/PR tanpa jurnal otomatis.
+- **Deteksi anomali** `GET /accounting/ai/anomalies?year=&month=` — duplikasi bill vendor (nama+nominal dalam 7 hari), transaksi >3× median, sanity PPN (ppn ≠ rate×amount).
+- **Kategori bill cerdas** `POST /accounting/ai/categorize-bill` — saran COA berdasarkan keyword + riwayat vendor serupa.
+- **Narasi eksekutif** `GET /accounting/ai/executive-summary?year=[&month=]` — angka terverifikasi → narasi Bahasa Indonesia via LLM (fallback template bila AI tidak dikonfigurasi).
+- **Tanya laporan** `POST /accounting/ai/ask` — pertanyaan natural → pre-computed data terverifikasi (laba rugi, neraca, per klien) → jawaban dirangkai LLM.
+- Semua fitur AI berbasis data terstruktur yang bisa diverifikasi, bukan teks bebas; LLM opsional — checklist & anomali sepenuhnya deterministik.
+
 ### Added — Fase 10 lanjutan: Kas & Bank, Pembelian, Aset Tetap, Arus Kas Tidak Langsung
 
 - **Kas & Bank** (`BankTransaction`, migrasi `k2l3m4n5o6p7`): penerimaan/pembayaran/transfer antar rekening dengan jurnal otomatis; rekonsiliasi manual per transaksi.

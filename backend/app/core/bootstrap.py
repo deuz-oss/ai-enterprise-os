@@ -46,8 +46,10 @@ def ensure_default_tenant(db: Session):
 def _find_user_unfiltered(db: Session, email: str):
     from app.modules.auth.models import User
 
-    stmt = select(User).where(User.email == email).execution_options(
-        include_with_loader_criteria=False
+    stmt = (
+        select(User)
+        .where(User.email == email)
+        .execution_options(include_with_loader_criteria=False)
     )
     return db.execute(stmt).scalar_one_or_none()
 
@@ -69,9 +71,7 @@ def run_bootstrap(db: Session) -> None:
                 tenant_id=default_tenant.id,
             )
             db.add(admin)
-            logger.info(
-                "Bootstrap admin tenant '%s' dibuat: %s", DEFAULT_TENANT_SLUG, admin.email
-            )
+            logger.info("Bootstrap admin tenant '%s' dibuat: %s", DEFAULT_TENANT_SLUG, admin.email)
 
         # 2) Platform admin (opsional; aktif jika password diset di env)
         if settings.platform_admin_password:

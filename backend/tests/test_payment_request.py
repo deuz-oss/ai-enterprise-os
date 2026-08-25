@@ -4,10 +4,12 @@ from tests.conftest import _auth_header
 
 
 def _finalized_run(client, headers, year=2026, month=5, salary=6_000_000):
-    emp = client.post(
+    client.post(
         "/api/v1/employees", headers=headers, json={"full_name": "PR Emp", "base_salary": salary}
     ).json()
-    run = client.post("/api/v1/payroll/runs", headers=headers, json={"year": year, "month": month}).json()
+    run = client.post(
+        "/api/v1/payroll/runs", headers=headers, json={"year": year, "month": month}
+    ).json()
     gen = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
     assert gen.status_code == 201, gen.text
     fin = client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=headers)
@@ -87,9 +89,7 @@ def test_pr_reject_requires_note_and_resubmit_flow(client):
     assert pr2.status_code == 201
 
     # Filter status bekerja
-    rejected_only = client.get(
-        "/api/v1/payment-requests?status=ditolak", headers=headers
-    ).json()
+    rejected_only = client.get("/api/v1/payment-requests?status=ditolak", headers=headers).json()
     assert all(p["status"] == "ditolak" for p in rejected_only)
 
 
@@ -113,7 +113,9 @@ def test_pr_from_proyek_run(client):
     assert not_final.status_code == 422
 
     # Jalur proyek: submit ke klien & approve sebelum PR
-    sub = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    sub = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}
+    ).json()
     client.post(
         f"/api/v1/payroll/client/{sub['raw_token']}/decision",
         json={"approved": True, "name": "Klien"},

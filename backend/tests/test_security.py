@@ -37,7 +37,8 @@ def test_change_password_sendiri(client):
     assert bad.status_code == 422
 
     ok = client.post(
-        "/api/v1/auth/change-password", headers=headers,
+        "/api/v1/auth/change-password",
+        headers=headers,
         json={"old_password": "password123", "new_password": "password456"},
     )
     assert ok.status_code == 204
@@ -68,9 +69,7 @@ def test_reset_password_alur_admin_token(client):
     admin = _auth_header(client)
     user = _register(client, admin, "reset-target@example.com")
 
-    issued = client.post(
-        f"/api/v1/auth/users/{user['id']}/password-reset-token", headers=admin
-    )
+    issued = client.post(f"/api/v1/auth/users/{user['id']}/password-reset-token", headers=admin)
     assert issued.status_code == 200
     token = issued.json()["reset_token"]
     assert len(token) > 20

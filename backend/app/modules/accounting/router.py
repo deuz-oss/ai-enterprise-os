@@ -139,3 +139,63 @@ def profit_by_client(
 ):
     """Laba rugi per kontrak klien dari dimensi baris jurnal (PRD §8.6)."""
     return service.profit_by_client(db, year=year, month=month)
+
+
+# ---------- Fase 10: AI Layer Akuntansi (PRD §8.8) ----------
+
+from app.modules.accounting import ai_accounting  # noqa: E402
+
+
+@router.get("/ai/close-checklist")
+def close_checklist(
+    year: int = Query(...),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Asisten tutup buku — checklist deterministik tanpa LLM."""
+    return ai_accounting.close_checklist(db, year=year, month=month)
+
+
+@router.get("/ai/anomalies")
+def detect_anomalies(
+    year: int = Query(...),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Deteksi anomali & kepatuhan: duplikasi bill, transaksi besar, sanity PPN."""
+    return ai_accounting.detect_anomalies(db, year=year, month=month)
+
+
+@router.get("/ai/executive-summary")
+def executive_summary(
+    year: int = Query(...),
+    month: int | None = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Narasi eksekutif otomatis dari data terverifikasi (LLM opsional)."""
+    return ai_accounting.executive_summary(db, year=year, month=month)
+
+
+@router.post("/ai/categorize-bill")
+def categorize_bill(payload: dict, db: Session = Depends(get_db)):
+    """Saran COA untuk bill baru berdasarkan riwayat & keyword."""
+    vendor = str((payload or {}).get("vendor_name") or "")
+    if not vendor.strip():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="vendor_name wajib diisi")
+    return ai_accounting.suggest_bill_category(
+        db, vendor_name=vendor, description=(payload or {}).get("description")
+    )
+
+
+@router.post("/ai/ask")
+def ask_report(payload: dict, db: Session = Depends(get_db)):
+    """Tanya laporan — jawaban berbasis pre-computed data terverifikasi."""
+    question = str((payload or {}).get("question") or "").strip()
+    if not question:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="Pertanyaan wajib diisi")
+    year = (payload or {}).get("year")
+    return ai_accounting.ask_report(db, question=question, year=int(year) if year else None)

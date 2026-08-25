@@ -39,9 +39,7 @@ def upgrade() -> None:
         batch_op.create_foreign_key(
             "fk_payroll_runs_client_id_clients", "clients", ["client_id"], ["id"]
         )
-    op.create_index(
-        op.f("ix_payroll_runs_run_type"), "payroll_runs", ["run_type"], unique=False
-    )
+    op.create_index(op.f("ix_payroll_runs_run_type"), "payroll_runs", ["run_type"], unique=False)
 
     op.create_table(
         "payroll_run_tokens",
@@ -82,8 +80,6 @@ def downgrade() -> None:
     op.drop_table("payroll_run_tokens")
     op.drop_index(op.f("ix_payroll_runs_run_type"), table_name="payroll_runs")
     with op.batch_alter_table("payroll_runs") as batch_op:
-        batch_op.drop_constraint(
-            "fk_payroll_runs_client_id_clients", type_="foreignkey"
-        )
+        batch_op.drop_constraint("fk_payroll_runs_client_id_clients", type_="foreignkey")
         batch_op.drop_column("client_id")
         batch_op.drop_column("run_type")

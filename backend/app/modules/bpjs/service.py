@@ -43,7 +43,9 @@ def monthly_recap(db: Session, year: int, month: int) -> BpjsRecapOut:
     effective = date(year, month, 1)
     rows: list[ContributionRowOut] = []
     for emp in _get_employees(db):
-        breakdown = compute_contribution(float(emp.base_salary), emp.jkk_risk_category, db=db, effective_date=effective)  # noqa: E501
+        breakdown = compute_contribution(
+            float(emp.base_salary), emp.jkk_risk_category, db=db, effective_date=effective
+        )  # noqa: E501
         rows.append(_to_row(emp, breakdown))
 
     summary = RecapSummaryOut(
@@ -103,9 +105,27 @@ def contributions_csv(db: Session, year: int, month: int) -> tuple[str, str]:
             ]
         )
     writer.writerow([])
-    writer.writerow(["TOTAL", "", "", "", "", "", "", "", "", "", "", "", "", "",
-                     recap.summary.employer_total, recap.summary.employee_total,
-                     recap.summary.grand_total])
+    writer.writerow(
+        [
+            "TOTAL",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            recap.summary.employer_total,
+            recap.summary.employee_total,
+            recap.summary.grand_total,
+        ]
+    )
     filename = f"bpjs-iuran-{year}{month:02d}.csv"
     return buffer.getvalue(), filename
 

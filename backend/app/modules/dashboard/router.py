@@ -21,11 +21,14 @@ def overview(db: Session = Depends(get_db)):
     lead_rows = db.execute(select(Lead.stage, func.count(Lead.id)).group_by(Lead.stage)).all()
     leads = {stage.value: count for stage, count in lead_rows}
 
-    open_job_orders = db.execute(
-        select(func.count(JobOrder.id)).where(
-            JobOrder.status.notin_([JobOrderStatus.filled, JobOrderStatus.closed])
-        )
-    ).scalar() or 0
+    open_job_orders = (
+        db.execute(
+            select(func.count(JobOrder.id)).where(
+                JobOrder.status.notin_([JobOrderStatus.filled, JobOrderStatus.closed])
+            )
+        ).scalar()
+        or 0
+    )
 
     candidate_rows = db.execute(
         select(Candidate.status, func.count(Candidate.id)).group_by(Candidate.status)
@@ -37,10 +40,7 @@ def overview(db: Session = Depends(get_db)):
             "total": sum(leads.values()),
             "won": leads.get(LeadStage.won.value, 0),
             "by_stage": leads,
-            "funnel": [
-                {"stage": s.value, "count": leads.get(s.value, 0)}
-                for s in LeadStage
-            ],
+            "funnel": [{"stage": s.value, "count": leads.get(s.value, 0)} for s in LeadStage],
         },
         "clients": db.execute(select(func.count(Client.id))).scalar() or 0,
         "documents": db.execute(select(func.count(LegalDocument.id))).scalar() or 0,

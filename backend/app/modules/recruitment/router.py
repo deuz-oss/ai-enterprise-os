@@ -39,9 +39,7 @@ def list_job_orders(
     return service.list_job_orders(db, client_id=client_id, status=jo_status)
 
 
-@router.post(
-    "/job-orders", response_model=JobOrderOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("/job-orders", response_model=JobOrderOut, status_code=status.HTTP_201_CREATED)
 def create_job_order(payload: JobOrderCreate, db: Session = Depends(get_db)):
     return service.create_job_order(db, payload)
 
@@ -94,9 +92,7 @@ def get_candidate(candidate_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/candidates/{candidate_id}", response_model=CandidateOut)
-def update_candidate(
-    candidate_id: str, payload: CandidateUpdate, db: Session = Depends(get_db)
-):
+def update_candidate(candidate_id: str, payload: CandidateUpdate, db: Session = Depends(get_db)):
     return service.update_candidate(db, candidate_id, payload)
 
 

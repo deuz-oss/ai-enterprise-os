@@ -183,16 +183,12 @@ def test_finalize_run_locks(client):
     empty = client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=headers)
     assert empty.status_code == 422  # belum ada slip
 
-    client.post(
-        f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}
-    )
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
     finalized = client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=headers)
     assert finalized.status_code == 200
     assert finalized.json()["status"] == "final"
 
-    again = client.post(
-        f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}
-    )
+    again = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
     assert again.status_code == 409  # run final terkunci
 
 

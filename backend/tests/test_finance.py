@@ -37,14 +37,10 @@ def _seed_client_with_payroll(client, headers, name="PT Tagihan Jaya", salary=5_
     )
     assert resp.status_code == 200
 
-    resp = client.post(
-        "/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 6}
-    )
+    resp = client.post("/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 6})
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
-    resp = client.post(
-        f"/api/v1/payroll/runs/{run_id}/generate", headers=headers, json={}
-    )
+    resp = client.post(f"/api/v1/payroll/runs/{run_id}/generate", headers=headers, json={})
     assert resp.status_code == 201, resp.text
     return client_id, run_id
 
@@ -170,7 +166,5 @@ def test_cashflow_crud_and_summary(client):
     assert summary["outflow"] == 6_000_000
     assert summary["net"] == 4_000_000
 
-    entries = client.get(
-        "/api/v1/finance/cashflow", headers=headers, params={"year": 2026}
-    ).json()
+    entries = client.get("/api/v1/finance/cashflow", headers=headers, params={"year": 2026}).json()
     assert len(entries) == 2

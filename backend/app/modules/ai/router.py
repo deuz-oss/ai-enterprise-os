@@ -38,9 +38,7 @@ def screen_candidate(
     return ai_service.screen_candidate(db, candidate_id, job_order_id)
 
 
-@recruitment_router.get(
-    "/candidates/{candidate_id}/screenings", response_model=list[ScreeningOut]
-)
+@recruitment_router.get("/candidates/{candidate_id}/screenings", response_model=list[ScreeningOut])
 def list_screenings(candidate_id: UUID, db: Session = Depends(get_db)):
     return ai_service.list_screenings(db, candidate_id)
 

@@ -51,9 +51,7 @@ def test_jkk_mengikuti_kategori_risiko():
 def test_total_adalah_penjumlahan_komponen():
     b = compute_contribution(7_500_000, 4)
     assert b.grand_total == b.employer_total + b.employee_total
-    assert b.employer_total == (
-        b.kes_employer + b.jkk + b.jkm + b.jht_employer + b.jp_employer
-    )
+    assert b.employer_total == (b.kes_employer + b.jkk + b.jkm + b.jht_employer + b.jp_employer)
 
 
 # ---- API ----

@@ -112,9 +112,7 @@ def list_indexed(db: Session) -> list[IndexedContractOut]:
         )
         .join(Employee, Employee.id == EmploymentContract.employee_id)
         .join(AIDocumentChunk, AIDocumentChunk.source_id == EmploymentContract.id)
-        .group_by(
-            EmploymentContract.id, EmploymentContract.file_name, Employee.full_name
-        )
+        .group_by(EmploymentContract.id, EmploymentContract.file_name, Employee.full_name)
         .order_by(Employee.full_name)
     ).all()
     return [
@@ -151,10 +149,7 @@ def ask(db: Session, question: str, employee_id: UUID | None = None) -> AskResul
     employee_ids = {c.employee_id for _, c in scored if c.employee_id}
     contract_ids = {c.source_id for _, c in scored}
     employees: dict[UUID, Employee] = (
-        {
-            e.id: e
-            for e in db.scalars(select(Employee).where(Employee.id.in_(employee_ids))).all()
-        }
+        {e.id: e for e in db.scalars(select(Employee).where(Employee.id.in_(employee_ids))).all()}
         if employee_ids
         else {}
     )
@@ -185,8 +180,7 @@ def ask(db: Session, question: str, employee_id: UUID | None = None) -> AskResul
         )
 
     user_prompt = (
-        "KONTEKS DOKUMEN KONTRAK:\n\n" + "\n\n".join(context_parts) +
-        f"\n\nPERTANYAAN: {question}"
+        "KONTEKS DOKUMEN KONTRAK:\n\n" + "\n\n".join(context_parts) + f"\n\nPERTANYAAN: {question}"
     )
     result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True)
     answer = str(result.get("answer") or "").strip() if isinstance(result, dict) else ""

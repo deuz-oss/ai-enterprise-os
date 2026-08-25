@@ -62,7 +62,7 @@ def test_manual_record_and_auto_aggregation(client):
 
 
 def test_two_lane_validation(client):
-    from datetime import date, timedelta
+    from datetime import date
 
     admin = _auth_header(client)
     internal = _employee(client, admin, "Staf Internal", employment="internal")

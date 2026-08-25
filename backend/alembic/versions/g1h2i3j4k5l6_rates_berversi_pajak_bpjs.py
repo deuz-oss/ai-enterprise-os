@@ -29,11 +29,18 @@ def upgrade() -> None:
         sa.Column("ter_a", sa.JSON(), nullable=False),
         sa.Column("ter_b", sa.JSON(), nullable=False),
         sa.Column("ter_c", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("effective_from", name="uq_pph21_effective"),
     )
-    op.create_index(op.f("ix_pph21_configs_effective_from"), "pph21_configs", ["effective_from"], unique=False)
+    op.create_index(
+        op.f("ix_pph21_configs_effective_from"), "pph21_configs", ["effective_from"], unique=False
+    )
 
     op.create_table(
         "bpjs_configs",
@@ -50,11 +57,18 @@ def upgrade() -> None:
         sa.Column("jkm_rate", sa.Numeric(precision=5, scale=4), nullable=False),
         sa.Column("jkk_rates", sa.JSON(), nullable=False),
         sa.Column("default_jkk_category", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("effective_from", name="uq_bpjs_effective"),
     )
-    op.create_index(op.f("ix_bpjs_configs_effective_from"), "bpjs_configs", ["effective_from"], unique=False)
+    op.create_index(
+        op.f("ix_bpjs_configs_effective_from"), "bpjs_configs", ["effective_from"], unique=False
+    )
 
     op.create_table(
         "billing_tax_configs",
@@ -63,11 +77,21 @@ def upgrade() -> None:
         sa.Column("ppn_rate", sa.Numeric(precision=5, scale=4), nullable=False),
         sa.Column("pph23_rate", sa.Numeric(precision=5, scale=4), nullable=False),
         sa.Column("due_days", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("effective_from", name="uq_billing_effective"),
     )
-    op.create_index(op.f("ix_billing_tax_configs_effective_from"), "billing_tax_configs", ["effective_from"], unique=False)
+    op.create_index(
+        op.f("ix_billing_tax_configs_effective_from"),
+        "billing_tax_configs",
+        ["effective_from"],
+        unique=False,
+    )
 
     op.create_table(
         "bank_fee_configs",
@@ -75,8 +99,18 @@ def upgrade() -> None:
         sa.Column("bank_name", sa.String(length=100), nullable=False),
         sa.Column("fee", sa.Numeric(precision=14, scale=2), nullable=False),
         sa.Column("is_mandiri_group", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("bank_name", name="uq_bank_fee_name"),
     )
@@ -103,7 +137,11 @@ def upgrade() -> None:
         KESEHATAN_EMPLOYER,
         KESEHATAN_SALARY_CAP,
     )
-    from app.modules.finance.tax_config import DEFAULT_DUE_DAYS, DEFAULT_PPH23_RATE, DEFAULT_PPN_RATE
+    from app.modules.finance.tax_config import (
+        DEFAULT_DUE_DAYS,
+        DEFAULT_PPH23_RATE,
+        DEFAULT_PPN_RATE,
+    )
     from app.modules.payroll.tax import (
         MAX_TANGGUNGAN,
         PASAL_17_BRACKETS,
@@ -122,7 +160,9 @@ def upgrade() -> None:
     pph21_id = "00000000-0000-0000-0000-000000000001"
     conn.execute(
         sa.text(
-            "INSERT INTO pph21_configs (id, effective_from, ptkp_diri, ptkp_kawin, ptkp_tanggungan, max_tanggungan, pasal17_brackets, ter_a, ter_b, ter_c) "
+            "INSERT INTO pph21_configs (id, effective_from, ptkp_diri, ptkp_kawin, "
+            "ptkp_tanggungan, "
+            "max_tanggungan, pasal17_brackets, ter_a, ter_b, ter_c) "
             "VALUES (:id, :eff, :diri, :kawin, :tang, :max, :pasal, :a, :b, :c)"
         ),
         {
@@ -142,8 +182,11 @@ def upgrade() -> None:
     bpjs_id = "00000000-0000-0000-0000-000000000002"
     conn.execute(
         sa.text(
-            "INSERT INTO bpjs_configs (id, effective_from, kesehatan_employer, kesehatan_employee, kesehatan_cap, jht_employer, jht_employee, jp_employer, jp_employee, jp_cap, jkm_rate, jkk_rates, default_jkk_category) "
-            "VALUES (:id, :eff, :ke, :ke2, :kecap, :jhte, :jhte2, :jpe, :jpe2, :jpcap, :jkm, :jkk, :def)"
+            "INSERT INTO bpjs_configs (id, effective_from, kesehatan_employer, kesehatan_employee, "
+            "kesehatan_cap, jht_employer, jht_employee, jp_employer, jp_employee, jp_cap, "
+            "jkm_rate, jkk_rates, default_jkk_category) "
+            "VALUES (:id, :eff, :ke, :ke2, :kecap, :jhte, :jhte2, :jpe, "
+            ":jpe2, :jpcap, :jkm, :jkk, :def)"
         ),
         {
             "id": bpjs_id,
@@ -165,18 +208,38 @@ def upgrade() -> None:
     billing_id = "00000000-0000-0000-0000-000000000003"
     conn.execute(
         sa.text(
-            "INSERT INTO billing_tax_configs (id, effective_from, ppn_rate, pph23_rate, due_days) VALUES (:id, :eff, :ppn, :pph23, :due)"
+            "INSERT INTO billing_tax_configs (id, effective_from, ppn_rate, pph23_rate, due_days) "
+            "VALUES (:id, :eff, :ppn, :pph23, :due)"
         ),
-        {"id": billing_id, "eff": "2025-01-01", "ppn": DEFAULT_PPN_RATE, "pph23": DEFAULT_PPH23_RATE, "due": DEFAULT_DUE_DAYS},
+        {
+            "id": billing_id,
+            "eff": "2025-01-01",
+            "ppn": DEFAULT_PPN_RATE,
+            "pph23": DEFAULT_PPH23_RATE,
+            "due": DEFAULT_DUE_DAYS,
+        },
     )
 
     # Bank fees default: Mandiri group gratis, lainnya 3500
     import uuid
 
-    for name, is_mandiri in [("Bank Mandiri", True), ("Bank BCA", False), ("Bank BNI", False), ("Bank BRI", False)]:
+    for name, is_mandiri in [
+        ("Bank Mandiri", True),
+        ("Bank BCA", False),
+        ("Bank BNI", False),
+        ("Bank BRI", False),
+    ]:
         conn.execute(
-            sa.text("INSERT INTO bank_fee_configs (id, bank_name, fee, is_mandiri_group) VALUES (:id, :name, :fee, :is_m)"),
-            {"id": str(uuid.uuid4()), "name": name, "fee": 0 if is_mandiri else 3500, "is_m": is_mandiri},
+            sa.text(
+                "INSERT INTO bank_fee_configs (id, bank_name, fee, is_mandiri_group) "
+                "VALUES (:id, :name, :fee, :is_m)"
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "name": name,
+                "fee": 0 if is_mandiri else 3500,
+                "is_m": is_mandiri,
+            },
         )
 
 

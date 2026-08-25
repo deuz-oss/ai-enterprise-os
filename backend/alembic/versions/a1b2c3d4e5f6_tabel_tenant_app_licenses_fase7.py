@@ -6,8 +6,8 @@ Create Date: 2026-08-25 05:30:00.000000
 
 """
 
-from collections.abc import Sequence
 import uuid
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
@@ -28,7 +28,9 @@ def upgrade() -> None:
         sa.Column("app_key", sa.String(length=50), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("trial", "aktif", "kedaluwarsa", name="licensestatus", native_enum=False, length=50),
+            sa.Enum(
+                "trial", "aktif", "kedaluwarsa", name="licensestatus", native_enum=False, length=50
+            ),
             nullable=True,
         ),
         sa.Column(

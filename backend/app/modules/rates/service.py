@@ -10,23 +10,37 @@ from app.modules.rates.models import BankFeeConfig, BillingTaxConfig, BpjsConfig
 
 # ---------- Generic helpers ----------
 
+
 def _get_effective(db: Session, model, effective_date: date):
     """Ambil versi efektif terbaru <= effective_date, atau None."""
-    return db.execute(
-        select(model).where(model.effective_from <= effective_date).order_by(model.effective_from.desc())  # noqa: E501
-    ).scalars().first()
+    return (
+        db.execute(
+            select(model)
+            .where(model.effective_from <= effective_date)
+            .order_by(model.effective_from.desc())  # noqa: E501
+        )
+        .scalars()
+        .first()
+    )
 
 
 def _check_duplicate(db: Session, model, effective_from: date):
-    exists = db.execute(select(model).where(model.effective_from == effective_from)).scalars().first()  # noqa: E501
+    exists = (
+        db.execute(select(model).where(model.effective_from == effective_from)).scalars().first()
+    )  # noqa: E501
     if exists:
-        raise HTTPException(status_code=409, detail=f"Versi untuk tanggal {effective_from} sudah ada")  # noqa: E501
+        raise HTTPException(
+            status_code=409, detail=f"Versi untuk tanggal {effective_from} sudah ada"
+        )  # noqa: E501
 
 
 # ---------- PPh21 ----------
 
+
 def list_pph21_configs(db: Session) -> list[Pph21Config]:
-    return list(db.execute(select(Pph21Config).order_by(Pph21Config.effective_from.desc())).scalars().all())  # noqa: E501
+    return list(
+        db.execute(select(Pph21Config).order_by(Pph21Config.effective_from.desc())).scalars().all()
+    )  # noqa: E501
 
 
 def get_effective_pph21(db: Session, effective_date: date) -> Pph21Config | None:
@@ -44,8 +58,11 @@ def create_pph21_config(db: Session, payload) -> Pph21Config:
 
 # ---------- BPJS ----------
 
+
 def list_bpjs_configs(db: Session) -> list[BpjsConfig]:
-    return list(db.execute(select(BpjsConfig).order_by(BpjsConfig.effective_from.desc())).scalars().all())  # noqa: E501
+    return list(
+        db.execute(select(BpjsConfig).order_by(BpjsConfig.effective_from.desc())).scalars().all()
+    )  # noqa: E501
 
 
 def get_effective_bpjs(db: Session, effective_date: date) -> BpjsConfig | None:
@@ -63,8 +80,13 @@ def create_bpjs_config(db: Session, payload) -> BpjsConfig:
 
 # ---------- Billing ----------
 
+
 def list_billing_configs(db: Session) -> list[BillingTaxConfig]:
-    return list(db.execute(select(BillingTaxConfig).order_by(BillingTaxConfig.effective_from.desc())).scalars().all())  # noqa: E501
+    return list(
+        db.execute(select(BillingTaxConfig).order_by(BillingTaxConfig.effective_from.desc()))
+        .scalars()
+        .all()
+    )  # noqa: E501
 
 
 def get_effective_billing(db: Session, effective_date: date) -> BillingTaxConfig | None:
@@ -82,12 +104,17 @@ def create_billing_config(db: Session, payload) -> BillingTaxConfig:
 
 # ---------- Bank fees ----------
 
+
 def list_bank_fees(db: Session) -> list[BankFeeConfig]:
     return list(db.execute(select(BankFeeConfig).order_by(BankFeeConfig.bank_name)).scalars().all())
 
 
 def upsert_bank_fee(db: Session, payload) -> BankFeeConfig:
-    existing = db.execute(select(BankFeeConfig).where(BankFeeConfig.bank_name == payload.bank_name)).scalars().first()  # noqa: E501
+    existing = (
+        db.execute(select(BankFeeConfig).where(BankFeeConfig.bank_name == payload.bank_name))
+        .scalars()
+        .first()
+    )  # noqa: E501
     if existing:
         existing.fee = payload.fee
         existing.is_mandiri_group = payload.is_mandiri_group
@@ -105,7 +132,11 @@ def get_bank_fee(db: Session, bank_name: str) -> float:
     """Return fee for bank, fallback 3500 for non-mandiri, 0 for mandiri group."""
     if not bank_name:
         return 0
-    row = db.execute(select(BankFeeConfig).where(BankFeeConfig.bank_name == bank_name)).scalars().first()  # noqa: E501
+    row = (
+        db.execute(select(BankFeeConfig).where(BankFeeConfig.bank_name == bank_name))
+        .scalars()
+        .first()
+    )  # noqa: E501
     if row:
         return float(row.fee)
     # fallback: check if mandiri group

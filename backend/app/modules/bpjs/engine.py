@@ -78,9 +78,14 @@ def _jkk_rate(category: int | None, config=None) -> float:
         # jkk_rates disimpan sebagai JSON dict str->float
         raw = config.jkk_rates if hasattr(config, "jkk_rates") else JKK_RATES
         # normalisasi key ke int
-        table = {int(k): float(v) for k, v in (raw.items() if isinstance(raw, dict) else JKK_RATES.items())}  # noqa: E501
+        table = {
+            int(k): float(v)
+            for k, v in (raw.items() if isinstance(raw, dict) else JKK_RATES.items())
+        }  # noqa: E501
         default_cat = int(getattr(config, "default_jkk_category", DEFAULT_JKK_CATEGORY))
-        return table.get(category or default_cat, table.get(default_cat, JKK_RATES[DEFAULT_JKK_CATEGORY]))  # noqa: E501
+        return table.get(
+            category or default_cat, table.get(default_cat, JKK_RATES[DEFAULT_JKK_CATEGORY])
+        )  # noqa: E501
     return JKK_RATES.get(category or DEFAULT_JKK_CATEGORY, JKK_RATES[DEFAULT_JKK_CATEGORY])
 
 
@@ -96,15 +101,25 @@ def _get_bpjs_config(db, effective_date):
 
         if isinstance(effective_date, str):
             effective_date = _date.fromisoformat(effective_date)
-        return db.execute(
-            select(BpjsConfig).where(BpjsConfig.effective_from <= effective_date).order_by(BpjsConfig.effective_from.desc())  # noqa: E501
-        ).scalars().first()
+        return (
+            db.execute(
+                select(BpjsConfig)
+                .where(BpjsConfig.effective_from <= effective_date)
+                .order_by(BpjsConfig.effective_from.desc())  # noqa: E501
+            )
+            .scalars()
+            .first()
+        )
     except Exception:
         return None
 
 
 def compute_contribution(
-    base_salary: float, jkk_risk_category: int | None = None, _config=None, db=None, effective_date=None  # noqa: E501
+    base_salary: float,
+    jkk_risk_category: int | None = None,
+    _config=None,
+    db=None,
+    effective_date=None,  # noqa: E501
 ) -> BpjsBreakdown:
     """Hitung iuran bulanan dari gaji pokok (dengan batas atas per program)."""
     # Resolve config dari DB jika db disediakan

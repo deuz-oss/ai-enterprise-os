@@ -52,9 +52,7 @@ def _is_pg() -> bool:
 
 def _enable_rls(table: str) -> None:
     # Defensive: kegagalan pembuatan policy tidak boleh menggagalkan migrasi.
-    op.execute(
-        sa.text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
-    )
+    op.execute(sa.text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))
     op.execute(
         sa.text(
             f"""
@@ -116,7 +114,5 @@ def downgrade() -> None:
     if _is_pg():
         for table in reversed(BUSINESS_TABLES):
             _disable_rls(table)
-    op.drop_index(
-        op.f("ix_password_reset_tokens_user_id"), table_name="password_reset_tokens"
-    )
+    op.drop_index(op.f("ix_password_reset_tokens_user_id"), table_name="password_reset_tokens")
     op.drop_table("password_reset_tokens")

@@ -12,8 +12,10 @@ from app.modules.auth.schemas import UserCreate
 
 def _find_users_by_email_unfiltered(db: Session, email: str) -> list[User]:
     """Cari user by email TANPA filter tenant (opsi eksekusi eksplisit)."""
-    stmt = select(User).where(User.email == email).execution_options(
-        include_with_loader_criteria=False
+    stmt = (
+        select(User)
+        .where(User.email == email)
+        .execution_options(include_with_loader_criteria=False)
     )
     return list(db.scalars(stmt).all())
 
@@ -35,9 +37,7 @@ def create_user(db: Session, payload: UserCreate, tenant_id=None) -> User:
     if len(payload.password) < 8:
         raise HTTPException(status_code=422, detail="Password minimal 8 karakter")
     if get_by_email(db, payload.email) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email sudah terdaftar"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email sudah terdaftar")
     user = User(
         email=payload.email.lower(),
         full_name=payload.full_name,
@@ -67,6 +67,7 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
         return None
     return user
 
+
 def issue_password_reset_token(db: Session, user: User) -> str:
     """Buat token reset satu kali pakai untuk user; kembalikan token mentah.
 
@@ -83,8 +84,7 @@ def issue_password_reset_token(db: Session, user: User) -> str:
         PasswordResetToken(
             user_id=user.id,
             token_hash=token_hash,
-            expires_at=datetime.now(UTC)
-            + timedelta(minutes=settings.password_reset_ttl_min),
+            expires_at=datetime.now(UTC) + timedelta(minutes=settings.password_reset_ttl_min),
         )
     )
     # Batasi riwayat: token lama/terpakai milik user yang sama dibuang.

@@ -25,9 +25,7 @@ def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/expiring-contracts", response_model=list[ClientOut])
-def expiring_contracts(
-    within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)
-):
+def expiring_contracts(within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
     return service.expiring_contracts(db, within_days)
 
 

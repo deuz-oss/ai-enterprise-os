@@ -70,9 +70,7 @@ def forecast_cash_flow(db: Session, months_ahead: int = 3) -> ForecastOut:
     hist_start = _shift_month(current[0], current[1], -(_HISTORY_MONTHS - 1))
     first_of_hist = date(hist_start[0], hist_start[1], 1)
     entries = list(
-        db.scalars(
-            select(CashFlowEntry).where(CashFlowEntry.entry_date >= first_of_hist)
-        ).all()
+        db.scalars(select(CashFlowEntry).where(CashFlowEntry.entry_date >= first_of_hist)).all()
     )
 
     buckets: dict[tuple[int, int], list[float]] = {
@@ -91,9 +89,9 @@ def forecast_cash_flow(db: Session, months_ahead: int = 3) -> ForecastOut:
     ]
 
     # Bulan berjalan diabaikan dari baseline karena belum bulan penuh.
-    baseline_keys = [
-        key for key in _month_span(hist_start, _HISTORY_MONTHS)[:-1]
-    ][-_BASELINE_MONTHS:]
+    baseline_keys = [key for key in _month_span(hist_start, _HISTORY_MONTHS)[:-1]][
+        -_BASELINE_MONTHS:
+    ]
     inflow_series = [buckets[key][0] for key in baseline_keys]
     outflow_series = [buckets[key][1] for key in baseline_keys]
 

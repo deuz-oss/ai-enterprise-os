@@ -39,9 +39,7 @@ class AttendanceRecord(TenantMixin, Base):
     """
 
     __tablename__ = "attendance_records"
-    __table_args__ = (
-        UniqueConstraint("employee_id", "date", name="uq_attendance_record_day"),
-    )
+    __table_args__ = (UniqueConstraint("employee_id", "date", name="uq_attendance_record_day"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
@@ -59,8 +57,6 @@ class AttendanceRecord(TenantMixin, Base):
         default=AttendanceSource.manual,
     )
     notes: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee = relationship("Employee", lazy="joined")

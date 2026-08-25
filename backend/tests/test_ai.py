@@ -87,9 +87,7 @@ def test_screen_tanpa_konfigurasi_ai_mengembalikan_503(client):
         patch("app.modules.ai.service.get_object") as get_obj,
     ):
         get_obj.return_value = _CV_TEXT
-        resp = client.post(
-            f"/api/v1/ai/candidates/{cand_id}/screen", headers=headers, json={}
-        )
+        resp = client.post(f"/api/v1/ai/candidates/{cand_id}/screen", headers=headers, json={})
     assert resp.status_code == 503
 
 
@@ -264,9 +262,7 @@ def test_endpoint_ai_butuh_role_recruiter(client):
 
 def _employee_with_contract(client, headers, name="Budi Karyawan") -> str:
     """Buat karyawan + kontrak + unggah file kontrak; kembalikan contract_id."""
-    emp = client.post(
-        "/api/v1/employees", headers=headers, json={"full_name": name}
-    ).json()
+    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": name}).json()
     contract = client.post(
         f"/api/v1/employees/{emp['id']}/contracts", headers=headers, json={}
     ).json()
@@ -283,9 +279,7 @@ def _employee_with_contract(client, headers, name="Budi Karyawan") -> str:
 
 def test_index_contract_butuh_file(client):
     headers = _auth_header(client)
-    emp = client.post(
-        "/api/v1/employees", headers=headers, json={"full_name": "Tanpa File"}
-    ).json()
+    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "Tanpa File"}).json()
     contract = client.post(
         f"/api/v1/employees/{emp['id']}/contracts", headers=headers, json={}
     ).json()
@@ -408,9 +402,7 @@ def test_forecast_arus_kas(client):
             "risks": ["Ketergantungan satu klien"],
             "recommendations": ["Percepat penagihan invoice jatuh tempo"],
         }
-        resp = client.post(
-            "/api/v1/ai/finance/forecast", headers=headers, json={"months_ahead": 2}
-        )
+        resp = client.post("/api/v1/ai/finance/forecast", headers=headers, json={"months_ahead": 2})
 
     assert resp.status_code == 200, resp.text
     body = resp.json()

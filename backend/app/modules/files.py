@@ -5,7 +5,6 @@ Hanya aktif saat MinIO/S3 tidak dikonfigurasi. URL memuat UUID acak
 saat dibuka dari browser.
 """
 
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 

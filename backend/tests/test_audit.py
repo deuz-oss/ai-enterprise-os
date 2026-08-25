@@ -125,7 +125,5 @@ def test_role_recruiter_ditolak_membaca_audit(client):
         "/api/v1/auth/login",
         json={"email": "rec-audit@example.com", "password": "password123"},
     ).json()["access_token"]
-    resp = client.get(
-        "/api/v1/audit/logs", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = client.get("/api/v1/audit/logs", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403

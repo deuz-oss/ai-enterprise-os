@@ -90,9 +90,7 @@ def create_candidate(db: Session, payload: CandidateCreate) -> Candidate:
     return candidate
 
 
-async def upload_cv(
-    db: Session, candidate_id: str, file: UploadFile
-) -> Candidate:
+async def upload_cv(db: Session, candidate_id: str, file: UploadFile) -> Candidate:
     candidate = _get_candidate(db, candidate_id)
     data = await file.read()
     if not data:

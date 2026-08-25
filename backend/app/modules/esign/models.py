@@ -24,9 +24,7 @@ class EsignRequest(TenantMixin, Base):
     __tablename__ = "esign_requests"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    contract_id: Mapped[UUID] = mapped_column(
-        ForeignKey("employment_contracts.id"), index=True
-    )
+    contract_id: Mapped[UUID] = mapped_column(ForeignKey("employment_contracts.id"), index=True)
     provider: Mapped[str] = mapped_column(String(50))
     provider_document_id: Mapped[str] = mapped_column(String(255), index=True)
     signer_name: Mapped[str] = mapped_column(String(255))
@@ -41,9 +39,7 @@ class EsignRequest(TenantMixin, Base):
     error: Mapped[str | None] = mapped_column(Text)
     # Payload mentah dari webhook/status provider untuk kebutuhan audit.
     detail_json: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

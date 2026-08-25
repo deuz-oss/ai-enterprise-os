@@ -1,7 +1,5 @@
-from datetime import date
-
 from app.modules.bpjs.engine import compute_contribution
-from app.modules.payroll.tax import PTKP_DIRI_SENDIRI, TER_A, TaxProfile, compute_ter
+from app.modules.payroll.tax import PTKP_DIRI_SENDIRI, TaxProfile, compute_ter
 
 
 def _auth(client):
@@ -27,7 +25,13 @@ def test_pph21_versioned_mempengaruhi_perhitungan(client):
         "ptkp_kawin": 4_500_000,
         "ptkp_tanggungan": 4_500_000,
         "max_tanggungan": 3,
-        "pasal17_brackets": [[60000000, 0.05], [250000000, 0.15], [500000000, 0.25], [5000000000, 0.30], [None, 0.35]],
+        "pasal17_brackets": [
+            [60000000, 0.05],
+            [250000000, 0.15],
+            [500000000, 0.25],
+            [5000000000, 0.30],
+            [None, 0.35],
+        ],
         "ter_a": [[5400000, 0.0], [5650000, 0.0025], [None, 0.20]],
         "ter_b": [[6200000, 0.0], [None, 0.20]],
         "ter_c": [[6600000, 0.0], [None, 0.19]],
@@ -36,14 +40,9 @@ def test_pph21_versioned_mempengaruhi_perhitungan(client):
     assert resp.status_code == 201, resp.text
     # Preview pajak untuk periode 2026-06 harus memakai config baru (effective 2026-01-01)
     # Dengan PTKP diri 40jt (lebih kecil dari 54jt), PKP lebih besar -> pajak pasal17 lebih tinggi
-    # TER juga: gross 5_650_000 sebelumnya 0.0025*... sekarang config TER_A punya rate sama di bracket itu, tetap
+    # TER juga: gross 5_650_000 sebelumnya 0.0025*...
+    # sekarang config TER_A punya rate sama di bracket itu, tetap
     # Cek via DB load: TaxProfile.from_db
-    from app.modules.payroll.tax import TaxProfile as TP
-
-    db = client.testing_session() if hasattr(client, "testing_session") else None
-    # fallback manual: gunakan profile dengan config baru
-    import sqlalchemy as sa
-    from app.modules.rates.models import Pph21Config
 
     # Ambil langsung via API list untuk verifikasi
     listed = client.get("/api/v1/rates/pph21", headers=headers).json()
@@ -76,9 +75,13 @@ def test_bpjs_versioned_dan_bank_fee(client):
     before = compute_contribution(10_000_000, jkk_risk_category=2)
     assert before.jht_employer == 370000
     # Dengan DB, lewat monthly_recap untuk 2026-06 harus pakai 0.05
-    recap = client.get("/api/v1/bpjs/contributions/2026/6", headers=headers).json()
+    client.get("/api/v1/bpjs/contributions/2026/6", headers=headers)
     # recap dihitung dari DB, tapi butuh karyawan dulu
-    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "BPJS Test", "base_salary": 10_000_000}).json()
+    client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "BPJS Test", "base_salary": 10_000_000},
+    ).json()
     recap2 = client.get("/api/v1/bpjs/contributions/2026/6", headers=headers).json()
     row = next(r for r in recap2["rows"] if r["full_name"] == "BPJS Test")
     # JHT employer harus 500k jika config efektif, fallback 370k jika belum
@@ -100,17 +103,25 @@ def test_billing_versioned_dan_bank_fee_config(client):
     assert any(c["ppn_rate"] == 0.12 for c in listed)
 
     # Bank fee
-    bf = client.post("/api/v1/rates/bank-fees", headers=headers, json={"bank_name": "Bank Test Fee", "fee": 6500}).json()
+    bf = client.post(
+        "/api/v1/rates/bank-fees", headers=headers, json={"bank_name": "Bank Test Fee", "fee": 6500}
+    ).json()
     assert bf["fee"] == 6500
     listed_fees = client.get("/api/v1/rates/bank-fees", headers=headers).json()
     assert any(f["bank_name"] == "Bank Test Fee" for f in listed_fees)
 
     # Payroll dengan bank non-mandiri harus kena potongan admin otomatis
     emp = client.post(
-        "/api/v1/employees", headers=headers, json={"full_name": "Bank Fee Emp", "base_salary": 5_000_000, "bank_name": "Bank Test Fee"}
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Bank Fee Emp", "base_salary": 5_000_000, "bank_name": "Bank Test Fee"},
     ).json()
-    run = client.post("/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 7}).json()
-    slips = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}).json()
+    run = client.post(
+        "/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 7}
+    ).json()
+    slips = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}
+    ).json()
     slip = next(s for s in slips if s["employee_id"] == emp["id"])
     # deductions harus mencakup bank fee 6500
     assert slip["deductions"] == 6500
@@ -129,25 +140,35 @@ def test_payroll_snapshot_tersimpan(client):
             "ptkp_kawin": 4_500_000,
             "ptkp_tanggungan": 4_500_000,
             "max_tanggungan": 3,
-            "pasal17_brackets": [[60000000, 0.05], [250000000, 0.15], [500000000, 0.25], [5000000000, 0.30], [None, 0.35]],
+            "pasal17_brackets": [
+                [60000000, 0.05],
+                [250000000, 0.15],
+                [500000000, 0.25],
+                [5000000000, 0.30],
+                [None, 0.35],
+            ],
             "ter_a": [[5400000, 0.0], [None, 0.20]],
             "ter_b": [[6200000, 0.0], [None, 0.20]],
             "ter_c": [[6600000, 0.0], [None, 0.19]],
         },
     )
-    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "Snapshot Emp", "base_salary": 6_000_000}).json()
-    run = client.post("/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 8}).json()
-    slips = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}).json()
+    client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Snapshot Emp", "base_salary": 6_000_000},
+    ).json()
+    run = client.post(
+        "/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 8}
+    ).json()
+    slips = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={}
+    ).json()
     assert len(slips) >= 1
     fetched = client.get(f"/api/v1/payroll/runs/{run['id']}", headers=headers).json()
     # Verifikasi snapshot tersimpan di DB langsung
-    from sqlalchemy import select
-
-    from app.modules.payroll.models import PayrollRun
-
-    from uuid import UUID
 
     from app.core.database import parse_uuid
+    from app.modules.payroll.models import PayrollRun
 
     db = client.testing_session()
     try:

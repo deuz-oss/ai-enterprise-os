@@ -14,7 +14,12 @@ depends_on: str | Sequence[str] | None = None
 def _common_cols() -> list[sa.Column]:
     return [
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
     ]
 
 
@@ -26,8 +31,12 @@ def upgrade() -> None:
         sa.Column(
             "tx_type",
             sa.Enum(
-                "penerimaan", "pembayaran", "transfer_antar_rekening",
-                name="banktxttype", native_enum=False, length=50,
+                "penerimaan",
+                "pembayaran",
+                "transfer_antar_rekening",
+                name="banktxttype",
+                native_enum=False,
+                length=50,
             ),
             nullable=False,
         ),
@@ -45,7 +54,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     for col in ("tx_date", "tx_type", "bank_account_id"):
-        op.create_index(op.f(f"ix_bank_transactions_{col}"), "bank_transactions", [col], unique=False)
+        op.create_index(
+            op.f(f"ix_bank_transactions_{col}"), "bank_transactions", [col], unique=False
+        )
 
     op.create_table(
         "purchase_bills",

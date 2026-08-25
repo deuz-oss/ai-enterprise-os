@@ -24,8 +24,19 @@ def test_coa_seeded_per_tenant(client):
     accounts = client.get("/api/v1/accounting/accounts", headers=headers).json()
     codes = {a["code"] for a in accounts}
     # Akun inti template outsourcing wajib ada.
-    for expected in ("1-1000", "1-1100", "1-1200", "2-1100", "2-1200", "2-1300",
-                     "3-2000", "4-1000", "5-1000", "5-3000", "5-5000"):
+    for expected in (
+        "1-1000",
+        "1-1100",
+        "1-1200",
+        "2-1100",
+        "2-1200",
+        "2-1300",
+        "3-2000",
+        "4-1000",
+        "5-1000",
+        "5-3000",
+        "5-5000",
+    ):
         assert expected in codes, expected
     bank = next(a for a in accounts if a["code"] == "1-1100")
     assert bank["is_cash_bank"] is True
@@ -68,7 +79,8 @@ def test_coa_crud_and_delete_guard(client):
     )
     assert mutated.status_code == 201
     bank_id = next(
-        a["id"] for a in client.get("/api/v1/accounting/accounts", headers=headers).json()
+        a["id"]
+        for a in client.get("/api/v1/accounting/accounts", headers=headers).json()
         if a["code"] == "1-1100"
     )
     del_blocked = client.delete(f"/api/v1/accounting/accounts/{bank_id}", headers=headers)
@@ -83,19 +95,28 @@ def test_memorial_posting_flow_and_validations(client):
     assert memorial.status_code == 201
     assert memorial.json()["status"] == "memorial"
 
-    tb = client.get("/api/v1/accounting/trial-balance", headers=headers, params={"year": 2026}).json()
+    tb = client.get(
+        "/api/v1/accounting/trial-balance", headers=headers, params={"year": 2026}
+    ).json()
     bank = next(r for r in tb if r["account_code"] == "1-1100")
     assert float(bank["total_debit"]) == 0
 
     entry_id = memorial.json()["id"]
 
     # Tidak seimbang → posting ditolak
-    unbalanced = _entry(headers, client, status="memorial", lines=[
-        {"account_code": "1-1100", "debit": 100, "credit": 0},
-        {"account_code": "4-1000", "debit": 0, "credit": 90},
-    ])
+    unbalanced = _entry(
+        headers,
+        client,
+        status="memorial",
+        lines=[
+            {"account_code": "1-1100", "debit": 100, "credit": 0},
+            {"account_code": "4-1000", "debit": 0, "credit": 90},
+        ],
+    )
     assert unbalanced.status_code == 201  # pembuatan boleh
-    unbal_post = client.post(f"/api/v1/accounting/journal/{unbalanced.json()['id']}/post", headers=headers)
+    unbal_post = client.post(
+        f"/api/v1/accounting/journal/{unbalanced.json()['id']}/post", headers=headers
+    )
     assert unbal_post.status_code == 422
 
     # Posting valid → masuk laporan
@@ -111,7 +132,7 @@ def test_close_period_blocks_backdate(client):
 
     admin = _auth_header(client)
     today = datetime.now(UTC).date()
-    last_month = (today.replace(day=1) - timedelta(days=1))
+    last_month = today.replace(day=1) - timedelta(days=1)
 
     # Tutup bulan lalu
     closed = client.post(
@@ -120,7 +141,9 @@ def test_close_period_blocks_backdate(client):
     )
     assert closed.status_code == 200, closed.text
     periods = client.get("/api/v1/accounting/periods", headers=admin).json()
-    target = next(p for p in periods if p["year"] == last_month.year and p["month"] == last_month.month)
+    target = next(
+        p for p in periods if p["year"] == last_month.year and p["month"] == last_month.month
+    )
 
     # Input backdate ke periode tertutup ditolak
     back = _entry(admin, client, date=f"{last_month.year}-{str(last_month.month).zfill(2)}-15")
@@ -138,14 +161,14 @@ def test_close_period_blocks_backdate(client):
 
 
 def test_auto_journal_invoice_and_payroll(client):
-    from tests.conftest import _platform_admin_header
-    from tests.test_payroll_dua_jalur import _setup as _payroll_setup
-
     admin = _auth_header(client)
-    plat = _platform_admin_header(client)
 
     # ---- siapkan karyawan aktif agar payrol bisa diproses ----
-    client.post("/api/v1/employees", headers=admin, json={"full_name": "Staf Gaji", "base_salary": 4_000_000})
+    client.post(
+        "/api/v1/employees",
+        headers=admin,
+        json={"full_name": "Staf Gaji", "base_salary": 4_000_000},
+    )
 
     # ---- invoice_issued ----
     cl = client.post("/api/v1/clients", headers=admin, json={"name": "PT Auto Jurnal"}).json()
@@ -158,7 +181,7 @@ def test_auto_journal_invoice_and_payroll(client):
     assert inv.status_code == 422
 
     run = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 6}).json()
-    client.post("/api/v1/payroll/runs/{0}/generate".format(run["id"]), headers=admin, json={})
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
     client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=admin)
 
     inv = client.post(
@@ -170,12 +193,12 @@ def test_auto_journal_invoice_and_payroll(client):
     inv_id = inv.json()["id"]
     total_due = float(inv.json()["total_due"])
 
-    entries = client.get(
-        "/api/v1/accounting/journal", headers=admin, params={"year": 2026}
-    ).json()
+    entries = client.get("/api/v1/accounting/journal", headers=admin, params={"year": 2026}).json()
     issued = [e for e in entries if e.get("event_code") == "invoice_issued"]
     assert len(issued) == 1
-    lines = {l["account_code"]: (float(l["debit"]), float(l["credit"])) for l in issued[0]["lines"]}
+    lines = {
+        ln["account_code"]: (float(ln["debit"]), float(ln["credit"])) for ln in issued[0]["lines"]
+    }
     assert lines["1-1200"][0] == total_due  # Dr Piutang
     assert lines["4-1000"][1] > 0  # Cr Pendapatan
     assert lines["2-1300"][1] > 0  # Cr PPN Keluaran
@@ -202,7 +225,10 @@ def test_auto_journal_invoice_and_payroll(client):
     entries2 = client.get("/api/v1/accounting/journal", headers=admin, params={"year": 2026}).json()
     paid_events = [e for e in entries2 if e.get("event_code") == "invoice_paid"]
     assert len(paid_events) == 1
-    plines = {l["account_code"]: (float(l["debit"]), float(l["credit"])) for l in paid_events[0]["lines"]}
+    plines = {
+        ln["account_code"]: (float(ln["debit"]), float(ln["credit"]))
+        for ln in paid_events[0]["lines"]
+    }
     assert plines["1-1100"][0] == total_due
     assert plines["1-1200"][1] == total_due
 
@@ -216,9 +242,11 @@ def test_pr_executed_auto_journal_and_profit_by_client(client):
         headers=admin,
         json={"year": 2026, "month": 10, "run_type": "proyek", "client_id": client_id},
     ).json()
-    slips = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={}).json()
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
 
-    sub = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    sub = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}
+    ).json()
     client.post(
         f"/api/v1/payroll/client/{sub['raw_token']}/decision",
         json={"approved": True, "name": "Klien"},
@@ -235,9 +263,7 @@ def test_pr_executed_auto_journal_and_profit_by_client(client):
     exe = client.post(f"/api/v1/payment-requests/{pr['id']}/execute", headers=admin)
     assert exe.status_code == 200
 
-    entries = client.get(
-        "/api/v1/accounting/journal", headers=admin, params={"year": 2026}
-    ).json()
+    entries = client.get("/api/v1/accounting/journal", headers=admin, params={"year": 2026}).json()
     pr_exec = [e for e in entries if e.get("event_code") == "pr_executed"]
     assert len(pr_exec) == 1
 

@@ -4,9 +4,7 @@ from tests.conftest import _auth_header
 
 
 def _client_id(client, headers) -> str:
-    resp = client.post(
-        "/api/v1/clients", headers=headers, json={"name": "PT Pemberi Kerja"}
-    )
+    resp = client.post("/api/v1/clients", headers=headers, json={"name": "PT Pemberi Kerja"})
     return resp.json()["id"]
 
 

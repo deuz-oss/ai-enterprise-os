@@ -78,9 +78,7 @@ def put_object(object_key: str, data: bytes, content_type: str) -> str:
         path.write_bytes(data)
         return object_key
     try:
-        client.put_object(
-            Bucket=_bucket(), Key=object_key, Body=data, ContentType=content_type
-        )
+        client.put_object(Bucket=_bucket(), Key=object_key, Body=data, ContentType=content_type)
     except (ClientError, BotoCoreError) as exc:
         logger.error("put_object failed: %s", exc)
         raise HTTPException(status_code=502, detail="Gagal menyimpan file ke storage") from exc

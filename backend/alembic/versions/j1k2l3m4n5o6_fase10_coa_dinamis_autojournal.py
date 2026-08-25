@@ -29,10 +29,19 @@ def upgrade() -> None:
         sa.Column(
             "group_type",
             sa.Enum(
-                "aset_lancar", "aset_tetap", "liabilitas_pendek", "liabilitas_panjang",
-                "ekuitas", "pendapatan", "hpp", "beban_usaha", "beban_lain",
+                "aset_lancar",
+                "aset_tetap",
+                "liabilitas_pendek",
+                "liabilitas_panjang",
+                "ekuitas",
+                "pendapatan",
+                "hpp",
+                "beban_usaha",
+                "beban_lain",
                 "pendapatan_lain",
-                name="grouptype", native_enum=False, length=50,
+                name="grouptype",
+                native_enum=False,
+                length=50,
             ),
             nullable=False,
         ),
@@ -40,7 +49,12 @@ def upgrade() -> None:
         sa.Column("is_cash_bank", sa.Boolean(), nullable=False),
         sa.Column("is_control_ar_ap", sa.Boolean(), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_account_tenant_code"),
@@ -63,7 +77,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "year", "month", name="uq_period_month"),
     )
-    op.create_index(op.f("ix_accounting_periods_year"), "accounting_periods", ["year"], unique=False)
+    op.create_index(
+        op.f("ix_accounting_periods_year"), "accounting_periods", ["year"], unique=False
+    )
 
     op.add_column(
         "journal_entries",
@@ -74,22 +90,33 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column("journal_entries", sa.Column("posted_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "journal_entries", sa.Column("posted_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("journal_entries", sa.Column("event_code", sa.String(length=50), nullable=True))
-    op.add_column("journal_entries", sa.Column("source_ref_type", sa.String(length=50), nullable=True))
+    op.add_column(
+        "journal_entries", sa.Column("source_ref_type", sa.String(length=50), nullable=True)
+    )
     op.add_column("journal_entries", sa.Column("source_ref_id", sa.Uuid(), nullable=True))
     op.create_index(op.f("ix_journal_entries_status"), "journal_entries", ["status"], unique=False)
-    op.create_index(op.f("ix_journal_entries_event_code"), "journal_entries", ["event_code"], unique=False)
+    op.create_index(
+        op.f("ix_journal_entries_event_code"), "journal_entries", ["event_code"], unique=False
+    )
 
     with op.batch_alter_table("journal_lines") as batch_op:
         batch_op.add_column(sa.Column("account_id", sa.Uuid(), nullable=True))
         batch_op.add_column(sa.Column("client_dim_id", sa.Uuid(), nullable=True))
         batch_op.add_column(sa.Column("memo", sa.String(length=200), nullable=True))
         batch_op.create_foreign_key("fk_journal_lines_account", "accounts", ["account_id"], ["id"])
-        batch_op.create_foreign_key("fk_journal_lines_client_dim", "clients", ["client_dim_id"], ["id"])
-    op.create_index(op.f("ix_journal_lines_account_id"), "journal_lines", ["account_id"], unique=False)
-    op.create_index(op.f("ix_journal_lines_client_dim_id"), "journal_lines", ["client_dim_id"], unique=False)
-
+        batch_op.create_foreign_key(
+            "fk_journal_lines_client_dim", "clients", ["client_dim_id"], ["id"]
+        )
+    op.create_index(
+        op.f("ix_journal_lines_account_id"), "journal_lines", ["account_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_journal_lines_client_dim_id"), "journal_lines", ["client_dim_id"], unique=False
+    )
 
     op.create_table(
         "journal_rules",
@@ -103,7 +130,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "event_code", name="uq_rule_tenant_event"),
     )
-    op.create_index(op.f("ix_journal_rules_event_code"), "journal_rules", ["event_code"], unique=False)
+    op.create_index(
+        op.f("ix_journal_rules_event_code"), "journal_rules", ["event_code"], unique=False
+    )
     # ---- Data migration ----
     # 1) Seed COA default untuk setiap tenant.
     # 2) Map journal_lines lama (account_code) → account_id dari COA tenant.
@@ -117,11 +146,20 @@ def upgrade() -> None:
         for code, name, group, normal, cash, ar_ap in DEFAULT_COA:
             conn.execute(
                 sa.text(
-                    "INSERT INTO accounts (id, tenant_id, code, name, group_type, normal_balance, is_cash_bank, is_control_ar_ap, is_active) "
+                    "INSERT INTO accounts (id, tenant_id, code, name, group_type, normal_balance, "
+                    "is_cash_bank, is_control_ar_ap, is_active) "
                     "VALUES (:id, :tid, :code, :name, :grp, :nb, :cash, :arap, 1)"
                 ),
-                {"id": str(uuid.uuid4()), "tid": tid, "code": code, "name": name,
-                 "grp": group, "nb": normal, "cash": int(cash), "arap": int(ar_ap)},
+                {
+                    "id": str(uuid.uuid4()),
+                    "tid": tid,
+                    "code": code,
+                    "name": name,
+                    "grp": group,
+                    "nb": normal,
+                    "cash": int(cash),
+                    "arap": int(ar_ap),
+                },
             )
         # Map baris jurnal lama ke akun COA berdasar kode (dalam tenant sama).
         conn.execute(
@@ -143,7 +181,8 @@ def upgrade() -> None:
         for event, d, c in DEFAULT_RULES:
             conn.execute(
                 sa.text(
-                    "INSERT INTO journal_rules (id, tenant_id, event_code, debit_account_code, credit_account_code, is_active) "
+                    "INSERT INTO journal_rules (id, tenant_id, event_code, debit_account_code, "
+                    "credit_account_code, is_active) "
                     "VALUES (:id, :tid, :ev, :d, :c, 1)"
                 ),
                 {"id": str(uuid.uuid4()), "tid": tid, "ev": event, "d": d, "c": c},

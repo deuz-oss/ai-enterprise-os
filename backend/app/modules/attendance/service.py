@@ -53,13 +53,17 @@ def recompute_month_summary(db: Session, employee_id, year: int, month: int):
     from app.modules.payroll.models import AttendanceSummary
 
     start, end = _month_bounds(year, month)
-    rows = db.execute(
-        select(AttendanceRecord)
-        .where(AttendanceRecord.employee_id == parse_uuid(str(employee_id)))
-        .where(AttendanceRecord.date >= start)
-        .where(AttendanceRecord.date <= end)
-        .order_by(AttendanceRecord.date)
-    ).scalars().all()
+    rows = (
+        db.execute(
+            select(AttendanceRecord)
+            .where(AttendanceRecord.employee_id == parse_uuid(str(employee_id)))
+            .where(AttendanceRecord.date >= start)
+            .where(AttendanceRecord.date <= end)
+            .order_by(AttendanceRecord.date)
+        )
+        .scalars()
+        .all()
+    )
 
     present = sum(1 for r in rows if r.status in PRESENT_STATUSES)
     overtime = sum(r.overtime_hours for r in rows)
@@ -251,9 +255,7 @@ async def import_csv(db: Session, file: UploadFile) -> ImportResultOut:
                 .where(AttendanceRecord.employee_id == employee.id)
                 .where(AttendanceRecord.date == record_date)
             ).scalar_one_or_none()
-            record = existing or AttendanceRecord(
-                employee_id=employee.id, date=record_date
-            )
+            record = existing or AttendanceRecord(employee_id=employee.id, date=record_date)
             record.status = status
             record.clock_in = clock_in
             record.clock_out = clock_out
@@ -377,9 +379,7 @@ def sync_leave_records(db, leave) -> int:
                 AttendanceRecord(
                     employee_id=leave.employee_id,
                     date=current,
-                    status=LEAVE_STATUS_MAP.get(
-                        leave.leave_type.value, AttendanceStatus.cuti
-                    ),
+                    status=LEAVE_STATUS_MAP.get(leave.leave_type.value, AttendanceStatus.cuti),
                     source=AttendanceSource.ess,
                     notes=f"Dari pengajuan cuti/izin ESS ({leave.leave_type.value})",
                 )

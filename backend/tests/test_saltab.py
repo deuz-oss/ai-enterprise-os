@@ -59,7 +59,12 @@ def test_saltab_components_prorata_and_bpjs(client):
     gen = client.post(
         f"/api/v1/payroll/runs/{run['id']}/generate",
         headers=admin,
-        json={"allowance": 1_000_000, "overtime_rate": 50_000, "prorata_absensi": True, "bpjs_enabled": True},
+        json={
+            "allowance": 1_000_000,
+            "overtime_rate": 50_000,
+            "prorata_absensi": True,
+            "bpjs_enabled": True,
+        },
     )
     assert gen.status_code == 201, gen.text
     slip = gen.json()[0]
@@ -100,7 +105,9 @@ def test_saltab_components_prorata_and_bpjs(client):
 def test_generate_tanpa_flag_bpjs_tidak_menambah_potongan(client):
     admin = _auth_header(client)
     emp = client.post(
-        "/api/v1/employees", headers=admin, json={"full_name": "Tanpa BPJS Flag", "base_salary": 5_000_000}
+        "/api/v1/employees",
+        headers=admin,
+        json={"full_name": "Tanpa BPJS Flag", "base_salary": 5_000_000},
     ).json()
     run = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 4}).json()
     slips = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={}).json()
@@ -122,7 +129,9 @@ def test_auto_invoice_draft_saat_client_approved(client):
         headers=admin,
         json={"bpjs_enabled": True},
     )
-    sub = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    sub = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}
+    ).json()
     dec = client.post(
         f"/api/v1/payroll/client/{sub['raw_token']}/decision",
         json={"approved": True, "name": "Finance Klien"},
