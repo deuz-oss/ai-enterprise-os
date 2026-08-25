@@ -13,6 +13,8 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Billing**: `generate_invoice` memakai `billing_tax_configs` efektif per periode (PPN/PPh23/due_days) dengan fallback `finance/tax_config.py`.
 - **Bank fee**: `POST/GET /rates/bank-fees` — potongan admin otomatis di slip gaji (non-Mandiri, default Rp 3.500, configurable per bank). Endpoint `GET /rates/{pph21,bpjs,billing}` list, `POST` buat versi baru (admin/finance/management).
 - **CRUD rates**: `GET /rates/{pph21,bpjs,billing,bank-fees}` + `POST` (admin) — versi untuk tanggal yang sama ditolak 409.
+- **Halaman "🧮 Tarif & Rate"** (`/rates`, role admin/finance/management): tab PPh21/BPJS/Billing/Bank Fee, tabel riwayat versi + form buat versi baru (bracket JSON), edit fee bank inline.
+- **ADR-0006** — guard lisensi payrol per `run_type`: shell `/payroll` menjadi OR (`hr_payroll` ATAU `operations_billing`), mutasi divalidasi per objek; BPJS recap tetap any-of.
 
 ### Added — Fase 8: Absensi Harian (Clock-in/out)
 

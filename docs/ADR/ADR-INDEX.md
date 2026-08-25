@@ -5,4 +5,5 @@
 - [ADR-0003 Shared Packages](./ADR-0003-Shared-Packages.md)
 - [ADR-0004 Event-Driven Architecture](./ADR-0004-Event-Driven-Architecture.md)
 - [ADR-0005 API First](./ADR-0005-API-First.md)
+- [ADR-0006 Payroll License Guard by Run Type](./ADR-0006-Payroll-License-Guard-by-Run-Type.md)
 - [ADR Template](./ADR-TEMPLATE.md)

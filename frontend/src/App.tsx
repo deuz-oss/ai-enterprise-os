@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import MyPortal from "./pages/MyPortal";
 import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
+import Rates from "./pages/Rates";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/payroll" element={<Payroll />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/accounting" element={<Accounting />} />
+            <Route path="/rates" element={<Rates />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/portal-saya" element={<MyPortal />} />
             <Route path="/platform" element={<PlatformTenants />} />

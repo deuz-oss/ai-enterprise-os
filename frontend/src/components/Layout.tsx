@@ -40,6 +40,13 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], app: "hr_payroll" },
   { to: "/finance", label: "Finance", app: "operations_billing" },
   { to: "/accounting", label: "Akunting", app: "finance_accounting" },
+  // Kelola rate ber-versi — role finance ke atas.
+  {
+    to: "/rates",
+    label: "Tarif & Rate",
+    roles: ["admin", "finance", "management"],
+    app: "finance_accounting",
+  },
   // Jejak audit sensitif — disembunyikan dari role non-management.
   { to: "/audit", label: "Audit", roles: ["admin", "management"] },
 ];
@@ -73,6 +80,7 @@ const PAGE_EMOJI: Record<string, string> = {
   "/portal-saya": "🙋",
   "/finance": "🏗️",
   "/accounting": "📊",
+  "/rates": "🧮",
   "/audit": "🛡️",
 };
 

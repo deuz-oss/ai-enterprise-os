@@ -380,6 +380,19 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Migrasi | `b4d5e6f7a8b9` (tabel `attendance_records` + kolom `employment_type`) |
 | Test | `backend/tests/test_attendance.py` |
 
+### 12.10 Rates Ber-versi + ADR-0006 Guard Payrol
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Rate pajak/BPJS/billing/bank fee terpisah dari kode, ber-versi per tanggal efektif; snapshot historis |
+| Source Code | `backend/app/modules/rates/*`, integrasi di `payroll/{tax,service}.py`, `bpjs/{engine,service}.py`, `finance/service.py`, `payroll/models.py` (snapshot) |
+| API | `GET/POST /rates/pph21`, `/rates/bpjs`, `/rates/billing` (POST admin/finance/management), `GET/POST /rates/bank-fees`; duplikat tanggal 409 |
+| Integrasi | Slip gaji: PPh21 dari config efektif + potongan bank fee otomatis; BPJS recap per periode; invoice memakai PPN/PPh23/due_days versi; snapshot JSON tersimpan di `payroll_runs` |
+| Frontend | Halaman "🧮 Tarif & Rate" (`/rates`) — 4 tab: tabel versi + form buat versi baru + edit fee bank inline |
+| Keputusan | **ADR-0006**: guard lisensi payrol per `run_type` (shell OR, mutasi per objek) — dieksekusi di Fase 9 irisan a |
+| Migrasi | `g1h2i3j4k5l6` (4 tabel rate + kolom snapshot `payroll_runs` + seed 2025-01-01) |
+| Test | `backend/tests/test_rates.py` |
+
 ---
 
 # End of Requirement Traceability Matrix
