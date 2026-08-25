@@ -14,7 +14,11 @@ def _setup_basic(client):
         tenant = ensure_default_tenant(db)
         for email, role in [("ops@t.co", "operations")]:
             try:
-                create_user(db, UserCreate(email=email, full_name="Ops", password="rahasia-123", role=role), tenant_id=tenant.id)
+                create_user(
+                    db,
+                    UserCreate(email=email, full_name="Ops", password="rahasia-123", role=role),
+                    tenant_id=tenant.id,
+                )
             except Exception:
                 pass
     finally:
@@ -28,14 +32,24 @@ def _setup_basic(client):
 
     # Klien + Job order → auto #jo channel
     cl = client.post("/api/v1/clients", headers=admin, json={"name": "PT Auto Channel"}).json()
-    jo = client.post("/api/v1/recruitment/job-orders", headers=admin, json={"client_id": cl["id"], "title": "Admin Gudang", "headcount": 2}).json()
+    jo = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=admin,
+        json={"client_id": cl["id"], "title": "Admin Gudang", "headcount": 2},
+    ).json()
 
     channels = client.get("/api/v1/chat/channels", headers=admin).json()
     assert any("jo-" in c["slug"] for c in channels), channels
 
     # Kandidat + placement → auto #proyek channel
-    cand = client.post("/api/v1/recruitment/candidates", headers=admin, json={"full_name": "Auto Worker"}).json()
-    placement = client.post("/api/v1/recruitment/placements", headers=admin, json={"candidate_id": cand["id"], "job_order_id": jo["id"]}).json()
+    cand = client.post(
+        "/api/v1/recruitment/candidates", headers=admin, json={"full_name": "Auto Worker"}
+    ).json()
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=admin,
+        json={"candidate_id": cand["id"], "job_order_id": jo["id"]},
+    ).json()
     channels2 = client.get("/api/v1/chat/channels", headers=admin).json()
     assert any("proyek-" in c["slug"] for c in channels2), channels2
 
@@ -50,19 +64,39 @@ def test_payroll_auto_channel_and_system_message(client):
     admin, ops, cl, jo, cand, placement = _setup_basic(client)
 
     # Buat karyawan dari placement → emp + rekap absensi
-    emp = client.post("/api/v1/employees", headers=admin, json={"full_name": "TKO Payroll", "placement_id": placement["id"], "base_salary": 5000000}).json()
+    emp = client.post(
+        "/api/v1/employees",
+        headers=admin,
+        json={"full_name": "TKO Payroll", "placement_id": placement["id"], "base_salary": 5000000},
+    ).json()
     client.post(
         "/api/v1/payroll/attendance",
         headers=admin,
-        json={"employee_id": emp["id"], "year": 2026, "month": 9, "present_days": 22, "overtime_hours": 2},
+        json={
+            "employee_id": emp["id"],
+            "year": 2026,
+            "month": 9,
+            "present_days": 22,
+            "overtime_hours": 2,
+        },
     )
     # Approve agar generate bisa sertakan lembur
-    att = client.get("/api/v1/payroll/attendance", headers=admin, params={"year": 2026, "month": 9}).json()[0]
-    client.patch(f"/api/v1/payroll/attendance/{att['id']}/client-approval", headers=admin, params={"approved": True})
+    att = client.get(
+        "/api/v1/payroll/attendance", headers=admin, params={"year": 2026, "month": 9}
+    ).json()[0]
+    client.patch(
+        f"/api/v1/payroll/attendance/{att['id']}/client-approval",
+        headers=admin,
+        params={"approved": True},
+    )
 
-    run = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 9, "run_type": "proyek", "client_id": cl["id"]}).json()
+    run = client.post(
+        "/api/v1/payroll/runs",
+        headers=admin,
+        json={"year": 2026, "month": 9, "run_type": "proyek", "client_id": cl["id"]},
+    ).json()
     client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
-    sub = client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
+    client.post(f"/api/v1/payroll/runs/{run['id']}/submit-to-client", headers=admin, json={}).json()
 
     channels = client.get("/api/v1/chat/channels", headers=admin).json()
     payroll_ch = next(c for c in channels if c["slug"].startswith("payroll-2026"))
@@ -74,17 +108,25 @@ def test_interactive_card_pr_approve_via_chat(client):
     admin, ops, cl, jo, cand, placement = _setup_basic(client)
 
     # Finalize run agar PR bisa dibuat
-    emp2 = client.post("/api/v1/employees", headers=admin, json={"full_name": "PR Worker", "base_salary": 6000000}).json()
-    run = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 10}).json()
+    client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "PR Worker", "base_salary": 6000000}
+    ).json()
+    run = client.post(
+        "/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 10}
+    ).json()
     client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=admin, json={})
     client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=admin)
 
-    pr = client.post("/api/v1/payment-requests", headers=admin, json={"pr_type": "internal", "payroll_run_id": run["id"]}).json()
+    pr = client.post(
+        "/api/v1/payment-requests",
+        headers=admin,
+        json={"pr_type": "internal", "payroll_run_id": run["id"]},
+    ).json()
 
     # Card harus ada di channel payroll terkait
     channels = client.get("/api/v1/chat/channels", headers=admin).json()
-    payroll_ch = next((c for c in channels if c["slug"].startswith("payroll-")), None)
-    # Jika belum ada karena internal run tidak punya client channel, setidaknya cek card ada di salah satu channel
+    # Jika belum ada karena internal run tidak punya client channel,
+    # setidaknya cek card ada di salah satu channel
     card_found = False
     for ch in channels:
         msgs = client.get(f"/api/v1/chat/channels/{ch['id']}/messages", headers=admin).json()
@@ -119,7 +161,7 @@ def test_websocket_requires_auth(client):
     try:
         with client.websocket_connect("/api/v1/chat/ws?token=invalid") as ws:
             ws.send_text("ping")
-            assert False, "Seharusnya ditolak"
+            raise AssertionError("Seharusnya ditolak")
     except Exception:
         # TestClient mengangkat WebSocketDisconnect atau ClosedResourceError
         pass

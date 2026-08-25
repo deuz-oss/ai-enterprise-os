@@ -48,9 +48,14 @@ def test_create_channel_and_send_message(client):
     h = _setup(client)
     admin = h["admin"]
 
-    created = client.post("/api/v1/chat/channels", headers=admin, json={
-        "name": "General", "channel_type": "public",
-    })
+    created = client.post(
+        "/api/v1/chat/channels",
+        headers=admin,
+        json={
+            "name": "General",
+            "channel_type": "public",
+        },
+    )
     assert created.status_code == 201, created.text
     channel_id = created.json()["id"]
 
@@ -73,10 +78,15 @@ def test_karyawan_scoped_access(client):
     h = _setup(client)
     admin, worker1 = h["admin"], h["worker1"]
 
-    ch = client.post("/api/v1/chat/channels", headers=admin, json={
-        "name": "Proyek Alpha", "channel_type": "private",
-        "member_ids": [],
-    }).json()
+    ch = client.post(
+        "/api/v1/chat/channels",
+        headers=admin,
+        json={
+            "name": "Proyek Alpha",
+            "channel_type": "private",
+            "member_ids": [],
+        },
+    ).json()
 
     # Worker1 belum jadi member → 403
     blocked = client.get(f"/api/v1/chat/channels/{ch['id']}/messages", headers=worker1)
@@ -109,9 +119,14 @@ def test_broadcast_channel_ops_only_post(client):
     h = _setup(client)
     ops, worker1 = h["ops"], h["worker1"]
 
-    ch = client.post("/api/v1/chat/channels", headers=ops, json={
-        "name": "Pengumuman", "channel_type": "broadcast",
-    }).json()
+    ch = client.post(
+        "/api/v1/chat/channels",
+        headers=ops,
+        json={
+            "name": "Pengumuman",
+            "channel_type": "broadcast",
+        },
+    ).json()
     channel_id = ch["id"]
 
     # Ops bisa posting
@@ -135,9 +150,14 @@ def test_thread_reply_and_reaction(client):
     h = _setup(client)
     admin, hr = h["admin"], h["hr"]
 
-    ch = client.post("/api/v1/chat/channels", headers=admin, json={
-        "name": "Diskusi", "channel_type": "public",
-    }).json()
+    ch = client.post(
+        "/api/v1/chat/channels",
+        headers=admin,
+        json={
+            "name": "Diskusi",
+            "channel_type": "public",
+        },
+    ).json()
     channel_id = ch["id"]
 
     parent = client.post(
@@ -200,9 +220,14 @@ def test_channel_list_shows_unread_for_karyawan(client):
     h = _setup(client)
     admin, worker1 = h["admin"], h["worker1"]
 
-    ch = client.post("/api/v1/chat/channels", headers=admin, json={
-        "name": "Tim Proyek", "channel_type": "private",
-    }).json()
+    ch = client.post(
+        "/api/v1/chat/channels",
+        headers=admin,
+        json={
+            "name": "Tim Proyek",
+            "channel_type": "private",
+        },
+    ).json()
     users_list = client.get("/api/v1/auth/users", headers=admin).json()
     w1_id = next(u["id"] for u in users_list if u["email"] == "worker1@t.co")
     client.post(f"/api/v1/chat/channels/{ch['id']}/members", headers=admin, json={"user_id": w1_id})

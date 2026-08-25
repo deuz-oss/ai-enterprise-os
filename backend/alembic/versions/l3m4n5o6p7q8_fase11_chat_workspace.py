@@ -29,13 +29,20 @@ def upgrade() -> None:
         sa.Column("slug", sa.String(length=120), nullable=False),
         sa.Column("channel_type", sa.String(length=20), nullable=False, server_default="public"),
         sa.Column("created_by_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_chat_channels_slug"), "chat_channels", ["slug"], unique=False)
-    op.create_index(op.f("ix_chat_channels_tenant_id"), "chat_channels", ["tenant_id"], unique=False)
+    op.create_index(
+        op.f("ix_chat_channels_tenant_id"), "chat_channels", ["tenant_id"], unique=False
+    )
 
     op.create_table(
         "chat_channel_members",
@@ -44,7 +51,12 @@ def upgrade() -> None:
         sa.Column("channel_id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("is_admin", sa.Boolean(), nullable=False, server_default="0"),
-        sa.Column("joined_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "joined_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.ForeignKeyConstraint(["channel_id"], ["chat_channels.id"]),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
@@ -52,7 +64,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("channel_id", "user_id", name="uq_chat_member"),
     )
     for col in ("tenant_id", "channel_id", "user_id"):
-        op.create_index(op.f(f"ix_chat_channel_members_{col}"), "chat_channel_members", [col], unique=False)
+        op.create_index(
+            op.f(f"ix_chat_channel_members_{col}"), "chat_channel_members", [col], unique=False
+        )
 
     op.create_table(
         "chat_messages",
@@ -64,7 +78,12 @@ def upgrade() -> None:
         sa.Column("parent_id", sa.Uuid(), nullable=True),
         sa.Column("edited_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
         sa.ForeignKeyConstraint(["channel_id"], ["chat_channels.id"]),
         sa.ForeignKeyConstraint(["sender_id"], ["users.id"]),
@@ -87,7 +106,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("message_id", "user_id", "emoji", name="uq_reaction"),
     )
-    op.create_index(op.f("ix_chat_message_reactions_message_id"), "chat_message_reactions", ["message_id"], unique=False)
+    op.create_index(
+        op.f("ix_chat_message_reactions_message_id"),
+        "chat_message_reactions",
+        ["message_id"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:

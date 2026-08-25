@@ -18,7 +18,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("chat_messages") as batch_op:
-        batch_op.add_column(sa.Column("message_type", sa.String(length=20), nullable=False, server_default="text"))
+        batch_op.add_column(
+            sa.Column("message_type", sa.String(length=20), nullable=False, server_default="text")
+        )
         batch_op.add_column(sa.Column("card_data", sa.JSON(), nullable=True))
         batch_op.add_column(sa.Column("actions", sa.JSON(), nullable=True))
 
