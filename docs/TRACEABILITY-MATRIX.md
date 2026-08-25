@@ -408,6 +408,19 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Test | `backend/tests/test_payroll_dua_jalur.py` (7 skenario) |
 | Sisa Fase 9 | Saltab grid line-item + prorata, BPJS dua sisi ke invoice, Payment Request workflow, invoice/jurnal otomatis (irisan b–c, terkait Fase 10) |
 
+### 12.12 Fase 9b-c — Saltab Line-item, BPJS Dua Sisi & Payment Request
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Grid Saltab line-item + prorata absensi + BPJS dua sisi; invoice draft otomatis saat klien approve; workflow Payment Request |
+| Source Code | `payroll/{models,schemas,service}.py` (`PayslipComponent`, saltab), `finance/{models,schemas,service,router}.py` (`PaymentRequest`) |
+| API Saltab | `GET /payroll/runs/{id}/saltab` · `PATCH /payroll/saltab/components/{id}` (override manual ber-audit) · `GET .../saltab/export` (CSV) |
+| API PR | `GET|POST /payment-requests` · `POST /{id}/approve|reject|execute` (approve: management; execute: finance/management) |
+| Aturan | Prorata & BPJS opt-in per generate; THP = Σ pemasukan − Σ potongan; BPJS employer pass-through ditagih ke klien; override manual recompute agregat + audit; tolak PR wajib catatan |
+| Migrasi | `i0j1k2l3m4n5` (tabel `payslip_components` + `payment_requests`) |
+| Test | `backend/tests/test_saltab.py`, `backend/tests/test_payment_request.py` |
+| Sisa Fase 9 | Ekspor Excel/PDF (CSV tersedia); rantai approval multi-level configurable |
+
 ---
 
 # End of Requirement Traceability Matrix

@@ -81,8 +81,54 @@ def get_run(run_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/runs/{run_id}/slips", response_model=list[PayslipOut])
-def list_slips(run_id: str, db: Session = Depends(get_db)):
+def list_slips(run_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
     return service.list_slips(db, run_id)
+
+
+# ---------- Saltab grid (Fase 9b) ----------
+
+
+@router.get("/runs/{run_id}/saltab")
+def saltab_view(
+    run_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Grid line-item Saltab per karyawan (PRD §6)."""
+    return service.saltab_view(db, run_id, tenant_id=user.tenant_id)
+
+
+@router.patch("/saltab/components/{component_id}", response_model=dict)
+def override_saltab_component(
+    component_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Override manual nominal komponen; agregat slip dihitung ulang + audit."""
+    from app.modules.payroll.schemas import SaltabComponentUpdate
+
+    data = SaltabComponentUpdate(**payload)
+    comp, slip = service.update_saltab_component(db, user, component_id, data.amount)
+    return {
+        "id": str(comp.id),
+        "amount": float(comp.amount),
+        "source": comp.source,
+        "gross": float(slip.gross),
+        "net_pay": float(slip.net_pay),
+    }
+
+
+@router.get("/runs/{run_id}/saltab/export")
+def export_saltab(run_id: str, db: Session = Depends(get_db)):
+    from fastapi import Response
+
+    content, filename = service.saltab_export_csv(db, run_id)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/runs/{run_id}/finalize", response_model=RunOut)

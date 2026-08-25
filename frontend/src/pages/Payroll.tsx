@@ -67,6 +67,135 @@ interface BpjsRecap {
   summary: { employer_total: number; employee_total: number; grand_total: number };
 }
 
+interface SaltabComp {
+  id: string;
+  ctype: "earnings" | "deduction" | "passthrough";
+  code: string;
+  name: string;
+  amount: number;
+  source: string;
+  notes: string | null;
+}
+
+interface SaltabRow {
+  payslip_id: string;
+  employee_name: string;
+  components: SaltabComp[];
+  total_earnings: number;
+  total_deductions: number;
+  total_passthrough: number;
+}
+
+function SaltabTable({ runId }: { runId: string | null }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<string | null>(null);
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ["saltab", runId],
+    queryFn: () => api.get<SaltabRow[]>(`/payroll/runs/${runId}/saltab`),
+    enabled: Boolean(runId),
+  });
+  const saveAmount = useMutation({
+    mutationFn: ({ id, amount }: { id: string; amount: number }) =>
+      api.patch(`/payroll/saltab/components/${id}`, { amount }),
+    onSuccess: () => {
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["saltab", runId] });
+      qc.invalidateQueries({ queryKey: ["slips", runId] });
+    },
+  });
+  const err = saveAmount.error as Error | null;
+
+  if (!runId)
+    return (
+      <p className="p-4 text-sm text-slate-400">
+        Pilih payroll run (klik "Slip Gaji") untuk melihat grid Saltab.
+      </p>
+    );
+  if (isLoading) return <p className="p-4 text-sm text-slate-400">Memuat...</p>;
+
+  return (
+    <div className="divide-y divide-slate-100">
+      {(rows ?? []).map((row) => (
+        <div key={row.payslip_id} className="px-4 py-3">
+          <p className="text-sm font-medium text-slate-700">{row.employee_name}</p>
+          <table className="mt-1 w-full text-xs">
+            <tbody>
+              {row.components.map((c) => (
+                <tr key={c.id}>
+                  <td className="py-0.5 pr-2 capitalize" style={{ color: "var(--n-text-muted)" }}>
+                    {c.name}
+                    {c.source === "manual" && (
+                      <span className="ml-1 badge bg-indigo-100 text-indigo-700">manual</span>
+                    )}
+                  </td>
+                  <td className="py-0.5 pr-2 uppercase text-[10px]" style={{ color: "var(--n-text-muted)" }}>
+                    {c.ctype}
+                  </td>
+                  <td className="w-40 py-0.5 text-right font-mono">
+                    {editing === c.id ? null : formatRupiah(c.amount)}
+                  </td>
+                  <td className="w-24 py-0.5 pl-2 text-right">
+                    {editing === c.id ? (
+                      <form
+                        className="flex justify-end gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const f = new FormData(e.currentTarget);
+                          saveAmount.mutate({
+                            id: c.id,
+                            amount: Number(f.get("amount") || 0),
+                          });
+                        }}
+                      >
+                        <input
+                          name="amount"
+                          type="number"
+                          defaultValue={c.amount}
+                          className="input w-28 px-1 py-0.5 text-right"
+                        />
+                        <button className="btn-secondary px-1.5 py-0.5">✓</button>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => setEditing(c.id)}
+                        className="text-indigo-600 hover:text-indigo-800"
+                        title="Override manual"
+                      >
+                        edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td className="pt-1">THP</td>
+                <td />
+                <td className="pt-1 text-right font-mono">
+                  {formatRupiah(row.total_earnings - row.total_deductions)}
+                </td>
+                <td />
+              </tr>
+              {row.total_passthrough > 0 && (
+                <tr style={{ color: "var(--n-text-muted)" }}>
+                  <td className="pr-2" colSpan={2}>
+                    + BPJS perusahaan (pass-through, ditagih ke klien)
+                  </td>
+                  <td className="text-right font-mono">{formatRupiah(row.total_passthrough)}</td>
+                  <td />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {rows?.length === 0 && (
+        <p className="p-4 text-sm text-slate-400">Belum ada slip pada run ini.</p>
+      )}
+      {err && <p className="px-4 pb-3 text-sm text-red-600">{err.message}</p>}
+    </div>
+  );
+}
+
 export default function Payroll() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState({ year: 2026, month: 8 });
@@ -152,6 +281,10 @@ export default function Payroll() {
   const startProcessing = useMutation({
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/start-processing`, {}),
     onSuccess: invalidateAll,
+  });
+  const createPr = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post<{ pr_number: string }>("/payment-requests", body),
   });
 
   const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -377,6 +510,23 @@ export default function Payroll() {
                     {r.status === "submitted_to_client" && (
                       <span className="text-xs text-slate-400">menunggu keputusan klien</span>
                     )}
+                    {r.status === "final" && (
+                      <button
+                        onClick={() =>
+                          createPr.mutate(
+                            { payroll_run_id: r.id, pr_type: r.run_type },
+                            {
+                              onSuccess: () =>
+                                window.location.assign("/payment-requests"),
+                            }
+                          )
+                        }
+                        className="font-medium text-indigo-600 hover:text-indigo-800"
+                        title="Ajukan Payment Request pembayaran gaji"
+                      >
+                        + Payment Request
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -437,6 +587,25 @@ export default function Payroll() {
           </table>
         </div>
       )}
+
+      <div className="card p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
+          <h2 className="font-semibold text-slate-700">
+            Saltab (Grid Komponen) — Run terpilih
+          </h2>
+          {selectedRunId && (
+            <button
+              className="btn-secondary text-xs"
+              onClick={() =>
+                downloadFile(`/payroll/runs/${selectedRunId}/saltab/export`)
+              }
+            >
+              Unduh CSV Saltab
+            </button>
+          )}
+        </div>
+        <SaltabTable runId={selectedRunId} />
+      </div>
 
       <div className="card p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">

@@ -6,12 +6,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
+from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.finance.models import (
     CashFlowDirection,
     CashFlowEntry,
     Invoice,
     InvoiceStatus,
+    PaymentRequest,
+    PaymentRequestStatus,
 )
 from app.modules.finance.schemas import (
     AgingRow,
@@ -43,9 +46,32 @@ def _generate_invoice_no(db: Session) -> str:
 
 
 def _payroll_total_for_client(
-    db: Session, client_id: UUID, year: int, month: int
+    db: Session, client_id: UUID, year: int, month: int, run_id: UUID | None = None
 ) -> float:
-    """Total slip gaji karyawan klien (via placement → job order)."""
+    """Total slip gaji karyawan klien (via placement → job order).
+
+    Bila run_id diberikan (payrol proyek dua jalur), total dihitung dari
+    line-item Saltab: Σ earnings + Σ passthrough (BPJS perusahaan).
+    """
+    if run_id is not None:
+        from app.modules.payroll.models import PayslipComponent
+
+        rows = db.execute(
+            select(Payslip.id).where(Payslip.run_id == parse_uuid(str(run_id)))
+        ).scalars().all()
+        if not rows:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Belum ada slip gaji pada payrol {str(run_id)[:8]} untuk ditagihkan",
+            )
+        comps = db.execute(
+            select(PayslipComponent.ctype, func.coalesce(func.sum(PayslipComponent.amount), 0))
+            .where(PayslipComponent.payslip_id.in_(rows))
+            .group_by(PayslipComponent.ctype)
+        ).all()
+        totals = {ctype.value: float(amount) for ctype, amount in comps}
+        return totals.get("earnings", 0) + totals.get("passthrough", 0)
+
     run = db.execute(
         select(PayrollRun).where(PayrollRun.year == year, PayrollRun.month == month)
     ).scalar_one_or_none()
@@ -64,7 +90,9 @@ def _payroll_total_for_client(
     return float(total or 0)
 
 
-def generate_invoice(db: Session, payload: InvoiceGenerateRequest) -> Invoice:
+def generate_invoice(
+    db: Session, payload: InvoiceGenerateRequest, run_id: UUID | None = None
+) -> Invoice:
     if db.get(Client, payload.client_id) is None:
         raise HTTPException(status_code=404, detail="Klien tidak ditemukan")
     duplicate = db.execute(
@@ -78,7 +106,11 @@ def generate_invoice(db: Session, payload: InvoiceGenerateRequest) -> Invoice:
         raise HTTPException(status_code=409, detail="Invoice untuk periode ini sudah ada")
 
     payroll_total = _payroll_total_for_client(
-        db, payload.client_id, payload.year, payload.month
+        db,
+        payload.client_id,
+        payload.year,
+        payload.month,
+        run_id=run_id or payload.run_id,
     )
     # Ambil tarif ber-versi untuk periode invoice (fallback ke konstanta kode)
     billing_cfg = get_effective_billing(db, date(payload.year, payload.month, 1))
@@ -235,3 +267,183 @@ def cashflow_summary(
         "outflow": outflow,
         "net": inflow - outflow,
     }
+
+# ---------- Payment Request (PRD §7) ----------
+
+
+def _next_pr_number(db: Session) -> str:
+    count = db.scalar(select(func.count(PaymentRequest.id))) or 0
+    return f"PR/{date.today().year}/{count + 1:04d}"
+
+
+def create_payment_request(
+    db: Session,
+    *,
+    user,
+    pr_type: str,
+    amount: float,
+    payroll_run_id=None,
+    description: str | None = None,
+) -> PaymentRequest:
+    """Ops (proyek) / HR (internal) mengajukan PR pembayaran gaji."""
+    from app.modules.notifications.service import notify
+
+    if pr_type not in ("proyek", "internal"):
+        raise HTTPException(status_code=422, detail="Tipe PR harus proyek atau internal")
+    run_ref = None
+    if payroll_run_id is not None:
+        from app.modules.payroll.models import PayrollRun
+
+        run_ref = db.get(PayrollRun, parse_uuid(str(payroll_run_id)))
+        if run_ref is None:
+            raise HTTPException(status_code=404, detail="Payroll run tidak ditemukan")
+        if run_ref.status.value != "final":
+            raise HTTPException(
+                status_code=422, detail="PR hanya untuk payroll run berstatus final"
+            )
+        if amount <= 0:
+            amount = sum(float(s.net_pay) for s in run_ref.slips)
+    pr = PaymentRequest(
+        pr_number=_next_pr_number(db),
+        pr_type=pr_type,
+        payroll_run_id=run_ref.id if run_ref else None,
+        amount=round(amount),
+        description=(description or "").strip()[:500]
+        or (
+            f"Pembayaran gaji {run_ref.month}/{run_ref.year} ({run_ref.run_type.value})"
+            if run_ref
+            else None
+        ),
+        status=PaymentRequestStatus.waiting_superior,
+        requester_id=user.id,
+    )
+    db.add(pr)
+    db.commit()
+    db.refresh(pr)
+    audit.log_event(
+        db,
+        action="payment_request.created",
+        entity_type="payment_request",
+        entity_id=pr.id,
+        detail={"number": pr.pr_number, "type": pr.pr_type, "amount": float(pr.amount)},
+    )
+    # Notifikasi ke approver (admin + management tenant).
+    from app.modules.auth.models import User, UserRole
+
+    approvers = (
+        db.execute(
+            select(User.id).where(
+                User.tenant_id == user.tenant_id,
+                User.is_active.is_(True),
+                User.role.in_([UserRole.admin, UserRole.management]),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for uid in approvers:
+        notify(
+            db,
+            user_id=uid,
+            title=f"Payment Request menunggu persetujuan — {pr.pr_number}",
+            body=f"{pr.description or pr.pr_type}: Rp{float(pr.amount):,.0f}",
+            category="payment",
+            entity_type="payment_request",
+            entity_id=pr.id,
+        )
+    return pr
+
+
+def decide_payment_request(
+    db: Session, *, user, pr_id: str, approved: bool, note: str | None = None
+) -> PaymentRequest:
+    """Atasan (management/admin) menyetujui / menolak PR."""
+    from app.modules.notifications.service import notify
+
+    pr = db.get(PaymentRequest, parse_uuid(pr_id))
+    if pr is None:
+        raise HTTPException(status_code=404, detail="PR tidak ditemukan")
+    if pr.status != PaymentRequestStatus.waiting_superior:
+        raise HTTPException(status_code=409, detail="PR sudah diputus sebelumnya")
+    if user.role != "admin" and user.role.value != "management":
+        raise HTTPException(
+            status_code=403, detail="Hanya management yang dapat memutuskan PR"
+        )
+    if not approved and not (note or "").strip():
+        raise HTTPException(status_code=422, detail="Catatan wajib saat menolak PR")
+
+    pr.status = PaymentRequestStatus.approved if approved else PaymentRequestStatus.rejected
+    pr.approver_id = user.id
+    pr.decided_at = datetime.now(UTC)
+    pr.decision_note = (note or "").strip()[:500] or None
+    db.commit()
+    db.refresh(pr)
+    audit.log_event(
+        db,
+        action="payment_request.decided",
+        entity_type="payment_request",
+        entity_id=pr.id,
+        detail={"approved": approved, "status": pr.status.value},
+    )
+    notify(
+        db,
+        user_id=pr.requester_id,
+        title=f"PR {pr.pr_number} {'disetujui atasan' if approved else 'ditolak'}",
+        body=pr.decision_note,
+        category="payment",
+        entity_type="payment_request",
+        entity_id=pr.id,
+    )
+    return pr
+
+
+def execute_payment_request(db: Session, *, user, pr_id: str) -> PaymentRequest:
+    """Finance menjalankan pembayaran (checklist transfer per bank menyusul)."""
+    from app.modules.notifications.service import notify
+
+    pr = db.get(PaymentRequest, parse_uuid(pr_id))
+    if pr is None:
+        raise HTTPException(status_code=404, detail="PR tidak ditemukan")
+    if pr.status != PaymentRequestStatus.approved:
+        raise HTTPException(status_code=409, detail="PR belum disetujui atasan")
+    if user.role not in ("finance", "management", "admin") and user.role.value not in (
+        "finance",
+        "management",
+        "admin",
+    ):
+        raise HTTPException(status_code=403, detail="Hanya Finance yang dapat mengeksekusi PR")
+    pr.status = PaymentRequestStatus.executed
+    pr.executed_at = datetime.now(UTC)
+    pr.executed_by_id = user.id
+    db.commit()
+    db.refresh(pr)
+    audit.log_event(
+        db,
+        action="payment_request.executed",
+        entity_type="payment_request",
+        entity_id=pr.id,
+        detail={"amount": float(pr.amount)},
+    )
+    notify(
+        db,
+        user_id=pr.requester_id,
+        title=f"PR {pr.pr_number} dieksekusi Finance",
+        body=f"Pembayaran Rp{float(pr.amount):,.0f} diproses.",
+        category="payment",
+        entity_type="payment_request",
+        entity_id=pr.id,
+    )
+    return pr
+
+
+def list_payment_requests(
+    db: Session,
+    status: PaymentRequestStatus | None = None,
+    pr_type: str | None = None,
+) -> list[PaymentRequest]:
+    stmt = select(PaymentRequest).order_by(PaymentRequest.created_at.desc())
+    if status is not None:
+        stmt = stmt.where(PaymentRequest.status == status)
+    if pr_type:
+        stmt = stmt.where(PaymentRequest.pr_type == pr_type)
+    return list(db.execute(stmt).scalars())

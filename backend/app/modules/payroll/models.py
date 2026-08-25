@@ -102,6 +102,38 @@ class PayrollRun(TenantMixin, Base):
     client = relationship("Client", lazy="joined")
 
 
+class PayslipComponentType(str, enum.Enum):
+    earnings = "earnings"  # pemasukan billable (masuk gross, ditagih ke klien)
+    deduction = "deduction"  # potongan karyawan (mengurangi THP)
+    passthrough = "passthrough"  # BPJS employer — bukan pendapatan, ditagih ke klien
+
+
+class PayslipComponent(TenantMixin, Base):
+    """Line-item Saltab (PRD §6): rincian komponen satu slip gaji.
+
+    - `source=auto` dibangun mesin saat generate (prorata absensi & BPJS).
+    - Override manual via grid Saltab mengubah amount + source=`manual`,
+      tercatat di audit; agregat slip (gross/net) dihitung ulang dari sini.
+    """
+
+    __tablename__ = "payslip_components"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    payslip_id: Mapped[UUID] = mapped_column(ForeignKey("payslips.id"), index=True)
+    ctype: Mapped[PayslipComponentType] = mapped_column(
+        Enum(PayslipComponentType, native_enum=False, length=50),
+        default=PayslipComponentType.earnings,
+        index=True,
+    )
+    code: Mapped[str] = mapped_column(String(50))
+    name: Mapped[str] = mapped_column(String(255))
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    source: Mapped[str] = mapped_column(String(20), default="auto")
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+    payslip = relationship("Payslip", back_populates="components")
+
+
 class PayrollRunToken(TenantMixin, Base):
     """Token approval payrol proyek untuk klien (link tanpa akun).
 
@@ -145,3 +177,8 @@ class Payslip(TenantMixin, Base):
 
     run = relationship("PayrollRun", back_populates="slips")
     employee = relationship("Employee", lazy="joined")
+    components: Mapped[list["PayslipComponent"]] = relationship(
+        back_populates="payslip",
+        cascade="all, delete-orphan",
+        order_by="PayslipComponent.ctype",
+    )

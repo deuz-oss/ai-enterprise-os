@@ -59,12 +59,21 @@ class RunCreate(BaseModel):
 
 
 class GenerateSlipsRequest(BaseModel):
-    """Kosong = semua karyawan aktif; isi daftar untuk subset karyawan."""
+    """Kosong = semua karyawan aktif; isi daftar untuk subset karyawan.
+
+    Fase 9b (opsional, default nonaktif demi kompatibilitas):
+    - prorata_absensi: gaji pokok & tunjangan diprorata dari hari hadir
+      rekap tervalidasi ÷ hari kerja (Sen–Jum) bulan tersebut.
+    - bpjs_enabled: potongan BPJS karyawan + passthrough BPJS perusahaan
+      dihitung mesin BPJS dan menjadi line-item Saltab.
+    """
 
     employee_ids: list[UUID] | None = None
     allowance: float = 0
     deductions: float = 0
     overtime_rate: float = 0
+    prorata_absensi: bool = False
+    bpjs_enabled: bool = False
 
 
 class PayslipOut(BaseModel):
@@ -114,3 +123,38 @@ class TaxPreviewIn(BaseModel):
     dependents: int = 0
     method: str = "ter"  # "ter" atau "pasal17"
     months: int = 1
+
+
+# ---------- Saltab ----------
+
+class SaltabComponentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    ctype: str
+    code: str
+    name: str
+    amount: float
+    source: str
+    notes: str | None
+
+
+class SaltabRowOut(BaseModel):
+    payslip_id: UUID
+    employee_name: str
+    status_run: str
+    components: list[SaltabComponentOut]
+    total_earnings: float
+    total_deductions: float
+    total_passthrough: float
+
+
+class SaltabComponentUpdate(BaseModel):
+    amount: float
+
+    @field_validator("amount")
+    @classmethod
+    def _non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Nominal komponen tidak boleh negatif")
+        return v

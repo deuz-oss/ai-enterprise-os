@@ -14,6 +14,8 @@ class InvoiceGenerateRequest(BaseModel):
     ppn_rate: float | None = None  # None → pakai default konfigurasi
     pph23_rate: float | None = None
     notes: str | None = None
+    # Payrol proyek dua jalur: tagih dari run tertentu (line-item Saltab)
+    run_id: UUID | None = None
 
     @field_validator("month")
     @classmethod

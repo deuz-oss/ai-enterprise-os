@@ -14,6 +14,7 @@ import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
 import MyPortal from "./pages/MyPortal";
+import PaymentRequests from "./pages/PaymentRequests";
 import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
 import Rates from "./pages/Rates";
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
+            <Route path="/payment-requests" element={<PaymentRequests />} />
             <Route path="/payroll" element={<Payroll />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/accounting" element={<Accounting />} />

@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
     from app.modules.esign.router import webhook_router as esign_webhook_router
     from app.modules.ess.router import router as ess_router
     from app.modules.files import router as files_router
+    from app.modules.finance.router import pr_router as payment_request_router
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.notifications.router import router as notifications_router
@@ -148,6 +149,11 @@ def create_app() -> FastAPI:
         finance_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("operations_billing"))],
+    )
+    # Payment Request lintas jalur (Fase 9c): guard OR dua aplikasi.
+    app.include_router(
+        payment_request_router,
+        prefix="/api/v1",
     )
     app.include_router(
         accounting_router,

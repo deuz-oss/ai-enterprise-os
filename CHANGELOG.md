@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 9b-c: Saltab Line-item, BPJS Dua Sisi & Payment Request
+
+- **Line-item Saltab** (`PayslipComponent`, migrasi `i0j1k2l3m4n5`): setiap slip kini punya rincian komponen (gaji pokok, tunjangan, lembur, PPh21, potongan lain, admin bank) yang dibangun otomatis saat generate — komponen ↔ agregat slip selalu "nol selisih".
+- **Prorata absensi (opt-in)**: `prorata_absensi=true` pada `POST /payroll/runs/{id}/generate` memprorata gaji pokok & tunjangan dari hari hadir rekap tervalidasi ÷ hari kerja Sen–Jum bulan tsb (jejak di notes komponen).
+- **BPJS dua sisi (opt-in)**: `bpjs_enabled=true` menambah potongan karyawan (Kesehatan/JHT/JP) + passthrough tanggungan perusahaan dari mesin BPJS ber-versi.
+- **Grid Saltab**: `GET /payroll/runs/{id}/saltab` + override manual per komponen `PATCH /payroll/saltab/components/{id}` (gross/net recompute + audit) + ekspor CSV.
+- **Invoice draft otomatis** saat payrol proyek disetujui klien (Σ earnings + BPJS employer; fee diatur Finance; idempoten per periode+klien).
+- **Workflow Payment Request**: `PaymentRequest` dengan state machine diajukan → menunggu_atasan → disetujui → dieksekusi / ditolak (+catatan wajib); endpoint `/payment-requests` (create dari run final, list+filter, approve/reject management, execute finance); notifikasi approver & pemohon; nomor PR/ tahun berurutan.
+- **Frontend**: grid Saltab editable inline di halaman Payroll; halaman "🧾 Payment Request" dengan aksi per status; tombol "+ Payment Request" pada run final.
+- Tes: komponen/prorata/BPJS dua sisi, override + recompute, invoice otomatis, PR lifecycle lengkap.
+
 ### Added — Fase 9a: Payrol Dua Jalur + Approval Klien Ber-Token (ADR-0006)
 
 - **`PayrollRun.run_type`** (`internal|proyek`) + `client_id` wajib untuk run proyek; duplikat diperiksa per (periode, jenis, klien). Migrasi `h9i0j1k2l3m4`.
