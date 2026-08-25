@@ -26,6 +26,7 @@ from app.modules.finance.tax_config import (
 )
 from app.modules.hrd.models import Employee
 from app.modules.payroll.models import PayrollRun, Payslip
+from app.modules.rates.service import get_effective_billing
 from app.modules.recruitment.models import JobOrder, Placement
 
 
@@ -79,8 +80,14 @@ def generate_invoice(db: Session, payload: InvoiceGenerateRequest) -> Invoice:
     payroll_total = _payroll_total_for_client(
         db, payload.client_id, payload.year, payload.month
     )
-    ppn_rate = payload.ppn_rate if payload.ppn_rate is not None else DEFAULT_PPN_RATE
-    pph23_rate = payload.pph23_rate if payload.pph23_rate is not None else DEFAULT_PPH23_RATE
+    # Ambil tarif ber-versi untuk periode invoice (fallback ke konstanta kode)
+    billing_cfg = get_effective_billing(db, date(payload.year, payload.month, 1))
+    default_ppn = float(billing_cfg.ppn_rate) if billing_cfg else DEFAULT_PPN_RATE
+    default_pph23 = float(billing_cfg.pph23_rate) if billing_cfg else DEFAULT_PPH23_RATE
+    default_due = int(billing_cfg.due_days) if billing_cfg else DEFAULT_DUE_DAYS
+
+    ppn_rate = payload.ppn_rate if payload.ppn_rate is not None else default_ppn
+    pph23_rate = payload.pph23_rate if payload.pph23_rate is not None else default_pph23
 
     subtotal = payroll_total + payload.fee_amount
     ppn_amount = round(subtotal * ppn_rate)
@@ -101,7 +108,7 @@ def generate_invoice(db: Session, payload: InvoiceGenerateRequest) -> Invoice:
         total_due=total_due,
         status=InvoiceStatus.draft,
         issued_date=date.today(),
-        due_date=date.today() + timedelta(days=DEFAULT_DUE_DAYS),
+        due_date=date.today() + timedelta(days=default_due),
         notes=payload.notes,
     )
     db.add(invoice)

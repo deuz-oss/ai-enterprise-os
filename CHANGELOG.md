@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Rates ber-versi untuk pajak, BPJS, billing, bank fee (NFR §11)
+
+- **Tabel rate ber-versi** (`pph21_configs`, `bpjs_configs`, `billing_tax_configs`, `bank_fee_configs`) dengan `effective_from` — tarif terpisah dari kode, versi dicatat per periode agar laporan historis konsisten. Migrasi `g1h2i3j4k5l6` (seed 2025-01-01 dari konstanta kode).
+- **Payroll & BPJS memakai DB**: `TaxProfile.from_db(db, effective_date)` dan `compute_contribution(db, effective_date)` → fallback ke konstanta bila DB kosong; snapshot `pph21_snapshot`/`bpjs_snapshot` disimpan di `payroll_runs` saat generate.
+- **Billing**: `generate_invoice` memakai `billing_tax_configs` efektif per periode (PPN/PPh23/due_days) dengan fallback `finance/tax_config.py`.
+- **Bank fee**: `POST/GET /rates/bank-fees` — potongan admin otomatis di slip gaji (non-Mandiri, default Rp 3.500, configurable per bank). Endpoint `GET /rates/{pph21,bpjs,billing}` list, `POST` buat versi baru (admin/finance/management).
+- **CRUD rates**: `GET /rates/{pph21,bpjs,billing,bank-fees}` + `POST` (admin) — versi untuk tanggal yang sama ditolak 409.
+
 ### Added — Fase 8: Absensi Harian (Clock-in/out)
 
 - **Model harian `AttendanceRecord`** (`date`, `clock_in`, `clock_out`, `overtime_hours`, `status`, `source`, `notes`) dengan unique `(employee_id, date)`; kolom `employees.employment_type` (`internal/eksternal`, default eksternal). Migrasi `b4d5e6f7a8b9`.

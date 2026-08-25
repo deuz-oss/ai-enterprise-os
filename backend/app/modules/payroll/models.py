@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Enum,
@@ -65,6 +66,9 @@ class PayrollRun(TenantMixin, Base):
     )
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Snapshot rate ber-versi untuk konsistensi historis (NFR §11)
+    pph21_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    bpjs_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     slips: Mapped[list["Payslip"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"

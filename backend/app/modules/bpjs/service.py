@@ -40,9 +40,10 @@ def _validate_period(year: int, month: int) -> None:
 def monthly_recap(db: Session, year: int, month: int) -> BpjsRecapOut:
     """Rekap iuran semua karyawan aktif untuk periode tertentu."""
     _validate_period(year, month)
+    effective = date(year, month, 1)
     rows: list[ContributionRowOut] = []
     for emp in _get_employees(db):
-        breakdown = compute_contribution(float(emp.base_salary), emp.jkk_risk_category)
+        breakdown = compute_contribution(float(emp.base_salary), emp.jkk_risk_category, db=db, effective_date=effective)  # noqa: E501
         rows.append(_to_row(emp, breakdown))
 
     summary = RecapSummaryOut(

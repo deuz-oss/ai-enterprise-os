@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -19,6 +19,7 @@ from app.modules.payroll.schemas import (
     TaxPreviewIn,
 )
 from app.modules.payroll.tax import TaxProfile, compute_pasal17_monthly_average, compute_ter
+from app.modules.rates.service import get_effective_bpjs, get_effective_pph21
 
 # ---------- Attendance & approval klien ----------
 
@@ -120,6 +121,23 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
     if run.status == PayrollRunStatus.final:
         raise HTTPException(status_code=409, detail="Payroll run sudah final dan terkunci")
 
+    # Resolve rate ber-versi untuk periode ini; snapshot disimpan di run untuk historis.
+    period_date = date(run.year, run.month, 1)
+    pph21_cfg = get_effective_pph21(db, period_date)
+    bpjs_cfg = get_effective_bpjs(db, period_date)
+    # Simpan snapshot JSON agar laporan historis tetap konsisten walau rate diperbarui
+    if pph21_cfg and run.pph21_snapshot is None:
+        run.pph21_snapshot = {
+            "effective_from": pph21_cfg.effective_from.isoformat(),
+            "ptkp_diri": float(pph21_cfg.ptkp_diri),
+            "config_id": pph21_cfg.id,
+        }
+    if bpjs_cfg and run.bpjs_snapshot is None:
+        run.bpjs_snapshot = {
+            "effective_from": bpjs_cfg.effective_from.isoformat(),
+            "config_id": bpjs_cfg.id,
+        }
+
     employee_stmt = select(Employee).where(Employee.status == EmployeeStatus.active)
     if payload.employee_ids:
         ids = [parse_uuid(str(e)) for e in payload.employee_ids]
@@ -152,12 +170,24 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
         overtime_amount = overtime_hours * float(payload.overtime_rate or 0)
         gross = base + float(payload.allowance or 0) + overtime_amount
 
-        profile = TaxProfile(
+        # Gunakan config ber-versi jika ada, fallback ke konstanta kode
+        period_date = date(run.year, run.month, 1)
+        profile = TaxProfile.from_db(
+            db,
+            period_date,
             marital_status=(employee.marital_status.value if employee.marital_status else "tk"),
             dependents=employee.dependents or 0,
         )
         tax = compute_ter(gross, profile)
+        # Potongan admin bank otomatis (non-Mandiri) dari config
+        try:
+            from app.modules.rates.service import get_bank_fee
 
+            bank_fee = get_bank_fee(db, employee.bank_name or "")
+        except Exception:
+            bank_fee = 0
+
+        total_deductions = float(payload.deductions or 0) + bank_fee
         slip = Payslip(
             run_id=run.id,
             employee_id=employee.id,
@@ -166,11 +196,11 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
             overtime_hours=overtime_hours,
             overtime_rate=float(payload.overtime_rate or 0),
             overtime_amount=overtime_amount,
-            deductions=float(payload.deductions or 0),
+            deductions=total_deductions,
             gross=gross,
             pph21_method="ter",
             tax_pph21=tax,
-            net_pay=gross - tax - float(payload.deductions or 0),
+            net_pay=gross - tax - total_deductions,
         )
         slips.append(slip)
 
@@ -208,8 +238,13 @@ def finalize_run(db: Session, run_id: str) -> PayrollRun:
 # ---------- Preview pajak ----------
 
 
-def preview_tax(payload: TaxPreviewIn) -> dict:
-    profile = TaxProfile(marital_status=payload.marital_status, dependents=payload.dependents)
+def preview_tax(payload: TaxPreviewIn, db: Session | None = None) -> dict:
+    # Gunakan config ber-versi jika db tersedia
+    effective = date.today()
+    if db is not None:
+        profile = TaxProfile.from_db(db, effective, payload.marital_status, payload.dependents)
+    else:
+        profile = TaxProfile(marital_status=payload.marital_status, dependents=payload.dependents)
     if payload.method == "pasal17":
         tax = compute_pasal17_monthly_average(
             payload.gross_monthly, payload.months, profile

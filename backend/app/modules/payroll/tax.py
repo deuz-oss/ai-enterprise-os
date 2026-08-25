@@ -16,8 +16,10 @@ perlu dicek ulang terhadap PMK 168/2023 saat pemakaian produksi.
 """
 
 from dataclasses import dataclass
+from datetime import date
+from typing import Any
 
-# ---------- Parameter regulasi ----------
+# ---------- Parameter regulasi (fallback jika DB kosong) ----------
 
 PTKP_DIRI_SENDIRI = 54_000_000
 PTKP_KAWIN = 4_500_000
@@ -125,20 +127,51 @@ TER_C: list[tuple[float, float]] = [
 ]
 
 
+def _deser_brackets(raw: Any) -> list[tuple[float, float]]:
+    """Deserialisasi JSON brackets: [upper|null, rate] -> [(upper|inf, rate)]."""
+    result: list[tuple[float, float]] = []
+    for upper, rate in raw:
+        result.append((float("inf") if upper is None else float(upper), float(rate)))
+    return result
+
+
+def _get_pph21_config(db, effective_date: date | None):
+    if db is None or effective_date is None:
+        return None
+    try:
+        from sqlalchemy import select
+
+        from app.modules.rates.models import Pph21Config
+
+        return db.execute(
+            select(Pph21Config).where(Pph21Config.effective_from <= effective_date).order_by(Pph21Config.effective_from.desc())  # noqa: E501
+        ).scalars().first()
+    except Exception:
+        return None
+
+
 @dataclass(frozen=True)
 class TaxProfile:
     """Status PTKP karyawan, mis. `k_2` = kawin, 2 tanggungan."""
 
     marital_status: str  # "tk" atau "k"
     dependents: int = 0
+    _config: Any | None = None  # Pph21Config DB row atau None (fallback konstanta)
 
     @property
     def ptkp_key(self) -> str:
-        deps = min(max(self.dependents, 0), MAX_TANGGUNGAN)
+        max_dep = int(self._config.max_tanggungan) if self._config else MAX_TANGGUNGAN
+        deps = min(max(self.dependents, 0), max_dep)
         return f"{self.marital_status}_{deps}"
 
     @property
     def ptkp_annual(self) -> float:
+        if self._config:
+            base = float(self._config.ptkp_diri)
+            if self.marital_status == "k":
+                base += float(self._config.ptkp_kawin)
+            deps = min(max(self.dependents, 0), int(self._config.max_tanggungan))
+            return base + deps * float(self._config.ptkp_tanggungan)
         base = PTKP_DIRI_SENDIRI
         if self.marital_status == "k":
             base += PTKP_KAWIN
@@ -147,12 +180,33 @@ class TaxProfile:
 
     @property
     def ter_table(self) -> list[tuple[float, float]]:
+        if self._config:
+            key = self.ptkp_key
+            # kategori masih hardcoded, tapi tabel dari DB
+            if key in TER_CATEGORY_A:
+                return _deser_brackets(self._config.ter_a)
+            if key in TER_CATEGORY_B:
+                return _deser_brackets(self._config.ter_b)
+            return _deser_brackets(self._config.ter_c)
         key = self.ptkp_key
         if key in TER_CATEGORY_A:
             return TER_A
         if key in TER_CATEGORY_B:
             return TER_B
         return TER_C
+
+    @property
+    def pasal17_brackets(self) -> list[tuple[float, float]]:
+        if self._config:
+            return _deser_brackets(self._config.pasal17_brackets)
+        return PASAL_17_BRACKETS
+
+    @classmethod
+    def from_db(
+        cls, db, effective_date: date | None, marital_status: str, dependents: int = 0
+    ) -> "TaxProfile":
+        cfg = _get_pph21_config(db, effective_date)
+        return cls(marital_status=marital_status, dependents=dependents, _config=cfg)
 
 
 def ter_category(profile: TaxProfile) -> str:
@@ -178,7 +232,7 @@ def compute_pasal17_annual(annual_gross: float, profile: TaxProfile) -> float:
     taxable = max(annual_gross - profile.ptkp_annual, 0)
     tax = 0.0
     previous_bound = 0.0
-    for upper_bound, rate in PASAL_17_BRACKETS:
+    for upper_bound, rate in profile.pasal17_brackets:
         layer = min(taxable, upper_bound) - previous_bound
         if layer > 0:
             tax += layer * rate

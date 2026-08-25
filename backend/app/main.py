@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     from app.modules.payroll.router import router as payroll_router
     from app.modules.platform.router import router as platform_router
     from app.modules.presales.router import router as presales_router
+    from app.modules.rates.router import router as rates_router
     from app.modules.recruitment.router import router as recruitment_router
 
     app.include_router(auth_router, prefix="/api/v1")
@@ -148,6 +149,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_licensed_app("finance_accounting"))],
     )
     app.include_router(apps_router, prefix="/api/v1")
+    app.include_router(rates_router, prefix="/api/v1")
     # Absensi harian (Fase 8): lintas dua aplikasi → guard OR.
     app.include_router(
         attendance_router,

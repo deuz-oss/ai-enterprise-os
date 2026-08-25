@@ -82,4 +82,4 @@ def finalize_run(run_id: str, db: Session = Depends(get_db)):
 
 @router.post("/tax-preview")
 def tax_preview(payload: TaxPreviewIn, db: Session = Depends(get_db)):
-    return service.preview_tax(payload)
+    return service.preview_tax(payload, db)
