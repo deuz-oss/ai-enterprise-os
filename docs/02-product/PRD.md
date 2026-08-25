@@ -148,7 +148,7 @@ lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
 - Callout block ✅ · Properti metadata ✅ (detail lead & karyawan terpilih).
 - Referensi visual: [`docs/design/mockup-notion-ui.html`](../design/mockup-notion-ui.html).
 
-### Fase 8 — Absensi
+### Fase 8 — Absensi — ✅ Selesai (2026-08-25)
 
 - Model harian `AttendanceRecord`: tanggal, clock-in/out, jam lembur, status
   `hadir/terlambat/izin/sakit/cuti/alpa/libur/dinas-luar`, sumber `manual/impor/mobile`.

@@ -53,6 +53,12 @@ def set_client_approval(
     summary = db.get(AttendanceSummary, parse_uuid(attendance_id))
     if summary is None:
         raise HTTPException(status_code=404, detail="Rekap absensi tidak ditemukan")
+    # Validasi dua jalur (Fase 8): approval klien hanya untuk karyawan eksternal.
+    if summary.employee.employment_type.value != "eksternal":
+        raise HTTPException(
+            status_code=422,
+            detail="Karyawan internal divalidasi oleh HR (jalur /attendance/summaries)",
+        )
     summary.client_approved = approved
     summary.approved_at = datetime.now(UTC) if approved else None
     db.commit()

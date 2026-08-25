@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.bootstrap import run_bootstrap
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
-from app.core.security import require_licensed_app
+from app.core.security import require_any_licensed_app, require_licensed_app, require_roles
 from app.core.storage import ensure_storage
 from app.core.tenancy import TenantContextMiddleware
 
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
         recruitment_router as ai_recruitment_router,
     )
     from app.modules.apps.router import router as apps_router
+    from app.modules.attendance.router import router as attendance_router
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
     from app.modules.bpjs.router import router as bpjs_router
@@ -147,6 +148,15 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_licensed_app("finance_accounting"))],
     )
     app.include_router(apps_router, prefix="/api/v1")
+    # Absensi harian (Fase 8): lintas dua aplikasi → guard OR.
+    app.include_router(
+        attendance_router,
+        prefix="/api/v1",
+        dependencies=[
+            Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+            Depends(require_roles("operations", "hr", "management")),
+        ],
+    )
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(files_router, prefix="/api/v1")
 

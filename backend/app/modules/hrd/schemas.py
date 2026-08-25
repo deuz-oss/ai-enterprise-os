@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from app.modules.hrd.models import (
     ContractSignStatus,
     EmployeeStatus,
+    EmploymentType,
     HrDocumentType,
     MaritalStatus,
 )
@@ -28,6 +29,7 @@ class EmployeeCreate(BaseModel):
     dependents: int = 0
     base_salary: float = 0
     jkk_risk_category: int | None = None
+    employment_type: EmploymentType = EmploymentType.eksternal
 
 
 class EmployeeUpdate(BaseModel):
@@ -47,6 +49,7 @@ class EmployeeUpdate(BaseModel):
     dependents: int | None = None
     base_salary: float | None = None
     jkk_risk_category: int | None = None
+    employment_type: EmploymentType | None = None
     # Taut/lepas akun login self-service (role karyawan); null = lepas tautan.
     user_id: UUID | None = None
 
@@ -71,6 +74,7 @@ class EmployeeOut(BaseModel):
     dependents: int
     base_salary: float
     jkk_risk_category: int | None
+    employment_type: EmploymentType
     user_id: UUID | None
     status: EmployeeStatus
     created_at: datetime

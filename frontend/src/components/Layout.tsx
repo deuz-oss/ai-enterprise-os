@@ -10,6 +10,7 @@ interface NavItem {
   end?: boolean;
   roles?: string[];
   app?: AppKey;
+  apps?: AppKey[];
 }
 
 type AppKey =
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/job-orders", label: "Job Orders", app: "recruitment" },
   { to: "/candidates", label: "Kandidat", app: "recruitment" },
   { to: "/employees", label: "Karyawan", app: "hr_payroll" },
+  { to: "/attendance", label: "Absensi", apps: ["hr_payroll", "operations_billing"] },
   { to: "/payroll", label: "Payroll", app: "hr_payroll" },
   { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], app: "hr_payroll" },
   { to: "/finance", label: "Finance", app: "operations_billing" },
@@ -66,6 +68,7 @@ const PAGE_EMOJI: Record<string, string> = {
   "/job-orders": "🧲",
   "/candidates": "🧲",
   "/employees": "💼",
+  "/attendance": "📅",
   "/payroll": "💼",
   "/portal-saya": "🙋",
   "/finance": "🏗️",
@@ -131,26 +134,41 @@ export default function Layout() {
     (apps.data ?? []).filter((a) => a.licensed).map((a) => a.key)
   );
 
+  function licensedFor(item: NavItem): boolean {
+    const keys: AppKey[] = item.apps ?? (item.app ? [item.app] : []);
+    if (!keys.length) return true;
+    return keys.some((k) => licensedSet.has(k));
+  }
+
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.roles && !(me.data && item.roles.includes(me.data.role))) return false;
     // Selama entitlement belum termuat, tampilkan dulu (hindari kedipan).
-    if (!item.app) return true;
+    if (!item.apps && !item.app) return true;
     if (!apps.data) return true;
-    return licensedSet.has(item.app);
+    return licensedFor(item);
   });
 
   // Grup ala Notion: Umum → satu grup per aplikasi berlisensi → Lainnya.
   const groups: { label: string; emoji?: string; accent?: string; items: NavItem[] }[] = [];
-  const umum = visibleItems.filter((i) => !i.app && i.to !== "/audit");
+  const umum = visibleItems.filter((i) => !i.app && !i.apps && i.to !== "/audit");
   if (umum.length) groups.push({ label: "Umum", emoji: "🗂️", items: umum });
   for (const key of APP_ORDER) {
-    const inApp = visibleItems.filter((i) => i.app === key);
+    // Item milik App ini jika app/apps mengandung key tersebut.
+    const inApp = visibleItems.filter(
+      (i) => i.app === key || (i.apps && i.apps.includes(key))
+    );
     if (!inApp.length || !licensedSet.has(key)) continue;
+    // Hindari duplikasi: attendance masuk di dua app → tetapkan ke HR & Payroll.
+    const unique = inApp.filter((i) => {
+      if (!i.apps || i.apps.length === 1) return true;
+      return key === "hr_payroll";
+    });
+    if (!unique.length) continue;
     groups.push({
       label: APP_META[key].label,
       emoji: APP_META[key].emoji,
       accent: APP_META[key].accent,
-      items: inApp,
+      items: unique,
     });
   }
   const lainnya = visibleItems.filter((i) => i.to === "/audit");
@@ -194,8 +212,15 @@ export default function Layout() {
   const pageTitle = showAppsMenu() && location.pathname === "/apps"
     ? "Aplikasi"
     : activeItem?.label ?? "";
-  const pageEmoji = PAGE_EMOJI[location.pathname] ?? (activeItem?.app ? APP_META[activeItem.app].emoji : "📄");
-  const crumbApp = activeItem?.app ? APP_META[activeItem.app].label : null;
+  const pageEmoji =
+    PAGE_EMOJI[location.pathname] ??
+    (activeItem?.app ? APP_META[activeItem.app].emoji : "📄");
+  const crumbApp =
+    activeItem?.app != null
+      ? APP_META[activeItem.app].label
+      : activeItem?.apps?.[0] != null
+        ? APP_META[activeItem.apps[0]].label
+        : null;
 
   return (
     <div className="flex min-h-screen">

@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 8: Absensi Harian (Clock-in/out)
+
+- **Model harian `AttendanceRecord`** (`date`, `clock_in`, `clock_out`, `overtime_hours`, `status`, `source`, `notes`) dengan unique `(employee_id, date)`; kolom `employees.employment_type` (`internal/eksternal`, default eksternal). Migrasi `b4d5e6f7a8b9`.
+- **Guard multi-app**: absensi dilindungi `require_any_licensed_app("hr_payroll", "operations_billing")` — cukup salah satu aplikasi berlisensi.
+- **Input manual + agregasi otomatis**: `POST /attendance/records` upsert satu hari langsung menghitung ulang `AttendanceSummary` bulanan; angka berubah me-reset approval (`client_approved`).
+- **Impor CSV mesin fingerprint**: template `GET /attendance/template` (delimiter `;`), upload `POST /attendance/import` mengembalikan `{inserted, updated, failed[]}` dengan laporan baris gagal.
+- **Validasi dua jalur**: `POST /attendance/summaries/{id}/validate?lane=hr|klien` — internal divalidasi HR, eksternal divalidasi Operations/klien; endpoint legacy `/payroll/attendance/.../client-approval` kini menolak karyawan internal (422).
+- **Integrasi ESS**: cuti/izin yang disetujui di portal otomatis membuat record harian ber-status `cuti/izin/sakit` (source `ess`, tidak menimpa record manual/impor).
+- **Halaman Absensi** (`/attendance`, nav "📅 Absensi"): periode picker, rekap bulanan + tombol Validasi HR / Approval Klien, form input manual, panel impor CSV dengan tabel baris gagal, daftar record harian.
+- Tes: CRUD + agregasi, dua jalur, impor CSV dengan baris gagal, template, sinkron cuti ESS.
+
 ### Added — Fase 7: View Papan, Callout & Properti Notion (bagian 3 dari 3)
 
 - **View papan/kanban Pipeline**: toggle "Tabel | Papan" di halaman Pipeline; kolom per tahapan dengan jumlah lead + total nilai potensi, kartu lead dengan tombol pindah tahap cepat (←/→) dan dropdown tahapan.

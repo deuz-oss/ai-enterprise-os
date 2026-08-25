@@ -143,6 +143,31 @@ def require_licensed_app(app_key: str):
     return dependency
 
 
+def require_any_licensed_app(*app_keys: str):
+    """Guard OR: cukup salah satu aplikasi berlisensi (mis. Absensi dipakai
+    HR & Payroll maupun Operations & Billing)."""
+
+    def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
+        from app.modules.platform.service import is_licensed
+
+        if user.role == "platform_admin" or user.tenant_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun platform tidak memiliki akses ke data tenant",
+            )
+        if not any(is_licensed(db, user.tenant_id, key) for key in app_keys):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Aplikasi terkait belum aktif untuk perusahaan Anda. "
+                    "Buka menu Aplikasi untuk memulai trial atau berlangganan."
+                ),
+            )
+        return user
+
+    return dependency
+
+
 def require_tenant_user():
     """Wajib akun bertenanta — memblokir platform_admin dari data bisnis."""
 

@@ -367,6 +367,19 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Capability | View papan pipeline per tahapan, callout block, panel properti metadata ala Notion |
 | Source Code | `frontend/src/components/notion.tsx`, `src/pages/Leads.tsx` (toggle tabel/papan), `src/pages/Employees.tsx` (header properti + callout reminder) |
 
+### 12.9 Fase 8 — Absensi Harian (Clock-in/out)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Record harian clock-in/out, impor CSV fingerprint, validasi dua jalur, agregasi bulanan otomatis, integrasi ESS |
+| Source Code | `backend/app/modules/attendance/{models,schemas,service,router}.py`, kolom `employees.employment_type`, guard `require_any_licensed_app` |
+| API HR/Ops (`/attendance`) | `GET /attendance/template`, `GET /attendance/records?year=&month=`, `POST /attendance/records`, `POST /attendance/import`, `POST /attendance/summaries/{id}/validate?lane=` |
+| Integrasi | Cuti/izin ESS disetujui → record harian otomatis (source `ess`); tidak menimpa record manual/impor |
+| Aturan | Dua jalur: internal→HR, eksternal→Ops/klien; angka berubah me-reset approval; impor: template ; + laporan baris gagal |
+| Frontend | Halaman "📅 Absensi" (`/attendance`) — periode picker, rekap + tombol Validasi, form manual, panel impor + tabel gagal, daftar harian |
+| Migrasi | `b4d5e6f7a8b9` (tabel `attendance_records` + kolom `employment_type`) |
+| Test | `backend/tests/test_attendance.py` |
+
 ---
 
 # End of Requirement Traceability Matrix

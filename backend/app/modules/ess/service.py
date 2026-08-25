@@ -560,6 +560,11 @@ def decide_leave_request(
             entity_type="leave_request",
             entity_id=leave.id,
         )
+    # Fase 8: cuti/izin yang disetujui otomatis menjadi record absensi harian.
+    if approved:
+        from app.modules.attendance import service as attendance_service
+
+        attendance_service.sync_leave_records(db, leave)
     return leave
 
 

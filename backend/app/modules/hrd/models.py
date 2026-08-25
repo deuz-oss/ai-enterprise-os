@@ -24,6 +24,18 @@ class EmployeeStatus(str, enum.Enum):
     resigned = "resign"
 
 
+class EmploymentType(str, enum.Enum):
+    """Jenis kepegawaian — menentukan jalur validasi absensi & payrol (Fase 8-9).
+
+    internal  : karyawan kantor (divisi sendiri) → absensi divalidasi HR.
+    eksternal : karyawan outsourcing yang ditempatkan di klien → divalidasi
+                Operations/approval klien.
+    """
+
+    internal = "internal"
+    eksternal = "eksternal"
+
+
 class MaritalStatus(str, enum.Enum):
     """Untuk perhitungan PPh 21: `tk` = tidak kawin, `k` = kawin."""
 
@@ -73,6 +85,12 @@ class Employee(TenantMixin, Base):
     base_salary: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     # Kelas risiko JKK BPJS Ketenagakerjaan (I–V); kosong = default modul bpjs.
     jkk_risk_category: Mapped[int | None] = mapped_column(Integer, default=None)
+    # Jenis kepegawaian: menentukan jalur validasi absensi & payrol (Fase 8-9).
+    employment_type: Mapped[EmploymentType] = mapped_column(
+        Enum(EmploymentType, native_enum=False, length=50),
+        default=EmploymentType.eksternal,
+        server_default="eksternal",
+    )
     # Akun login self-service (role karyawan) — dibuat oleh HR, opsional.
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None, unique=True)
     status: Mapped[EmployeeStatus] = mapped_column(

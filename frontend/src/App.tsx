@@ -7,6 +7,7 @@ import Audit from "./pages/Audit";
 import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
+import Attendance from "./pages/Attendance";
 import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
 import JobOrders from "./pages/JobOrders";
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/employees" element={<Employees />} />
+            <Route path="/attendance" element={<Attendance />} />
             <Route path="/payroll" element={<Payroll />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/accounting" element={<Accounting />} />
