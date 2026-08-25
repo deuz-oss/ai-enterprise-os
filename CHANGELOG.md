@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 10 lanjutan: Kas & Bank, Pembelian, Aset Tetap, Arus Kas Tidak Langsung
+
+- **Kas & Bank** (`BankTransaction`, migrasi `k2l3m4n5o6p7`): penerimaan/pembayaran/transfer antar rekening dengan jurnal otomatis; rekonsiliasi manual per transaksi.
+- **Pembelian** (`PurchaseBill`): bill vendor → Dr Beban/Aset + PPN Masukan / Cr Utang Usaha; pembayaran → Dr Utang / Cr Bank.
+- **Aset tetap** (`FixedAsset`): perolehan (Dr Aset / Cr sumber dana), penyusutan garis lurus bulanan idempoten (Dr Beban Penyusutan / Cr Akum Penyusutan), disposisi dengan gain/loss otomatis.
+- **Arus kas metode tidak langsung**: `GET /accounting/reports/cash-flow-indirect?year=` dari perubahan saldo grup akun — CFO/CFI/CFF terpisah.
+- `ensure_coa` kini sync-upsert: menambah akun/rule template baru ke tenant lama tanpa duplikasi.
+- Frontend Akunting: tab Kas & Bank / Pembelian / Aset Tetap + laporan arus kas tidak langsung.
+
 ### Added — Fase 10 (core): Accounting ala Accurate
 
 - **Bagan akun dinamis per tenant** (`accounts`, migrasi `j1k2l3m4n5o6`): kode, kelompok 10 jenis ala Accurate, saldo normal, flag `is_cash_bank`/`is_control_ar_ap`; template default outsourcing di-seed otomatis; CRUD dengan guard "akun termutasi tidak boleh dihapus".

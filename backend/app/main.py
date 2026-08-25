@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
     )
 
     from app.modules.accounting.router import router as accounting_router
+    from app.modules.accounting.transactions_router import router as accounting_tx_router
     from app.modules.ai.router import (
         finance_router as ai_finance_router,
     )
@@ -157,6 +158,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         accounting_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("finance_accounting"))],
+    )
+    app.include_router(
+        accounting_tx_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("finance_accounting"))],
     )

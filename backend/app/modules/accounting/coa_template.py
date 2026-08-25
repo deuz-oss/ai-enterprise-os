@@ -31,6 +31,7 @@ DEFAULT_COA: list[tuple[str, str, str, str, bool, bool]] = [
     ("5-4000", "Beban Rekrutmen & Penempatan", "beban_usaha", "debit", False, False),
     ("5-5000", "HPP Tenaga Kerja Proyek", "hpp", "debit", False, False),
     ("5-9000", "Beban Operasional Lainnya", "beban_usaha", "debit", False, False),
+    ("5-6000", "Beban Penyusutan Aset Tetap", "beban_usaha", "debit", False, False),
     ("6-1000", "Beban Bunga Bank", "beban_lain", "debit", False, False),
 ]
 
@@ -44,4 +45,13 @@ DEFAULT_RULES: list[tuple[str, str, str]] = [
     ("payroll_finalized_proyek", "5-5000", "2-1000"),
     ("pr_executed", "2-1000", "1-1100"),
     ("opening_balance", "1-1000", "3-1000"),
+    # Modul kas & bank / pembelian / aset tetap
+    ("cash_receipt", "1-1100", "4-1000"),
+    ("cash_payment", "5-9000", "1-1100"),
+    ("bank_transfer", "1-1100", "1-1000"),
+    ("purchase_received", "5-9000", "2-1000"),
+    ("purchase_paid", "2-1000", "1-1100"),
+    ("asset_acquired", "1-2000", "1-1100"),
+    ("depreciation_monthly", "5-6000", "1-2100"),
+    ("asset_disposed", "1-1100", "1-2000"),
 ]

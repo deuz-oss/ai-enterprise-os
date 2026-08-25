@@ -42,46 +42,58 @@ EXPENSE_GROUPS = ("hpp", "beban_usaha", "beban_lain")
 
 
 def ensure_coa(db: Session, tenant_id) -> None:
-    """Seed bagan akun + rules default untuk tenant (idempoten)."""
+    """Sync-upsert bagan akun + rules default untuk tenant (idempoten).
+
+    Menambah akun/rule template yang belum ada — aman dipanggil ulang
+    kapan pun, mis. saat template bertambah di rilis berikutnya.
+    """
     from app.core.tenancy import get_tenant
 
     prev = get_tenant()
     set_tenant(tenant_id)
     try:
-        existing = (
+        existing_codes = set(
             db.execute(select(Account.code).where(Account.tenant_id == parse_uuid(str(tenant_id))))
             .scalars()
             .all()
         )
-        if not existing:
-            for code, name, group, normal, cash, ar_ap in DEFAULT_COA:
-                db.add(
-                    Account(
-                        code=code,
-                        name=name,
-                        group_type=GroupType(group),
-                        normal_balance=normal,
-                        is_cash_bank=cash,
-                        is_control_ar_ap=ar_ap,
-                    )
-                )
-            db.commit()
-        rule_count = db.scalar(
-            select(func.count(JournalRule.id)).where(
-                JournalRule.tenant_id == parse_uuid(str(tenant_id))
+        new_accounts = [
+            Account(
+                code=code,
+                name=name,
+                group_type=GroupType(group),
+                normal_balance=normal,
+                is_cash_bank=cash,
+                is_control_ar_ap=ar_ap,
             )
-        )
-        if not rule_count:
-            for event, d, c in _default_rules():
-                db.add(
-                    JournalRule(
-                        tenant_id=parse_uuid(str(tenant_id)),
-                        event_code=event,
-                        debit_account_code=d,
-                        credit_account_code=c,
-                    )
+            for code, name, group, normal, cash, ar_ap in DEFAULT_COA
+            if code not in existing_codes
+        ]
+        if new_accounts:
+            db.add_all(new_accounts)
+
+        existing_rules = set(
+            db.execute(
+                select(JournalRule.event_code).where(
+                    JournalRule.tenant_id == parse_uuid(str(tenant_id))
                 )
-            db.commit()
+            )
+            .scalars()
+            .all()
+        )
+        new_rules = [
+            JournalRule(
+                tenant_id=parse_uuid(str(tenant_id)),
+                event_code=event,
+                debit_account_code=d,
+                credit_account_code=c,
+            )
+            for event, d, c in _default_rules()
+            if event not in existing_rules
+        ]
+        if new_rules:
+            db.add_all(new_rules)
+        db.commit()
     finally:
         set_tenant(prev)
 

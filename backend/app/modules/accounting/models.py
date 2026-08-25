@@ -149,3 +149,104 @@ class JournalRule(TenantMixin, Base):
     debit_account_code: Mapped[str] = mapped_column(String(20))
     credit_account_code: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+# ---------- Modul transaksi (PRD §8.4) ----------
+
+
+class BankTxType(str, enum.Enum):
+    receipt = "penerimaan"
+    payment = "pembayaran"
+    transfer = "transfer_antar_rekening"
+
+
+class BankTransaction(TenantMixin, Base):
+    """Mutasi kas & bank; setiap transaksi membentuk jurnal otomatis.
+
+    - penerimaan : Dr Bank / Cr akun lawan
+    - pembayaran : Dr akun lawan / Cr Bank
+    - transfer   : Dr bank tujuan / Cr bank sumber (counter = sumber)
+    Rekonsiliasi ditandai manual setelah cocok dengan rekening koran.
+    """
+
+    __tablename__ = "bank_transactions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tx_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    tx_type: Mapped[BankTxType] = mapped_column(
+        Enum(BankTxType, native_enum=False, length=50),
+        default=BankTxType.receipt,
+        index=True,
+    )
+    bank_account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id"), index=True)
+    counter_account_id: Mapped[UUID | None] = mapped_column(ForeignKey("accounts.id"))
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    description: Mapped[str | None] = mapped_column(String(500))
+    journal_entry_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("journal_entries.id"), default=None
+    )
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BillStatus(str, enum.Enum):
+    unpaid = "belum_dibayar"
+    paid = "dibayar"
+
+
+class PurchaseBill(TenantMixin, Base):
+    """Bill vendor (PRD §8.4 pembelian).
+
+    Penerimaan bill → Dr Beban/Aset + Dr PPN Masukan / Cr Utang Usaha.
+    Pembayaran → Dr Utang Usaha / Cr Kas-Bank.
+    """
+
+    __tablename__ = "purchase_bills"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    vendor_name: Mapped[str] = mapped_column(String(255))
+    bill_number: Mapped[str | None] = mapped_column(String(100))
+    expense_account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id"), index=True)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    ppn_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
+    ppn_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    entry_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    due_date: Mapped[date | None] = mapped_column(Date, default=None)
+    status: Mapped[BillStatus] = mapped_column(
+        Enum(BillStatus, native_enum=False, length=50),
+        default=BillStatus.unpaid,
+        index=True,
+    )
+    received_journal_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("journal_entries.id"), default=None
+    )
+    paid_journal_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("journal_entries.id"), default=None
+    )
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FixedAsset(TenantMixin, Base):
+    """Aset tetap metode garis lurus dengan penyusutan bulanan idempoten."""
+
+    __tablename__ = "fixed_assets"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    asset_account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id"), index=True)
+    accum_depreciation_account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id"))
+    depreciation_expense_account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id"))
+    funding_account_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("accounts.id")
+    )  # sumber dana perolehan; NULL = Kas default
+    acquisition_date: Mapped[date] = mapped_column(Date, default=date.today)
+    cost: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    useful_life_months: Mapped[int] = mapped_column(Integer, default=48)
+    accumulated_depreciation: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    monthly_depreciation: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    last_depreciated_ym: Mapped[str | None] = mapped_column(String(7))  # YYYY-MM
+    disposed_at: Mapped[date | None] = mapped_column(Date, default=None, index=True)
+    disposal_proceeds: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

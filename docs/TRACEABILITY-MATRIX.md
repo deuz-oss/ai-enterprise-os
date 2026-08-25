@@ -431,7 +431,19 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Aturan | Saldo akun tidak disimpan (dihitung dari jurnal posted); backdate periode tertutup ditolak; auto-journal idempoten (unique event+ref) dan melewati periode tertutup |
 | Migrasi | `j1k2l3m4n5o6` (tabel accounts/accounting_periods/journal_rules, kolom status & account_id & dimensi, data migration map baris legacy → COA) |
 | Test | `backend/tests/test_accounting_fase10.py` |
-| Sisa Fase 10 | Kas-bank & rekonsiliasi, pembelian, aset tetap + penyusutan otomatis, arus kas tidak langsung, AI akuntansi (§8.8) |
+| Sisa Fase 10 | AI akuntansi (§8.8) — butuh LLM kalibrasi |
+
+### 12.15 Fase 10 lanjutan — Kas & Bank, Pembelian, Aset Tetap, Arus Kas
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Kas-bank transaksi + rekonsiliasi; pembelian bill vendor; aset tetap garis lurus + penyusutan idempoten + disposisi; arus kas metode tidak langsung |
+| Source Code | `backend/app/modules/accounting/transactions_{service,router,schemas}.py` |
+| API | `GET|POST /accounting/cashbank/transactions` (+reconcile) · `GET|POST /accounting/purchases` (+pay) · `GET|POST /accounting/assets` (+depreciate/dispose) · `GET /reports/cash-flow-indirect?year=` |
+| Aturan | Setiap transaksi membentuk jurnal otomatis via post_auto_event; penyusutan idempoten per aset per bulan (dibatasi sisa nilai buku); disposisi gain/loss ke pendapatan/beban lain; rekonsiliasi manual |
+| Frontend | Tab "Kas & Bank" / "Pembelian" / "Aset Tetap" di halaman Akunting + laporan arus kas tidak langsung |
+| Migrasi | `k2l3m4n5o6p7` (3 tabel: bank_transactions/purchase_bills/fixed_assets) |
+| Test | `backend/tests/test_fase10_transactions.py` |
 
 ---
 
