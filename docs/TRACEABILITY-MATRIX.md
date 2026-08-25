@@ -421,6 +421,18 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Test | `backend/tests/test_saltab.py`, `backend/tests/test_payment_request.py` |
 | Sisa Fase 9 | Ekspor Excel/PDF (CSV tersedia); rantai approval multi-level configurable |
 
+### 12.13 Fase 10 (core) — Accounting ala Accurate
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Bagan akun dinamis + template; jurnal memorial→posted; periode & tutup buku; mesin auto-journal idempoten; laporan berbasis akun DB + laba rugi per klien |
+| Source Code | `backend/app/modules/accounting/*` (`Account`, `AccountingPeriod`, `JournalRule`, status jurnal), integrasi hook di `finance/service.py` & `payroll/service.py` |
+| API | `GET|POST /accounting/accounts`, `PATCH/DELETE /accounts/{id}` · `GET /periods`, `POST /periods/{y}/{m}/close|reopen` · `POST /journal` (status memorial/posted) · `POST /journal/{id}/post` · laporan existing + `GET /reports/profit-by-client` |
+| Aturan | Saldo akun tidak disimpan (dihitung dari jurnal posted); backdate periode tertutup ditolak; auto-journal idempoten (unique event+ref) dan melewati periode tertutup |
+| Migrasi | `j1k2l3m4n5o6` (tabel accounts/accounting_periods/journal_rules, kolom status & account_id & dimensi, data migration map baris legacy → COA) |
+| Test | `backend/tests/test_accounting_fase10.py` |
+| Sisa Fase 10 | Kas-bank & rekonsiliasi, pembelian, aset tetap + penyusutan otomatis, arus kas tidak langsung, AI akuntansi (§8.8) |
+
 ---
 
 # End of Requirement Traceability Matrix

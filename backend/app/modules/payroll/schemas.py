@@ -127,6 +127,7 @@ class TaxPreviewIn(BaseModel):
 
 # ---------- Saltab ----------
 
+
 class SaltabComponentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

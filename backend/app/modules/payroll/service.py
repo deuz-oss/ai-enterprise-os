@@ -104,9 +104,7 @@ def upsert_attendance(db: Session, payload: AttendanceUpsert) -> AttendanceSumma
     return summary
 
 
-def set_client_approval(
-    db: Session, attendance_id: str, approved: bool
-) -> AttendanceSummary:
+def set_client_approval(db: Session, attendance_id: str, approved: bool) -> AttendanceSummary:
     summary = db.get(AttendanceSummary, parse_uuid(attendance_id))
     if summary is None:
         raise HTTPException(status_code=404, detail="Rekap absensi tidak ditemukan")
@@ -204,8 +202,7 @@ def generate_slips(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Slip hanya bisa dibuat saat status draft "
-                "(atau ditolak klien untuk payrol proyek)"
+                "Slip hanya bisa dibuat saat status draft (atau ditolak klien untuk payrol proyek)"
             ),
         )
 
@@ -313,11 +310,7 @@ def generate_slips(
                 db=db,
                 effective_date=period_date,
             )
-            bpjs_emp_total = (
-                breakdown.kes_employee
-                + breakdown.jht_employee
-                + breakdown.jp_employee
-            )
+            bpjs_emp_total = breakdown.kes_employee + breakdown.jht_employee + breakdown.jp_employee
 
         total_deductions = float(payload.deductions or 0) + bank_fee + bpjs_emp_total
         slip = Payslip(
@@ -388,9 +381,8 @@ def generate_slips(
         slips.append(slip)
 
     existing = {
-        (s.run_id, s.employee_id) for s in db.execute(
-            select(Payslip).where(Payslip.run_id == run.id)
-        ).scalars()
+        (s.run_id, s.employee_id)
+        for s in db.execute(select(Payslip).where(Payslip.run_id == run.id)).scalars()
     }
     added = [s for s in slips if (s.run_id, s.employee_id) not in existing]
     if not added:
@@ -575,6 +567,50 @@ def finalize_run(db: Session, run_id: str, tenant_id=None) -> PayrollRun:
         entity_id=run.id,
         detail={"run_type": run.run_type.value, "period": f"{run.year}-{run.month:02d}"},
     )
+    # Fase 10: jurnal otomatis payroll_finalized_{internal|proyek} (best-effort).
+    try:
+        from app.modules.accounting.service import post_auto_event
+
+        gross_total = sum(float(s.gross) for s in run.slips)
+        net_total = sum(float(s.net_pay) for s in run.slips)
+        tax_total = sum(float(s.tax_pph21) for s in run.slips)
+        bpjs_er = sum(
+            float(c.amount) for s in run.slips for c in s.components if c.code == "bpjs_employer"
+        )
+        bpjs_emp = sum(
+            float(c.amount)
+            for s in run.slips
+            for c in s.components
+            if c.code in ("bpjs_kesehatan_py", "jht_py", "jp_py")
+        )
+        event = (
+            "payroll_finalized_internal"
+            if run.run_type == PayrollRunType.internal
+            else "payroll_finalized_proyek"
+        )
+        lines: list[tuple[str, float, float]] = [("5-1000", round(gross_total), 0.0)]
+        if bpjs_er:
+            lines.append(("5-3000", round(bpjs_er), 0.0))
+        lines.append(("2-1000", 0.0, round(net_total)))
+        if tax_total:
+            lines.append(("2-1100", 0.0, round(tax_total)))
+        if bpjs_emp + bpjs_er:
+            lines.append(("2-1200", 0.0, round(bpjs_emp + bpjs_er)))
+        post_auto_event(
+            db,
+            tenant_id=run.tenant_id,
+            event_code=event,
+            source_ref_type="payroll_run",
+            source_ref_id=run.id,
+            entry_date=date.today(),
+            description=f"Payrol {run.run_type.value} {run.month}/{run.year}",
+            lines=lines,
+            client_dim_id=run.client_id,
+        )
+    except Exception:  # noqa: BLE001 - jurnal tidak boleh memblokir bisnis
+        import logging
+
+        logging.getLogger(__name__).exception("Auto-journal payrol gagal")
     return run
 
 
@@ -705,11 +741,7 @@ def decide_by_token(
     prev_tenant = get_tenant()
     set_tenant(run.tenant_id)
     try:
-        target = (
-            PayrollRunStatus.client_approved
-            if approved
-            else PayrollRunStatus.client_rejected
-        )
+        target = PayrollRunStatus.client_approved if approved else PayrollRunStatus.client_rejected
         _transition(run, target)
         token.decided_at = datetime.now(UTC)
         token.decided_by_name = name[:255]
@@ -731,10 +763,7 @@ def decide_by_token(
         notify_hr_users(
             db,
             title=f"Payrol proyek {run.month}/{run.year}: {keputusan} klien",
-            body=(
-                f"Keputusan oleh {name}"
-                + (f" — {note}" if note else "")
-            ),
+            body=(f"Keputusan oleh {name}" + (f" — {note}" if note else "")),
             entity_id=run.id,
         )
 
@@ -807,9 +836,7 @@ def preview_tax(payload: TaxPreviewIn, db: Session | None = None) -> dict:
     else:
         profile = TaxProfile(marital_status=payload.marital_status, dependents=payload.dependents)
     if payload.method == "pasal17":
-        tax = compute_pasal17_monthly_average(
-            payload.gross_monthly, payload.months, profile
-        )
+        tax = compute_pasal17_monthly_average(payload.gross_monthly, payload.months, profile)
     else:
         tax = compute_ter(payload.gross_monthly, profile)
     return {"tax_pph21": tax, "method": payload.method}

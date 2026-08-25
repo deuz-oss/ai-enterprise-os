@@ -138,9 +138,7 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/invoices/{invoice_id}", response_model=InvoiceOut)
-def update_invoice(
-    invoice_id: str, payload: InvoiceUpdate, db: Session = Depends(get_db)
-):
+def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depends(get_db)):
     return service.update_invoice(db, invoice_id, payload)
 
 

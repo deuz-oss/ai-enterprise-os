@@ -143,9 +143,15 @@ def _get_pph21_config(db, effective_date: date | None):
 
         from app.modules.rates.models import Pph21Config
 
-        return db.execute(
-            select(Pph21Config).where(Pph21Config.effective_from <= effective_date).order_by(Pph21Config.effective_from.desc())  # noqa: E501
-        ).scalars().first()
+        return (
+            db.execute(
+                select(Pph21Config)
+                .where(Pph21Config.effective_from <= effective_date)
+                .order_by(Pph21Config.effective_from.desc())  # noqa: E501
+            )
+            .scalars()
+            .first()
+        )
     except Exception:
         return None
 

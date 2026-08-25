@@ -56,9 +56,11 @@ def _payroll_total_for_client(
     if run_id is not None:
         from app.modules.payroll.models import PayslipComponent
 
-        rows = db.execute(
-            select(Payslip.id).where(Payslip.run_id == parse_uuid(str(run_id)))
-        ).scalars().all()
+        rows = (
+            db.execute(select(Payslip.id).where(Payslip.run_id == parse_uuid(str(run_id))))
+            .scalars()
+            .all()
+        )
         if not rows:
             raise HTTPException(
                 status_code=422,
@@ -146,6 +148,33 @@ def generate_invoice(
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
+
+    # Fase 10: jurnal otomatis invoice_issued (idempoten, best-effort).
+    try:
+        from app.modules.accounting.service import post_auto_event
+
+        ppn_out = round(ppn_amount)
+        revenue = round(subtotal)
+        lines = [
+            ("1-1200", float(total_due), 0.0),
+            ("4-1000", 0.0, revenue),
+        ]
+        if ppn_out:
+            lines.append(("2-1300", 0.0, ppn_out))
+        post = post_auto_event(  # noqa: F841
+            db,
+            tenant_id=invoice.tenant_id,
+            event_code="invoice_issued",
+            source_ref_type="invoice",
+            source_ref_id=invoice.id,
+            entry_date=invoice.issued_date or date.today(),
+            description=f"Invoice {invoice.invoice_no} — {payload.notes or ''}".strip(),
+            lines=lines,
+        )
+    except Exception:  # noqa: BLE001 - jurnal tidak boleh memblokir bisnis
+        import logging
+
+        logging.getLogger(__name__).exception("Auto-journal invoice_issued gagal")
     return invoice
 
 
@@ -178,6 +207,27 @@ def update_invoice(db: Session, invoice_id: str, payload: InvoiceUpdate) -> Invo
         invoice.status = new_status
         if new_status == InvoiceStatus.paid:
             invoice.paid_at = datetime.now(UTC)
+            # Fase 10: jurnal otomatis invoice_paid (idempoten).
+            try:
+                from app.modules.accounting.service import post_auto_event
+
+                post_auto_event(
+                    db,
+                    tenant_id=invoice.tenant_id,
+                    event_code="invoice_paid",
+                    source_ref_type="invoice",
+                    source_ref_id=invoice.id,
+                    entry_date=date.today(),
+                    description=f"Pelunasan invoice {invoice.invoice_no}",
+                    lines=[
+                        ("1-1100", float(invoice.total_due), 0.0),
+                        ("1-1200", 0.0, float(invoice.total_due)),
+                    ],
+                )
+            except Exception:  # noqa: BLE001
+                import logging
+
+                logging.getLogger(__name__).exception("Auto-journal invoice_paid gagal")
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -244,12 +294,10 @@ def list_cashflow(
     return list(db.execute(stmt).scalars())
 
 
-def cashflow_summary(
-    db: Session, year: int, month: int | None = None
-) -> dict:
-    stmt = select(
-        CashFlowEntry.direction, func.coalesce(func.sum(CashFlowEntry.amount), 0)
-    ).where(func.extract("year", CashFlowEntry.entry_date) == year)
+def cashflow_summary(db: Session, year: int, month: int | None = None) -> dict:
+    stmt = select(CashFlowEntry.direction, func.coalesce(func.sum(CashFlowEntry.amount), 0)).where(
+        func.extract("year", CashFlowEntry.entry_date) == year
+    )
     if month is not None:
         stmt = stmt.where(func.extract("month", CashFlowEntry.entry_date) == month)
     stmt = stmt.group_by(CashFlowEntry.direction)
@@ -267,6 +315,7 @@ def cashflow_summary(
         "outflow": outflow,
         "net": inflow - outflow,
     }
+
 
 # ---------- Payment Request (PRD §7) ----------
 
@@ -366,9 +415,7 @@ def decide_payment_request(
     if pr.status != PaymentRequestStatus.waiting_superior:
         raise HTTPException(status_code=409, detail="PR sudah diputus sebelumnya")
     if user.role != "admin" and user.role.value != "management":
-        raise HTTPException(
-            status_code=403, detail="Hanya management yang dapat memutuskan PR"
-        )
+        raise HTTPException(status_code=403, detail="Hanya management yang dapat memutuskan PR")
     if not approved and not (note or "").strip():
         raise HTTPException(status_code=422, detail="Catatan wajib saat menolak PR")
 
@@ -433,6 +480,27 @@ def execute_payment_request(db: Session, *, user, pr_id: str) -> PaymentRequest:
         entity_type="payment_request",
         entity_id=pr.id,
     )
+    # Fase 10: jurnal otomatis pr_executed (idempoten, best-effort).
+    try:
+        from app.modules.accounting.service import post_auto_event
+
+        post_auto_event(
+            db,
+            tenant_id=pr.tenant_id,
+            event_code="pr_executed",
+            source_ref_type="payment_request",
+            source_ref_id=pr.id,
+            entry_date=date.today(),
+            description=f"Eksekusi PR {pr.pr_number}",
+            lines=[
+                ("2-1000", round(float(pr.amount)), 0.0),
+                ("1-1100", 0.0, round(float(pr.amount))),
+            ],
+        )
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("Auto-journal pr_executed gagal")
     return pr
 
 

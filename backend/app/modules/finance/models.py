@@ -107,14 +107,13 @@ class PaymentRequest(TenantMixin, Base):
     """
 
     __tablename__ = "payment_requests"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "pr_number", name="uq_pr_tenant_number"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "pr_number", name="uq_pr_tenant_number"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     pr_number: Mapped[str] = mapped_column(String(50), index=True)
     pr_type: Mapped[str] = mapped_column(
-        String(20), default="internal"  # proyek | internal
+        String(20),
+        default="internal",  # proyek | internal
     )
     payroll_run_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("payroll_runs.id"), default=None, index=True

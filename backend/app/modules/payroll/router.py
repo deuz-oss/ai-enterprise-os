@@ -33,9 +33,7 @@ router = APIRouter(
 
 
 @router.get("/attendance", response_model=list[AttendanceOut])
-def list_attendance(
-    year: int = Query(...), month: int = Query(...), db: Session = Depends(get_db)
-):
+def list_attendance(year: int = Query(...), month: int = Query(...), db: Session = Depends(get_db)):
     return service.list_attendance(db, year=year, month=month)
 
 

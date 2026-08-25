@@ -41,8 +41,11 @@ def get_or_create_default_tenant(
     db: Session, *, name: str = "Default", slug: str = "default"
 ) -> Tenant:
     """Dipakai bootstrap & test: tenant tunggal untuk mode single-tenant lama."""
+    from app.modules.accounting.service import ensure_coa
+
     existing = db.scalars(select(Tenant).where(Tenant.slug == slug)).first()
     if existing:
+        ensure_coa(db, existing.id)
         return existing
     tenant = Tenant(name=name, slug=slug)
     db.add(tenant)
@@ -50,6 +53,7 @@ def get_or_create_default_tenant(
     db.refresh(tenant)
     # Tenant default selalu paket penuh (mode dev/single-tenant).
     ensure_full_package(db, tenant.id)
+    ensure_coa(db, tenant.id)
     return tenant
 
 
@@ -71,6 +75,9 @@ def provision_tenant(db: Session, payload: TenantCreate) -> TenantProvisionedOut
     # Tenant provisioning baru MULAI TANPA lisensi aplikasi (PRD Fase 7):
     # admin tenant mengaktifkan trial mandiri dari menu Aplikasi, lalu
     # platform admin yang mengatur langganan.
+    from app.modules.accounting.service import ensure_coa
+
+    ensure_coa(db, tenant.id)
 
     admin = create_user(
         db,

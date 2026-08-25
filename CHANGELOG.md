@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 10 (core): Accounting ala Accurate
+
+- **Bagan akun dinamis per tenant** (`accounts`, migrasi `j1k2l3m4n5o6`): kode, kelompok 10 jenis ala Accurate, saldo normal, flag `is_cash_bank`/`is_control_ar_ap`; template default outsourcing di-seed otomatis; CRUD dengan guard "akun termutasi tidak boleh dihapus".
+- **Jurnal memorial → posted**: `POST /accounting/journal?status=memorial` lalu `POST /accounting/journal/{id}/post` dengan validasi seimbang, periode open, akun aktif. Baris jurnal kini punya `account_id` FK, dimensi klien (`client_dim_id`), dan memo.
+- **Periode & tutup buku**: `GET /accounting/periods`, `POST /periods/{y}/{m}/close|reopen` — input backdate ke periode tertutup ditolak; buka ulang tercatat di audit.
+- **Mesin auto-journal idempoten** `post_auto_event()`: event unik per dokumen sumber (unique event+ref); rule aktif per tenant (`journal_rules`). Hook aktif: `invoice_issued`, `invoice_paid`, `payroll_finalized_internal/proyek`, `pr_executed`.
+- **Laporan berbasis akun DB + hanya posted**: neraca saldo, buku besar, laba rugi (tahun/bulan), neraca; **laba rugi per klien** dari dimensi baris jurnal.
+- **Frontend Akunting**: tab Jurnal (form memorial/posted, filter event, tombol Posting), Bagan Akun (+tambah akun), Periode & Tutup Buku (tutup/buka ulang).
+- Sisa Fase 10 (irisan lanjut): kas-bank & rekonsiliasi, pembelian, aset tetap + penyusutan otomatis, arus kas tidak langsung, AI akuntansi.
+
 ### Added — Fase 9b-c: Saltab Line-item, BPJS Dua Sisi & Payment Request
 
 - **Line-item Saltab** (`PayslipComponent`, migrasi `i0j1k2l3m4n5`): setiap slip kini punya rincian komponen (gaji pokok, tunjangan, lembur, PPh21, potongan lain, admin bank) yang dibangun otomatis saat generate — komponen ↔ agregat slip selalu "nol selisih".
