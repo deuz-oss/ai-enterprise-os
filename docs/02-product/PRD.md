@@ -143,7 +143,7 @@ lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
 
 ### Fase 8 — Absensi
 
-- Model harian `AttendanceRecord`: tanggal, check-in/out, jam lembur, status
+- Model harian `AttendanceRecord`: tanggal, clock-in/out, jam lembur, status
   `hadir/terlambat/izin/sakit/cuti/alpa/libur/dinas-luar`, sumber `manual/impor/mobile`.
 - Sumber prioritas: **impor CSV mesin fingerprint** (template + laporan baris gagal);
   input manual; mobile GPS+selfie menyusul (memanfaatkan app Flutter); pengajuan
