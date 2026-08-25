@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Accounting from "./pages/Accounting";
+import Apps from "./pages/Apps";
 import Audit from "./pages/Audit";
 import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/apps" element={<Apps />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/job-orders" element={<JobOrders />} />

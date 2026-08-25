@@ -4,9 +4,10 @@ from tests.conftest import _auth_header, _login_header, _platform_admin_header
 
 
 def _provision(client, slug: str, name: str | None = None) -> dict:
+    plat = _platform_admin_header(client)
     resp = client.post(
         "/api/v1/platform/tenants",
-        headers=_platform_admin_header(client),
+        headers=plat,
         json={
             "name": name or f"Tenant {slug}",
             "slug": slug,
@@ -16,7 +17,19 @@ def _provision(client, slug: str, name: str | None = None) -> dict:
         },
     )
     assert resp.status_code == 201, resp.text
-    return resp.json()
+    body = resp.json()
+
+    # Tenant provisioning baru mulai tanpa lisensi (Fase 7). Untuk keperluan
+    # pengujian isolasi data, aktifkan semua aplikasi lewat platform.
+    apps = client.get(f"/api/v1/platform/tenants/{body['id']}/licenses", headers=plat).json()
+    for lic in apps:
+        set_resp = client.patch(
+            f"/api/v1/platform/tenants/{body['id']}/licenses/{lic['app_key']}",
+            headers=plat,
+            json={"status": "aktif"},
+        )
+        assert set_resp.status_code == 200, set_resp.text
+    return body
 
 
 def _login(client, email: str, password: str = "password123") -> dict[str, str]:
@@ -73,9 +86,7 @@ def test_isolasi_data_antar_tenant(client):
     alpha = _login(client, "admin-alpha@example.com")
     beta = _login(client, "admin-beta@example.com")
 
-    created = client.post(
-        "/api/v1/clients", headers=alpha, json={"name": "Klien Milik Alpha"}
-    )
+    created = client.post("/api/v1/clients", headers=alpha, json={"name": "Klien Milik Alpha"})
     assert created.status_code == 201
     client_id = created.json()["id"]
 
@@ -117,8 +128,7 @@ def test_email_harus_unik_global_antar_tenant(client):
     )
     assert ok.status_code == 201
     assert (
-        ok.json()["tenant_id"]
-        == client.get("/api/v1/auth/me", headers=alpha).json()["tenant_id"]
+        ok.json()["tenant_id"] == client.get("/api/v1/auth/me", headers=alpha).json()["tenant_id"]
     )
 
     # Email sama dari tenant berbeda harus ditolak (batasan v1)

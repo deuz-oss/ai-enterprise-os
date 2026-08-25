@@ -4,18 +4,18 @@ import { api, clearToken, getToken } from "../api/client";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/leads", label: "Pipeline" },
-  { to: "/clients", label: "Klien" },
-  { to: "/job-orders", label: "Job Orders" },
-  { to: "/candidates", label: "Kandidat" },
-  { to: "/employees", label: "Karyawan" },
-  { to: "/payroll", label: "Payroll" },
-  { to: "/finance", label: "Finance" },
-  { to: "/accounting", label: "Akunting" },
+  { to: "/leads", label: "Pipeline", app: "sales_crm" },
+  { to: "/clients", label: "Klien", app: "sales_crm" },
+  { to: "/job-orders", label: "Job Orders", app: "recruitment" },
+  { to: "/candidates", label: "Kandidat", app: "recruitment" },
+  { to: "/employees", label: "Karyawan", app: "hr_payroll" },
+  { to: "/payroll", label: "Payroll", app: "hr_payroll" },
+  { to: "/finance", label: "Finance", app: "operations_billing" },
+  { to: "/accounting", label: "Akunting", app: "finance_accounting" },
   // Jejak audit sensitif — disembunyikan dari role non-management.
   { to: "/audit", label: "Audit", roles: ["admin", "management"] },
   // Portal self-service karyawan — hanya untuk akun role karyawan.
-  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"] },
+  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], app: "hr_payroll" },
 ];
 
 // Platform admin hanya melihat manajemen tenant.
@@ -30,6 +30,13 @@ export default function Layout() {
     enabled: Boolean(getToken()),
     retry: false,
   });
+  // Entitlement Fase 7: nav dinamis mengikuti lisensi aplikasi tenant.
+  const apps = useQuery({
+    queryKey: ["apps"],
+    queryFn: () =>
+      api.get<{ key: string; licensed: boolean }[]>("/apps"),
+    enabled: Boolean(getToken()) && me.data?.role !== "platform_admin",
+  });
 
   if (!getToken()) return <Navigate to="/login" replace />;
 
@@ -43,11 +50,19 @@ export default function Layout() {
   if (isKaryawan && location.pathname === "/") {
     return <Navigate to="/portal-saya" replace />;
   }
-  const items = isPlatform
+  const items = (isPlatform
     ? PLATFORM_NAV_ITEMS
     : NAV_ITEMS.filter(
         (item) => !item.roles || (me.data && item.roles.includes(me.data.role))
-      );
+      )
+  ).filter((item) => {
+    // Selama entitlement belum termuat, tampilkan dulu (hindari kedipan).
+    if (!("app" in item) || !item.app) return true;
+    if (!apps.data) return true;
+    return apps.data.some((a) => a.key === item.app && a.licensed);
+  });
+  // Menu Aplikasi: launcher + upsell, bukan untuk karyawan & platform admin.
+  const showAppsMenu = Boolean(getToken()) && me.data && !isPlatform && me.data.role !== "karyawan";
 
   return (
     <div className="flex min-h-screen">
@@ -57,6 +72,19 @@ export default function Layout() {
           <p className="mt-1 text-xs text-slate-400">Outsourcing Operations</p>
         </div>
         <nav className="flex-1 space-y-1 px-3">
+          {showAppsMenu && (
+            <NavLink
+              to="/apps"
+              end
+              className={({ isActive }) =>
+                `mb-2 block rounded-lg px-3 py-2 text-sm ${
+                  isActive ? "bg-indigo-600 text-white" : "hover:bg-slate-800"
+                }`
+              }
+            >
+              🚀 Aplikasi
+            </NavLink>
+          )}
           {items.map((item) => (
             <NavLink
               key={item.to}

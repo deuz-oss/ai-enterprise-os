@@ -115,6 +115,34 @@ def require_platform_admin():
     return dependency
 
 
+def require_licensed_app(app_key: str):
+    """Guard lisensi Fase 7: endpoint aplikasi tanpa lisensi → 403.
+
+    Berlaku untuk SELURUH role dalam tenant (lisensi milik tenant, bukan
+    user). Dipasang lewat include_router(dependencies=[...]) di main.py.
+    """
+
+    def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
+        from app.modules.platform.service import is_licensed
+
+        if user.role == "platform_admin" or user.tenant_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun platform tidak memiliki akses ke data tenant",
+            )
+        if not is_licensed(db, user.tenant_id, app_key):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Aplikasi belum aktif untuk perusahaan Anda. "
+                    "Buka menu Aplikasi untuk memulai trial atau berlangganan."
+                ),
+            )
+        return user
+
+    return dependency
+
+
 def require_tenant_user():
     """Wajib akun bertenanta — memblokir platform_admin dari data bisnis."""
 

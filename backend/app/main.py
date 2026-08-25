@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.bootstrap import run_bootstrap
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
+from app.core.security import require_licensed_app
 from app.core.storage import ensure_storage
 from app.core.tenancy import TenantContextMiddleware
 
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     from app.modules.ai.router import (
         recruitment_router as ai_recruitment_router,
     )
+    from app.modules.apps.router import router as apps_router
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
     from app.modules.bpjs.router import router as bpjs_router
@@ -72,21 +74,79 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
     app.include_router(platform_router, prefix="/api/v1")
-    app.include_router(presales_router, prefix="/api/v1")
-    app.include_router(clients_router, prefix="/api/v1")
-    app.include_router(recruitment_router, prefix="/api/v1")
-    app.include_router(ai_recruitment_router, prefix="/api/v1")
-    app.include_router(ai_hr_router, prefix="/api/v1")
-    app.include_router(ai_finance_router, prefix="/api/v1")
-    app.include_router(hrd_router, prefix="/api/v1")
-    app.include_router(ess_router, prefix="/api/v1")
-    app.include_router(notifications_router, prefix="/api/v1")
-    app.include_router(esign_router, prefix="/api/v1")
-    app.include_router(esign_webhook_router, prefix="/api/v1")
-    app.include_router(payroll_router, prefix="/api/v1")
-    app.include_router(bpjs_router, prefix="/api/v1")
-    app.include_router(finance_router, prefix="/api/v1")
-    app.include_router(accounting_router, prefix="/api/v1")
+    # Guard lisensi Fase 7: endpoint aplikasi tanpa lisensi tenant → 403.
+    app.include_router(
+        presales_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        clients_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        recruitment_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("recruitment"))],
+    )
+    app.include_router(
+        ai_recruitment_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("ai_addon"))],
+    )
+    app.include_router(
+        ai_hr_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("ai_addon"))],
+    )
+    app.include_router(
+        ai_finance_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("ai_addon"))],
+    )
+    app.include_router(
+        hrd_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+    )
+    app.include_router(
+        ess_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+    )
+    app.include_router(
+        notifications_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+    )
+    app.include_router(
+        esign_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("esign"))],
+    )
+    app.include_router(esign_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
+    app.include_router(
+        payroll_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+    )
+    app.include_router(
+        bpjs_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+    )
+    app.include_router(
+        finance_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("operations_billing"))],
+    )
+    app.include_router(
+        accounting_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("finance_accounting"))],
+    )
+    app.include_router(apps_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(files_router, prefix="/api/v1")
 

@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 7: Entitlement Multi-App (bagian 1 dari 3)
+
+- **App registry** (`app/core/apps.py`): 7 aplikasi portofolio (Sales CRM, Recruitment, HR & Payroll, Operations & Billing, Finance & Accounting, E-Sign, AI Add-on) dengan metadata, dependensi, dan pemetaan prefix route — single source of truth.
+- **Lisensi per tenant**: tabel `tenant_app_licenses` (status `trial/aktif/kedaluwarsa`, trial 14 hari sekali per aplikasi). Migrasi `a1b2c3d4e5f6`; tenant lama di-seed paket penuh.
+- **Guard backend 403**: endpoint aplikasi tanpa lisensi ditolak; dipasang via `include_router(dependencies=[...])`. Tenant provisioning baru kini mulai tanpa lisensi — admin mengaktifkan trial mandiri dari menu Aplikasi; tenant default/dev tetap full package.
+- **API**: `GET /apps` (nav dinamis + launcher), `POST /apps/{key}/trial` (admin/management), `GET|PATCH /platform/tenants/{id}/licenses/{app_key}` (platform admin).
+- **Frontend**: halaman "Aplikasi" (launcher + upsell trial 14 hari), nav sidebar dinamis mengikuti lisensi, editor lisensi per tenant di halaman platform.
+- Tes: pemetaan registry, guard 403 + pemulihan, alur trial/provisioning/expiry.
+
+> Irisan berikutnya Fase 7: design system Notion-style (shell baru, ⌘K, dark mode) — sesi terpisah.
+
 ### Added — Lampiran Surat Sakit, Koreksi Absensi, dan Email Notifikasi
 
 - **Lampiran pengajuan cuti**: karyawan dapat mengunggah berkas pendukung (mis. surat dokter, maks. 10 MB) pada pengajuan berstatus menunggu via `POST /me/leave-requests/{id}/attachment`; unduh lewat `/me/.../attachment/download-url` (karyawan) atau `/employees/leave-requests/{id}/attachment/download-url` (HR). Migrasi `e8b4c7d1a952`.

@@ -341,6 +341,17 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Aturan | Lampiran hanya saat menunggu (≤10 MB); koreksi disetujui menerapkan angka ke AttendanceSummary & reset approval klien; email hanya aktif bila SMTP_HOST diisi |
 | Migrasi | `e8b4c7d1a952` (kolom lampiran), `f9c2e6b8d314` (tabel attendance_corrections) |
 
+### 12.6 Fase 7 — Entitlement Multi-App (irisan 1)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | App registry + lisensi per tenant + guard 403 + nav dinamis & launcher |
+| Source Code | `backend/app/core/apps.py`, modul `apps`, lisensi di modul `platform`; frontend `Apps.tsx`, `Layout.tsx`, `PlatformTenants.tsx` |
+| API Tenant | `GET /apps`, `POST /apps/{key}/trial` (14 hari, sekali per app) |
+| API Platform | `GET|PATCH /platform/tenants/{id}/licenses/{app_key}` |
+| Aturan | Tanpa lisensi → 403 semua endpoint aplikasi tsb; provisioning baru mulai kosong; tenant default/dev full package; migrasi seed tenant lama |
+| Migrasi | `a1b2c3d4e5f6` (tabel tenant_app_licenses + seed) |
+
 ---
 
 # End of Requirement Traceability Matrix

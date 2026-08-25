@@ -19,6 +19,12 @@ interface Provisioned {
   admin_initial_password: string;
 }
 
+interface LicenseRow {
+  app_key: string;
+  name: string;
+  status: string | null;
+}
+
 const STATUS_BADGES: Record<string, string> = {
   aktif: "bg-emerald-100 text-emerald-700",
   ditangguhkan: "bg-rose-100 text-rose-700",
@@ -51,6 +57,27 @@ export default function PlatformTenants() {
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/platform/tenants/${id}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-tenants"] }),
+  });
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { data: licenses } = useQuery({
+    queryKey: ["licenses", expandedId],
+    queryFn: () => api.get<LicenseRow[]>(`/platform/tenants/${expandedId}/licenses`),
+    enabled: Boolean(expandedId),
+  });
+
+  const setLicense = useMutation({
+    mutationFn: ({
+      tenantId,
+      appKey,
+      status,
+    }: {
+      tenantId: string;
+      appKey: string;
+      status: string;
+    }) =>
+      api.patch(`/platform/tenants/${tenantId}/licenses/${appKey}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
   });
 
   if (me.isLoading) return <p className="text-sm text-slate-400">Memuat...</p>;
@@ -176,9 +203,50 @@ export default function PlatformTenants() {
                       Aktifkan
                     </button>
                   )}
+                  {" · "}
+                  <button
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                  >
+                    {expandedId === t.id ? "Tutup Lisensi" : "Lisensi"}
+                  </button>
                 </td>
               </tr>
             ))}
+            {(expandedId !== null) && (
+              <tr>
+                <td colSpan={5} className="td bg-slate-50">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {(licenses ?? []).map((lic) => (
+                      <div
+                        key={lic.app_key}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2"
+                      >
+                        <span className="truncate text-xs font-medium text-slate-700">
+                          {lic.name}
+                        </span>
+                        <select
+                          value={lic.status ?? ""}
+                          onChange={(e) =>
+                            setLicense.mutate({
+                              tenantId: expandedId,
+                              appKey: lic.app_key,
+                              status: e.target.value,
+                            })
+                          }
+                          className="input w-auto py-1 text-xs"
+                        >
+                          <option value="">—</option>
+                          <option value="aktif">aktif</option>
+                          <option value="trial">trial</option>
+                          <option value="kedaluwarsa">kedaluwarsa</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            )}
             {isLoading === false && tenants?.length === 0 && (
               <tr>
                 <td colSpan={5} className="td py-8 text-center text-slate-400">
