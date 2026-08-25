@@ -8,6 +8,7 @@ import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
+import Chat from "./pages/Chat";
 import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
 import JobOrders from "./pages/JobOrders";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
+            <Route path="/chat" element={<Chat />} />
             <Route path="/payment-requests" element={<PaymentRequests />} />
             <Route path="/payroll" element={<Payroll />} />
             <Route path="/finance" element={<Finance />} />

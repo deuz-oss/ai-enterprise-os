@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
     from app.modules.bpjs.router import router as bpjs_router
+    from app.modules.chat.router import router as chat_router
     from app.modules.clients.router import router as clients_router
     from app.modules.dashboard.router import router as dashboard_router
     from app.modules.esign.router import router as esign_router
@@ -168,6 +169,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(apps_router, prefix="/api/v1")
     app.include_router(rates_router, prefix="/api/v1")
+    # Chat Workspace (Fase 11): gratis di semua paket — tanpa guard lisensi.
+    app.include_router(chat_router, prefix="/api/v1")
     # Absensi harian (Fase 8): lintas dua aplikasi → guard OR.
     app.include_router(
         attendance_router,

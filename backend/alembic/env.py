@@ -6,6 +6,7 @@ import app.modules.ai.models  # noqa: F401
 import app.modules.attendance.models  # noqa: F401
 import app.modules.audit.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
+import app.modules.chat.models
 import app.modules.clients.models  # noqa: F401
 import app.modules.esign.models  # noqa: F401
 import app.modules.ess.models  # noqa: F401

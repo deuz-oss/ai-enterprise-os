@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 11: Chat Workspace (gratis, WebSocket real-time — v1 REST polling)
+
+- **Model chat** (`chat_channels`, `chat_channel_members`, `chat_messages`, `chat_message_reactions`, migrasi `l3m4n5o6p7q8`): Channel tipe `public/private/dm/broadcast`, pesan thread (`parent_id`), soft delete, reaksi emoji, anggota channel.
+- **Akses ter-scope (PRD §9.2) dipaksakan server-side**: staff melihat semua channel tenant; karyawan outsourcing hanya channel yang dia member — penegakan di semua endpoint.
+- **Broadcast channel** (📢 read-only untuk karyawan; hanya admin/Ops/management bisa posting).
+- **Thread reply + reaksi**: kirim pesan ke channel/ke thread via `parent_id`; filter thread; toggle reaksi emoji; edit/hapus pesan milik sendiri.
+- **Unread**: `unread_count` per channel untuk karyawan; `POST /channels/{id}/read-all`.
+- **Channel gratis** (tanpa guard lisensi); rilis v1 memakai polling — WebSocket pluggable menyusul.
+- **Halaman Chat** (`/chat`, nav 💬 Chat): layout dua panel (channel list + pesan), thread view Balas↩, polling 2.5–4 detik, reaksi per pesan, edit/hapus pesan milik sendiri.
+- Tes: channel CRUD, scope karyawan (403 → 200 setelah diinvite), broadcast hanya Ops/admin, thread + reaksi, unread count.
+
 ### Added — Fase 10: AI Layer Akuntansi (§8.8)
 
 - **Asisten tutup buku** `GET /accounting/ai/close-checklist?year=&month=` — checklist deterministik tanpa LLM: jurnal memorial belum diposting, invoice/payrol/PR tanpa jurnal otomatis.

@@ -431,7 +431,28 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Aturan | Saldo akun tidak disimpan (dihitung dari jurnal posted); backdate periode tertutup ditolak; auto-journal idempoten (unique event+ref) dan melewati periode tertutup |
 | Migrasi | `j1k2l3m4n5o6` (tabel accounts/accounting_periods/journal_rules, kolom status & account_id & dimensi, data migration map baris legacy → COA) |
 | Test | `backend/tests/test_accounting_fase10.py` |
-| Sisa Fase 10 | AI akuntansi (§8.8) — butuh LLM kalibrasi |
+| Sisa Fase 10 | Kas-bank & rekonsiliasi, pembelian, aset tetap + penyusutan otomatis, arus kas tidak langsung, AI akuntansi (§8.8) |
+
+### 12.17 Fase 10 — AI Layer Akuntansi (§8.8)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Asisten tutup buku, deteksi anomali & kepatuhan, kategori bill cerdas, narasi eksekutif, tanya laporan |
+| Source Code | `backend/app/modules/accounting/ai_accounting.py`, endpoint di `accounting/router.py` |
+| API | `GET /ai/close-checklist?year=&month=` · `GET /ai/anomalies?year=&month=` · `POST /ai/categorize-bill` · `GET /ai/executive-summary?year=[&month=]` · `POST /ai/ask` |
+| Aturan | Checklist & anomali 100% deterministik (tanpa LLM); narasi/tanya-laporan memakai LLM sebagai lapisan bahasa di atas angka terverifikasi dengan fallback template; kategori berbasis keyword + riwayat vendor |
+| LLM | Opsional via AI_BASE_URL; tanpa konfigurasi semua fitur tetap berfungsi kecuali narasi natural |
+
+### 12.18 Fase 11 — Chat Workspace (gratis, WebSocket real-time — v1 REST polling)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Channel public/private/dm/broadcast + pesan thread + soft delete + reaksi emoji + unread per karyawan; akses ter-scope per proyek |
+| Source Code | `backend/app/modules/chat/*`, migrasi `l3m4n5o6p7q8` |
+| API | `GET|POST /chat/channels` · `POST /channels/{id}/members` · `GET|POST /channels/{id}/messages` · `PATCH|DELETE /messages/{id}` · `POST /messages/{id}/react` · `POST /channels/{id}/read-all` |
+| Aturan | Channel gratis tanpa guard lisensi; akses dipaksakan server-side — karyawan hanya melihat channel di mana dia member; broadcast hanya Ops/admin bisa posting; thread via parent_id; polling v1, WebSocket pluggable menyusul |
+| Frontend | Halaman Chat `/chat` (nav 💬 Chat): dua panel channel+pesan, thread view, reaksi per pesan, edit/hapus, polling, unread badge |
+| Test | `backend/tests/test_chat.py` |
 
 ### 12.16 Fase 10 — AI Layer Akuntansi (§8.8)
 

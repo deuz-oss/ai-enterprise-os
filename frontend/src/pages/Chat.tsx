@@ -1,0 +1,296 @@
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../api/client";
+import { PageHeader } from "../components/notion";
+
+interface ChannelRow {
+  id: string;
+  name: string;
+  slug: string;
+  channel_type: string;
+  member_count: number;
+  last_message_preview: string;
+  unread_count: number;
+}
+
+interface MessageRow {
+  id: string;
+  sender_id: string;
+  content: string;
+  parent_id: string | null;
+  edited_at: string | null;
+  created_at: string;
+  reactions: Record<string, number>;
+  is_own: boolean;
+}
+
+const EMOJI_REACTIONS = ["👍", "❤️", "🎉", "😂", "🙏", "🔥"];
+
+export default function Chat() {
+  const qc = useQueryClient();
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
+  const [threadParent, setThreadParent] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const { data: channels } = useQuery({
+    queryKey: ["chat-channels"],
+    queryFn: () => api.get<ChannelRow[]>("/chat/channels"),
+    refetchInterval: 4000,
+  });
+
+  const { data: messages } = useQuery({
+    queryKey: ["chat-messages", activeChannel, threadParent],
+    queryFn: () =>
+      api.get<MessageRow[]>(
+        `/chat/channels/${activeChannel}/messages${threadParent ? `?parent_id=${threadParent}` : ""}`
+      ),
+    enabled: Boolean(activeChannel),
+    refetchInterval: 2500,
+  });
+
+  const createChannel = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/chat/channels", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
+  });
+
+  const sendMessage = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api.post(`/chat/channels/${activeChannel}/messages`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      qc.invalidateQueries({ queryKey: ["chat-channels"] });
+      if (inputRef.current) inputRef.current.value = "";
+    },
+  });
+
+  const addReaction = useMutation({
+    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
+      api.post(`/chat/messages/${messageId}/react`, { emoji }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+  });
+
+  const deleteMessage = useMutation({
+    mutationFn: (messageId: string) => api.delete(`/chat/messages/${messageId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+  });
+
+  const editMessage = useMutation({
+    mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
+      api.patch(`/chat/messages/${messageId}`, { content }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+  });
+
+  const markRead = useMutation({
+    mutationFn: (channelId: string) => api.post(`/chat/channels/${channelId}/read-all`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
+  });
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages]);
+
+  function handleSend(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const content = String(form.get("content") || "").trim();
+    if (!content || !activeChannel) return;
+    sendMessage.mutate({ content, parent_id: threadParent || undefined });
+  }
+
+  const activeMeta = channels?.find((c) => c.id === activeChannel);
+  const channelName = activeMeta?.name ?? "Pilih channel";
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        emoji="💬"
+        title="Chat Workspace"
+        subtitle="Gratis di semua paket — channel proyek ter-scope per penempatan"
+      />
+
+      <div className="flex gap-4" style={{ height: "64vh" }}>
+        {/* Channel list */}
+        <div
+          className="flex w-64 shrink-0 flex-col overflow-hidden rounded-md"
+          style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-sidebar)" }}
+        >
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ borderBottom: "1px solid var(--n-border)" }}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+              Channel
+            </span>
+          </div>
+
+          <form
+            className="flex gap-1 p-2"
+            style={{ borderBottom: "1px solid var(--n-border)" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const name = String(form.get("name") || "").trim();
+              if (!name) return;
+              createChannel.mutate({ name });
+              e.currentTarget.reset();
+            }}
+          >
+            <input name="name" required placeholder="Channel baru ..." className="input flex-1 py-1 text-xs" />
+            <button className="btn-secondary px-2 py-1 text-xs">+</button>
+          </form>
+
+          <div className="flex-1 overflow-y-auto">
+            {(channels ?? []).map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => {
+                  setActiveChannel(ch.id);
+                  setThreadParent(null);
+                }}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--n-hover)]"
+                style={{
+                  backgroundColor: activeChannel === ch.id ? "var(--n-hover)" : "transparent",
+                  color: activeChannel === ch.id ? "var(--n-text)" : "var(--n-text-muted)",
+                }}
+              >
+                <span className="truncate">
+                  {ch.channel_type === "private" ? "🔒 " : ch.channel_type === "broadcast" ? "📢 " : "# "}
+                  {ch.name}
+                </span>
+                {ch.unread_count > 0 && (
+                  <span className="ml-1 shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {ch.unread_count}
+                  </span>
+                )}
+              </button>
+            ))}
+            {channels?.length === 0 && (
+              <p className="px-3 py-6 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+                Belum ada channel.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Message area */}
+        <div className="flex flex-1 flex-col overflow-hidden rounded-md" style={{ border: "1px solid var(--n-border)" }}>
+          <div
+            className="flex items-center justify-between px-4 py-2"
+            style={{ borderBottom: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+          >
+            <span className="font-medium" style={{ color: "var(--n-text)" }}>
+              {threadParent ? "↩ Thread Balasan" : channelName}
+            </span>
+            <div className="flex items-center gap-2">
+              {threadParent && (
+                <button onClick={() => setThreadParent(null)} className="btn-secondary py-0.5 text-xs">
+                  Kembali
+                </button>
+              )}
+              {activeChannel && (
+                <button onClick={() => markRead.mutate(activeChannel!)} className="btn-secondary py-0.5 text-xs">
+                  Tandai dibaca
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+            {(messages ?? []).map((m) => (
+              <div
+                key={m.id}
+                className="group rounded px-2 py-1.5 transition-colors hover:bg-[var(--n-hover)]"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-xs font-medium" style={{ color: "var(--n-text-muted)" }}>
+                    {m.sender_id.slice(0, 8)}… · {new Date(m.created_at).toLocaleString("id-ID")}
+                    {m.edited_at && <span className="ml-1 italic">diedit</span>}
+                  </span>
+                  {m.is_own && !threadParent && (
+                    <button
+                      onClick={() => setThreadParent(m.id)}
+                      className="shrink-0 text-[11px] text-indigo-600 hover:text-indigo-800"
+                    >
+                      Balas
+                    </button>
+                  )}
+                </div>
+
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--n-text)" }}>
+                  {m.content}
+                </p>
+
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {Object.entries(m.reactions).map(([emoji, count]) => (
+                    <button
+                      key={emoji}
+                      onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
+                      className="rounded-full px-1.5 py-0.5 text-xs"
+                      style={{ border: "1px solid var(--n-border)" }}
+                    >
+                      {emoji} {count}
+                    </button>
+                  ))}
+                  {EMOJI_REACTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
+                      className="rounded px-1 py-0.5 text-xs hover:bg-[var(--n-hover)]"
+                      title={`React ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                  {m.is_own && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const next = window.prompt("Edit pesan:", m.content);
+                          if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
+                        }}
+                        className="ml-auto text-[11px] text-slate-400 hover:text-slate-600"
+                      >
+                        edit
+                      </button>
+                      <button
+                        onClick={() => deleteMessage.mutate(m.id)}
+                        className="text-[11px] text-rose-400 hover:text-rose-600"
+                      >
+                        hapus
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+            {messages?.length === 0 && (
+              <p className="py-8 text-center text-sm" style={{ color: "var(--n-text-muted)" }}>
+                Belum ada pesan. Mulai percakapan!
+              </p>
+            )}
+          </div>
+
+          <form
+            onSubmit={handleSend}
+            className="flex gap-2 px-4 py-3"
+            style={{ borderTop: "1px solid var(--n-border)" }}
+          >
+            <input
+              ref={inputRef}
+              name="content"
+              required
+              placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan...") : "Pilih channel dulu"}
+              disabled={!activeChannel}
+              className="input flex-1"
+            />
+            <button disabled={!activeChannel || sendMessage.isPending} className="btn">
+              Kirim
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
