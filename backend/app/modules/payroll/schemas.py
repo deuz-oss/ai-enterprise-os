@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.payroll.models import PayrollRunStatus
+from app.modules.payroll.models import PayrollRunStatus, PayrollRunType
 
 
 class AttendanceUpsert(BaseModel):
@@ -39,6 +39,8 @@ class AttendanceOut(BaseModel):
 class RunCreate(BaseModel):
     year: int
     month: int
+    run_type: PayrollRunType = PayrollRunType.internal
+    client_id: UUID | None = None
 
     @field_validator("month")
     @classmethod
@@ -46,6 +48,14 @@ class RunCreate(BaseModel):
         if not 1 <= v <= 12:
             raise ValueError("Bulan harus 1-12")
         return v
+
+    @model_validator(mode="after")
+    def _proyek_needs_client(self) -> "RunCreate":
+        if self.run_type == PayrollRunType.proyek and self.client_id is None:
+            raise ValueError("Payrol proyek wajib memilih klien")
+        if self.run_type == PayrollRunType.internal:
+            self.client_id = None
+        return self
 
 
 class GenerateSlipsRequest(BaseModel):
@@ -81,9 +91,21 @@ class RunOut(BaseModel):
     id: UUID
     year: int
     month: int
+    run_type: PayrollRunType
+    client_id: UUID | None
     status: PayrollRunStatus
     finalized_at: datetime | None
     created_at: datetime
+
+
+class ClientLinkCreate(BaseModel):
+    days: int = 14  # masa berlaku token, 1–90 hari
+
+
+class ClientDecisionIn(BaseModel):
+    approved: bool
+    name: str = Field(min_length=1, max_length=255)
+    note: str | None = None
 
 
 class TaxPreviewIn(BaseModel):

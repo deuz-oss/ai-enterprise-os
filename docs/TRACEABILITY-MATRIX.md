@@ -393,6 +393,21 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Migrasi | `g1h2i3j4k5l6` (4 tabel rate + kolom snapshot `payroll_runs` + seed 2025-01-01) |
 | Test | `backend/tests/test_rates.py` |
 
+### 12.11 Fase 9a — Payrol Dua Jalur & Approval Klien Ber-Token
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Payrol internal vs proyek per klien; state machine PRD; approval klien via link ber-token tanpa akun |
+| Source Code | `backend/app/modules/payroll/{models,schemas,service,router}.py` (`PayrollRunType`, `PayrollRunToken`, transisi `_ALLOWED_TRANSITIONS`, `assert_run_license`) — sesuai **ADR-0006** |
+| API Internal | `POST /payroll/runs` (run_type=internal) · `/start-processing` · `/finalize` (draft/finance_processing) |
+| API Proyek | `POST /payroll/runs?run_type=proyek&client_id=` · `/submit-to-client` (token 1–90 hari) · publik `GET|POST /payroll/client/{token}[/decision]` |
+| Guard | Shell OR dua lisensi; mutasi divalidasi lisensi per run_type (403 menyebut aplikasi); BPJS recap any-of |
+| Frontend | Halaman Payroll: pilih jenis/klien, badge 6 status, aksi kontekstual, callout link approval + salin URL |
+| Integrasi ESS | Generate slip proyek difilter placement→job order→klien; lembur tetap butuh approval klien di rekap absensi |
+| Migrasi | `h9i0j1k2l3m4` (kolom run_type/client_id + tabel payroll_run_tokens) |
+| Test | `backend/tests/test_payroll_dua_jalur.py` (7 skenario) |
+| Sisa Fase 9 | Saltab grid line-item + prorata, BPJS dua sisi ke invoice, Payment Request workflow, invoice/jurnal otomatis (irisan b–c, terkait Fase 10) |
+
 ---
 
 # End of Requirement Traceability Matrix

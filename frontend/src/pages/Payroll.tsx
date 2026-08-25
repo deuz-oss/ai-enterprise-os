@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { PageHeader } from "../components/notion";
+import { PageHeader, CalloutBlock } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -24,8 +24,15 @@ interface RunRow {
   id: string;
   year: number;
   month: number;
+  run_type: "internal" | "proyek";
+  client_id: string | null;
   status: string;
   finalized_at: string | null;
+}
+
+interface ClientRow {
+  id: string;
+  name: string;
 }
 
 interface SlipRow {
@@ -64,6 +71,14 @@ export default function Payroll() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState({ year: 2026, month: 8 });
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runType, setRunType] = useState<"internal" | "proyek">("internal");
+  const [createClientId, setCreateClientId] = useState("");
+  const [clientLink, setClientLink] = useState<{ link: string; expires: string } | null>(null);
+
+  const { data: clients } = useQuery({
+    queryKey: ["clients"],
+    queryFn: () => api.get<ClientRow[]>("/clients"),
+  });
 
   const { data: employees } = useQuery({
     queryKey: ["employees"],
@@ -123,6 +138,30 @@ export default function Payroll() {
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/finalize`, {}),
     onSuccess: invalidateAll,
   });
+  const submitToClient = useMutation({
+    mutationFn: (runId: string) =>
+      api.post<{ status: string; expires_at: string; link: string }>(
+        `/payroll/runs/${runId}/submit-to-client`,
+        { days: 14 }
+      ),
+    onSuccess: (data) => {
+      setClientLink({ link: data.link, expires: data.expires_at });
+      invalidateAll();
+    },
+  });
+  const startProcessing = useMutation({
+    mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/start-processing`, {}),
+    onSuccess: invalidateAll,
+  });
+
+  const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
+    draft: { label: "Draft", cls: "bg-slate-100 text-slate-600" },
+    submitted_to_client: { label: "Menunggu Klien", cls: "bg-amber-100 text-amber-700" },
+    client_rejected: { label: "Ditolak Klien", cls: "bg-red-100 text-red-600" },
+    client_approved: { label: "Disetujui Klien", cls: "bg-emerald-100 text-emerald-700" },
+    finance_processing: { label: "Proses Finance", cls: "bg-blue-100 text-blue-700" },
+    final: { label: "Final", cls: "bg-slate-800 text-white" },
+  };
 
   function handleAttendance(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -155,10 +194,39 @@ export default function Payroll() {
             onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
             className="input w-24"
           />
+          <select
+            value={runType}
+            onChange={(e) => setRunType(e.target.value as "internal" | "proyek")}
+            className="input w-auto"
+            title="Jenis payrol"
+          >
+            <option value="internal">Internal</option>
+            <option value="proyek">Proyek (per klien)</option>
+          </select>
+          {runType === "proyek" && (
+            <select
+              onChange={(e) => setCreateClientId(e.target.value)}
+              defaultValue=""
+              className="input w-auto"
+              title="Klien"
+            >
+              <option value="">-- pilih klien --</option>
+              {(clients ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             className="btn"
             onClick={() =>
-              createRun.mutate({ year: period.year, month: period.month })
+              createRun.mutate({
+                year: period.year,
+                month: period.month,
+                run_type: runType,
+                ...(runType === "proyek" ? { client_id: createClientId || undefined } : {}),
+              })
             }
           >
             + Run Payrol
@@ -227,52 +295,95 @@ export default function Payroll() {
         </table>
       </div>
 
+      {clientLink && (
+        <CalloutBlock emoji="🔗" tone="success">
+          <p className="font-medium">Link approval klien aktif</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <code className="rounded bg-white/70 px-2 py-0.5 text-xs">{clientLink.link}</code>
+            <button
+              className="btn-secondary py-0.5 text-xs"
+              onClick={() => navigator.clipboard.writeText(window.location.origin + clientLink.link)}
+            >
+              Salin URL
+            </button>
+            <span className="text-xs">berlaku s.d. {new Date(clientLink.expires).toLocaleString("id-ID")}</span>
+          </div>
+        </CalloutBlock>
+      )}
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="th">Periode</th>
+              <th className="th">Jenis / Klien</th>
               <th className="th">Status</th>
               <th className="th">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {(runs ?? []).map((r) => (
-              <tr key={r.id}>
-                <td className="td font-medium">
-                  {String(r.month).padStart(2, "0")}/{r.year}
-                </td>
-                <td className="td">
-                  <span
-                    className={`badge ${
-                      r.status === "final"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </td>
-                <td className="td space-x-2 whitespace-nowrap">
-                  <button onClick={() => setSelectedRunId(r.id)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
-                    Slip Gaji
-                  </button>
-                  {r.status !== "final" && (
-                    <>
-                      <button onClick={() => generateSlips.mutate(r.id)} className="text-sm font-medium text-slate-600 hover:text-slate-900">
-                        Generate
+            {(runs ?? []).map((r) => {
+              const badge = STATUS_LABELS[r.status] ?? { label: r.status, cls: "bg-slate-100 text-slate-600" };
+              return (
+                <tr key={r.id}>
+                  <td className="td font-medium">
+                    {String(r.month).padStart(2, "0")}/{r.year}
+                  </td>
+                  <td className="td text-xs">
+                    {r.run_type === "proyek"
+                      ? `Proyek · ${clients?.find((c) => c.id === r.client_id)?.name ?? "klien"}`
+                      : "Internal"}
+                  </td>
+                  <td className="td">
+                    <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                  </td>
+                  <td className="td space-x-2 whitespace-nowrap text-sm">
+                    <button onClick={() => setSelectedRunId(r.id)} className="font-medium text-indigo-600 hover:text-indigo-800">
+                      Slip Gaji
+                    </button>
+                    {(r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
+                      <>
+                        <button onClick={() => generateSlips.mutate(r.id)} className="text-slate-600 hover:text-slate-900">
+                          Generate
+                        </button>
+                        {r.run_type === "proyek" ? (
+                          <button
+                            onClick={() =>
+                              submitToClient.mutate(r.id, {
+                                onSuccess: (d) => setClientLink({ link: d.link, expires: d.expires_at }),
+                              })
+                            }
+                            className="font-medium text-indigo-600 hover:text-indigo-800"
+                          >
+                            Kirim ke Klien
+                          </button>
+                        ) : (
+                          <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 hover:text-rose-800">
+                            Finalisasi
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {r.status === "client_approved" && (
+                      <button onClick={() => startProcessing.mutate(r.id)} className="font-medium text-blue-600 hover:text-blue-800">
+                        Mulai Proses Finance
                       </button>
-                      <button onClick={() => finalizeRun.mutate(r.id)} className="text-sm font-medium text-rose-600 hover:text-rose-800">
+                    )}
+                    {r.status === "finance_processing" && (
+                      <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 hover:text-rose-800">
                         Finalisasi
                       </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    )}
+                    {r.status === "submitted_to_client" && (
+                      <span className="text-xs text-slate-400">menunggu keputusan klien</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {runs?.length === 0 && (
               <tr>
-                <td colSpan={3} className="td py-8 text-center text-slate-400">
+                <td colSpan={4} className="td py-8 text-center text-slate-400">
                   Belum ada payroll run.
                 </td>
               </tr>

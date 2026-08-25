@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.notifications.router import router as notifications_router
+    from app.modules.payroll.router import public_router as payroll_public_router
     from app.modules.payroll.router import router as payroll_router
     from app.modules.platform.router import router as platform_router
     from app.modules.presales.router import router as presales_router
@@ -131,8 +132,13 @@ def create_app() -> FastAPI:
     app.include_router(
         payroll_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+        dependencies=[
+            Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+            Depends(require_roles("operations", "management", "hr")),
+        ],
     )
+    # Link approval klien ber-token: publik, dikontrol token + kedaluwarsa (ADR/PRD Fase 9).
+    app.include_router(payroll_public_router, prefix="/api/v1")
     app.include_router(
         bpjs_router,
         prefix="/api/v1",

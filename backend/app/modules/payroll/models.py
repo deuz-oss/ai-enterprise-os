@@ -20,8 +20,17 @@ from app.core.database import Base
 from app.core.tenancy import TenantMixin
 
 
+class PayrollRunType(str, enum.Enum):
+    internal = "internal"
+    proyek = "proyek"
+
+
 class PayrollRunStatus(str, enum.Enum):
     draft = "draft"
+    submitted_to_client = "submitted_to_client"
+    client_rejected = "client_rejected"
+    client_approved = "client_approved"
+    finance_processing = "finance_processing"
     final = "final"
 
 
@@ -52,13 +61,30 @@ class AttendanceSummary(TenantMixin, Base):
 
 
 class PayrollRun(TenantMixin, Base):
-    """Satu proses payrol untuk periode bulanan tertentu."""
+    """Satu proses payrol untuk periode bulanan tertentu.
+
+    Fase 9 dua jalur:
+    - internal : karyawan kantor; DRAFT → FINANCE_PROCESSING → FINALIZED.
+    - proyek   : per klien per periode; DRAFT → SUBMITTED_TO_CLIENT →
+                 CLIENT_APPROVED (atau REJECTED→DRAFT) → FINANCE_PROCESSING
+                 → FINALIZED. Approval via link ber-token tanpa akun.
+    """
 
     __tablename__ = "payroll_runs"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     year: Mapped[int] = mapped_column(Integer, index=True)
     month: Mapped[int] = mapped_column(Integer, index=True)
+    run_type: Mapped[PayrollRunType] = mapped_column(
+        Enum(PayrollRunType, native_enum=False, length=50),
+        default=PayrollRunType.internal,
+        server_default="internal",
+        index=True,
+    )
+    # Wajib untuk run proyek: payrol ditagihkan ke satu klien.
+    client_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("clients.id"), default=None, index=True
+    )
     status: Mapped[PayrollRunStatus] = mapped_column(
         Enum(PayrollRunStatus, native_enum=False, length=50),
         default=PayrollRunStatus.draft,
@@ -73,6 +99,27 @@ class PayrollRun(TenantMixin, Base):
     slips: Mapped[list["Payslip"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
+    client = relationship("Client", lazy="joined")
+
+
+class PayrollRunToken(TenantMixin, Base):
+    """Token approval payrol proyek untuk klien (link tanpa akun).
+
+    Token disimpan sebagai hash SHA-256; nilai mentah hanya tampil sekali
+    saat HR/Ops membuat link. Satu token belum terpakai per run — membuat
+    link baru mencabut yang lama.
+    """
+
+    __tablename__ = "payroll_run_tokens"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("payroll_runs.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    decided_by_name: Mapped[str | None] = mapped_column(String(255))
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Payslip(TenantMixin, Base):

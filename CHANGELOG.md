@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 9a: Payrol Dua Jalur + Approval Klien Ber-Token (ADR-0006)
+
+- **`PayrollRun.run_type`** (`internal|proyek`) + `client_id` wajib untuk run proyek; duplikat diperiksa per (periode, jenis, klien). Migrasi `h9i0j1k2l3m4`.
+- **State machine** sesuai PRD: proyek `draft → submitted_to_client → client_approved/rejected → finance_processing → final` (ditolak → perbaiki → kirim ulang); internal `draft → finance_processing → final` (finalisasi langsung dari draft tetap didukung).
+- **Approval klien ber-token tanpa akun**: `POST /payroll/runs/{id}/submit-to-client` menghasilkan link `/payroll/client/{token}` (token disimpan sebagai hash SHA-256, masa berlaku 1–90 hari, link baru mencabut yang lama). Endpoint publik read-only `GET /payroll/client/{token}` + keputusan `POST .../decision` (nama & catatan wajib; kedaluwarsa 410; sudah diputus 409). Semua tercatat di audit + notifikasi HR.
+- **Guard ADR-0006 dieksekusi**: shell `/payroll` jadi OR (`hr_payroll` ATAU `operations_billing`, role operations/management/hr), mutasi divalidasi lisensi per `run_type` di service.
+- **Generate slip proyek** hanya menarik karyawan yang ditempatkan di klien run tersebut.
+- **Frontend Payroll**: pilih jenis payrol + klien saat buat run; badge status 6 state; aksi kontekstual per status (Kirim ke Klien / Mulai Proses Finance / Finalisasi) + callout link approval dengan tombol salin URL.
+- Tes: lifecycle internal & proyek lengkap, tolak→perbaiki→kirim ulang, token kedaluwarsa/terpakai, guard lisensi per jenis.
+
 ### Added — Rates ber-versi untuk pajak, BPJS, billing, bank fee (NFR §11)
 
 - **Tabel rate ber-versi** (`pph21_configs`, `bpjs_configs`, `billing_tax_configs`, `bank_fee_configs`) dengan `effective_from` — tarif terpisah dari kode, versi dicatat per periode agar laporan historis konsisten. Migrasi `g1h2i3j4k5l6` (seed 2025-01-01 dari konstanta kode).
