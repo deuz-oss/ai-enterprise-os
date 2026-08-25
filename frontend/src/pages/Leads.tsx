@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
 
 export interface Lead {
   id: string;
@@ -14,6 +15,17 @@ export interface Lead {
 }
 
 const STAGES = ["lead", "kontak", "presentasi", "penawaran", "negosiasi", "deal", "gagal"];
+
+// Warna aksen kolom papan ala badge pipeline.
+const STAGE_DOT: Record<string, string> = {
+  lead: "#9f9f9f",
+  kontak: "#2383e2",
+  presentasi: "#5b5bd6",
+  penawaran: "#9065b0",
+  negosiasi: "#cb912f",
+  deal: "#0f7b6c",
+  gagal: "#e03e3e",
+};
 
 const BADGE_COLORS: Record<string, string> = {
   lead: "bg-slate-100 text-slate-600",
@@ -36,6 +48,7 @@ export default function Leads() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<"tabel" | "papan">("tabel");
   const { data: leads } = useQuery({
     queryKey: ["leads"],
     queryFn: () => api.get<Lead[]>("/leads"),
@@ -88,11 +101,33 @@ export default function Leads() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Pipeline Calon Klien</h1>
-        <button className="btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Tutup" : "+ Lead Baru"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PageHeader emoji="🎯" title="Pipeline Calon Klien" />
+        <div className="flex items-center gap-2">
+          <div
+            className="flex overflow-hidden rounded text-sm"
+            style={{ border: "1px solid var(--n-border)" }}
+          >
+            {(["tabel", "papan"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className="px-3 py-1.5 capitalize transition-colors"
+                style={{
+                  backgroundColor: view === v ? "var(--n-hover)" : "transparent",
+                  color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                  fontWeight: view === v ? 500 : 400,
+                }}
+              >
+                {view === v ? "☰ " : "▦ "}
+                {v}
+              </button>
+            ))}
+          </div>
+          <button className="btn" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Tutup" : "+ Lead Baru"}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -109,7 +144,15 @@ export default function Leads() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
+      {leads?.length === 0 && (
+        <CalloutBlock emoji="🌱" tone="info">
+          Belum ada lead. Klik <b>"+ Lead Baru"</b> untuk mulai mengisi pipeline.
+        </CalloutBlock>
+      )}
+
+      {/* ===== View Tabel ===== */}
+      {view === "tabel" && (
+        <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
@@ -155,17 +198,160 @@ export default function Leads() {
             {leads?.length === 0 && (
               <tr>
                 <td colSpan={5} className="td py-8 text-center text-slate-400">
-                  Belum ada lead. Klik "+ Lead Baru" untuk mulai.
+                  Belum ada lead.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
+
+      {/* ===== View Papan (kanban ala Notion) ===== */}
+      {view === "papan" && (
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {STAGES.map((stage) => {
+            const cards = (leads ?? []).filter((l) => l.stage === stage);
+            const total = cards.reduce((s, l) => s + Number(l.estimated_value ?? 0), 0);
+            return (
+              <div
+                key={stage}
+                className="w-64 shrink-0 rounded-md"
+                style={{ backgroundColor: "var(--n-hover)" }}
+              >
+                <div className="flex items-center justify-between px-3 pt-3">
+                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: STAGE_DOT[stage] }}
+                    />
+                    <span className="capitalize">{stage}</span>
+                    <span style={{ color: "var(--n-text-muted)" }}>{cards.length}</span>
+                  </span>
+                </div>
+                <p className="px-3 pb-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  {formatRupiah(total)}
+                </p>
+                <div className="space-y-2 px-2 pb-3">
+                  {cards.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="rounded-md p-3 shadow-sm transition-shadow hover:shadow"
+                      style={{
+                        backgroundColor: "var(--n-bg-elevated)",
+                        border: "1px solid var(--n-border)",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
+                      title={lead.industry ?? undefined}
+                    >
+                      <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                        {lead.company_name}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        {lead.contact_name ?? "—"}
+                        {lead.estimated_headcount ? ` · ${lead.estimated_headcount} TKI` : ""}
+                      </p>
+                      <p className="mt-1 text-xs font-medium">
+                        {formatRupiah(lead.estimated_value)}
+                      </p>
+                      {/* Pindah tahap cepat: panah kiri/kanan */}
+                      <div
+                        className="mt-2 flex items-center justify-between text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          disabled={STAGES.indexOf(lead.stage) === 0}
+                          onClick={() =>
+                            changeStage.mutate({
+                              id: lead.id,
+                              stage: STAGES[STAGES.indexOf(lead.stage) - 1],
+                            })
+                          }
+                          className="rounded px-1.5 py-0.5 disabled:opacity-25"
+                          style={{ border: "1px solid var(--n-border)" }}
+                          title="Tahap sebelumnya"
+                        >
+                          ←
+                        </button>
+                        <select
+                          value={lead.stage}
+                          onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
+                          className="cursor-pointer rounded bg-transparent text-xs capitalize"
+                          style={{ color: "var(--n-text-muted)", border: "none", outline: "none" }}
+                        >
+                          {STAGES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          disabled={STAGES.indexOf(lead.stage) === STAGES.length - 1}
+                          onClick={() =>
+                            changeStage.mutate({
+                              id: lead.id,
+                              stage: STAGES[STAGES.indexOf(lead.stage) + 1],
+                            })
+                          }
+                          className="rounded px-1.5 py-0.5 disabled:opacity-25"
+                          style={{ border: "1px solid var(--n-border)" }}
+                          title="Tahap berikutnya"
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {cards.length === 0 && (
+                    <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      Kosong
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {selectedId && (
         <div className="card">
-          <h2 className="font-semibold text-slate-700">Aktivitas</h2>
+          {(() => {
+            const lead = leads?.find((l) => l.id === selectedId);
+            if (!lead) return null;
+            return (
+              <>
+                <PageHeader emoji="🏢" title={lead.company_name} subtitle={lead.industry ?? undefined} />
+                <PropertiesPanel className="mt-4 max-w-xl">
+                  <PropertyRow icon="👤" label="PIC">
+                    {lead.contact_name ?? "—"}
+                  </PropertyRow>
+                  <PropertyRow icon="🧑‍🤝‍🧑" label="Est. TKI">
+                    {lead.estimated_headcount ?? "—"}
+                  </PropertyRow>
+                  <PropertyRow icon="💰" label="Nilai Potensi">
+                    {formatRupiah(lead.estimated_value)}
+                  </PropertyRow>
+                  <PropertyRow icon="📍" label="Tahapan">
+                    <select
+                      value={lead.stage}
+                      onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
+                      className="input w-auto py-1 text-sm capitalize"
+                    >
+                      {STAGES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </PropertyRow>
+                </PropertiesPanel>
+              </>
+            );
+          })()}
+
+          <h2 className="mt-6 font-semibold text-notion">Aktivitas</h2>
           <form
             className="mt-3 flex gap-2"
             onSubmit={(e) => {

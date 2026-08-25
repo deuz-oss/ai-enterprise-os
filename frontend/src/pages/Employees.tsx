@@ -1,6 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
+import { CalloutBlock, PropertiesPanel, PropertyRow } from "../components/notion";
 
 export interface EmployeeRow {
   id: string;
@@ -378,17 +379,16 @@ export default function Employees() {
       )}
 
       {(expiring ?? []).length > 0 && (
-        <div className="card border-l-4 border-amber-400">
-          <h2 className="font-semibold text-amber-700">Reminder Kontrak ≤30 hari</h2>
-          <ul className="mt-2 space-y-1 text-sm text-slate-600">
+        <CalloutBlock emoji="⏰" tone="warning">
+          <p className="font-medium">Reminder Kontrak ≤30 hari</p>
+          <ul className="mt-1 list-inside list-disc text-xs">
             {expiring!.map((c) => (
               <li key={c.contract_id}>
-                <span className="font-medium">{c.employee_name}</span> — kontrak{" "}
-                {c.contract_no} berakhir {c.end_date} ({c.days_left} hari lagi)
+                {c.employee_name} — kontrak {c.contract_no} berakhir {c.end_date} ({c.days_left} hari lagi)
               </li>
             ))}
           </ul>
-        </div>
+        </CalloutBlock>
       )}
 
       <div className="card">
@@ -692,6 +692,38 @@ export default function Employees() {
 
       {selectedId && (
         <>
+        {/* Header properti ala Notion untuk karyawan terpilih */}
+        {selected && (
+          <div className="card">
+            <h1 className="flex items-center gap-3 text-2xl font-bold text-notion">
+              <span className="text-4xl leading-none">👤</span>
+              {selected.full_name}
+            </h1>
+            <PropertiesPanel className="mt-4 max-w-2xl">
+              <PropertyRow icon="🆔" label="No. Induk">
+                <span className="font-mono text-xs">{selected.employee_no}</span>
+              </PropertyRow>
+              <PropertyRow icon="📞" label="Telepon">
+                {selected.phone ?? "—"}
+              </PropertyRow>
+              <PropertyRow icon="📅" label="Tanggal Masuk">
+                {selected.join_date ?? "—"}
+              </PropertyRow>
+              <PropertyRow icon="🏷️" label="Status">
+                <span
+                  className={`badge ${
+                    selected.status === "aktif"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {selected.status}
+                </span>
+              </PropertyRow>
+            </PropertiesPanel>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="card">
             <h2 className="font-semibold text-slate-700">Kontrak Kerja</h2>

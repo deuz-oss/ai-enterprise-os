@@ -6,6 +6,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 7: View Papan, Callout & Properti Notion (bagian 3 dari 3)
+
+- **View papan/kanban Pipeline**: toggle "Tabel | Papan" di halaman Pipeline; kolom per tahapan dengan jumlah lead + total nilai potensi, kartu lead dengan tombol pindah tahap cepat (←/→) dan dropdown tahapan.
+- **Primitif komponen ala Notion** (`src/components/notion.tsx`): `PageHeader` (emoji besar + judul), `CalloutBlock` (4 tone berwarna lembut), `PropertyRow`/`PropertiesPanel` (properti metadata dengan pemisah putus-putus).
+- **Properti metadata pada halaman detail**: detail lead terpilih dan header karyawan terpilih kini memakai panel properti ala Notion; reminder kontrak berubah menjadi callout warning.
+- Fase 7 selesai penuh (entitlement, guard, launcher, design system, kanban, properti).
+
 ### Added — Fase 7: Design System Notion-style (bagian 2 dari 3)
 
 - **Token desain**: font Inter, teks hangat `#37352F`, border/hover sangat halus, radius kecil, sidebar abu lembut (`#f7f6f3`) — semua via CSS variables di `index.css`.

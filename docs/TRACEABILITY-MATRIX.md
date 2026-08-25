@@ -360,6 +360,13 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Source Code | `frontend/tailwind.config.ts`, `src/index.css` (CSS variables + retro-fit dark), `src/components/Layout.tsx`, `src/components/CommandPalette.tsx`, `index.html` |
 | Catatan | Dark memakai aturan pemetaan kelas slate-* agar seluruh halaman lama ikut tanpa rewrite; view papan/callout block masuk polish Fase 7 berikutnya |
 
+### 12.8 Fase 7 — Kanban Pipeline & Properti Notion (irisan 3)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | View papan pipeline per tahapan, callout block, panel properti metadata ala Notion |
+| Source Code | `frontend/src/components/notion.tsx`, `src/pages/Leads.tsx` (toggle tabel/papan), `src/pages/Employees.tsx` (header properti + callout reminder) |
+
 ---
 
 # End of Requirement Traceability Matrix
