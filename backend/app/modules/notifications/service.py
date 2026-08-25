@@ -1,14 +1,69 @@
 import logging
+import smtplib
+import threading
+from email.message import EmailMessage
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import parse_uuid
 from app.modules.auth.models import User, UserRole
 from app.modules.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
+
+
+def build_email_message(to: str, subject: str, body: str) -> EmailMessage:
+    """Susun pesan email notifikasi (fungsi murni agar mudah dites)."""
+    msg = EmailMessage()
+    msg["Subject"] = f"[AEOS] {subject}"
+    msg["From"] = get_settings().smtp_from or get_settings().smtp_user or "aeos@localhost"
+    msg["To"] = to
+    footer = (
+        "\n\n--\nPesan ini dikirim otomatis oleh AI Enterprise OS. "
+        "Balas lewat portal atau hubungi HR."
+    )
+    msg.set_content((body or subject) + footer)
+    return msg
+
+
+def _smtp_send(msg: EmailMessage) -> None:
+    """Kirim pesan lewat SMTP; kegagalan hanya dicatat ke log."""
+    settings = get_settings()
+    host = settings.smtp_host
+    if not host:
+        return
+    try:
+        port = settings.smtp_port
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=10) as smtp:
+                if settings.smtp_user:
+                    smtp.login(settings.smtp_user, settings.smtp_password or "")
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=10) as smtp:
+                smtp.starttls()
+                if settings.smtp_user:
+                    smtp.login(settings.smtp_user, settings.smtp_password or "")
+                smtp.send_message(msg)
+    except Exception:  # noqa: BLE001 - email tidak boleh mematahkan bisnis
+        logger.exception("Gagal mengirim email notifikasi ke %s", msg["To"])
+
+
+def _queue_email(db: Session, user_id, title: str, body: str | None) -> None:
+    """Antre email notifikasi bila SMTP diatur; pengiriman di thread terpisah."""
+    settings = get_settings()
+    if not settings.email_enabled:
+        return
+    recipient = db.execute(
+        select(User.email).where(User.id == parse_uuid(str(user_id)))
+    ).scalar_one_or_none()
+    if not recipient:
+        return
+    msg = build_email_message(recipient, title, body or "")
+    threading.Thread(target=_smtp_send, args=(msg,), daemon=True).start()
 
 
 def notify(
@@ -37,6 +92,9 @@ def notify(
     except Exception:  # noqa: BLE001 - notifikasi tidak boleh mematahkan bisnis
         logger.exception("Gagal mengirim notifikasi user=%s", user_id)
         db.rollback()
+        return
+    # Notifikasi in-app tersimpan → teruskan ke email bila fitur aktif.
+    _queue_email(db, user_id, title, body)
 
 
 def notify_hr_users(db: Session, *, title: str, body: str | None, entity_id=None) -> int:

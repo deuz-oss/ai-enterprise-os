@@ -90,6 +90,8 @@ interface LeaveRow {
   reason: string | null;
   status: string;
   decision_note: string | null;
+  file_name: string | null;
+  file_size: number;
 }
 
 interface LeaveBalanceRow {
@@ -105,6 +107,17 @@ interface AppNotification {
   body: string | null;
   read_at: string | null;
   created_at: string;
+}
+
+interface AttendanceCorrectionRow {
+  id: string;
+  year: number;
+  month: number;
+  requested_present_days: number;
+  requested_overtime_hours: number;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
 }
 
 async function openDownload(path: string) {
@@ -161,6 +174,25 @@ export default function MyPortal() {
     queryKey: ["me-notifications"],
     queryFn: () => api.get<AppNotification[]>("/me/notifications"),
   });
+  const { data: corrections } = useQuery({
+    queryKey: ["me-corrections"],
+    queryFn: () => api.get<AttendanceCorrectionRow[]>("/me/attendance-corrections"),
+  });
+
+  const invalidateCorrections = () => {
+    qc.invalidateQueries({ queryKey: ["me-corrections"] });
+    qc.invalidateQueries({ queryKey: ["me-attendance"] });
+  };
+
+  const createCorrection = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post("/me/attendance-corrections", body),
+    onSuccess: invalidateCorrections,
+  });
+  const cancelCorrection = useMutation({
+    mutationFn: (id: string) => api.post(`/me/attendance-corrections/${id}/cancel`, {}),
+    onSuccess: invalidateCorrections,
+  });
 
   const markNotification = useMutation({
     mutationFn: (id: string) => api.post(`/me/notifications/${id}/read`, {}),
@@ -182,6 +214,11 @@ export default function MyPortal() {
   });
   const cancelLeave = useMutation({
     mutationFn: (id: string) => api.post(`/me/leave-requests/${id}/cancel`, {}),
+    onSuccess: invalidateLeaves,
+  });
+  const uploadAttachment = useMutation({
+    mutationFn: ({ id, formData }: { id: string; formData: FormData }) =>
+      api.upload(`/me/leave-requests/${id}/attachment`, formData),
     onSuccess: invalidateLeaves,
   });
   const changePassword = useMutation({
@@ -416,6 +453,116 @@ export default function MyPortal() {
       </div>
 
       <div className="card">
+        <h2 className="font-semibold text-slate-700">Koreksi Absensi</h2>
+        <form
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_auto_1fr_auto]"
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            createCorrection.mutate({
+              year: Number(form.get("year")),
+              month: Number(form.get("month")),
+              requested_present_days: Number(form.get("present_days") || 0),
+              requested_overtime_hours: Number(form.get("overtime_hours") || 0),
+              reason: form.get("reason") || null,
+            });
+            e.currentTarget.reset();
+          }}
+        >
+          <input
+            name="month"
+            type="number"
+            min={1}
+            max={12}
+            required
+            placeholder="Bulan"
+            defaultValue={attPeriod.month}
+            className="input w-24"
+          />
+          <input
+            name="year"
+            type="number"
+            required
+            placeholder="Tahun"
+            defaultValue={attPeriod.year}
+            className="input w-24"
+          />
+          <div className="flex gap-2">
+            <input
+              name="present_days"
+              type="number"
+              min={0}
+              placeholder="Hari hadir"
+              className="input w-28"
+            />
+            <input
+              name="overtime_hours"
+              type="number"
+              min={0}
+              placeholder="Jam lembur"
+              className="input w-28"
+            />
+          </div>
+          <input name="reason" placeholder="Alasan koreksi" className="input" />
+          <button disabled={createCorrection.isPending} className="btn">
+            Ajukan
+          </button>
+        </form>
+        {createCorrection.error && (
+          <p className="mt-2 text-sm text-red-600">
+            {(createCorrection.error as Error).message}
+          </p>
+        )}
+        <table className="mt-3 w-full">
+          <thead>
+            <tr>
+              <th className="th">Periode</th>
+              <th className="th">Usulan</th>
+              <th className="th">Status</th>
+              <th className="th">Catatan HR</th>
+              <th className="th">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(corrections ?? []).map((c) => (
+              <tr key={c.id}>
+                <td className="td font-medium">
+                  {String(c.month).padStart(2, "0")}/{c.year}
+                </td>
+                <td className="td">
+                  {c.requested_present_days} hari hadir · {c.requested_overtime_hours} jam lembur
+                  {c.reason ? ` · ${c.reason}` : ""}
+                </td>
+                <td className="td">
+                  <span className={`badge ${LEAVE_STATUS_BADGES[c.status] ?? ""}`}>
+                    {c.status}
+                  </span>
+                </td>
+                <td className="td">{c.decision_note ?? "-"}</td>
+                <td className="td">
+                  {c.status === "menunggu" && (
+                    <button
+                      onClick={() => cancelCorrection.mutate(c.id)}
+                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {corrections?.length === 0 && (
+              <tr>
+                <td colSpan={5} className="td py-6 text-center text-slate-400">
+                  Belum ada pengajuan koreksi absensi.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold text-slate-700">
             Sisa Cuti Tahunan {today.getFullYear()}
@@ -480,6 +627,7 @@ export default function MyPortal() {
               <th className="th">Tanggal</th>
               <th className="th">Status</th>
               <th className="th">Catatan HR</th>
+              <th className="th">Lampiran</th>
               <th className="th">Aksi</th>
             </tr>
           </thead>
@@ -499,6 +647,34 @@ export default function MyPortal() {
                   </span>
                 </td>
                 <td className="td">{lv.decision_note ?? "-"}</td>
+                <td className="td whitespace-nowrap">
+                  {lv.file_name ? (
+                    <button
+                      onClick={() => openDownload(`/me/leave-requests/${lv.id}/attachment/download-url`)}
+                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Lampiran ({(lv.file_size / 1024).toFixed(0)} KB)
+                    </button>
+                  ) : lv.status === "menunggu" ? (
+                    <label className="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                      + Lampirkan
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const fd = new FormData();
+                          fd.append("file", file);
+                          uploadAttachment.mutate({ id: lv.id, formData: fd });
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    "-"
+                  )}
+                </td>
                 <td className="td">
                   {lv.status === "menunggu" && (
                     <button
@@ -513,7 +689,7 @@ export default function MyPortal() {
             ))}
             {leaves?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-6 text-center text-slate-400">
+                <td colSpan={6} className="td py-6 text-center text-slate-400">
                   Belum ada pengajuan cuti/izin.
                 </td>
               </tr>

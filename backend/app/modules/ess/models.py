@@ -32,6 +32,36 @@ class LeaveStatus(str, enum.Enum):
     cancelled = "dibatalkan"
 
 
+class AttendanceCorrection(TenantMixin, Base):
+    """Pengajuan koreksi rekap absensi oleh karyawan lewat portal.
+
+    Alur: karyawan mengajukan angka kehadiran/lembur yang menurutnya benar
+    untuk satu periode → HR setujui (angka diterapkan ke AttendanceSummary
+    dan approval klien di-reset agar diverifikasi ulang) atau tolak.
+    """
+
+    __tablename__ = "attendance_corrections"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    month: Mapped[int] = mapped_column(Integer)
+    requested_present_days: Mapped[int] = mapped_column(Integer, default=0)
+    requested_overtime_hours: Mapped[int] = mapped_column(Integer, default=0)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(
+        Enum(LeaveStatus, native_enum=False, length=50),
+        default=LeaveStatus.pending,
+        index=True,
+    )
+    decided_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    employee = relationship("Employee", lazy="joined")
+
+
 class LeaveRequest(TenantMixin, Base):
     """Pengajuan cuti/izin karyawan dari portal self-service.
 
@@ -57,6 +87,11 @@ class LeaveRequest(TenantMixin, Base):
     decided_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     decision_note: Mapped[str | None] = mapped_column(String(500))
+    # Lampiran opsional (mis. surat dokter untuk pengajuan sakit).
+    object_key: Mapped[str | None] = mapped_column(String(500))
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    mime_type: Mapped[str | None] = mapped_column(String(120))
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee = relationship("Employee", lazy="joined")

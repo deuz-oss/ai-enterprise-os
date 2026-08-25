@@ -10,8 +10,18 @@ from app.core import storage
 from app.core.database import parse_uuid
 from app.modules import audit
 from app.modules.auth.models import User, UserRole
-from app.modules.ess.models import LeaveBalance, LeaveRequest, LeaveStatus, LeaveType
-from app.modules.ess.schemas import LeaveBalanceUpsertIn, LeaveCreate
+from app.modules.ess.models import (
+    AttendanceCorrection,
+    LeaveBalance,
+    LeaveRequest,
+    LeaveStatus,
+    LeaveType,
+)
+from app.modules.ess.schemas import (
+    AttendanceCorrectionCreate,
+    LeaveBalanceUpsertIn,
+    LeaveCreate,
+)
 from app.modules.hrd.models import Employee, EmployeeDocument, EmploymentContract
 from app.modules.payroll.models import (
     AttendanceSummary,
@@ -218,6 +228,274 @@ def cancel_own_leave_request(db: Session, user, leave_id: str) -> LeaveRequest:
         entity_id=leave.id,
     )
     return leave
+
+
+# ---------- Lampiran pengajuan (mis. surat dokter) ----------
+
+
+async def upload_leave_attachment(db: Session, user, leave_id: str, file) -> LeaveRequest:
+    """Karyawan melampirkan file pada pengajuannya yang masih menunggu."""
+    from app.core import storage
+
+    leave = _get_own_leave(db, user, leave_id)
+    if leave.status != LeaveStatus.pending:
+        raise HTTPException(
+            status_code=409,
+            detail="Lampiran hanya untuk pengajuan berstatus menunggu",
+        )
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="File lampiran kosong")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Ukuran lampiran maksimal 10 MB")
+    file_name = file.filename or "lampiran.pdf"
+    content_type = file.content_type or "application/octet-stream"
+    object_key = storage.new_object_key(f"leave/{leave.employee_id}", file_name)
+    storage.put_object(object_key, data, content_type)
+    leave.object_key = object_key
+    leave.file_name = file_name
+    leave.mime_type = content_type
+    leave.file_size = len(data)
+    db.commit()
+    db.refresh(leave)
+    audit.log_event(
+        db,
+        action="leave.attachment_uploaded",
+        entity_type="leave_request",
+        entity_id=leave.id,
+        object_key=object_key,
+        detail={"file_name": file_name},
+    )
+    return leave
+
+
+def _get_leave_for_download(db: Session, leave_id: str) -> LeaveRequest:
+    leave = db.get(LeaveRequest, parse_uuid(leave_id))
+    if leave is None:
+        raise HTTPException(status_code=404, detail="Pengajuan tidak ditemukan")
+    return leave
+
+
+def own_attachment_download_url(db: Session, user, leave_id: str) -> str:
+    from app.core import storage
+
+    leave = _get_own_leave(db, user, leave_id)
+    if not leave.object_key:
+        raise HTTPException(status_code=404, detail="Pengajuan belum punya lampiran")
+    audit.log_event(
+        db,
+        action="leave.attachment_download_url",
+        entity_type="leave_request",
+        entity_id=leave.id,
+        object_key=leave.object_key,
+        detail={"file_name": leave.file_name},
+    )
+    return storage.presigned_get_url(leave.object_key)
+
+
+def hr_attachment_download_url(db: Session, leave_id: str) -> str:
+    from app.core import storage
+
+    leave = _get_leave_for_download(db, leave_id)
+    if not leave.object_key:
+        raise HTTPException(status_code=404, detail="Pengajuan belum punya lampiran")
+    audit.log_event(
+        db,
+        action="leave.attachment_download_url",
+        entity_type="leave_request",
+        entity_id=leave.id,
+        object_key=leave.object_key,
+        detail={"file_name": leave.file_name},
+    )
+    return storage.presigned_get_url(leave.object_key)
+
+
+# ---------- Koreksi absensi oleh karyawan ----------
+
+
+def _get_own_correction(db: Session, user, correction_id: str) -> AttendanceCorrection:
+    correction = db.get(AttendanceCorrection, parse_uuid(correction_id))
+    if correction is None or correction.employee.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Pengajuan koreksi tidak ditemukan")
+    return correction
+
+
+def create_attendance_correction(
+    db: Session, user, payload: AttendanceCorrectionCreate
+) -> AttendanceCorrection:
+    from app.modules.notifications import service as notification_service
+
+    employee = get_own_employee(db, user)
+    duplicate = db.execute(
+        select(AttendanceCorrection)
+        .where(AttendanceCorrection.employee_id == employee.id)
+        .where(AttendanceCorrection.year == payload.year)
+        .where(AttendanceCorrection.month == payload.month)
+        .where(AttendanceCorrection.status == LeaveStatus.pending)
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Masih ada pengajuan koreksi menunggu untuk periode "
+            f"{payload.month}/{payload.year}",
+        )
+    correction = AttendanceCorrection(
+        employee_id=employee.id,
+        year=payload.year,
+        month=payload.month,
+        requested_present_days=payload.requested_present_days,
+        requested_overtime_hours=payload.requested_overtime_hours,
+        reason=(payload.reason or "").strip() or None,
+        status=LeaveStatus.pending,
+    )
+    db.add(correction)
+    db.commit()
+    db.refresh(correction)
+    audit.log_event(
+        db,
+        action="attendance_correction.submitted",
+        entity_type="attendance_correction",
+        entity_id=correction.id,
+        detail={
+            "period": f"{correction.year}-{correction.month:02d}",
+            "present_days": correction.requested_present_days,
+            "overtime_hours": correction.requested_overtime_hours,
+        },
+    )
+    notification_service.notify_hr_users(
+        db,
+        title="Pengajuan koreksi absensi baru",
+        body=(
+            f"{employee.full_name} mengajukan koreksi absensi "
+            f"{correction.month}/{correction.year}: "
+            f"{correction.requested_present_days} hari hadir, "
+            f"{correction.requested_overtime_hours} jam lembur"
+        ),
+        entity_id=correction.id,
+    )
+    return correction
+
+
+def list_own_attendance_corrections(db: Session, user) -> list[AttendanceCorrection]:
+    own_id = get_own_employee(db, user).id
+    return list(
+        db.execute(
+            select(AttendanceCorrection)
+            .where(AttendanceCorrection.employee_id == own_id)
+            .order_by(
+                AttendanceCorrection.created_at.desc(),
+                AttendanceCorrection.year.desc(),
+                AttendanceCorrection.month.desc(),
+            )
+        ).scalars()
+    )
+
+
+def cancel_own_attendance_correction(db: Session, user, correction_id: str) -> AttendanceCorrection:
+    correction = _get_own_correction(db, user, correction_id)
+    if correction.status != LeaveStatus.pending:
+        raise HTTPException(
+            status_code=409, detail="Hanya pengajuan berstatus menunggu yang bisa dibatalkan"
+        )
+    correction.status = LeaveStatus.cancelled
+    db.commit()
+    db.refresh(correction)
+    audit.log_event(
+        db,
+        action="attendance_correction.cancelled",
+        entity_type="attendance_correction",
+        entity_id=correction.id,
+    )
+    return correction
+
+
+# ---------- Koreksi absensi sisi HR ----------
+
+
+def hr_list_attendance_corrections(
+    db: Session,
+    status_filter: LeaveStatus | None = None,
+    employee_id=None,
+) -> list[AttendanceCorrection]:
+    stmt = select(AttendanceCorrection).order_by(
+        AttendanceCorrection.created_at.desc(),
+        AttendanceCorrection.year.desc(),
+        AttendanceCorrection.month.desc(),
+    )
+    if status_filter is not None:
+        stmt = stmt.where(AttendanceCorrection.status == status_filter)
+    if employee_id is not None:
+        stmt = stmt.where(AttendanceCorrection.employee_id == parse_uuid(str(employee_id)))
+    return list(db.execute(stmt).scalars())
+
+
+def decide_attendance_correction(
+    db: Session, user, correction_id: str, approved: bool, note: str | None
+) -> AttendanceCorrection:
+    """HR memutuskan koreksi; approval menerapkan angka ke rekap absensi."""
+    from app.modules.notifications import service as notification_service
+    from app.modules.payroll.models import AttendanceSummary
+
+    correction = db.get(AttendanceCorrection, parse_uuid(correction_id))
+    if correction is None:
+        raise HTTPException(status_code=404, detail="Pengajuan koreksi tidak ditemukan")
+    if correction.status != LeaveStatus.pending:
+        raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+
+    if approved:
+        summary = db.execute(
+            select(AttendanceSummary)
+            .where(AttendanceSummary.employee_id == correction.employee_id)
+            .where(AttendanceSummary.year == correction.year)
+            .where(AttendanceSummary.month == correction.month)
+        ).scalar_one_or_none()
+        if summary is None:
+            summary = AttendanceSummary(
+                employee_id=correction.employee_id,
+                year=correction.year,
+                month=correction.month,
+                present_days=correction.requested_present_days,
+                overtime_hours=correction.requested_overtime_hours,
+                notes=f"Koreksi via portal ({correction.reason or '-'})",
+            )
+            db.add(summary)
+        else:
+            summary.present_days = correction.requested_present_days
+            summary.overtime_hours = correction.requested_overtime_hours
+            # Angka berubah → approval klien di-reset agar diverifikasi ulang.
+            summary.client_approved = False
+            summary.approved_at = None
+
+    correction.status = LeaveStatus.approved if approved else LeaveStatus.rejected
+    correction.decided_by = user.id
+    correction.decided_at = datetime.now(UTC)
+    correction.decision_note = (note or "").strip() or None
+    db.commit()
+    db.refresh(correction)
+    audit.log_event(
+        db,
+        action="attendance_correction.decided",
+        entity_type="attendance_correction",
+        entity_id=correction.id,
+        detail={"approved": approved, "status": correction.status.value},
+    )
+    if correction.employee.user_id is not None:
+        keputusan = "disetujui" if approved else "ditolak"
+        notification_service.notify(
+            db,
+            user_id=correction.employee.user_id,
+            title=f"Koreksi absensi Anda {keputusan}",
+            body=(
+                f"Periode {correction.month}/{correction.year}: "
+                f"{correction.requested_present_days} hari hadir, "
+                f"{correction.requested_overtime_hours} jam lembur"
+                + (f" — catatan: {correction.decision_note}" if correction.decision_note else "")
+            ),
+            category="leave",
+            entity_type="attendance_correction",
+            entity_id=correction.id,
+        )
+    return correction
 
 
 # ---------- Cuti/izin sisi HR ----------

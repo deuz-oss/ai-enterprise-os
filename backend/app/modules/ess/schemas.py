@@ -85,6 +85,8 @@ class LeaveOut(BaseModel):
     status: LeaveStatus
     decision_note: str | None
     decided_at: datetime | None
+    file_name: str | None
+    file_size: int
     created_at: datetime
 
 
@@ -99,6 +101,51 @@ class SelfserviceAccountOut(BaseModel):
 class LeaveDecisionIn(BaseModel):
     approved: bool
     note: str | None = None
+
+
+class AttendanceCorrectionCreate(BaseModel):
+    year: int
+    month: int
+    requested_present_days: int = 0
+    requested_overtime_hours: int = 0
+    reason: str | None = None
+
+    @field_validator("year")
+    @classmethod
+    def _sane_year(cls, v: int) -> int:
+        if not 2000 <= v <= 2100:
+            raise ValueError("Tahun tidak wajar")
+        return v
+
+    @field_validator("month")
+    @classmethod
+    def _valid_month(cls, v: int) -> int:
+        if not 1 <= v <= 12:
+            raise ValueError("Bulan harus 1-12")
+        return v
+
+    @field_validator("requested_present_days", "requested_overtime_hours")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Angka tidak boleh negatif")
+        return v
+
+
+class AttendanceCorrectionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    year: int
+    month: int
+    requested_present_days: int
+    requested_overtime_hours: int
+    reason: str | None
+    status: LeaveStatus
+    decision_note: str | None
+    decided_at: datetime | None
+    created_at: datetime
 
 
 class LeaveBalanceUpsertIn(BaseModel):

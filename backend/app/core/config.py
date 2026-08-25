@@ -11,9 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=(".env", REPO_ROOT / ".env"), extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=(".env", REPO_ROOT / ".env"), extra="ignore")
 
     project_name: str = "AI Enterprise OS"
     app_env: str = "dev"
@@ -65,11 +63,31 @@ class Settings(BaseSettings):
     # Rahasia bersama untuk verifikasi header webhook dari penyedia TTE.
     esign_webhook_secret: str | None = None
 
+    # Email notifikasi (mis. keputusan cuti). SMTP_HOST kosong => nonaktif.
+    # Kirim berjalan fire-and-forget di thread terpisah, best-effort.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+
     @field_validator(
-        "database_url", "storage_endpoint", "storage_access_key", "storage_secret_key",
-        "ai_base_url", "ai_api_key",
-        "privy_api_url", "privy_merchant_key", "privy_username", "privy_password",
-        "esign_webhook_secret", "platform_admin_password",
+        "database_url",
+        "storage_endpoint",
+        "storage_access_key",
+        "storage_secret_key",
+        "ai_base_url",
+        "ai_api_key",
+        "privy_api_url",
+        "privy_merchant_key",
+        "privy_username",
+        "privy_password",
+        "esign_webhook_secret",
+        "platform_admin_password",
+        "smtp_host",
+        "smtp_user",
+        "smtp_password",
+        "smtp_from",
         mode="before",
     )
     @classmethod
@@ -100,9 +118,7 @@ class Settings(BaseSettings):
 
     @property
     def storage_configured(self) -> bool:
-        return bool(
-            self.storage_endpoint and self.storage_access_key and self.storage_secret_key
-        )
+        return bool(self.storage_endpoint and self.storage_access_key and self.storage_secret_key)
 
     @property
     def ai_configured(self) -> bool:
@@ -111,6 +127,11 @@ class Settings(BaseSettings):
     @property
     def esign_configured(self) -> bool:
         return self.esign_provider in ("sandbox", "privy")
+
+    @property
+    def email_enabled(self) -> bool:
+        """Notifikasi email aktif bila SMTP_HOST diisi."""
+        return bool(self.smtp_host)
 
 
 @lru_cache

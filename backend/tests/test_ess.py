@@ -451,6 +451,236 @@ def test_csv_exports_for_hr(client):
     assert forbidden.status_code == 403
 
 
+# ---------- Email notifikasi ----------
+
+
+def test_build_email_message(monkeypatch):
+    from app.core.config import get_settings
+    from app.modules.notifications.service import build_email_message
+
+    # get_settings() di-cache — set ulang env lalu bangun ulang cache.
+    monkeypatch.setenv("SMTP_FROM", "hr@outsourcing.co.id")
+    get_settings.cache_clear()
+    try:
+        msg = build_email_message(
+            "karyawan@example.com", "Pengajuan cuti Anda disetujui", "Silakan istirahat"
+        )
+    finally:
+        get_settings.cache_clear()
+    assert msg["To"] == "karyawan@example.com"
+    assert msg["From"] == "hr@outsourcing.co.id"
+    assert "[AEOS]" in msg["Subject"]
+    body = msg.get_content()
+    assert "Silakan istirahat" in body and "AI Enterprise OS" in body
+
+
+# ---------- Lampiran surat dokter / berkas pendukung ----------
+
+
+def test_leave_attachment_flow(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Pemohon Sakit"}
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    leave = client.post(
+        "/api/v1/me/leave-requests",
+        headers=headers,
+        json={
+            "leave_type": "sakit",
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-11",
+            "reason": "Demam",
+        },
+    ).json()
+    leave_id = leave["id"]
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        uploaded = client.post(
+            f"/api/v1/me/leave-requests/{leave_id}/attachment",
+            headers=headers,
+            files={"file": ("surat-dokter.pdf", b"%PDF-1.4 sakit", "application/pdf")},
+        )
+    assert uploaded.status_code == 200, uploaded.text
+    body = uploaded.json()
+    assert body["file_name"] == "surat-dokter.pdf"
+    assert body["file_size"] == len(b"%PDF-1.4 sakit")
+
+    # karyawan mengunduh lampirannya sendiri
+    own_url = client.get(
+        f"/api/v1/me/leave-requests/{leave_id}/attachment/download-url", headers=headers
+    )
+    assert own_url.status_code == 200
+    assert own_url.json()["url"].startswith("/api/v1/files/")
+
+    # HR juga bisa melihat lampiran
+    hr_url = client.get(
+        f"/api/v1/employees/leave-requests/{leave_id}/attachment/download-url",
+        headers=admin,
+    )
+    assert hr_url.status_code == 200
+
+    # setelah diputuskan, lampiran tidak boleh diganti
+    client.patch(
+        f"/api/v1/employees/leave-requests/{leave_id}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    with patch("app.modules.ess.service.storage.put_object") as put2:
+        put2.return_value = "key"
+        rejected = client.post(
+            f"/api/v1/me/leave-requests/{leave_id}/attachment",
+            headers=headers,
+            files={"file": ("ulang.pdf", b"%PDF-1.4", "application/pdf")},
+        )
+    assert rejected.status_code == 409
+
+    # karyawan lain tidak bisa mengakses lampiran milik orang lain
+    other_headers = _create_karyawan(client, email="lain@outsourcing.co.id")
+    other_emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Karyawan Beda"}
+    ).json()
+    _link_employee(client, other_emp["id"], email="lain@outsourcing.co.id")
+    forbidden = client.get(
+        f"/api/v1/me/leave-requests/{leave_id}/attachment/download-url",
+        headers=other_headers,
+    )
+    assert forbidden.status_code == 404
+
+    # pengajuan tanpa lampiran → 404 saat minta URL unduhan
+    plain = _submit_leave(client, headers, start="2026-12-01", end="2026-12-01").json()
+    no_file = client.get(
+        f"/api/v1/me/leave-requests/{plain['id']}/attachment/download-url", headers=headers
+    )
+    assert no_file.status_code == 404
+
+
+# ---------- Koreksi absensi oleh karyawan ----------
+
+
+def test_attendance_correction_flow(client):
+    admin = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=admin, json={"full_name": "Pemohon Koreksi"}
+    ).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    # HR mengisi rekap awal: 15 hari hadir
+    client.post(
+        "/api/v1/payroll/attendance",
+        headers=admin,
+        json={"employee_id": emp["id"], "year": 2026, "month": 8, "present_days": 15},
+    )
+
+    # karyawan mengajukan koreksi: seharusnya 21 hadir + 4 jam lembur
+    created = client.post(
+        "/api/v1/me/attendance-corrections",
+        headers=headers,
+        json={
+            "year": 2026,
+            "month": 8,
+            "requested_present_days": 21,
+            "requested_overtime_hours": 4,
+            "reason": "Absensi fingerprint error seminggu",
+        },
+    )
+    assert created.status_code == 201, created.text
+    correction = created.json()
+    assert correction["status"] == "menunggu"
+
+    # duplikat pending untuk periode yang sama ditolak
+    dup = client.post(
+        "/api/v1/me/attendance-corrections",
+        headers=headers,
+        json={"year": 2026, "month": 8, "requested_present_days": 20},
+    )
+    assert dup.status_code == 409
+
+    # bulan tidak valid ditolak validasi
+    bad_month = client.post(
+        "/api/v1/me/attendance-corrections",
+        headers=headers,
+        json={"year": 2026, "month": 13, "requested_present_days": 1},
+    )
+    assert bad_month.status_code == 422
+
+    # HR menyetujui → angka diterapkan & approval klien reset (belum pernah disetujui)
+    decided = client.patch(
+        f"/api/v1/employees/attendance-corrections/{correction['id']}/decision",
+        headers=admin,
+        json={"approved": True},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "disetujui"
+
+    attendance = client.get(
+        "/api/v1/me/attendance", headers=headers, params={"year": 2026, "month": 8}
+    ).json()
+    assert len(attendance) == 1
+    assert attendance[0]["present_days"] == 21
+    assert attendance[0]["overtime_hours"] == 4
+    assert attendance[0]["client_approved"] is False
+
+    # keputusan ulang ditolak; karyawan menerima notifikasi hasil
+    again = client.patch(
+        f"/api/v1/employees/attendance-corrections/{correction['id']}/decision",
+        headers=admin,
+        json={"approved": False},
+    )
+    assert again.status_code == 409
+    notifs = client.get("/api/v1/me/notifications", headers=headers).json()
+    assert any("Koreksi absensi Anda disetujui" in n["title"] for n in notifs)
+
+
+def test_attendance_correction_cancel_and_reject(client):
+    admin = _auth_header(client)
+    emp = client.post("/api/v1/employees", headers=admin, json={"full_name": "Koreksi Dua"}).json()
+    headers = _create_karyawan(client)
+    _link_employee(client, emp["id"])
+
+    first = client.post(
+        "/api/v1/me/attendance-corrections",
+        headers=headers,
+        json={"year": 2026, "month": 7, "requested_present_days": 22},
+    ).json()
+
+    # batalkan sendiri saat masih pending → bebas ajukan lagi
+    cancelled = client.post(
+        f"/api/v1/me/attendance-corrections/{first['id']}/cancel", headers=headers
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "dibatalkan"
+    second = client.post(
+        "/api/v1/me/attendance-corrections",
+        headers=headers,
+        json={"year": 2026, "month": 7, "requested_present_days": 20},
+    )
+    assert second.status_code == 201
+
+    # HR menolak → rekap absensi tidak berubah
+    rejected = client.patch(
+        f"/api/v1/employees/attendance-corrections/{second.json()['id']}/decision",
+        headers=admin,
+        json={"approved": False, "note": "Angka sesuai data klien"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "ditolak"
+    attendance = client.get(
+        "/api/v1/payroll/attendance", headers=admin, params={"year": 2026, "month": 7}
+    ).json()
+    assert all(a["employee_id"] != emp["id"] for a in attendance)
+
+    # koreksi yang sudah dibatalkan tak bisa dibatalkan lagi
+    recancel = client.post(
+        f"/api/v1/me/attendance-corrections/{first['id']}/cancel", headers=headers
+    )
+    assert recancel.status_code == 409
+
+
 def test_platform_admin_blocked_from_portal(client):
     headers = _platform_admin_header(client)
     assert client.get("/api/v1/me/profile", headers=headers).status_code == 403

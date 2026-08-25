@@ -6,6 +6,7 @@ from app.core.security import get_current_user, require_roles
 from app.modules.ess import service as ess_service
 from app.modules.ess.models import LeaveStatus
 from app.modules.ess.schemas import (
+    AttendanceCorrectionOut,
     LeaveBalanceOut,
     LeaveBalanceUpsertIn,
     LeaveDecisionIn,
@@ -108,6 +109,39 @@ def decide_leave_request(
     """Setujui/tolak pengajuan cuti-izin karyawan (wajib status menunggu)."""
     return ess_service.decide_leave_request(
         db, current_user, leave_id, payload.approved, payload.note
+    )
+
+
+@router.get("/leave-requests/{leave_id}/attachment/download-url")
+def leave_attachment_url(leave_id: str, db: Session = Depends(get_db)):
+    return {"url": ess_service.hr_attachment_download_url(db, leave_id)}
+
+
+@router.get("/attendance-corrections", response_model=list[AttendanceCorrectionOut])
+def list_attendance_corrections(
+    status_filter: LeaveStatus | None = Query(None, alias="status"),
+    employee_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Daftar pengajuan koreksi absensi dari portal karyawan."""
+    return ess_service.hr_list_attendance_corrections(
+        db, status_filter=status_filter, employee_id=employee_id
+    )
+
+
+@router.patch(
+    "/attendance-corrections/{correction_id}/decision",
+    response_model=AttendanceCorrectionOut,
+)
+def decide_attendance_correction(
+    correction_id: str,
+    payload: LeaveDecisionIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Setujui (angka diterapkan ke rekap absensi) atau tolak koreksi."""
+    return ess_service.decide_attendance_correction(
+        db, current_user, correction_id, payload.approved, payload.note
     )
 
 

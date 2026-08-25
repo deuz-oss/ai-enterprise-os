@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_tenant_user
 from app.modules.ess import service
 from app.modules.ess.schemas import (
+    AttendanceCorrectionCreate,
+    AttendanceCorrectionOut,
     LeaveBalanceOut,
     LeaveCreate,
     LeaveOut,
@@ -97,6 +99,26 @@ def cancel_leave(
     return service.cancel_own_leave_request(db, current_user, leave_id)
 
 
+@router.post("/leave-requests/{leave_id}/attachment", response_model=LeaveOut)
+async def upload_leave_attachment(
+    leave_id: str,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lampirkan file (mis. surat dokter) pada pengajuan yang masih menunggu."""
+    return await service.upload_leave_attachment(db, current_user, leave_id, file)
+
+
+@router.get("/leave-requests/{leave_id}/attachment/download-url")
+def my_leave_attachment_url(
+    leave_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return {"url": service.own_attachment_download_url(db, current_user, leave_id)}
+
+
 @router.get("/leave-balance", response_model=LeaveBalanceOut | None)
 def my_leave_balance(
     year: int | None = Query(None),
@@ -105,3 +127,35 @@ def my_leave_balance(
 ):
     """Sisa jatah cuti tahunan sendiri; null bila HR belum mengatur kuota."""
     return service.get_own_leave_balance(db, current_user, year)
+
+
+# ---------- Koreksi absensi ----------
+
+
+@router.get("/attendance-corrections", response_model=list[AttendanceCorrectionOut])
+def my_attendance_corrections(
+    current_user=Depends(get_current_user), db: Session = Depends(get_db)
+):
+    return service.list_own_attendance_corrections(db, current_user)
+
+
+@router.post("/attendance-corrections", response_model=AttendanceCorrectionOut, status_code=201)
+def request_attendance_correction(
+    payload: AttendanceCorrectionCreate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Ajukan koreksi angka kehadiran/lembur untuk satu periode."""
+    return service.create_attendance_correction(db, current_user, payload)
+
+
+@router.post(
+    "/attendance-corrections/{correction_id}/cancel",
+    response_model=AttendanceCorrectionOut,
+)
+def cancel_attendance_correction(
+    correction_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return service.cancel_own_attendance_correction(db, current_user, correction_id)

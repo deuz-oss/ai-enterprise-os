@@ -29,6 +29,7 @@ interface LeaveRequestRow {
   reason: string | null;
   status: string;
   decision_note: string | null;
+  file_name: string | null;
 }
 
 interface LeaveBalanceRow {
@@ -37,6 +38,18 @@ interface LeaveBalanceRow {
   total_days: number;
   used_days: number;
   remaining: number;
+}
+
+interface AttendanceCorrectionRow {
+  id: string;
+  employee_id: string;
+  year: number;
+  month: number;
+  requested_present_days: number;
+  requested_overtime_hours: number;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
 }
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
@@ -199,6 +212,10 @@ export default function Employees() {
       ),
     enabled: Boolean(selectedId),
   });
+  const { data: attendanceCorrections } = useQuery({
+    queryKey: ["attendance-corrections"],
+    queryFn: () => api.get<AttendanceCorrectionRow[]>("/employees/attendance-corrections"),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees"] });
@@ -295,6 +312,15 @@ export default function Employees() {
         note: null,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-requests"] }),
+  });
+
+  const decideCorrection = useMutation({
+    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
+      api.patch(`/employees/attendance-corrections/${id}/decision`, {
+        approved,
+        note: null,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-corrections"] }),
   });
 
   const saveBalance = useMutation({
@@ -423,6 +449,77 @@ export default function Employees() {
         )}
       </div>
 
+      {(attendanceCorrections ?? []).length > 0 && (
+        <div className="card overflow-x-auto p-0">
+          <div className="border-b border-slate-200 p-4">
+            <h2 className="font-semibold text-slate-700">Koreksi Absensi (Portal)</h2>
+          </div>
+          <table className="w-full">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="th">Karyawan</th>
+                <th className="th">Periode</th>
+                <th className="th">Usulan</th>
+                <th className="th">Alasan</th>
+                <th className="th">Status</th>
+                <th className="th">Keputusan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(attendanceCorrections ?? []).map((c) => {
+                const emp = employees?.find((e) => e.id === c.employee_id);
+                return (
+                  <tr key={c.id}>
+                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
+                    <td className="td">
+                      {String(c.month).padStart(2, "0")}/{c.year}
+                    </td>
+                    <td className="td">
+                      {c.requested_present_days} hari · {c.requested_overtime_hours} jam lembur
+                    </td>
+                    <td className="td">{c.reason ?? "-"}</td>
+                    <td className="td">
+                      <span
+                        className={`badge ${LEAVE_STATUS_BADGES[c.status] ?? ""}`}
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="td whitespace-nowrap">
+                      {c.status === "menunggu" ? (
+                        <>
+                          <button
+                            onClick={() =>
+                              decideCorrection.mutate({ id: c.id, approved: true })
+                            }
+                            disabled={decideCorrection.isPending}
+                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                          >
+                            Setujui
+                          </button>
+                          {" · "}
+                          <button
+                            onClick={() =>
+                              decideCorrection.mutate({ id: c.id, approved: false })
+                            }
+                            disabled={decideCorrection.isPending}
+                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                          >
+                            Tolak
+                          </button>
+                        </>
+                      ) : (
+                        (c.decision_note ?? "-")
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {(leaveRequests ?? []).length > 0 && (
         <div className="card overflow-x-auto p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
@@ -500,8 +597,23 @@ export default function Employees() {
                       </span>
                     </td>
                     <td className="td whitespace-nowrap">
+                      {lv.file_name && (
+                        <button
+                          onClick={async () => {
+                            const { url } = await api.get<{ url: string }>(
+                              `/employees/leave-requests/${lv.id}/attachment/download-url`
+                            );
+                            window.open(url, "_blank");
+                          }}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                          title={lv.file_name}
+                        >
+                          Lampiran
+                        </button>
+                      )}
                       {lv.status === "menunggu" ? (
                         <>
+                          {lv.file_name && " · "}
                           <button
                             onClick={() => decideLeave.mutate({ id: lv.id, approved: true })}
                             disabled={decideLeave.isPending}
@@ -518,9 +630,9 @@ export default function Employees() {
                             Tolak
                           </button>
                         </>
-                      ) : (
-                        (lv.decision_note ?? "-")
-                      )}
+                      ) : !lv.file_name ? (
+                        lv.decision_note ?? "-"
+                      ) : null}
                     </td>
                   </tr>
                 );

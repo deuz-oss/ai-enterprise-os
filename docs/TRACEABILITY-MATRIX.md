@@ -329,6 +329,18 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Cakupan | Profil ringkas, sisa cuti, form ajukan/batal cuti, slip gaji, notifikasi (tandai dibaca) |
 | Build | Butuh Flutter SDK; jalankan `flutter create . --org id.aeos` dulu (lihat AGENTS.md) — verifikasi build di mesin dengan SDK |
 
+### 12.5 Lampiran Cuti, Koreksi Absensi, Email Notifikasi
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Lampiran berkas pada pengajuan cuti; koreksi absensi oleh karyawan; notifikasi email opsional |
+| Source Code | `backend/app/modules/ess` (model/service/router), `backend/app/modules/notifications/service.py`, `backend/app/core/config.py` |
+| API Karyawan | `POST /me/leave-requests/{id}/attachment` (+download-url), `GET|POST /me/attendance-corrections` (+cancel) |
+| API HR | `GET /employees/leave-requests/{id}/attachment/download-url`, `GET /employees/attendance-corrections?status=`, `PATCH .../{id}/decision` |
+| Frontend | Kartu "Koreksi Absensi" di Portal Saya; tabel "Koreksi Absensi (Portal)" + tombol lampiran di halaman Karyawan |
+| Aturan | Lampiran hanya saat menunggu (≤10 MB); koreksi disetujui menerapkan angka ke AttendanceSummary & reset approval klien; email hanya aktif bila SMTP_HOST diisi |
+| Migrasi | `e8b4c7d1a952` (kolom lampiran), `f9c2e6b8d314` (tabel attendance_corrections) |
+
 ---
 
 # End of Requirement Traceability Matrix

@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Lampiran Surat Sakit, Koreksi Absensi, dan Email Notifikasi
+
+- **Lampiran pengajuan cuti**: karyawan dapat mengunggah berkas pendukung (mis. surat dokter, maks. 10 MB) pada pengajuan berstatus menunggu via `POST /me/leave-requests/{id}/attachment`; unduh lewat `/me/.../attachment/download-url` (karyawan) atau `/employees/leave-requests/{id}/attachment/download-url` (HR). Migrasi `e8b4c7d1a952`.
+- **Koreksi absensi oleh karyawan**: alur ajukan → approval HR. Karyawan mengusulkan angka hadir/lembur per periode (`POST /me/attendance-corrections`); saat disetujui angka diterapkan ke rekap absensi dan approval klien di-reset agar diverifikasi ulang. Duplikat pending per periode ditolak. Migrasi `f9c2e6b8d314`.
+- **Email notifikasi (opsional)**: isi `SMTP_HOST` (+ port/user/password/from) untuk meneruskan notifikasi keputusan/pengajuan ke email penerima; dikirim fire-and-forget di thread terpisah, gagal SMTP tidak memengaruhi bisnis. Tanpa SMTP_HOST fitur nonaktif.
+- UI: kartu "Koreksi Absensi" di Portal Saya; tabel "Koreksi Absensi (Portal)" di halaman Karyawan; tombol lampiran di kedua sisi.
+- Tes: alur lampiran (upload/unduh/isolasi/kunci setelah diputus) dan koreksi absensi (approve menerapkan angka, reset approval klien, duplikat 409).
+
 ### Added — Notifikasi & Ekspor CSV
 
 - Modul `notifications` (tabel `notifications`, migrasi `d6e3f2a8c471`) dengan endpoint `/me/notifications`: daftar, unread-count, tandai dibaca per item, dan read-all.
