@@ -122,23 +122,30 @@ Fase 1–6 (MVP presales → akunting, AI layer) dan platform awal (multi-tenant
 TTE sandbox PrivyID, rekap BPJS, ESS, kerangka mobile) — **✅ selesai**; detail
 lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
 
-### Fase 7 — Platform Multi-App & UI Notion
+### Fase 7 — Platform Multi-App & UI Notion — ✅ Selesai (2026-08-25)
 
 **Entitlement & lisensi**
-- App registry: daftar aplikasi + metadata + grafik dependensi (single source of truth).
+- App registry: daftar aplikasi + metadata + grafik dependensi (single source of truth). ✅ `backend/app/core/apps.py`
 - Lisensi per tenant di modul `platform`: status `trial/active/expired` per app,
-  aktivasi trial mandiri, perpanjangan/upgrade dari dalam produk.
+  aktivasi trial mandiri, perpanjangan/upgrade dari dalam produk. ✅ Trial 14 hari sekali per app (`POST /apps/{key}/trial`);
+  pengaturan langganan oleh platform admin via editor lisensi halaman Tenant.
+  *Catatan perilaku: tenant hasil provisioning baru mulai tanpa lisensi; tenant default/dev full package.*
 - Guard backend: endpoint app tanpa lisensi → `403`; guard frontend: nav dinamis +
-  halaman upsell "Tambah aplikasi".
-- App Launcher (grid aplikasi ala Mekari) sebagai gerbang navigasi.
+  halaman upsell "Tambah aplikasi". ✅ Guard via `include_router(dependencies=...)`;
+  webhook e-sign tetap terbuka. *Catatan arsitektur (ADR menyusul): `/payroll` & `/bpjs`
+  sementara di-guard utuh ke HR & Payroll — Fase 9 memecah guard per `run_type`.*
+- App Launcher (grid aplikasi ala Mekari) sebagai gerbang navigasi. ✅ Halaman "🚀 Aplikasi".
 
 **Design system Notion-style**
 - Token desain: Inter; teks hangat `#37352F`; border/hover sangat halus; radius 4–6px;
-  sidebar abu lembut; dark mode paralel.
+  sidebar abu lembut; dark mode paralel. ✅ CSS variables + retro-fit kelas lama.
 - Shell baru: sidebar (workspace switcher, grup aplikasi, page tree), topbar
   breadcrumb, judul halaman emoji besar, properti metadata, view tabel/papan,
-  callout block, **command palette ⌘K** lintas aplikasi.
-- Aksen warna per aplikasi di atas satu design system yang sama.
+  callout block, **command palette ⌘K** lintas aplikasi. ✅ kecuali page tree
+  (ditunda — belum ada konsep page user-generated) dan emoji besar baru di sebagian halaman.
+- Aksen warna per aplikasi di atas satu design system yang sama. ✅
+- View tabel/papan: ✅ Pipeline (kanban + pindah tahap); Kandidat menyusul.
+- Callout block ✅ · Properti metadata ✅ (detail lead & karyawan terpilih).
 - Referensi visual: [`docs/design/mockup-notion-ui.html`](../design/mockup-notion-ui.html).
 
 ### Fase 8 — Absensi
