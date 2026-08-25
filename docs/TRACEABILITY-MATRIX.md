@@ -352,6 +352,14 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Aturan | Tanpa lisensi → 403 semua endpoint aplikasi tsb; provisioning baru mulai kosong; tenant default/dev full package; migrasi seed tenant lama |
 | Migrasi | `a1b2c3d4e5f6` (tabel tenant_app_licenses + seed) |
 
+### 12.7 Fase 7 — Design System Notion-style (irisan 2)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Token desain Notion (Inter/warm text/border halus), dark mode, shell baru dengan grup aplikasi + aksen, command palette ⌘K |
+| Source Code | `frontend/tailwind.config.ts`, `src/index.css` (CSS variables + retro-fit dark), `src/components/Layout.tsx`, `src/components/CommandPalette.tsx`, `index.html` |
+| Catatan | Dark memakai aturan pemetaan kelas slate-* agar seluruh halaman lama ikut tanpa rewrite; view papan/callout block masuk polish Fase 7 berikutnya |
+
 ---
 
 # End of Requirement Traceability Matrix

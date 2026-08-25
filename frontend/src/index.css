@@ -2,26 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Token desain Notion-style (Fase 7).
+   Light: teks hangat #37352F, sidebar abu lembut, border halus.
+   Dark: paralel dengan latar gelap hangat (#191919).
+   ============================================================ */
+:root {
+  --n-bg: #ffffff;
+  --n-bg-elevated: #ffffff;
+  --n-sidebar: #f7f6f3;
+  --n-hover: rgba(55, 53, 47, 0.06);
+  --n-border: rgba(55, 53, 47, 0.09);
+  --n-text: #37352f;
+  --n-text-muted: rgba(55, 53, 47, 0.65);
+  --n-accent: #2383e2;
+}
+
+.dark {
+  --n-bg: #191919;
+  --n-bg-elevated: #202020;
+  --n-sidebar: #202020;
+  --n-hover: rgba(255, 255, 255, 0.055);
+  --n-border: rgba(255, 255, 255, 0.13);
+  --n-text: #d4d4d4;
+  --n-text-muted: rgba(255, 255, 255, 0.46);
+  --n-accent: #5b9bd5;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--n-bg);
+  color: var(--n-text);
+}
+
 @layer components {
   .btn {
-    @apply rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50;
+    @apply rounded px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
+    background-color: var(--n-accent);
+    transition: filter 0.15s ease;
+  }
+  .btn:hover {
+    filter: brightness(0.94);
   }
   .btn-secondary {
-    @apply rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50;
+    @apply rounded px-3 py-1.5 text-sm;
+    border: 1px solid var(--n-border);
+    background-color: var(--n-bg-elevated);
+    color: var(--n-text);
+    box-shadow: 0 1px 2px rgba(15, 15, 15, 0.06);
+    transition: background-color 0.15s ease;
+  }
+  .btn-secondary:hover {
+    background-color: var(--n-hover);
   }
   .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none;
+    @apply w-full rounded px-3 py-2 text-sm focus:outline-none;
+    border: 1px solid var(--n-border);
+    background-color: var(--n-bg-elevated);
+    color: var(--n-text);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
   }
+  .input:focus {
+    border-color: var(--n-accent);
+  }
+  /* Kartu ala halaman Notion: tanpa bayangan mencolok, border sangat halus. */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+    @apply rounded-md p-5;
+    border: 1px solid var(--n-border);
+    background-color: var(--n-bg-elevated);
   }
   .badge {
-    @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-block rounded px-2 py-0.5 text-xs font-medium;
   }
   .th {
-    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide;
+    color: var(--n-text-muted);
   }
   .td {
-    @apply px-4 py-3 text-sm text-slate-700;
+    @apply px-4 py-2.5 text-sm;
+    color: var(--n-text);
   }
+}
+
+/* ============================================================
+   Dark mode retro-fit: halaman lama memakai kelas slate-* secara
+   langsung; aturan berikut memetakan pola umum ke token agar
+   seluruh konten ikut gelap tanpa menyentuh setiap file.
+   ============================================================ */
+.dark [class*="bg-white"] {
+  background-color: var(--n-bg-elevated) !important;
+}
+.dark [class*="bg-slate-50"] {
+  background-color: var(--n-hover) !important;
+}
+.dark [class*="bg-slate-100"] {
+  background-color: var(--n-hover) !important;
+}
+.dark [class*="border-slate-100"],
+.dark [class*="border-slate-200"],
+.dark [class*="border-slate-300"] {
+  border-color: var(--n-border) !important;
+}
+.dark [class*="text-slate-800"],
+.dark [class*="text-slate-700"] {
+  color: var(--n-text) !important;
+}
+.dark [class*="text-slate-500"],
+.dark [class*="text-slate-600"],
+.dark [class*="text-slate-400"] {
+  color: var(--n-text-muted) !important;
+}
+/* Badge berwarna tetap terbaca di dark (sedikit diturunkan terangnya). */
+.dark .badge[class*="bg-emerald-100"],
+.dark .badge[class*="bg-amber-100"],
+.dark .badge[class*="bg-indigo-100"],
+.dark .badge[class*="bg-blue-100"],
+.dark .badge[class*="bg-violet-100"],
+.dark .badge[class*="bg-purple-100"] {
+  filter: brightness(0.82);
+}
+
+/* Scrollbar halus ala Notion */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--n-border) transparent;
 }

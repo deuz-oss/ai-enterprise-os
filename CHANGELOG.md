@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 7: Design System Notion-style (bagian 2 dari 3)
+
+- **Token desain**: font Inter, teks hangat `#37352F`, border/hover sangat halus, radius kecil, sidebar abu lembut (`#f7f6f3`) — semua via CSS variables di `index.css`.
+- **Dark mode paralel** dengan toggle 🌙/☀️ di sidebar (tersimpan di localStorage); aturan retro-fit memetakan kelas slate-* lama agar seluruh halaman ikut gelap tanpa rewrite per file.
+- **Shell baru**: sidebar workspace dengan grup per aplikasi berlisensi (aksen warna khas tiap app pada item aktif), topbar breadcrumb (Workspace / App / Halaman + emoji), tombol ⌘K.
+- **Command palette ⌘K**: cari & lompat ke halaman/aplikasi apa pun, navigasi panah + Enter, termasuk aksi ganti tema.
+- Irisan tersisa Fase 7 (polish): view papan (kanban pipeline), callout block, properti metadata ala Notion.
+
 ### Added — Fase 7: Entitlement Multi-App (bagian 1 dari 3)
 
 - **App registry** (`app/core/apps.py`): 7 aplikasi portofolio (Sales CRM, Recruitment, HR & Payroll, Operations & Billing, Finance & Accounting, E-Sign, AI Add-on) dengan metadata, dependensi, dan pemetaan prefix route — single source of truth.
