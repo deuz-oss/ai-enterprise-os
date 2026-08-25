@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AEOS — Ilustrasi Notion UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --accent:#2383E2;
+    --accent-tint:rgba(35,131,226,.13);
+    --radius:6px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Inter",ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background:var(--bg);
+    color:var(--text);
+    font-size:14px;
+    transition:background .15s,color .15s;
+  }
+  /* ---------- Design tokens (Notion-like) ---------- */
+  body.light{
+    --bg:#ffffff;
+    --bg-sidebar:#F7F7F5;
+    --text:#37352F;
+    --text2:rgba(55,53,47,.66);
+    --text3:rgba(55,53,47,.44);
+    --border:rgba(55,53,47,.09);
+    --hover:rgba(55,53,47,.05);
+    --active:#EFEFEE;
+    --card:#ffffff;
+    --shadow-modal:0 0 0 1px rgba(15,15,15,.05),0 3px 6px rgba(15,15,15,.1),0 9px 24px rgba(15,15,15,.2);
+    --callout-bg:#FBF3DB;
+    --board-col:#F7F7F5;
+  }
+  body.dark{
+    --bg:#191919;
+    --bg-sidebar:#202020;
+    --text:rgba(255,255,255,.82);
+    --text2:rgba(255,255,255,.46);
+    --text3:rgba(255,255,255,.32);
+    --border:rgba(255,255,255,.1);
+    --hover:rgba(255,255,255,.055);
+    --active:#2C2C2C;
+    --card:#1F1F1F;
+    --shadow-modal:0 0 0 1px rgba(255,255,255,.07),0 3px 6px rgba(0,0,0,.3),0 9px 24px rgba(0,0,0,.4);
+    --callout-bg:rgba(203,145,47,.18);
+    --board-col:#202020;
+  }
+  /* ---------- Aksen per aplikasi ---------- */
+  .shell[data-app="crm"]      {--accent:#2383E2;--accent-tint:rgba(35,131,226,.13)}
+  .shell[data-app="recruit"]  {--accent:#9065B0;--accent-tint:rgba(144,101,176,.14)}
+  .shell[data-app="hr"]       {--accent:#0F7B6D;--accent-tint:rgba(15,123,109,.13)}
+  .shell[data-app="acc"]      {--accent:#D9730D;--accent-tint:rgba(217,115,13,.13)}
+  .shell[data-app="esign"]    {--accent:#E03E3E;--accent-tint:rgba(224,62,62,.12)}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px;border:2px solid transparent;background-clip:content-box}
+
+  /* ---------- Shell ---------- */
+  .shell{display:flex;height:100vh;overflow:hidden}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    width:248px;flex-shrink:0;background:var(--bg-sidebar);
+    display:flex;flex-direction:column;border-right:1px solid var(--border);
+  }
+  .workspace{
+    display:flex;align-items:center;gap:8px;padding:10px 12px;margin:8px 8px 4px;
+    border-radius:var(--radius);font-weight:600;font-size:14px;cursor:pointer;
+  }
+  .workspace:hover{background:var(--hover)}
+  .ws-avatar{
+    width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#2383E2,#9065B0);
+    color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;
+  }
+  .workspace .chev{margin-left:auto;color:var(--text3);font-size:11px}
+
+  .side-scroll{flex:1;overflow-y:auto;padding:0 8px 8px}
+  .side-item{
+    display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;margin-top:1px;
+    border-radius:var(--radius);color:var(--text);font-weight:450;cursor:pointer;white-space:nowrap;
+    user-select:none;
+  }
+  .side-item:hover{background:var(--hover)}
+  .side-item.on{background:var(--accent-tint);color:var(--accent);font-weight:550}
+  .side-item .ico{width:18px;text-align:center;font-size:14px;flex-shrink:0}
+  .side-item .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:2px}
+  .side-label{
+    font-size:11.5px;font-weight:600;color:var(--text3);letter-spacing:.02em;
+    padding:16px 8px 4px;display:flex;justify-content:space-between;cursor:default;
+  }
+  .side-tree{padding-left:12px}
+  .side-sep{height:1px;background:var(--border);margin:8px 4px}
+
+  .upsell{
+    margin:8px;padding:12px;background:var(--card);border:1px solid var(--border);
+    border-radius:8px;
+  }
+  .upsell b{font-size:13px}
+  .upsell p{font-size:12px;color:var(--text2);margin:4px 0 8px;line-height:1.45}
+  .upsell button{
+    width:100%;border:none;border-radius:var(--radius);padding:6px 0;font-family:inherit;
+    font-size:12.5px;font-weight:600;background:var(--accent);color:#fff;cursor:pointer;
+  }
+  .me{
+    display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border);
+  }
+  .me .avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+  .me span.n{font-weight:550;font-size:13px}
+  .me span.r{font-size:11.5px;color:var(--text3)}
+
+  /* ---------- Main ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{
+    height:45px;flex-shrink:0;display:flex;align-items:center;gap:4px;
+    padding:0 12px;position:relative;z-index:5;
+  }
+  .crumb{display:flex;align-items:center;gap:4px;color:var(--text2);font-weight:500;font-size:13.5px}
+  .crumb .sep{color:var(--text3);margin:0 2px}
+  .crumb b{color:var(--text);font-weight:550}
+  .top-actions{margin-left:auto;display:flex;align-items:center;gap:2px}
+  .icon-btn{
+    height:28px;min-width:28px;border:none;background:transparent;border-radius:var(--radius);
+    cursor:pointer;color:var(--text2);font-family:inherit;font-size:13px;padding:0 7px;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .icon-btn:hover{background:var(--hover);color:var(--text)}
+  .edited{font-size:12px;color:var(--text3);margin-right:6px;white-space:nowrap}
+  .btn-share{
+    height:28px;border:none;border-radius:var(--radius);padding:0 10px;background:var(--accent);
+    color:#fff;font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;margin-left:6px;
+  }
+
+  .content{flex:1;overflow-y:auto}
+  .page{max-width:900px;margin:0 auto;padding:24px 48px 120px}
+  .page.hidden{display:none}
+
+  /* ---------- Blok dokumen ala Notion ---------- */
+  .doc-icon{font-size:56px;line-height:1;margin-bottom:4px}
+  h1.title{font-size:38px;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-bottom:6px}
+  .subtitle{color:var(--text2);font-size:15px;margin-bottom:20px}
+
+  .props{margin:4px 0 8px}
+  .prop{display:grid;grid-template-columns:168px 1fr;gap:8px;padding:4px 0;min-height:30px;align-items:center}
+  .prop .k{color:var(--text3);font-size:13.5px;display:flex;gap:6px;align-items:center}
+  .prop .v{font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+  hr.rule{border:none;border-top:1px solid var(--border);margin:14px 0 20px}
+
+  /* Views */
+  .views{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:10px}
+  .view-tab{
+    border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text2);
+    padding:6px 8px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+    display:flex;gap:6px;align-items:center;border-radius:4px 4px 0 0;
+  }
+  .view-tab:hover{background:var(--hover)}
+  .view-tab.on{color:var(--text);border-bottom-color:var(--text)}
+
+  /* Table */
+  table.db{width:100%;border-collapse:collapse}
+  .db th{
+    text-align:left;font-weight:450;color:var(--text3);font-size:13px;
+    padding:0 8px;height:33px;border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  .db td{
+    padding:0 8px;height:36px;border-bottom:1px solid var(--border);font-size:13.5px;white-space:nowrap;
+  }
+  .db tr.row{cursor:default}
+  .db tr.row:hover{background:var(--hover)}
+  .cell-name{display:flex;align-items:center;gap:8px;font-weight:500}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .muted{color:var(--text3)}
+
+  /* Pills */
+  .pill{
+    display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:4px;
+    font-size:12px;font-weight:500;gap:5px;
+  }
+  .p-gray  {background:rgba(127,127,127,.14);color:var(--text2)}
+  .p-blue  {background:rgba(35,131,226,.14);color:#2383E2}
+  .p-violet{background:rgba(144,101,176,.16);color:#9065B0}
+  .p-green {background:rgba(15,123,109,.15);color:#0F7B6D}
+  .p-orange{background:rgba(217,115,13,.15);color:#D9730D}
+  .p-yellow{background:rgba(203,145,47,.18);color:#CB912F}
+  .p-red   {background:rgba(224,62,62,.14);color:#E03E3E}
+  body.dark .p-gray{color:rgba(255,255,255,.6)}
+
+  .avatar-mini{
+    width:20px;height:20px;border-radius:50%;font-size:10px;font-weight:700;color:#fff;
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .avatars{display:flex}
+  .avatars .avatar-mini:not(:first-child){margin-left:-6px;border:1.5px solid var(--card)}
+
+  /* Board */
+  .board{display:flex;gap:12px;overflow-x:auto;padding-bottom:16px}
+  .col{width:264px;flex-shrink:0}
+  .col-head{display:flex;align-items:center;gap:8px;padding:8px 4px;font-weight:550;font-size:13.5px;color:var(--text2)}
+  .count{
+    background:var(--hover);border-radius:10px;padding:0 7px;height:18px;font-size:11.5px;
+    display:inline-flex;align-items:center;font-weight:600;color:var(--text3);
+  }
+  .col-body{background:var(--board-col);border-radius:8px;padding:8px;min-height:80px;display:flex;flex-direction:column;gap:8px}
+  .bcard{background:var(--card);border-radius:6px;padding:10px;box-shadow:0 1px 2px rgba(15,15,15,.04);cursor:default}
+  .bcard:hover{box-shadow:0 2px 8px rgba(15,15,15,.12)}
+  .bcard .t{font-weight:550;font-size:13.5px;display:flex;gap:6px;margin-bottom:8px}
+  .bmeta{display:flex;align-items:center;justify-content:space-between}
+  .bdate{font-size:11.5px;color:var(--text3)}
+
+  /* Callout */
+  .callout{
+    display:flex;gap:10px;padding:14px 16px;border-radius:var(--radius);
+    background:var(--callout-bg);margin:18px 0;font-size:13.5px;line-height:1.55;
+  }
+  .callout.ai{background:var(--accent-tint)}
+  .callout .e{font-size:17px;line-height:1.3}
+
+  /* Summary cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+  .scard{border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--card)}
+  .scard .l{font-size:12.5px;color:var(--text3);font-weight:500;margin-bottom:6px}
+  .scard .n{font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .scard .d{font-size:11.5px;margin-top:6px;font-weight:550}
+
+  .progress{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;flex:1}
+  .progress i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  .approval{display:flex;align-items:center;gap:12px;margin:6px 0 2px;font-size:13px;color:var(--text2)}
+
+  .actions-row{display:flex;gap:8px;margin:18px 0 6px}
+  .btn-primary{
+    height:34px;border:none;border-radius:var(--radius);padding:0 14px;background:var(--accent);
+    color:#fff;font-family:inherit;font-weight:600;font-size:13.5px;cursor:pointer;
+  }
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-ghost{
+    height:34px;border:1px solid var(--border);border-radius:var(--radius);padding:0 14px;
+    background:transparent;color:var(--text);font-family:inherit;font-weight:550;font-size:13.5px;cursor:pointer;
+  }
+  .btn-ghost:hover{background:var(--hover)}
+
+  .foot-note{max-width:900px;margin:0 auto;padding:0 48px 40px;color:var(--text3);font-size:12px}
+
+  /* ---------- Floating helpers ---------- */
+  .fab{
+    position:fixed;right:20px;bottom:20px;height:38px;border:none;border-radius:19px;
+    background:linear-gradient(135deg,#5B5BD6,#9065B0);color:#fff;font-family:inherit;
+    font-weight:600;font-size:13px;padding:0 16px;cursor:pointer;box-shadow:0 4px 14px rgba(91,91,214,.4);
+    display:flex;align-items:center;gap:7px;z-index:40;
+  }
+  .help-chip{
+    position:fixed;left:12px;bottom:12px;z-index:40;background:var(--card);border:1px solid var(--border);
+    color:var(--text2);font-size:11.5px;border-radius:8px;padding:7px 10px;line-height:1.6;
+    box-shadow:0 2px 8px rgba(15,15,15,.08);
+  }
+  kbd{
+    font-family:inherit;font-size:10.5px;border:1px solid var(--border);border-bottom-width:2px;
+    border-radius:4px;padding:0 4px;background:var(--hover);
+  }
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(15,15,15,.35);z-index:100;display:none;
+    align-items:flex-start;justify-content:center;padding-top:12vh;
+  }
+  .overlay.open{display:flex}
+  .modal{
+    background:var(--card);border-radius:12px;box-shadow:var(--shadow-modal);width:640px;max-width:92vw;
+    overflow:hidden;
+  }
+  .search-input{display:flex;align-items:center;gap:10px;padding:14px 16px}
+  .search-input input{
+    flex:1;border:none;outline:none;background:transparent;color:var(--text);
+    font-family:inherit;font-size:15px;
+  }
+  .results{border-top:1px solid var(--border);padding:8px;max-height:340px;overflow-y:auto}
+  .group{font-size:11px;font-weight:600;color:var(--text3);padding:8px 8px 4px;text-transform:uppercase;letter-spacing:.04em}
+  .result{
+    display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--radius);cursor:pointer;font-size:13.5px;
+  }
+  .result:hover,.result.sel{background:var(--hover)}
+  .result .ico{width:20px;text-align:center}
+  .result .path{margin-left:auto;color:var(--text3);font-size:11.5px}
+  .modal-foot{border-top:1px solid var(--border);padding:8px 14px;display:flex;gap:14px;font-size:11.5px;color:var(--text3)}
+
+  .launcher .modal{width:720px}
+  .launcher-head{padding:18px 20px 4px;display:flex;align-items:baseline;gap:10px}
+  .launcher-head h2{font-size:18px;font-weight:700}
+  .launcher-head span{color:var(--text3);font-size:12.5px}
+  .apps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 20px 20px}
+  .app-card{
+    border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--card);position:relative;
+  }
+  .app-card.off{opacity:.75;border-style:dashed}
+  .app-tile{
+    width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    font-size:19px;margin-bottom:10px;
+  }
+  .app-card b{font-size:13.5px}
+  .app-card p{font-size:11.5px;color:var(--text2);line-height:1.5;margin:3px 0 8px}
+  .badge-installed{font-size:11px;color:var(--text3)}
+  .badge-install{
+    font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-tint);
+    border-radius:4px;padding:2px 8px;cursor:pointer;
+  }
+  .launcher-foot{
+    border-top:1px solid var(--border);padding:12px 20px;font-size:12.5px;color:var(--text2);
+    display:flex;gap:8px;align-items:center;
+  }
+</style>
+</head>
+<body class="light">
+
+<div class="shell" id="shell" data-app="crm">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar">
+    <div class="workspace" onclick="openOverlay('launcher')" title="Klik: buka App Launcher">
+      <span class="ws-avatar">AO</span> PT Andalan Outsource <span class="chev">▾</span>
+    </div>
+
+    <div class="side-scroll">
+      <div class="side-item"><span class="ico">🔍</span> Pencarian</div>
+      <div class="side-item"><span class="ico">🏠</span> Beranda</div>
+      <div class="side-item"><span class="ico">🔔</span> Kotak Masuk <span class="pill p-red" style="margin-left:auto;height:17px;font-size:10.5px">3</span></div>
+
+      <div class="side-label"><span>Aplikasi Terpasang</span></div>
+
+      <div class="side-item on" data-nav="crm" onclick="go('crm','pipeline')">
+        <span class="ico">🎯</span> Sales CRM
+      </div>
+      <div class="side-tree">
+        <div class="side-item on" data-nav="pipeline" onclick="go('crm','pipeline')"><span class="ico">🛣️</span> Pipeline Klien</div>
+        <div class="side-item"><span class="ico">🏢</span> Klien</div>
+      </div>
+
+      <div class="side-item" data-nav="recruit"><span class="ico">🧲</span> Recruitment</div>
+      <div class="side-tree">
+        <div class="side-item"><span class="ico">📋</span> Job Orders</div>
+        <div class="side-item"><span class="ico">🧑‍💻</span> Kandidat</div>
+      </div>
+
+      <div class="side-item" data-nav="hr" onclick="go('hr','payroll')"><span class="ico">💼</span> HR &amp; Payroll</div>
+      <div class="side-tree">
+        <div class="side-item"><span class="ico">🗂️</span> Karyawan</div>
+        <div class="side-item" data-nav="payroll" onclick="go('hr','payroll')"><span class="ico">💰</span> Payroll</div>
+        <div class="side-item"><span class="ico">🏥</span> BPJS</div>
+      </div>
+
+      <div class="side-item"><span class="ico">📊</span> Accounting</div>
+      <div class="side-item"><span class="ico">✒️</span> E-Sign</div>
+
+      <div class="side-sep"></div>
+      <div class="side-item" onclick="openOverlay('launcher')" style="color:var(--text3)">
+        <span class="ico" style="font-size:12px">＋</span> Tambah aplikasi
+      </div>
+    </div>
+
+    <div class="upsell">
+      <b>✒️ Aktifkan E-Sign?</b>
+      <p>TTE tersertifikasi untuk kontrak kerja &amp; PKS. Gratis 14 hari.</p>
+      <button>Coba sekarang</button>
+    </div>
+
+    <div class="me">
+      <span class="avatar" style="background:#D9730D">BR</span>
+      <div><span class="n">Brian</span><br><span class="r">Owner · Admin</span></div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <main class="main">
+    <header class="topbar">
+      <nav class="crumb" id="crumb">
+        <span>🎯 Sales CRM</span><span class="sep">/</span><b>Pipeline Klien</b>
+      </nav>
+      <div class="top-actions">
+        <span class="edited"> Diedit baru saja</span>
+        <button class="icon-btn">☆</button>
+        <button class="icon-btn">💬</button>
+        <button class="icon-btn" onclick="toggleTheme()" title="Mode gelap/terang" id="themeBtn">🌙</button>
+        <button class="icon-btn">•••</button>
+        <button class="btn-share">Bagikan</button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ========== HALAMAN 1 : PIPELINE (Sales CRM) ========== -->
+      <section class="page" id="page-pipeline">
+        <div class="doc-icon">🎯</div>
+        <h1 class="title">Pipeline Klien</h1>
+        <div class="subtitle">Prospek manpower services — Q3 2026</div>
+
+        <div class="props">
+          <div class="prop"><span class="k">🏷️ Aplikasi</span><span class="v"><span class="pill p-blue">🎯 Sales CRM</span></span></div>
+          <div class="prop"><span class="k">👥 PIC</span>
+            <span class="v"><span class="avatars">
+              <span class="avatar-mini" style="background:#2383E2" title="Brian">BR</span>
+              <span class="avatar-mini" style="background:#0F7B6D" title="Sinta">SN</span>
+              <span class="avatar-mini" style="background:#D9730D" title="Dewi">DW</span>
+            </span></span>
+          </div>
+          <div class="prop"><span class="k">📅 Periode</span><span class="v">Jul – Sep 2026</span></div>
+          <div class="prop"><span class="k">Σ Nilai pipeline</span><span class="v"><b>Rp 4,04 M /tahun</b> <span class="muted">· 6 prospek aktif</span></span></div>
+        </div>
+
+        <hr class="rule">
+
+        <div class="views">
+          <button class="view-tab on" data-view="table" onclick="setView(this)">▤ Tabel</button>
+          <button class="view-tab" data-view="board" onclick="setView(this)">▦ Papan</button>
+          <button class="view-tab">◔ Kalender</button>
+        </div>
+
+        <!-- VIEW: TABEL -->
+        <div id="view-table">
+          <table class="db">
+            <thead><tr>
+              <th style="width:34%">Nama Prospek</th><th>Tahapan</th><th class="num">Nilai Kontrak /th</th><th>PIC</th><th>Update</th>
+            </tr></thead>
+            <tbody>
+              <tr class="row"><td><span class="cell-name">🏭 PT Sentosa Manufaktur</span></td><td><span class="pill p-violet">Penawaran</span></td><td class="num">Rp 1,20 M</td><td><span class="avatar-mini" style="background:#2383E2">BR</span></td><td class="muted">2 jam lalu</td></tr>
+              <tr class="row"><td><span class="cell-name">🚚 PT Nusantara Logistik</span></td><td><span class="pill p-orange">Negosiasi</span></td><td class="num">Rp 870 jt</td><td><span class="avatar-mini" style="background:#2383E2">BR</span></td><td class="muted">kemarin</td></tr>
+              <tr class="row"><td><span class="cell-name">🏦 Bank Daerah Jaya</span></td><td><span class="pill p-blue">Presentasi</span></td><td class="num">Rp 950 jt</td><td><span class="avatar-mini" style="background:#0F7B6D">SN</span></td><td class="muted">5 jam lalu</td></tr>
+              <tr class="row"><td><span class="cell-name">🏥 RS Harapan Sehat</span></td><td><span class="pill p-yellow">Kontak</span></td><td class="num">Rp 430 jt</td><td><span class="avatar-mini" style="background:#D9730D">DW</span></td><td class="muted">3 hari lalu</td></tr>
+              <tr class="row"><td><span class="cell-name">🏨 Grand Aston Hotel</span></td><td><span class="pill p-gray">Lead baru</span></td><td class="num">Rp 380 jt</td><td><span class="avatar-mini" style="background:#D9730D">DW</span></td><td class="muted">minggu lalu</td></tr>
+              <tr class="row"><td><span class="cell-name">🛒 Koperasi Mitra Dharma</span></td><td><span class="pill p-green">✓ Deal</span></td><td class="num">Rp 210 jt</td><td><span class="avatar-mini" style="background:#0F7B6D">SN</span></td><td class="muted">minggu lalu</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- VIEW: PAPAN -->
+        <div id="view-board" style="display:none">
+          <div class="board">
+            <div class="col"><div class="col-head"><span class="pill p-gray">Lead baru</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🏨 Grand Aston Hotel</div>
+                  <div class="bmeta"><span class="pill p-gray">Outsourcing F&amp;B</span><span class="bdate">12 Agu</span></div></div>
+              </div>
+            </div>
+            <div class="col"><div class="col-head"><span class="pill p-yellow">Kontak</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🏥 RS Harapan Sehat</div>
+                  <div class="bmeta"><span class="pill p-gray">Perawat + admin</span><span class="bdate">10 Agu</span></div></div>
+              </div>
+            </div>
+            <div class="col"><div class="col-head"><span class="pill p-blue">Presentasi</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🏦 Bank Daerah Jaya</div>
+                  <div class="bmeta"><span class="pill p-gray">Security 24/7</span><span class="bdate">18 Agu</span></div></div>
+              </div>
+            </div>
+            <div class="col"><div class="col-head"><span class="pill p-violet">Penawaran</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🏭 PT Sentosa Manufaktur</div>
+                  <div class="bmeta"><span class="avatars"><span class="avatar-mini" style="background:#2383E2">BR</span></span><span class="bdate">kemarin</span></div></div>
+              </div>
+            </div>
+            <div class="col"><div class="col-head"><span class="pill p-orange">Negosiasi</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🚚 PT Nusantara Logistik</div>
+                  <div class="bmeta"><span class="pill p-gray">Driver + helper</span><span class="bdate">kemarin</span></div></div>
+              </div>
+            </div>
+            <div class="col"><div class="col-head"><span class="pill p-green">✓ Deal</span><span class="count">1</span></div>
+              <div class="col-body">
+                <div class="bcard"><div class="t">🛒 Koperasi Mitra Dharma</div>
+                  <div class="bmeta"><span class="pill p-green">Onboarding →</span><span class="bdate">5 Agu</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout ai">
+          <span class="e">✨</span>
+          <div><b>AI Insight:</b> 3 job order melewati SLA pengiriman kandidat 7 hari (PT Sentosa ×2, Bank Daerah Jaya ×1).
+          Rekomendasi: aktifkan kembali 12 kandidat dari database yang matching ≥80%.</div>
+        </div>
+      </section>
+
+      <!-- ========== HALAMAN 2 : PAYROLL (HR & Payroll) ========== -->
+      <section class="page hidden" id="page-payroll">
+        <div class="doc-icon">💰</div>
+        <h1 class="title">Run Payroll — Juli 2026</h1>
+        <div class="subtitle">Siklus penggajian bulanan · cutoff 25 Jul</div>
+
+        <div class="props">
+          <div class="prop"><span class="k">🏷️ Aplikasi</span><span class="v"><span class="pill p-green">💼 HR &amp; Payroll</span></span></div>
+          <div class="prop"><span class="k">📌 Status</span><span class="v"><span class="pill p-yellow">Draft — menunggu finalisasi</span></span></div>
+          <div class="prop"><span class="k">👥 Karyawan</span><span class="v">128 orang · 6 klien</span></div>
+          <div class="prop"><span class="k">Σ Total cost</span><span class="v"><b>Rp 1.842.500.000</b></span></div>
+        </div>
+
+        <hr class="rule">
+
+        <div class="approval">
+          <span>Approval kehadiran klien</span>
+          <div class="progress"><i style="width:87%"></i></div>
+          <span><b>112</b>/128</span>
+        </div>
+
+        <div class="cards">
+          <div class="scard"><div class="l">Take-home pay</div><div class="n">Rp 1,61 M</div><div class="d muted">128 slip gaji siap kirim</div></div>
+          <div class="scard"><div class="l">PPh 21 (TER)</div><div class="n">Rp 96,4 jt</div><div class="d" style="color:#0F7B6D">✓ sesuai tarif DJP terbaru</div></div>
+          <div class="scard"><div class="l">BPJS (5 program)</div><div class="n">Rp 137,2 jt</div><div class="d" style="color:#0F7B6D">✓ rekap siap ekspor portal</div></div>
+        </div>
+
+        <table class="db">
+          <thead><tr><th>Klien</th><th class="num">Tenaga Kerja</th><th class="num">Gaji + Tunjangan</th><th class="num">Lembur</th><th>Status Approval</th></tr></thead>
+          <tbody>
+            <tr class="row"><td><span class="cell-name">🏭 PT Sentosa Manufaktur</span></td><td class="num">52</td><td class="num">Rp 684,0 jt</td><td class="num" style="color:#E03E3E">▲ Rp 41,2 jt</td><td><span class="pill p-green">Selesai</span></td></tr>
+            <tr class="row"><td><span class="cell-name">🏦 Bank Daerah Jaya</span></td><td class="num">31</td><td class="num">Rp 421,5 jt</td><td class="num">Rp 6,1 jt</td><td><span class="pill p-green">Selesai</span></td></tr>
+            <tr class="row"><td><span class="cell-name">🚚 PT Nusantara Logistik</span></td><td class="num">28</td><td class="num">Rp 377,8 jt</td><td class="num">Rp 12,4 jt</td><td><span class="pill p-yellow">Menunggu (9)</span></td></tr>
+            <tr class="row"><td><span class="cell-name">🏥 RS Harapan Sehat</span></td><td class="num">17</td><td class="num">Rp 359,2 jt</td><td class="num">Rp 8,9 jt</td><td><span class="pill p-yellow">Menunggu (7)</span></td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout ai">
+          <span class="e">✨</span>
+          <div><b>Anomali terdeteksi:</b> lembur PT Sentosa Manufaktur naik <b>42%</b> vs Juni.
+          Kemungkinan shift produksi Ramadan belum tertutup — cek absensi sebelum finalisasi.</div>
+        </div>
+
+        <div class="actions-row">
+          <button class="btn-primary">Finalisasi payroll</button>
+          <button class="btn-ghost">Pratinjau slip gaji</button>
+          <button class="btn-ghost">Ekspor jurnal → Accounting</button>
+        </div>
+      </section>
+
+    </div>
+    <div class="foot-note">Mockup statis untuk ilustrasi arah desain (Notion-style + model multi-app) — bukan produk jadi.</div>
+  </main>
+</div>
+
+<!-- ================= ⌘K SEARCH ================= -->
+<div class="overlay" id="ov-cmdk" onclick="if(event.target===this)closeOverlays()">
+  <div class="modal">
+    <div class="search-input">🔍<input id="q" placeholder="Cari halaman, klien, kandidat, job order…"></div>
+    <div class="results">
+      <div class="group">Aksi cepat</div>
+      <div class="result sel"><span class="ico">➕</span> Buat job order baru <span class="path"><kbd>C</kbd></span></div>
+      <div class="result"><span class="ico">💰</span> Mulai run payroll Agustus <span class="path">HR &amp; Payroll</span></div>
+      <div class="group">Halaman</div>
+      <div class="result"><span class="ico">🎯</span> Pipeline Klien <span class="path">🎯 Sales CRM</span></div>
+      <div class="result"><span class="ico">🧑‍💻</span> Kandidat — matching 80%+ <span class="path">🧲 Recruitment</span></div>
+      <div class="result"><span class="ico">🏢</span> PT Sentosa Manufaktur <span class="path">🏢 Klien</span></div>
+      <div class="result"><span class="ico">📄</span> PKS Bank Daerah Jaya v3 <span class="path">✒️ E-Sign · ditandatangani</span></div>
+    </div>
+    <div class="modal-foot"><span><kbd>↑↓</kbd> navigasi</span><span><kbd>↵</kbd> buka</span><span><kbd>esc</kbd> tutup</span></div>
+  </div>
+</div>
+
+<!-- ================= APP LAUNCHER ================= -->
+<div class="overlay launcher" id="ov-launcher" onclick="if(event.target===this)closeOverlays()">
+  <div class="modal">
+    <div class="launcher-head"><h2>Aplikasi</h2><span>Workspace: PT Andalan Outsource</span></div>
+    <div class="apps-grid">
+      <div class="app-card">
+        <div class="app-tile" style="background:rgba(35,131,226,.14)">🎯</div>
+        <b>Sales CRM</b><p>Pipeline, klien &amp; dokumen legalitas.</p><span class="badge-installed">● Terpasang</span>
+      </div>
+      <div class="app-card">
+        <div class="app-tile" style="background:rgba(144,101,176,.16)">🧲</div>
+        <b>Recruitment</b><p>Job order, kandidat, placement.</p><span class="badge-installed">● Terpasang</span>
+      </div>
+      <div class="app-card">
+        <div class="app-tile" style="background:rgba(15,123,109,.15)">💼</div>
+        <b>HR &amp; Payroll</b><p>Karyawan, payroll, PPh21, BPJS, portal karyawan.</p><span class="badge-installed">● Terpasang</span>
+      </div>
+      <div class="app-card">
+        <div class="app-tile" style="background:rgba(217,115,13,.15)">📊</div>
+        <b>Accounting</b><p>Jurnal, buku besar, laporan keuangan.</p><span class="badge-installed">● Terpasang</span>
+      </div>
+      <div class="app-card off">
+        <div class="app-tile" style="background:rgba(224,62,62,.13)">✒️</div>
+        <b>E-Sign</b><p>TTE tersertifikasi untuk kontrak &amp; PKS.</p><span class="badge-install">+ Install · trial 14 hari</span>
+      </div>
+      <div class="app-card off">
+        <div class="app-tile" style="background:rgba(91,91,214,.15)">✨</div>
+        <b>AI Add-on</b><p>Screening CV, matching, RAG kontrak, forecast.</p><span class="badge-install">Lihat paket</span>
+      </div>
+    </div>
+    <div class="launcher-foot">💡 Ambil <b>Full Package</b> (semua aplikasi + AI) dan hemat hingga 35% dibeli satuan.</div>
+  </div>
+</div>
+
+<button class="fab" onclick="openOverlay('cmdk')">✨ Tanya AEOS AI <kbd style="background:rgba(255,255,255,.2);border-color:transparent;color:#fff">⌘K</kbd></button>
+
+<div class="help-chip">
+  <b>Mockup interaktif</b> — coba:<br>
+  klik nama workspace (kiri atas) · <kbd>⌘K</kbd>/<kbd>Ctrl K</kbd> · tab Tabel/Papan · <kbd>esc</kbd> tutup
+</div>
+
+<script>
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  function openOverlay(n){$('#ov-'+n).classList.add('open'); if(n==='cmdk') setTimeout(()=>$('#q').focus(),30);}
+  function closeOverlays(){$$('.overlay').forEach(o=>o.classList.remove('open'));}
+  function setView(btn){
+    $$('.view-tab').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+    $('#view-table').style.display = btn.dataset.view==='table'?'':'none';
+    $('#view-board').style.display = btn.dataset.view==='board'?'':'none';
+  }
+  const APP={crm:{label:'🎯 Sales CRM'},hr:{label:'💼 HR & Payroll'}};
+  function go(app,page){
+    $$('.overlay').forEach(o=>o.classList.remove('open'));
+    $('#shell').dataset.app=app;
+    $$('.page').forEach(p=>p.classList.add('hidden'));
+    $('#page-'+page).classList.remove('hidden');
+    $('#crumb').innerHTML=`<span>${APP[app].label}</span><span class="sep">/</span><b>${page==='payroll'?'Run Payroll — Juli 2026':'Pipeline Klien'}</b>`;
+    $$('.side-item').forEach(i=>i.classList.toggle('on', i.dataset.nav===page));
+  }
+  function toggleTheme(){
+    const b=document.body; b.classList.toggle('dark'); b.classList.toggle('light');
+    $('#themeBtn').textContent=b.classList.contains('dark')?'☀️':'🌙';
+  }
+  document.addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openOverlay('cmdk');}
+    if(e.key==='Escape')closeOverlays();
+  });
+</script>
+</body>
+</html>
