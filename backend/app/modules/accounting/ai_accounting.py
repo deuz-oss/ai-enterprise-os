@@ -216,13 +216,14 @@ def detect_anomalies(db: Session, year: int, month: int) -> dict:
             continue
         dates = sorted(b.entry_date for b in group)
         if (dates[-1] - dates[0]).days <= 7:
+            detail = f"{len(group)} bill dari {vendor} senilai Rp{amount:,.0f} dalam 7 hari"
             anomalies.append(
                 {
                     "type": "duplicate_bill",
                     "severity": "high",
                     "vendor": vendor,
                     "amount": amount,
-                    "detail": f"{len(group)} bill dari {vendor} senilai Rp{amount:,.0f} dalam 7 hari",
+                    "detail": detail,
                     "bill_ids": [str(b.id) for b in group],
                 }
             )
