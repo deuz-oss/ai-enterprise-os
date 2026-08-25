@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "../components/notion";
 import { api } from "../api/client";
 
 interface UserRow {
@@ -40,7 +41,7 @@ export default function Users() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Pengguna</h1>
+        <PageHeader emoji="👥" title="Pengguna" />
         <p className="mt-1 text-sm text-slate-500">
           Kelola akun tim. Akun baru dibuat lewat tombol "+ Pengguna Baru".
         </p>

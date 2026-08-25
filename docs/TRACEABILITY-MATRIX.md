@@ -365,7 +365,7 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Aspek | Detail |
 | ------------------------- | ------------------------------------------------------------------ |
 | Capability | View papan pipeline per tahapan, callout block, panel properti metadata ala Notion |
-| Source Code | `frontend/src/components/notion.tsx`, `src/pages/Leads.tsx` (toggle tabel/papan), `src/pages/Employees.tsx` (header properti + callout reminder) |
+| Source Code | `frontend/src/components/notion.tsx`, `src/pages/Leads.tsx` + `Candidates.tsx` (toggle tabel/papan), `src/pages/Employees.tsx` (header properti + callout reminder); `PageHeader` konsisten di semua halaman |
 
 ### 12.9 Fase 8 — Absensi Harian (Clock-in/out)
 

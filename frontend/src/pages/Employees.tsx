@@ -1,7 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
-import { CalloutBlock, PropertiesPanel, PropertyRow } from "../components/notion";
+import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
 
 export interface EmployeeRow {
   id: string;
@@ -348,7 +348,7 @@ export default function Employees() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Karyawan</h1>
+        <PageHeader emoji="💼" title="Karyawan" />
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Tutup" : "+ Karyawan Baru"}
         </button>

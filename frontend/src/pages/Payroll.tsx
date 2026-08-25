@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -138,7 +139,7 @@ export default function Payroll() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold text-slate-800">Payroll</h1>
+        <PageHeader emoji="💼" title="Payroll" />
         <div className="flex items-center gap-2">
           <input
             type="number"

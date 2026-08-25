@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -48,7 +49,7 @@ export default function Audit() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold text-slate-800">Jejak Audit</h1>
+        <PageHeader emoji="🛡️" title="Jejak Audit" />
         <span className="text-xs text-slate-400">
           {data ? `${data.total} event` : "..."} · append-only
         </span>

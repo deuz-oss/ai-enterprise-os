@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { api } from "../api/client";
@@ -98,7 +99,7 @@ export default function PlatformTenants() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Manajemen Tenant</h1>
+        <PageHeader emoji="🏢" title="Manajemen Tenant" />
         <p className="mt-1 text-sm text-slate-500">
           Platform SaaS — satu tenant = satu perusahaan outsourcing pelanggan.
         </p>

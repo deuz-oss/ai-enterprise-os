@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { AiResultCard, ScoreBadge } from "../components/Ai";
@@ -83,7 +84,7 @@ export default function JobOrders() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Job Orders</h1>
+        <PageHeader emoji="🧲" title="Job Orders" />
         <button className="btn" onClick={() => setShowForm(!showForm)} disabled={!clients?.length}>
           {showForm ? "Tutup" : "+ Job Order Baru"}
         </button>

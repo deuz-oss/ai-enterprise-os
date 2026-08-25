@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "../components/notion";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 
@@ -60,7 +61,7 @@ export default function Apps() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Aplikasi</h1>
+        <PageHeader emoji="🚀" title="Aplikasi" />
         <p className="mt-1 text-sm text-slate-500">
           {licensedCount} dari {apps?.length ?? 0} aplikasi aktif untuk
           perusahaan Anda. Mulai trial 14 hari langsung dari sini — tanpa

@@ -1,4 +1,5 @@
 import { FormEvent, useRef, useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -87,7 +88,7 @@ export default function Clients() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Klien</h1>
+        <PageHeader emoji="🎯" title="Klien" />
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Tutup" : "+ Klien Baru"}
         </button>

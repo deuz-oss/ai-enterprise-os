@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 
@@ -89,7 +90,7 @@ export default function Accounting() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Akunting</h1>
+        <PageHeader emoji="📊" title="Akunting" />
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">Tahun</span>
           <input

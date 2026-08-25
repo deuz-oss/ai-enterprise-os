@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { AiResultCard } from "../components/Ai";
 import type { Screening } from "../components/Ai";
+import { CalloutBlock, PageHeader } from "../components/notion";
 import type { JobOrder } from "./JobOrders";
 
 interface Candidate {
@@ -26,9 +27,20 @@ const BADGE_COLORS: Record<string, string> = {
   arsip: "bg-slate-100 text-slate-400",
 };
 
+const STATUS_DOT: Record<string, string> = {
+  baru: "#9f9f9f",
+  screening: "#2383e2",
+  interview: "#5b5bd6",
+  offered: "#cb912f",
+  placed: "#0f7b6c",
+  gagal: "#e03e3e",
+  arsip: "#787774",
+};
+
 export default function Candidates() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [aiCandidateId, setAiCandidateId] = useState<string | null>(null);
   const cvRef = useRef<HTMLInputElement>(null);
   const { data: candidates } = useQuery({
@@ -108,11 +120,30 @@ export default function Candidates() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Database Kandidat</h1>
-        <button className="btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Tutup" : "+ Kandidat Baru"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PageHeader emoji="🧲" title="Database Kandidat" />
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded text-sm" style={{ border: "1px solid var(--n-border)" }}>
+            {(["tabel", "papan"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className="px-3 py-1.5 capitalize transition-colors"
+                style={{
+                  backgroundColor: view === v ? "var(--n-hover)" : "transparent",
+                  color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                  fontWeight: view === v ? 500 : 400,
+                }}
+              >
+                {view === v ? "☰ " : "▦ "}
+                {v}
+              </button>
+            ))}
+          </div>
+          <button className="btn" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Tutup" : "+ Kandidat Baru"}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -134,19 +165,26 @@ export default function Candidates() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
-            <tr>
-              <th className="th">Nama</th>
-              <th className="th">Kota</th>
-              <th className="th">Ekspektasi</th>
-              <th className="th">CV</th>
-              <th className="th">Status</th>
-              <th className="th">Place ke Job Order</th>
-              <th className="th">AI</th>
-            </tr>
-          </thead>
+      {candidates?.length === 0 && view === "tabel" && (
+        <CalloutBlock emoji="🌱" tone="info">
+          Belum ada kandidat. Klik <b>"+ Kandidat Baru"</b> untuk mulai.
+        </CalloutBlock>
+      )}
+
+      {view === "tabel" && (
+        <div className="card overflow-x-auto p-0">
+          <table className="w-full">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="th">Nama</th>
+                <th className="th">Kota</th>
+                <th className="th">Ekspektasi</th>
+                <th className="th">CV</th>
+                <th className="th">Status</th>
+                <th className="th">Place ke Job Order</th>
+                <th className="th">AI</th>
+              </tr>
+            </thead>
           <tbody className="divide-y divide-slate-100">
             {(candidates ?? []).map((c) => (
               <Fragment key={c.id}>
@@ -290,7 +328,81 @@ export default function Candidates() {
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
+
+      {view === "papan" && (
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {STATUSES.map((stage) => {
+            const cards = (candidates ?? []).filter((c) => c.status === stage);
+            return (
+              <div key={stage} className="w-64 shrink-0 rounded-md" style={{ backgroundColor: "var(--n-hover)" }}>
+                <div className="flex items-center justify-between px-3 pt-3">
+                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_DOT[stage] }} />
+                    <span className="capitalize">{stage}</span>
+                    <span style={{ color: "var(--n-text-muted)" }}>{cards.length}</span>
+                  </span>
+                </div>
+                <div className="space-y-2 px-2 pb-3 pt-2">
+                  {cards.map((c) => (
+                    <div
+                      key={c.id}
+                      className="rounded-md p-3 shadow-sm transition-shadow hover:shadow"
+                      style={{ backgroundColor: "var(--n-bg-elevated)", border: "1px solid var(--n-border)" }}
+                    >
+                      <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                        {c.full_name}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        {c.city ?? "—"} · {formatRupiah(c.expected_salary)}
+                      </p>
+                      {c.cv_file_name && <p className="mt-1 text-xs text-indigo-600">📎 {c.cv_file_name}</p>}
+                      <div className="mt-2 flex items-center justify-between text-xs" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          disabled={STATUSES.indexOf(c.status) === 0}
+                          onClick={() => changeStatus.mutate({ id: c.id, status: STATUSES[STATUSES.indexOf(c.status) - 1] })}
+                          className="rounded px-1.5 py-0.5 disabled:opacity-25"
+                          style={{ border: "1px solid var(--n-border)" }}
+                        >
+                          ←
+                        </button>
+                        <select
+                          value={c.status}
+                          onChange={(e) => changeStatus.mutate({ id: c.id, status: e.target.value })}
+                          className="cursor-pointer rounded bg-transparent text-xs capitalize"
+                          style={{ color: "var(--n-text-muted)", border: "none", outline: "none" }}
+                        >
+                          {STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          disabled={STATUSES.indexOf(c.status) === STATUSES.length - 1}
+                          onClick={() => changeStatus.mutate({ id: c.id, status: STATUSES[STATUSES.indexOf(c.status) + 1] })}
+                          className="rounded px-1.5 py-0.5 disabled:opacity-25"
+                          style={{ border: "1px solid var(--n-border)" }}
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {cards.length === 0 && <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>Kosong</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {candidates?.length === 0 && view === "papan" && (
+        <CalloutBlock emoji="🌱" tone="info">
+          Belum ada kandidat untuk ditampilkan di papan.
+        </CalloutBlock>
+      )}
     </div>
   );
 }
