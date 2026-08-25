@@ -44,7 +44,6 @@ def test_registry_covers_all_business_prefixes():
 
 
 def test_default_tenant_gets_full_package(client):
-
     headers = _auth_header(client)
     apps = client.get("/api/v1/apps", headers=headers).json()
     assert len(apps) == 7
@@ -52,7 +51,6 @@ def test_default_tenant_gets_full_package(client):
 
 
 def test_guard_blocks_and_trial_reactivates(client):
-
     admin = _auth_header(client)
 
     # Cabut lisensi Sales CRM → endpoint modul sales 403, lainnya tetap lolos.
