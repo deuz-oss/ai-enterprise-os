@@ -669,6 +669,14 @@ def submit_to_client(
         entity_id=run.id,
         detail={"expires_days": days, "slips": len(run.slips)},
     )
+    try:
+        from app.modules.chat.service import post_payroll_status_message
+
+        post_payroll_status_message(
+            db, run, f"Payrol {run.month}/{run.year} dikirim menunggu persetujuan klien"
+        )
+    except Exception:
+        pass
     return run, raw, expires_at
 
 
@@ -766,6 +774,12 @@ def decide_by_token(
             body=(f"Keputusan oleh {name}" + (f" — {note}" if note else "")),
             entity_id=run.id,
         )
+        try:
+            from app.modules.chat.service import post_payroll_status_message
+
+            post_payroll_status_message(db, run, f"Payrol {keputusan} klien: {name}")
+        except Exception:
+            pass
 
         # Fase 9b: draft invoice otomatis saat klien menyetujui (best-effort).
         if approved and run.client_id is not None:

@@ -31,11 +31,6 @@ STAFF_ROLES = {
 }
 
 
-def is_staff(user) -> bool:
-    role = user.role.value if hasattr(user.role, "value") else str(user.role)
-    return role != "karyawan"
-
-
 def _is_member(db: Session, channel_id, user_id) -> bool:
     count = db.scalar(
         select(func.count(ChatChannelMember.id)).where(
@@ -44,6 +39,11 @@ def _is_member(db: Session, channel_id, user_id) -> bool:
         )
     )
     return (count or 0) > 0
+
+
+def is_staff(user) -> bool:
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role != "karyawan"
 
 
 def _assert_can_read(db: Session, user, channel: Channel) -> None:
@@ -301,7 +301,7 @@ def _serialize_message(msg: ChatMessage, current_user_id) -> dict:
     reactions: dict[str, list[str]] = {}
     for r in msg.reactions:
         reactions.setdefault(r.emoji, []).append(str(r.user_id))
-    return {
+    base: dict = {
         "id": str(msg.id),
         "sender_id": str(msg.sender_id),
         "content": msg.content if msg.deleted_at is None else "(pesan dihapus)",
@@ -311,3 +311,259 @@ def _serialize_message(msg: ChatMessage, current_user_id) -> dict:
         "reactions": {e: len(u) for e, u in reactions.items()},
         "is_own": parse_uuid(str(msg.sender_id)) == parse_uuid(str(current_user_id)),
     }
+    if hasattr(msg, "message_type"):
+        base["message_type"] = getattr(msg, "message_type", "text")
+        base["card_data"] = getattr(msg, "card_data", None)
+        base["actions"] = getattr(msg, "actions", None)
+    return base
+
+
+# ---------- Card interaktif (PR & payroll) ----------
+
+
+def send_card_message(
+    db: Session,
+    *,
+    user,
+    channel_id: str,
+    title: str,
+    body: str | None,
+    actions: list[dict],
+    card_type: str = "pr_approval",
+) -> ChatMessage:
+    """Kirim pesan kartu dengan tombol aksi; notifikasi in-app juga dibuat."""
+    ch = get_channel_with_access_check(db, user, channel_id)
+    msg = ChatMessage(
+        channel_id=ch.id,
+        sender_id=parse_uuid(str(user.id)),
+        content=title,
+        message_type="card",
+        card_data={"title": title, "body": body or "", "type": card_type},
+        actions=actions,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    # Best-effort WS broadcast (polling fallback covers v1)
+    try:
+        import asyncio
+
+        from app.modules.chat.ws_manager import manager as _ws
+
+        coro = _ws.broadcast(
+            channel_id=str(ch.id),
+            payload={"event": "new_message", "message": _serialize_message(msg, user.id)},
+        )
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(coro)
+        except RuntimeError:
+            pass
+    except Exception:
+        pass
+    return msg
+
+
+def handle_card_action(
+    db: Session, *, user, message_id: str, action_id: str, note: str | None = None
+) -> dict:
+    """Dispatch aksi tombol kartu; divalidasi RBAC per aksi."""
+    msg = db.get(ChatMessage, _parse(message_id))
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Pesan kartu tidak ditemukan")
+    if not msg.actions:
+        raise HTTPException(status_code=422, detail="Pesan ini tidak memiliki aksi")
+
+    for act in msg.actions:
+        if act.get("id") == action_id:
+            break
+    else:
+        raise HTTPException(status_code=404, detail="Aksi tidak ditemukan")
+
+    if action_id.startswith("approve_pr:"):
+        pr_id = action_id.split(":", 1)[1]
+        from app.modules.finance import service as fin_service
+
+        pr = fin_service.decide_payment_request(
+            db, user=user, pr_id=pr_id, approved=True, note=note
+        )  # noqa: E501
+        _post_action_result(
+            db,
+            user=user,
+            original_msg=msg,
+            result=f"PR {pr.pr_number} disetujui oleh {getattr(user, 'full_name', '') or user.email}",  # noqa: E501
+        )
+        return {"status": "approved", "pr_number": pr.pr_number}
+    if action_id.startswith("reject_pr:"):
+        pr_id = action_id.split(":", 1)[1]
+        from app.modules.finance import service as fin_service
+
+        pr = fin_service.decide_payment_request(
+            db, user=user, pr_id=pr_id, approved=False, note=note
+        )  # noqa: E501
+        _post_action_result(
+            db,
+            user=user,
+            original_msg=msg,
+            result=f"PR {pr.pr_number} ditolak oleh {getattr(user, 'full_name', '') or user.email}",
+        )
+        return {"status": "rejected", "pr_number": pr.pr_number}
+    if action_id.startswith("execute_pr:"):
+        pr_id = action_id.split(":", 1)[1]
+        from app.modules.finance import service as fin_service
+
+        pr = fin_service.execute_payment_request(db, user=user, pr_id=pr_id)
+        _post_action_result(
+            db,
+            user=user,
+            original_msg=msg,
+            result=f"PR {pr.pr_number} dieksekusi Finance",
+        )
+        return {"status": "executed", "pr_number": pr.pr_number}
+    raise HTTPException(status_code=422, detail="Aksi tidak dikenal")
+
+
+def _post_action_result(db: Session, *, user, original_msg: ChatMessage, result: str) -> None:
+    reply = ChatMessage(
+        channel_id=original_msg.channel_id,
+        sender_id=parse_uuid(str(user.id)),
+        content=result,
+        parent_id=original_msg.id,
+        message_type="system",
+    )
+    db.add(reply)
+    db.commit()
+
+
+# ---------- Channel otomatis per entitas ----------
+
+
+def _get_ops_user_ids(db: Session, tenant_id) -> list:
+    from app.modules.auth.models import User
+
+    return list(
+        db.execute(
+            select(User.id).where(
+                User.tenant_id == parse_uuid(str(tenant_id)),
+                User.role == "operations",
+                User.is_active.is_(True),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def ensure_job_order_channel(db: Session, job_order) -> Channel | None:
+    """#jo-{klien}-{posisi} untuk diskusi job order."""
+    try:
+        from app.modules.clients.models import Client
+
+        client = db.get(Client, job_order.client_id)
+        if client is None:
+            return None
+        slug = f"jo-{client.name.lower().replace(' ', '-')[:40]}-{job_order.title.lower().replace(' ', '-')[:20]}"  # noqa: E501
+        existing = db.execute(
+            select(Channel).where(Channel.slug == slug, Channel.tenant_id == job_order.tenant_id)
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+        ch = Channel(
+            tenant_id=job_order.tenant_id,
+            name=f"JO: {job_order.title}",
+            slug=slug,
+            channel_type="private",
+            created_by_id=job_order.tenant_id,
+        )
+        db.add(ch)
+        db.flush()
+        for uid in _get_ops_user_ids(db, job_order.tenant_id):
+            db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, tenant_id=job_order.tenant_id))
+        db.commit()
+        db.refresh(ch)
+        return ch
+    except Exception:
+        db.rollback()
+        return None
+
+
+def ensure_project_channel(db: Session, placement) -> Channel | None:
+    """#proyek-{klien} untuk karyawan outsourcing + tim Ops proyeknya."""
+    try:
+        from app.modules.clients.models import Client
+        from app.modules.recruitment.models import JobOrder
+
+        jo = db.get(JobOrder, placement.job_order_id)
+        if jo is None:
+            return None
+        client = db.get(Client, jo.client_id)
+        if client is None:
+            return None
+        slug = f"proyek-{client.name.lower().replace(' ', '-')[:40]}"
+        existing = db.execute(
+            select(Channel).where(Channel.slug == slug, Channel.tenant_id == placement.tenant_id)
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+        ch = Channel(
+            tenant_id=placement.tenant_id,
+            name=f"Proyek: {client.name}",
+            slug=slug,
+            channel_type="private",
+            created_by_id=placement.tenant_id,
+        )
+        db.add(ch)
+        db.flush()
+        for uid in _get_ops_user_ids(db, placement.tenant_id):
+            db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, tenant_id=placement.tenant_id))
+        db.commit()
+        db.refresh(ch)
+        return ch
+    except Exception:
+        db.rollback()
+        return None
+
+
+def ensure_payroll_channel(db: Session, run) -> Channel | None:
+    """#payroll-{bulan} ringkasan per klien sebagai pesan sistem."""
+    try:
+        slug = f"payroll-{run.year}-{str(run.month).zfill(2)}"
+        existing = db.execute(
+            select(Channel).where(Channel.slug == slug, Channel.tenant_id == run.tenant_id)
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+        ch = Channel(
+            tenant_id=run.tenant_id,
+            name=f"Payroll {run.month}/{run.year}",
+            slug=slug,
+            channel_type="private",
+            created_by_id=run.tenant_id,
+        )
+        db.add(ch)
+        db.flush()
+        for uid in _get_ops_user_ids(db, run.tenant_id):
+            db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, tenant_id=run.tenant_id))
+        db.commit()
+        db.refresh(ch)
+        return ch
+    except Exception:
+        db.rollback()
+        return None
+
+
+def post_payroll_status_message(db: Session, run, text: str) -> None:
+    """Posting pesan sistem status payrol ke channel periode (best-effort)."""
+    ch = ensure_payroll_channel(db, run)
+    if ch is None:
+        return
+    msg = ChatMessage(
+        channel_id=ch.id,
+        sender_id=ch.created_by_id,
+        content=text,
+        message_type="system",
+        tenant_id=ch.tenant_id,
+    )
+    db.add(msg)
+    db.commit()

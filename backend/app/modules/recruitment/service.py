@@ -39,6 +39,13 @@ def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
     db.add(jo)
     db.commit()
     db.refresh(jo)
+    # Fase 11: channel otomatis per job order (#jo-…)
+    try:
+        from app.modules.chat.service import ensure_job_order_channel
+
+        ensure_job_order_channel(db, jo)
+    except Exception:
+        pass
     return jo
 
 
@@ -181,6 +188,13 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
         jo.status = JobOrderStatus.screening
     db.commit()
     db.refresh(placement)
+    # Fase 11: channel proyek otomatis + invite outsourcing
+    try:
+        from app.modules.chat.service import ensure_project_channel
+
+        ensure_project_channel(db, placement)
+    except Exception:
+        pass
     return placement
 
 

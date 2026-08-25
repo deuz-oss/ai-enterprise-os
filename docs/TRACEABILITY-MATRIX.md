@@ -454,6 +454,16 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Frontend | Halaman Chat `/chat` (nav 💬 Chat): dua panel channel+pesan, thread view, reaksi per pesan, edit/hapus, polling, unread badge |
 | Test | `backend/tests/test_chat.py` |
 
+### 12.19 Fase 11 — Chat Lanjutan: Auto Channel & Card Interaktif + WebSocket
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Channel otomatis per job order / payroll periode / proyek; kartu interaktif PR & payroll ber-tombol aksi; WebSocket real-time |
+| Source Code | `backend/app/modules/chat/service.py` (`ensure_*_channel`, `send_card_message`, `handle_card_action`), `ws_manager.py` |
+| API | `POST /chat/messages/{id}/actions/{action_id}` · `WS /chat/ws?token=` |
+| Aturan | Card PR: approve/reject/execute → `decide_payment_request`; channel #jo- / #proyek- / #payroll- dibuat idempoten via slug; WebSocket manager pluggable (in-memory v1, Redis pub/sub menyusul) |
+| Test | `backend/tests/test_chat_sisa.py` |
+
 ### 12.16 Fase 10 — AI Layer Akuntansi (§8.8)
 
 | Aspek | Detail |

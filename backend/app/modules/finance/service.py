@@ -400,6 +400,27 @@ def create_payment_request(
             entity_type="payment_request",
             entity_id=pr.id,
         )
+    # Fase 11: kartu interaktif di channel payroll (best-effort).
+    if run_ref is not None:
+        try:
+            from app.modules.chat.service import ensure_payroll_channel, send_card_message
+
+            ch = ensure_payroll_channel(db, run_ref)
+            if ch:
+                send_card_message(
+                    db,
+                    user=user,
+                    channel_id=str(ch.id),
+                    title=f"PR {pr.pr_number} menunggu persetujuan",
+                    body=f"{pr.description or pr.pr_type} — Rp{float(pr.amount):,.0f}",
+                    actions=[
+                        {"id": f"approve_pr:{pr.id}", "label": "Setujui", "style": "primary"},
+                        {"id": f"reject_pr:{pr.id}", "label": "Tolak", "style": "danger"},
+                    ],
+                    card_type="pr_approval",
+                )
+        except Exception:
+            pass
     return pr
 
 

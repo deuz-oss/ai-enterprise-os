@@ -22,6 +22,9 @@ interface MessageRow {
   created_at: string;
   reactions: Record<string, number>;
   is_own: boolean;
+  message_type?: string;
+  card_data?: { title: string; body?: string; type?: string } | null;
+  actions?: { id: string; label: string; style?: string }[] | null;
 }
 
 const EMOJI_REACTIONS = ["👍", "❤️", "🎉", "😂", "🙏", "🔥"];
@@ -86,10 +89,42 @@ export default function Chat() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
   });
 
+  const handleAction = useMutation({
+    mutationFn: ({ messageId, actionId }: { messageId: string; actionId: string }) =>
+      api.post(`/chat/messages/${messageId}/actions/${actionId}`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      qc.invalidateQueries({ queryKey: ["chat-channels"] });
+    },
+  });
+
   // Scroll to bottom on new messages
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages]);
+
+  // WebSocket real-time (PRD §9.4) — polling tetap sebagai fallback.
+  useEffect(() => {
+    if (!activeChannel) return;
+    const base = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL ?? "/api/v1";
+    const token = localStorage.getItem("aeos_token") ?? "";
+    if (!token) return;
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = base.startsWith("http") ? new URL(base).host : window.location.host;
+    const wsUrl = `${proto}//${host}/api/v1/chat/ws?token=${encodeURIComponent(token)}`;
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = () => qc.invalidateQueries({ queryKey: ["chat-messages"] });
+    } catch {
+      // abaikan — polling yang menangani
+    }
+    return () => {
+      try {
+        ws?.close();
+      } catch {}
+    };
+  }, [activeChannel]);
 
   function handleSend(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -221,6 +256,42 @@ export default function Chat() {
                 <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--n-text)" }}>
                   {m.content}
                 </p>
+                {m.message_type === "card" && m.card_data && (
+                  <div
+                    className="mt-2 rounded-md p-3"
+                    style={{
+                      border: "1px solid var(--n-border)",
+                      backgroundColor: "var(--n-bg-elevated)",
+                    }}
+                  >
+                    <p className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+                      {m.card_data.title}
+                    </p>
+                    {m.card_data.body && (
+                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        {m.card_data.body}
+                      </p>
+                    )}
+                    {m.actions && m.actions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {m.actions.map((a) => (
+                          <button
+                            key={a.id}
+                            onClick={() => handleAction.mutate({ messageId: m.id, actionId: a.id })}
+                            className="rounded px-2.5 py-1 text-xs font-medium"
+                            style={{
+                              backgroundColor: a.style === "primary" ? "var(--n-accent)" : "var(--n-bg-elevated)",
+                              color: a.style === "primary" ? "white" : "var(--n-text)",
+                              border: "1px solid var(--n-border)",
+                            }}
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   {Object.entries(m.reactions).map(([emoji, count]) => (

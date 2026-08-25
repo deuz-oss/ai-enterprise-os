@@ -15,6 +15,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Unread**: `unread_count` per channel untuk karyawan; `POST /channels/{id}/read-all`.
 - **Channel gratis** (tanpa guard lisensi); rilis v1 memakai polling — WebSocket pluggable menyusul.
 - **Halaman Chat** (`/chat`, nav 💬 Chat): layout dua panel (channel list + pesan), thread view Balas↩, polling 2.5–4 detik, reaksi per pesan, edit/hapus pesan milik sendiri.
+- **Sisa Fase 11 lanjutan**: channel otomatis per job order / payroll periode / proyek penempatan; kartu notifikasi interaktif (PR & payroll) dengan tombol aksi dari chat; WebSocket real-time native FastAPI (bertahan sebagai fallback polling).
 - Tes: channel CRUD, scope karyawan (403 → 200 setelah diinvite), broadcast hanya Ops/admin, thread + reaksi, unread count.
 
 ### Added — Fase 10: AI Layer Akuntansi (§8.8)
