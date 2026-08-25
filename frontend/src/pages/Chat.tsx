@@ -33,6 +33,8 @@ export default function Chat() {
   const qc = useQueryClient();
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [threadParent, setThreadParent] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +52,21 @@ export default function Chat() {
       ),
     enabled: Boolean(activeChannel),
     refetchInterval: 2500,
+  });
+
+  const { data: searchResults } = useQuery({
+    queryKey: ["chat-search", searchQuery, activeChannel],
+    queryFn: () =>
+      api.get<MessageRow[]>(
+        `/chat/search?q=${encodeURIComponent(searchQuery)}${activeChannel ? `&channel_id=${activeChannel}` : ""}`
+      ),
+    enabled: searchQuery.trim().length >= 2,
+  });
+
+  const { data: mentionResults } = useQuery({
+    queryKey: ["mention-search", mentionQuery],
+    queryFn: () => api.get<{ id: string; full_name: string; email: string }[]>(`/chat/users/search?q=${encodeURIComponent(mentionQuery || "")}`),
+    enabled: mentionQuery !== null,
   });
 
   const createChannel = useMutation({
@@ -212,13 +229,19 @@ export default function Chat() {
         {/* Message area */}
         <div className="flex flex-1 flex-col overflow-hidden rounded-md" style={{ border: "1px solid var(--n-border)" }}>
           <div
-            className="flex items-center justify-between px-4 py-2"
+            className="flex items-center justify-between gap-2 px-4 py-2"
             style={{ borderBottom: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
           >
-            <span className="font-medium" style={{ color: "var(--n-text)" }}>
+            <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
               {threadParent ? "↩ Thread Balasan" : channelName}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <input
+                placeholder="Cari..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input w-28 py-1 text-xs"
+              />
               {threadParent && (
                 <button onClick={() => setThreadParent(null)} className="btn-secondary py-0.5 text-xs">
                   Kembali
@@ -231,6 +254,26 @@ export default function Chat() {
               )}
             </div>
           </div>
+          {searchQuery.trim().length >= 2 && searchResults && (
+            <div className="max-h-40 overflow-y-auto border-b px-2 py-1" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+              <p className="px-2 py-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                Hasil cari "{searchQuery}" — {searchResults.length} pesan
+                <button onClick={() => setSearchQuery("")} className="ml-2 text-indigo-600">
+                  tutup
+                </button>
+              </p>
+              {searchResults.map((m: MessageRow) => (
+                <div key={m.id} className="truncate px-2 py-1 text-xs" style={{ color: "var(--n-text)" }}>
+                  {m.content.slice(0, 80)}
+                </div>
+              ))}
+              {searchResults.length === 0 && (
+                <p className="px-2 py-2 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  Tidak ada hasil.
+                </p>
+              )}
+            </div>
+          )}
 
           <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
             {(messages ?? []).map((m) => (
@@ -344,18 +387,57 @@ export default function Chat() {
           </div>
 
           <form
-            onSubmit={handleSend}
-            className="flex gap-2 px-4 py-3"
+            onSubmit={(e) => {
+              handleSend(e);
+              setMentionQuery(null);
+            }}
+            className="relative flex gap-2 px-4 py-3"
             style={{ borderTop: "1px solid var(--n-border)" }}
           >
-            <input
-              ref={inputRef}
-              name="content"
-              required
-              placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan...") : "Pilih channel dulu"}
-              disabled={!activeChannel}
-              className="input flex-1"
-            />
+            <div className="relative flex-1">
+              <input
+                ref={inputRef}
+                name="content"
+                required
+                placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan... (@ untuk mention)") : "Pilih channel dulu"}
+                disabled={!activeChannel}
+                className="input w-full"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const atIdx = val.lastIndexOf("@");
+                  if (atIdx >= 0) {
+                    const after = val.slice(atIdx + 1).split(/\s/)[0];
+                    if (/^[a-zA-Z0-9._-]*$/.test(after)) setMentionQuery(after);
+                    else setMentionQuery(null);
+                  } else setMentionQuery(null);
+                }}
+              />
+              {mentionQuery !== null && (mentionResults ?? []).length > 0 && (
+                <div
+                  className="absolute bottom-full left-0 right-0 mb-1 max-h-36 overflow-y-auto rounded-md shadow-lg"
+                  style={{ backgroundColor: "var(--n-bg-elevated)", border: "1px solid var(--n-border)" }}
+                >
+                  {(mentionResults ?? []).map((u: { id: string; full_name: string; email: string }) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        const cur = inputRef.current?.value || "";
+                        const atIdx = cur.lastIndexOf("@");
+                        const next = cur.slice(0, atIdx + 1) + u.full_name + " ";
+                        if (inputRef.current) inputRef.current.value = next;
+                        setMentionQuery(null);
+                        inputRef.current?.focus();
+                      }}
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-[var(--n-hover)]"
+                    >
+                      <span>{u.full_name}</span>
+                      <span style={{ color: "var(--n-text-muted)" }}>{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button disabled={!activeChannel || sendMessage.isPending} className="btn">
               Kirim
             </button>

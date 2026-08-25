@@ -526,7 +526,7 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
 
 
 def saltab_export_csv(db: Session, run_id: str) -> tuple[str, str]:
-    """Ekspor CSV grid Saltab (pengganti file Excel manual; PDF menyusul)."""
+    """Ekspor CSV grid Saltab (pengganti file Excel manual)."""
     run = _get_run(db, run_id)
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, delimiter=";")
@@ -547,6 +547,175 @@ def saltab_export_csv(db: Session, run_id: str) -> tuple[str, str]:
         writer.writerow([])
     filename = f"saltab-{run.year}{run.month:02d}-{str(run.id)[:8]}.csv"
     return buffer.getvalue(), filename
+
+
+def saltab_export_excel(db: Session, run_id: str) -> tuple[bytes, str]:
+    """Ekspor Excel Saltab dengan styling header."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    run = _get_run(db, run_id)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Saltab {run.year}-{run.month:02d}"
+
+    header = ["Karyawan", "Komponen", "Jenis", "Nominal", "Sumber"]
+    header_fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=10)
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+    align_right = Alignment(horizontal="right", vertical="center")
+
+    ws.append(header)
+    for col in range(1, 6):
+        c = ws.cell(row=1, column=col)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = align_center
+        c.border = border
+    ws.row_dimensions[1].height = 18
+
+    thp_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    thp_font = Font(bold=True)
+
+    row_idx = 2
+    for row in saltab_view(db, run_id):
+        for comp in row["components"]:
+            ws.append(
+                [row["employee_name"], comp["name"], comp["ctype"], comp["amount"], comp["source"]]
+            )  # noqa: E501
+            for col, align in [
+                (1, align_left),
+                (2, align_left),
+                (3, align_center),
+                (4, align_right),
+                (5, align_center),
+            ]:  # noqa: E501
+                c = ws.cell(row=row_idx, column=col)
+                c.border = border
+                c.alignment = align
+                if col == 4:
+                    c.number_format = "#,##0"
+            row_idx += 1
+        thp = row["total_earnings"] - row["total_deductions"]
+        ws.append([row["employee_name"], "TOTAL THP", "", thp, ""])
+        for col in range(1, 6):
+            c = ws.cell(row=row_idx, column=col)
+            c.fill = thp_fill
+            c.font = thp_font
+            c.border = border
+            c.alignment = align_right if col == 4 else align_left
+            if col == 4:
+                c.number_format = "#,##0"
+        row_idx += 1
+        ws.append([])
+        row_idx += 1
+
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 16
+    ws.column_dimensions["E"].width = 14
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.orientation = "landscape"
+    ws.print_title_rows = "1:1"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = f"saltab-{run.year}{run.month:02d}-{str(run.id)[:8]}.xlsx"
+    return buf.getvalue(), filename
+
+
+def saltab_export_pdf(db: Session, run_id: str) -> tuple[bytes, str]:
+    """Ekspor PDF Saltab via reportlab."""
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    run = _get_run(db, run_id)
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=12 * mm,
+        rightMargin=12 * mm,
+        topMargin=12 * mm,
+        bottomMargin=12 * mm,
+        title=f"Saltab {run.year}-{run.month:02d}",
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Heading2"]
+    title_style.textColor = colors.HexColor("#1F3864")
+    normal = styles["Normal"]
+    normal.fontSize = 8
+
+    story = []
+    story.append(
+        Paragraph(
+            f"Saltab &mdash; {run.year}/{run.month:02d} &mdash; Run {str(run.id)[:8]}", title_style
+        )
+    )  # noqa: E501
+    story.append(Spacer(1, 6))
+
+    for row in saltab_view(db, run_id):
+        data = [["Karyawan", "Komponen", "Jenis", "Nominal", "Sumber"]]
+        for comp in row["components"]:
+            data.append(
+                [
+                    row["employee_name"],
+                    comp["name"],
+                    comp["ctype"],
+                    f"{comp['amount']:,.0f}",
+                    comp["source"],
+                ]
+            )  # noqa: E501
+        thp = row["total_earnings"] - row["total_deductions"]
+        data.append([row["employee_name"], "TOTAL THP", "", f"{thp:,.0f}", ""])
+        tbl = Table(data, colWidths=[45 * mm, 55 * mm, 28 * mm, 30 * mm, 28 * mm], repeatRows=1)
+        tbl.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3864")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                    ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+                    ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9D9D9")),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#F2F2F2")],
+                    ),  # noqa: E501
+                    ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFF2CC")),
+                    ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+        # wrap text in cells
+        for r_idx in range(len(data)):
+            for c_idx in range(len(data[0])):
+                if isinstance(data[r_idx][c_idx], str) and len(data[r_idx][c_idx]) > 28:
+                    data[r_idx][c_idx] = Paragraph(data[r_idx][c_idx], normal)
+        story.append(Paragraph(f"<b>{row['employee_name']}</b>", normal))
+        story.append(Spacer(1, 2))
+        story.append(tbl)
+        story.append(Spacer(1, 10))
+
+    doc.build(story)
+    filename = f"saltab-{run.year}{run.month:02d}-{str(run.id)[:8]}.pdf"
+    return buf.getvalue(), filename
 
 
 def finalize_run(db: Session, run_id: str, tenant_id=None) -> PayrollRun:

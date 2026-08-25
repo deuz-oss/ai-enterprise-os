@@ -129,6 +129,30 @@ def export_saltab(run_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/runs/{run_id}/saltab/export-excel")
+def export_saltab_excel(run_id: str, db: Session = Depends(get_db)):
+    from fastapi import Response
+
+    content, filename = service.saltab_export_excel(db, run_id)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/runs/{run_id}/saltab/export-pdf")
+def export_saltab_pdf(run_id: str, db: Session = Depends(get_db)):
+    from fastapi import Response
+
+    content, filename = service.saltab_export_pdf(db, run_id)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/runs/{run_id}/finalize", response_model=RunOut)
 def finalize_run(run_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
     return service.finalize_run(db, run_id, tenant_id=user.tenant_id)

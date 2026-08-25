@@ -59,6 +59,27 @@ def list_channels(db: Session = Depends(get_db), user=Depends(get_current_user))
     return service.list_channels(db, user)
 
 
+@router.get("/search")
+def search_messages(
+    q: str = Query(..., min_length=2),
+    channel_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Pencarian pesan (ILIKE) ter-scope channel yang boleh dibaca."""
+    return service.search_messages(db, user, q=q, channel_id=channel_id)
+
+
+@router.get("/users/search")
+def search_users(
+    q: str = Query("", min_length=0),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Autocomplete mention @user — ter-scope proyek untuk karyawan."""
+    return service.search_users_for_mention(db, user, q=q)
+
+
 @router.post("/channels", status_code=201)
 def create_channel(payload: dict, db: Session = Depends(get_db), user=Depends(get_current_user)):
     name = str(payload.get("name") or "").strip()

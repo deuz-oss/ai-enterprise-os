@@ -594,14 +594,27 @@ export default function Payroll() {
             Saltab (Grid Komponen) — Run terpilih
           </h2>
           {selectedRunId && (
-            <button
-              className="btn-secondary text-xs"
-              onClick={() =>
-                downloadFile(`/payroll/runs/${selectedRunId}/saltab/export`)
-              }
-            >
-              Unduh CSV Saltab
-            </button>
+            <div className="flex gap-1.5">
+              <button
+                className="btn-secondary text-xs"
+                onClick={() => downloadFile(`/payroll/runs/${selectedRunId}/saltab/export`)}
+                title="CSV ; delimiter"
+              >
+                CSV
+              </button>
+              <button
+                className="btn-secondary text-xs"
+                onClick={() => downloadFile(`/payroll/runs/${selectedRunId}/saltab/export-excel`)}
+              >
+                Excel
+              </button>
+              <button
+                className="btn-secondary text-xs"
+                onClick={() => downloadFile(`/payroll/runs/${selectedRunId}/saltab/export-pdf`)}
+              >
+                PDF
+              </button>
+            </div>
           )}
         </div>
         <SaltabTable runId={selectedRunId} />

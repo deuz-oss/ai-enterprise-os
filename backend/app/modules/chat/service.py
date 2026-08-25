@@ -7,6 +7,7 @@ Aturan akses (PRD §9.2):
 """
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -188,6 +189,7 @@ def send_message(
     content = content.strip()
     if not content:
         raise HTTPException(status_code=422, detail="Pesan tidak boleh kosong")
+    _validate_mentions(db, user, str(ch.id), content)
     msg = ChatMessage(
         channel_id=ch.id,
         sender_id=parse_uuid(str(user.id)),
@@ -469,12 +471,13 @@ def ensure_job_order_channel(db: Session, job_order) -> Channel | None:
         ).scalar_one_or_none()
         if existing:
             return existing
+        creator_id = _get_admin_user_id(db, job_order.tenant_id) or job_order.tenant_id
         ch = Channel(
             tenant_id=job_order.tenant_id,
             name=f"JO: {job_order.title}",
             slug=slug,
             channel_type="private",
-            created_by_id=job_order.tenant_id,
+            created_by_id=creator_id,
         )
         db.add(ch)
         db.flush()
@@ -488,10 +491,25 @@ def ensure_job_order_channel(db: Session, job_order) -> Channel | None:
         return None
 
 
+def _get_admin_user_id(db: Session, tenant_id) -> UUID | None:
+    from app.modules.auth.models import User
+
+    admin = db.execute(
+        select(User.id).where(User.tenant_id == parse_uuid(str(tenant_id)), User.role == "admin")
+    ).scalar_one_or_none()
+    if admin:
+        return admin
+    any_user = db.execute(
+        select(User.id).where(User.tenant_id == parse_uuid(str(tenant_id)))
+    ).scalar_one_or_none()  # noqa: E501
+    return any_user
+
+
 def ensure_project_channel(db: Session, placement) -> Channel | None:
     """#proyek-{klien} untuk karyawan outsourcing + tim Ops proyeknya."""
     try:
         from app.modules.clients.models import Client
+        from app.modules.hrd.models import Employee
         from app.modules.recruitment.models import JobOrder
 
         jo = db.get(JobOrder, placement.job_order_id)
@@ -504,19 +522,43 @@ def ensure_project_channel(db: Session, placement) -> Channel | None:
         existing = db.execute(
             select(Channel).where(Channel.slug == slug, Channel.tenant_id == placement.tenant_id)
         ).scalar_one_or_none()
+        creator_id = _get_admin_user_id(db, placement.tenant_id) or placement.tenant_id
         if existing:
+            # Ensure new worker is added if not already
+            worker = db.execute(
+                select(Employee.user_id)
+                .where(Employee.placement_id == placement.id)
+                .where(Employee.user_id.is_not(None))  # noqa: E501
+            ).scalar_one_or_none()
+            if worker and not _is_member(db, existing.id, worker):
+                db.add(
+                    ChatChannelMember(
+                        channel_id=existing.id, user_id=worker, tenant_id=placement.tenant_id
+                    )
+                )  # noqa: E501
+                db.commit()
             return existing
         ch = Channel(
             tenant_id=placement.tenant_id,
             name=f"Proyek: {client.name}",
             slug=slug,
             channel_type="private",
-            created_by_id=placement.tenant_id,
+            created_by_id=creator_id,
         )
         db.add(ch)
         db.flush()
         for uid in _get_ops_user_ids(db, placement.tenant_id):
             db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, tenant_id=placement.tenant_id))
+        # Tambah pekerja yang baru ditempatkan
+        worker = db.execute(
+            select(Employee.user_id)
+            .where(Employee.placement_id == placement.id)
+            .where(Employee.user_id.is_not(None))  # noqa: E501
+        ).scalar_one_or_none()
+        if worker and worker not in _get_ops_user_ids(db, placement.tenant_id):
+            db.add(
+                ChatChannelMember(channel_id=ch.id, user_id=worker, tenant_id=placement.tenant_id)
+            )  # noqa: E501
         db.commit()
         db.refresh(ch)
         return ch
@@ -534,12 +576,13 @@ def ensure_payroll_channel(db: Session, run) -> Channel | None:
         ).scalar_one_or_none()
         if existing:
             return existing
+        creator_id = _get_admin_user_id(db, run.tenant_id) or run.tenant_id
         ch = Channel(
             tenant_id=run.tenant_id,
             name=f"Payroll {run.month}/{run.year}",
             slug=slug,
             channel_type="private",
-            created_by_id=run.tenant_id,
+            created_by_id=creator_id,
         )
         db.add(ch)
         db.flush()
@@ -567,3 +610,116 @@ def post_payroll_status_message(db: Session, run, text: str) -> None:
     )
     db.add(msg)
     db.commit()
+
+
+# ---------- Mention & Search (PRD sisa) ----------
+
+
+def search_messages(
+    db: Session, user, q: str, channel_id: str | None = None, limit: int = 20
+) -> list[dict]:  # noqa: E501
+    """Pencarian pesan via ILIKE (PostgreSQL FTS menyusul)."""
+
+    q_clean = q.strip()
+    if not q_clean or len(q_clean) < 2:
+        return []
+    # Tentukan channel yang boleh dibaca
+    if channel_id:
+        ch = get_channel_with_access_check(db, user, channel_id)
+        allowed_ids = [ch.id]
+    else:
+        raw_ids = [c["id"] for c in list_channels(db, user)]
+        allowed_ids = [uid for cid in raw_ids if (uid := parse_uuid(str(cid))) is not None]  # type: ignore[assignment]
+        if not allowed_ids:
+            return []
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.channel_id.in_(allowed_ids))
+        .where(ChatMessage.deleted_at.is_(None))
+        .where(ChatMessage.content.ilike(f"%{q_clean}%"))
+        .order_by(ChatMessage.created_at.desc())
+        .limit(limit)
+    )
+    msgs = list(db.execute(stmt).scalars().all())
+    return [_serialize_message(m, user.id) for m in msgs]
+
+
+def search_users_for_mention(db: Session, user, q: str, limit: int = 10) -> list[dict]:
+    """Autocomplete mention: staff melihat semua, karyawan hanya cohort + Ops."""
+    from app.modules.auth.models import User
+
+    q_clean = q.strip().lower()
+    if not q_clean:
+        return []
+    # Tentukan user yang boleh di-mention
+    if is_staff(user):
+        stmt = select(User).where(User.tenant_id == user.tenant_id, User.is_active.is_(True))
+        if q_clean:
+            stmt = stmt.where(
+                (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%"))
+            )
+        users = list(db.execute(stmt.limit(limit)).scalars().all())
+    else:
+        # Karyawan: cohort = sesama karyawan se-proyek + tim Ops
+        ops_ids = set(_get_ops_user_ids(db, user.tenant_id))
+        # Cari placement karyawan sendiri
+        from app.modules.hrd.models import Employee
+        from app.modules.recruitment.models import JobOrder, Placement
+
+        emp = db.execute(select(Employee).where(Employee.user_id == user.id)).scalar_one_or_none()
+        cohort_ids: set = set(ops_ids)
+        if emp and emp.placement_id:
+            placement = db.get(Placement, emp.placement_id)
+            if placement:
+                jo = db.get(JobOrder, placement.job_order_id)
+                if jo:
+                    # Semua karyawan ditempatkan di klien yang sama
+                    cohort_emps = (
+                        db.execute(
+                            select(Employee.user_id)
+                            .join(Placement, Employee.placement_id == Placement.id)
+                            .join(JobOrder, Placement.job_order_id == JobOrder.id)
+                            .where(JobOrder.client_id == jo.client_id)
+                            .where(Employee.user_id.is_not(None))
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    cohort_ids.update(cohort_emps)
+        if not cohort_ids:
+            return []
+        stmt = select(User).where(User.id.in_(cohort_ids), User.is_active.is_(True))
+        if q_clean:
+            stmt = stmt.where(
+                (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%"))
+            )
+        users = list(db.execute(stmt.limit(limit)).scalars().all())
+    return [
+        {"id": str(u.id), "full_name": u.full_name, "email": u.email, "role": u.role.value}
+        for u in users
+    ]
+
+
+def _validate_mentions(db: Session, user, channel_id: str, content: str) -> None:
+    """Tolak pesan jika menyebut user di luar scope (karyawan only)."""
+    if is_staff(user) or "@" not in content:
+        return
+    import re
+
+    mentions = re.findall(r"@([^\s@]+(?:\s+[^\s@]+)?)", content)
+    if not mentions:
+        return
+    allowed = {u["id"]: u for u in search_users_for_mention(db, user, "", limit=1000)}
+    # Juga izinkan @channel/@here untuk karyawan (broadcast)
+    for raw in mentions:
+        name = raw.strip().lower()
+        if name in ("channel", "here", "all"):
+            continue
+        # Cari user dengan nama mengandung mention
+        matched = [
+            u
+            for u in allowed.values()
+            if name in u["full_name"].lower() or name in u["email"].lower()
+        ]  # noqa: E501
+        if not matched:
+            raise HTTPException(status_code=403, detail=f"Mention @{raw} di luar scope proyek Anda")
