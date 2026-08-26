@@ -188,6 +188,13 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
         jo.status = JobOrderStatus.screening
     db.commit()
     db.refresh(placement)
+    # Fase 13: kunci versi CV standar terbaru sebagai bukti submission (§10.3).
+    try:
+        from app.modules.talentpool.service import lock_version_for_placement
+
+        lock_version_for_placement(db, candidate_id=candidate.id, placement_id=placement.id)
+    except Exception:
+        pass
     # Fase 11: channel proyek otomatis + invite outsourcing
     try:
         from app.modules.chat.service import ensure_project_channel

@@ -77,6 +77,8 @@ def create_app() -> FastAPI:
     from app.modules.presales.router import router as presales_router
     from app.modules.rates.router import router as rates_router
     from app.modules.recruitment.router import router as recruitment_router
+    from app.modules.talentpool.router import branding_admin_router as talentpool_branding_router
+    from app.modules.talentpool.router import router as talentpool_router
 
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
@@ -94,6 +96,16 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         recruitment_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("recruitment"))],
+    )
+    app.include_router(
+        talentpool_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("recruitment"))],
+    )
+    app.include_router(
+        talentpool_branding_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("recruitment"))],
     )
