@@ -6,6 +6,95 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Mobile GPS+selfie Absensi & Logo Branding CV
+
+- **Absensi mobile GPS+selfie (Fase 8 lanjutan)**: `POST /me/attendance/clock-in|clock-out`
+  (multipart selfie + koordinat) — satu record per hari (duplikat → 409), selfie
+  JPG/PNG ≤5 MB tersimpan sebagai bukti, koordinat divalidasi, notifikasi otomatis
+  ke HR/Ops tiap clock. HR/Ops melihat flag selfie + geo di daftar harian dan dapat
+  membuka bukti (`GET /attendance/records/{id}/selfie/{which}/download-url`,
+  role-gated + audit). Portal `/me` memuat URL selfie milik sendiri. Kolom baru
+  `attendance_records` (migrasi `q7r8s9t0u1v2`).
+- **App mobile**: tab "Absensi Saya" di Portal karyawan (`self_attendance_screen.dart`)
+  — izin lokasi (geolocator) → foto depan (image_picker) → unggah multipart;
+  `ApiClient.postMultipart` baru; deps pubspec bertambah geolocator & image_picker
+  (verifikasi build butuh Flutter SDK).
+- **Logo branding CV (§10.3)**: unggah/hapus logo perusahaan
+  (`POST|DELETE /talentpool/branding/logo`, PNG/JPEG ≤2 MB, admin/management);
+  logo tampil di header PDF CV standar; preview via panel "🎨 Branding CV Standar"
+  pada halaman Talent Pool.
+- Tes: `test_mobile_absensi.py` (+4), `test_talentpool.py::test_logo_upload_render_dan_hapus`.
+
+### Added — Fase 13: Talent Pool & CV Standardization
+
+- **Pipeline intake CV** (`POST /talentpool/intake`, modul `talentpool` baru,
+  migrasi `p6q7r8s9t0u1`): unggah PDF (teks/scan), DOCX, atau gambar → deteksi
+  jenis dokumen → ekstraksi LLM ke **skema tetap berversi** (scan/gambar via satu
+  panggilan vision). File asli tersimpan sebagai bukti sumber dan tidak pernah
+  ditimpa; intake gagal tetap tercatat dan bisa diproses ulang (`/reprocess`).
+- **Confidence per kelompok field + review wajib**: skor model dikoreksi
+  deterministik (validasi email/telepon, kelengkapan data); kelompok di bawah
+  ambang 0.7 wajib dicek recruiter sebelum finalisasi; koreksi inline tersimpan.
+- **Dokumen CV standar berversi**: finalisasi merender PDF struktur konsisten
+  (identitas → ringkasan → pengalaman → pendidikan → skill/sertifikasi/bahasa →
+  data penempatan) dengan **branding per tenant** (warna aksen + footer,
+  configurable); tiap finalize membuat versi baru; **placement baru otomatis
+  mengunci versi terbaru** sebagai bukti submission ke klien (§10.3).
+- **Facet talent pool**: `GET /talentpool?q=&domisili=&skill=&readiness=&tp_status=`
+  sesuai skema seragam §10.2.
+- **Kepatuhan UU PDP**: consent wajib saat unggah; hak hapus subjek
+  (`POST /talentpool/candidates/{id}/forget`) menghapus profil/snapshot dan
+  membersihkan PII kandidat dengan jejak audit.
+- Frontend: halaman "🧬 Talent Pool" (nav Recruitment) — unggah+consent, filter
+  facet, badge "perlu cek", panel review, unduh versi PDF.
+- Deps baru: `python-docx`. Tes: `backend/tests/test_talentpool.py`.
+
+### Added — Fase 10 sisa AI: OCR Faktur, Rekonsiliasi Bank Cerdas, Prediksi Pembayaran
+
+- **OCR faktur + auto-kategori (§8.8 #1)**: `POST /accounting/ai/ocr-bill` — foto
+  faktur/nota (PNG/JPEG/WebP) diekstraksi satu panggilan model vision
+  (`vision_completion` di `app/core/llm.py`) menjadi draft pembelian + saran COA
+  dari riwayat tenant. Hasil berupa draft — bill tetap dibuat lewat endpoint
+  pembelian agar jurnal terkontrol.
+- **Rekonsiliasi bank cerdas (§8.8 #2)**: impor CSV rekening koran
+  (`GET /cashbank/statement/template`, `POST /cashbank/statement/import`) dengan
+  laporan baris gagal & duplikat; matching fuzzy deterministik ke transaksi kas-bank
+  belum terekonsiliasi — skor = nominal 60% (toleransi ≤0,5%) + jarak tanggal ≤14 hari
+  25% + kemiripan token deskripsi 15%, ambang usulan 75%. Konfirmasi usulan
+  (`POST .../{id}/match`) menandai transaksi terekonsiliasi dan membersihkan usulan
+  basi; baris tanpa pasangan diberi alasan yang bisa dibaca. Model baru
+  `BankStatementLine` (migrasi `o5p6q7r8s9t0`).
+- **Prediksi pembayaran klien (§8.8 #6)**: `GET /accounting/ai/payment-prediction` —
+  skor risiko telat bayar per klien dari histori invoice (rasio keterlambatan +
+  rata-rata hari telat + paparan overdue) → prioritas collection = outstanding × risiko.
+- **Frontend**: tab baru "🤖 AI & Rekonsiliasi" pada halaman Akunting berisi Scan
+  Faktur, Rekonsiliasi Bank Cerdas, dan tabel Prediksi Pembayaran Klien.
+- Tes: `backend/tests/test_fase10_ai_sisa.py`.
+
+### Added — Fase 9 penutup: Rantai Approval PR Multi-level per Tenant
+
+- **Konfigurasi rantai** (`pr_approval_steps`, migrasi `n4o5p6q7r8s9`): urutan tahap
+  approval per tenant — tiap tahap menunjuk satu user spesifik atau satu peran staf.
+  `GET|PUT /payment-requests/approval-chain` (PUT khusus admin/management).
+- **Eksekusi bertahap**: PR berjalan tahap demi tahap; hanya approver tahap berjalan
+  yang dapat memutus (403 bila bukan); setujui tahap non-akhir melanjutkan ke approver
+  berikutnya (notifikasi otomatis); tolak di tahap mana pun menggugurkan seluruh PR.
+- **Jejak keputusan per tahap** (`pr_approvals`): step, approver, keputusan + catatan,
+  waktu — tercatat juga di audit log. Progres `Tahap X/Y` tampil di daftar PR.
+- **Kompatibilitas legacy**: tanpa konfigurasi rantai → perilaku lama (management/
+  admin mana pun memutus). Kartu aksi chat PR ikut tunduk pada validasi rantai.
+- Frontend: panel "Rantai Approval" di halaman Payment Request (tambah/hapus/simpan
+  tahap), badge progres tahap per baris PR.
+- Tes: rantai 2 tahap (peran → user), 403 approver salah tahap, penolakan per tahap,
+  validasi config (422), reset ke legacy.
+
+### Added — Saltab Export Excel/PDF + Pencarian & Mention Chat
+
+- **Ekspor Saltab**: `GET /payroll/runs/{id}/saltab/export-excel` (openpyxl) dan
+  `/export-pdf` (reportlab landscape A4); CSV tetap tersedia.
+- **Pencarian pesan chat** + **autocomplete mention** ter-scope (karyawan hanya bisa
+  menyebut sesama scope proyeknya).
+
 ### Added — Fase 11: Chat Workspace (gratis, WebSocket real-time — v1 REST polling)
 
 - **Model chat** (`chat_channels`, `chat_channel_members`, `chat_messages`, `chat_message_reactions`, migrasi `l3m4n5o6p7q8`): Channel tipe `public/private/dm/broadcast`, pesan thread (`parent_id`), soft delete, reaksi emoji, anggota channel.

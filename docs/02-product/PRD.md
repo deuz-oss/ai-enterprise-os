@@ -159,39 +159,43 @@ lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
 - Validasi dua jalur: internal → **HR**; outsourcing → **Operations**.
   Rekap tervalidasi menjadi masukan Saltab.
 
-### Fase 9 — Payrol Dua Jalur, Saltab Digital, PR & Invoice
+### Fase 9 — Payrol Dua Jalur, Saltab Digital, PR & Invoice — ✅ Selesai (2026-08-26)
 
 - `Employee.employment_type` = `internal | eksternal`; `PayrollRun.run_type` =
-  `internal | proyek`; run proyek **per klien per periode**.
+  `internal | proyek`; run proyek **per klien per periode**. ✅
 - State machine payrol proyek:
   `DRAFT → SUBMITTED_TO_CLIENT → CLIENT_REJECTED (→DRAFT) → CLIENT_APPROVED → FINANCE_PROCESSING → FINALIZED`
-  Payrol internal: `DRAFT → FINANCE_PROCESSING → FINALIZED`.
+  Payrol internal: `DRAFT → FINANCE_PROCESSING → FINALIZED`. ✅
 - Approval klien via **link ber-token** (tanpa akun): ringkasan Saltab per klien,
   tombol approve/reject + nama & catatan, kedaluwarsa token, tercatat di audit.
-  Export Excel/PDF tetap tersedia sebagai lampiran email (fallback proses lama).
-- **Payment Request (PR)** di modul finance (detail §7).
-- Invoice proyek otomatis saat `CLIENT_APPROVED` (rincian §6).
+  Export Excel/PDF tetap tersedia sebagai lampiran email (fallback proses lama). ✅
+- **Saltab digital** grid editable + ekspor Excel/PDF/CSV; BPJS dua sisi. ✅
+- **Payment Request (PR)** di modul finance dengan **rantai approval multi-level
+  configurable per tenant** (`GET|PUT /payment-requests/approval-chain`) — tiap tahap
+  user spesifik atau peran; jejak keputusan per tahap; tanpa rantai = management/
+  admin mana pun. Detail §7. ✅
+- Invoice proyek otomatis saat `CLIENT_APPROVED` (rincian §6). ✅
 - Jurnal otomatis saat `FINALIZED` via mesin auto-journal Fase 10
-  (internal: beban gaji/BPJS; proyek: piutang ke klien).
+  (internal: beban gaji/BPJS; proyek: piutang ke klien). ✅
 
-### Fase 10 — Finance & Accounting ala Accurate
+### Fase 10 — Finance & Accounting ala Accurate — ✅ Selesai (2026-08-26)
 
 Menggantikan modul akunting minimal dengan konsep setara Accurate Online,
 ditambah dimensi analisis dan AI layer sebagai pembeda. Spesifikasi penuh di §8;
 ringkas:
 
-- Bagan akun dinamis (tabel + template default jasa outsourcing, CRUD per tenant).
+- Bagan akun dinamis (tabel + template default jasa outsourcing, CRUD per tenant). ✅
 - Jurnal umum dengan status memorial → terposting; semua modul membentuk jurnal
-  lewat mesin auto-journal berbasis rule config (idempoten per dokumen sumber).
+  lewat mesin auto-journal berbasis rule config (idempoten per dokumen sumber). ✅
 - Modul transaksi: kas & bank (rekonsiliasi), pembelian (bill vendor),
-  aset tetap (penyusutan bulanan otomatis); penjualan = invoice; payroll dari Fase 9.
-- Periode akuntansi bulanan + tutup buku (lock, jurnal ikhtisar, audit bila dibuka ulang).
-- Dimensi analisis klien/proyek pada baris jurnal → **laba rugi per kontrak**.
+  aset tetap (penyusutan bulanan otomatis); penjualan = invoice; payroll dari Fase 9. ✅
+- Periode akuntansi bulanan + tutup buku (lock, jurnal ikhtisar, audit bila dibuka ulang). ✅
+- Dimensi analisis klien/proyek pada baris jurnal → **laba rugi per kontrak**. ✅
 - Laporan: buku besar, neraca saldo bulanan, laba rugi (bulan/YTD/per klien),
-  neraca, arus kas tidak langsung, aging piutang, mutasi aset tetap.
+  neraca, arus kas tidak langsung, aging piutang, mutasi aset tetap. ✅
 - **AI akuntansi (pembeda)**: auto-kategori + OCR, rekonsiliasi bank cerdas,
   asisten tutup buku, tanya-laporan natural language, narasi eksekutif otomatis,
-  prediksi pembayaran klien, deteksi anomali/kepatuhan (§8.8).
+  prediksi pembayaran klien, deteksi anomali/kepatuhan (§8.8). ✅
 
 ### Fase 11 — Chat Workspace ala Slack *(gratis)*
 
@@ -218,7 +222,7 @@ Setelah dasar chat stabil: asisten **@AEOS** via DM (RAG lintas aplikasi),
 rangkuman thread panjang, digest harian channel, slash command (`/pr`, `/cuti`,
 `/jo`), routing pertanyaan ke tim/peran yang tepat. Detail §9.6.
 
-### Fase 13 — Talent Pool & CV Standardization
+### Fase 13 — Talent Pool & CV Standardization — ✅ Selesai (2026-08-26)
 
 Semua kandidat ("talent pool") distandarkan otomatis agar informasi seragam,
 bisa dicari/difilter, dan siap dikirim ke klien dengan format konsisten.
@@ -279,6 +283,14 @@ DIAJUKAN (pemohon)
   → DIEKSEKUSI           Finance menjalankan pembayaran (checklist transfer per bank)
   → jurnal otomatis → Accounting
 ```
+
+**Rantai approval multi-level (✅ terimplementasi):** tenant dapat mengonfigurasi
+urutan tahap (`GET|PUT /payment-requests/approval-chain`, PUT khusus admin/
+management) — tiap tahap menunjuk satu **user spesifik** atau satu **peran staf**.
+Hanya approver tahap berjalan yang dapat memutus; setuju di tahap non-akhir
+melanjutkan ke approver berikutnya (notifikasi otomatis); tolak di tahap mana pun
+menggugurkan PR. Setiap keputusan tersimpan per tahap + audit log. Tanpa rantai →
+management/admin mana pun memutus.
 
 Semua transisi tercatat di modul `audit` + notifikasi in-app/email.
 

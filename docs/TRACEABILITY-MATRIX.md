@@ -486,6 +486,74 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Migrasi | `k2l3m4n5o6p7` (3 tabel: bank_transactions/purchase_bills/fixed_assets) |
 | Test | `backend/tests/test_fase10_transactions.py` |
 
+### 12.20 Saltab Export Excel/PDF + Pencarian & Mention Chat
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Ekspor Saltab ke Excel/PDF; pencarian pesan chat; autocomplete mention ter-scope |
+| Source Code | `backend/app/modules/payroll/{service,router}.py` (openpyxl/reportlab), `backend/app/modules/chat/{service,router}.py` |
+| API | `GET /payroll/runs/{id}/saltab/export-excel|export-pdf` · `GET /chat/search?q=` · autocomplete mention di endpoint pesan |
+| Frontend | Tombol unduh Excel/PDF di halaman Payroll; kotak cari + saran mention di halaman Chat |
+| Aturan | Karyawan tetap hanya bisa menyebut/menemukan user dalam scope proyeknya |
+
+### 12.21 Fase 9 penutup — Rantai Approval PR Multi-level per Tenant
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Urutan tahap approval Payment Request configurable per tenant (PRD §7: "rantai configurable, contoh COO") |
+| Source Code | `backend/app/modules/finance/models.py` (`PRApprovalStep`, `PaymentRequestApproval`), `finance/service.py` (`get/set_approval_chain`, `decide_payment_request` multi-tahap) |
+| API | `GET|PUT /payment-requests/approval-chain` (PUT admin/management); daftar PR kini memuat `progress` (tahap berjalan + riwayat keputusan) |
+| Aturan | Tiap tahap = user spesifik atau peran staf; hanya approver tahap berjalan bisa memutus (403 bila bukan); setujui tahap non-akhir → lanjut + notifikasi approver berikutnya; tolak → PR gugur; tanpa rantai → legacy (management/admin mana pun); kartu chat ikut tervalidasi |
+| Migrasi | `n4o5p6q7r8s9` (tabel `pr_approval_steps` + `pr_approvals`) |
+| Frontend | Panel "Rantai Approval" + badge progres Tahap X/Y di halaman Payment Request |
+| Test | `backend/tests/test_payment_request.py` (+3 skenario rantai) |
+
+### 12.22 Fase 10 sisa AI — OCR Faktur, Rekonsiliasi Bank Cerdas, Prediksi Pembayaran
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | §8.8 #1 foto faktur → draft pembelian + saran COA; #2 impor rekening koran + matching fuzzy + alasan ketidakcocokan; #6 skor risiko telat bayar klien → prioritas collection |
+| Source Code | `accounting/ai_accounting.py` (`ocr_extract_bill`, `predict_client_payments`), `accounting/bank_statement.py` (impor + matching deterministik), `app/core/llm.py` (`vision_completion`) |
+| API | `POST /accounting/ai/ocr-bill` (multipart gambar; 503 bila AI tak dikonfigurasi) · `GET /cashbank/statement/template` · `POST /cashbank/statement/import` (CSV, lapor baris gagal/duplikat) · `GET /cashbank/statement` · `POST /cashbank/statement/{id}/match` · `POST /cashbank/statement/{id}/ignore` · `GET /accounting/ai/payment-prediction` |
+| Aturan | OCR satu panggilan vision LLM → DRAFT saja (bill tetap dibuat via endpoint pembelian); matching 100% deterministik: nominal (toleransi ≤0,5%) 60% + jarak tanggal ≤14 hari 25% + kemiripan token deskripsi 15%, ambang usulan 75%; konfirmasi match menandai transaksi terekonsiliasi & membersihkan usulan basi baris lain; prediksi: rasio telat 60% + avg delay 40% (+10 overdue berjalan), prioritas = outstanding × risiko |
+| Model | `BankStatementLine` (`bank_statement_lines`, migrasi `o5p6q7r8s9t0`) |
+| Frontend | Tab "🤖 AI & Rekonsiliasi" halaman Akunting: Scan Faktur, Rekonsiliasi Bank Cerdas, Prediksi Pembayaran Klien |
+| Test | `backend/tests/test_fase10_ai_sisa.py` (prediksi ranking, impor+match+confirm+ignore, baris gagal/duplikat, validasi OCR) |
+
+### 12.23 Fase 13 — Talent Pool & CV Standardization
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Pipeline CV → profil terstruktur berversi → review recruiter (confidence) → PDF CV standar bertemplate branding tenant; facet talent pool; hak hapus UU PDP; snapshot submission (PRD §10) |
+| Source Code | `backend/app/modules/talentpool/{models,schemas,service,router}.py`; hook lock di `recruitment/service.py::create_placement` |
+| API | `POST /talentpool/intake` (multipart + consent UU PDP) · `GET /talentpool/intake/{id}` · `POST .../review` · `POST .../finalize` · `POST .../reprocess` · `GET /talentpool` (facet q/domisili/skill/readiness/tp_status/has_standard_cv) · `GET /talentpool/cv-versions/{id}/download` · `GET|PUT /talentpool/branding` · `POST /talentpool/candidates/{id}/forget` |
+| Aturan | Deteksi jenis dokumen: pdf teks vs scan (pypdf ≥40 char), DOCX (python-docx), gambar; scan/gambar → satu panggilan vision LLM; skema tetap berversi (SCHEMA/PROMPT_VERSION); confidence per kelompok dikoreksi deterministik (regex email/telepon, kelengkapan array); < 0.7 = wajib review — finalisasi diblokir selama belum dicek; file asli tak pernah ditimpa; tiap finalize = versi baru snapshot PDF; placement baru mengunci versi terbaru (bukti submission); intake gagal tetap tersimpan & bisa diproses ulang; forget menghapus profil/snapshot + scrub PII kandidat |
+| Guard | Lisensi aplikasi `recruitment`; role recruiter/operations/hr/management; branding PUT admin/management |
+| Migrasi | `p6q7r8s9t0u1` (`cv_intakes`, `standard_cv_versions`, `tenant_cv_branding`) |
+| Frontend | Halaman "🧬 Talent Pool" (`/talent-pool`, nav Recruitment): unggah+consent, facet filter, tabel status TP, panel review (highlight wajib cek, koreksi inline), unduh versi PDF |
+| Test | `backend/tests/test_talentpool.py` (8 skenario: validasi consent/format, gagal-tanpa-AI + reprocess, pipeline mocked→finalize→PDF, blokir finalize sebelum review, facet+hak hapus, lock saat placement, branding, unit normalize_and_score) |
+
+### 12.24 Fase 8 lanjutan — Mobile GPS+selfie Absensi
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Clock-in/out dari app mobile dengan bukti selfie kamera depan + koordinat GPS (PRD Fase 8) |
+| Source Code | `ess/service.py` (`mobile_clock`, `_save_selfie`, `own_selfie_url`), kolom baru `attendance_records` (geo+selfie key per arah), migrasi `q7r8s9t0u1v2` |
+| API | `POST /me/attendance/clock-in|clock-out` (multipart: file selfie + latitude/longitude) · `GET /me/attendance/{id}/selfie/{in|out}/download-url` (pemilik) · `GET /attendance/records` kini memuat `*_geo` + `has_*_selfie` · `GET /attendance/records/{id}/selfie/{which}/download-url` (admin/hr/operations/management) |
+| Aturan | Satu record/hari: clock-in kedua & clock-out ganda → 409; record manual/cuti hari ini memblokir clock-in; koordinat divalidasi rentang; selfie JPG/PNG ≤5 MB tersimpan di storage; notifikasi ke HR & Ops tiap clock; akses selfie HR terbatas role + audit log |
+| Mobile | Tab "Absensi Saya" di Portal (`self_attendance_screen.dart`): izin lokasi (geolocator) → foto depan (image_picker) → unggah multipart (`postMultipart`); deps baru pubspec; verifikasi build butuh Flutter SDK (AGENTS.md) |
+| Test | `backend/tests/test_mobile_absensi.py` (4 skenario: alur in/out + duplikat + flag HR, validasi akun/koordinat/format, blokir oleh record manual, hak akses selfie pemilik vs HR) |
+
+### 12.25 Branding CV — Logo Perusahaan
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Logo tenant pada header CV standar (pelengkap §10.3 branding) |
+| API | `POST /talentpool/branding/logo` (PNG/JPEG ≤2 MB, admin/management) · `DELETE .../branding/logo` · `GET /talentpool/branding/logo/download` (preview `<img>`) · `GET /branding` kini memuat `has_logo`+`logo_url` |
+| Render | Logo diambil dari storage saat finalize; tinggi tetap 14 mm, lebar mengikuti rasio; logo rusak tidak menggagalkan render PDF |
+| Frontend | Kartu "🎨 Branding CV Standar" di halaman Talent Pool (warna aksen, footer, unggah/hapus logo — admin/management) |
+| Test | `backend/tests/test_talentpool.py::test_logo_upload_render_dan_hapus` (validasi format, upload, preview, finalize dengan logo, hapus) |
+
 ---
 
 # End of Requirement Traceability Matrix
