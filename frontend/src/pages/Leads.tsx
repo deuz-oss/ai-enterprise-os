@@ -27,14 +27,15 @@ const STAGE_DOT: Record<string, string> = {
   gagal: "#e03e3e",
 };
 
-const BADGE_COLORS: Record<string, string> = {
-  lead: "bg-slate-100 text-slate-600",
-  kontak: "bg-blue-100 text-blue-700",
-  presentasi: "bg-indigo-100 text-indigo-700",
-  penawaran: "bg-violet-100 text-violet-700",
-  negosiasi: "bg-amber-100 text-amber-700",
-  deal: "bg-emerald-100 text-emerald-700",
-  gagal: "bg-red-100 text-red-700",
+// B1: pill status pakai palet hex Notion persis mockup (lihat index.css).
+const STAGE_PILL: Record<string, string> = {
+  lead: "pill p-gray",
+  kontak: "pill p-blue",
+  presentasi: "pill p-indigo",
+  penawaran: "pill p-violet",
+  negosiasi: "pill p-yellow",
+  deal: "pill p-green",
+  gagal: "pill p-red",
 };
 
 interface Activity {
@@ -154,7 +155,12 @@ export default function Leads() {
       {view === "tabel" && (
         <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead
+            style={{
+              borderBottom: "1px solid var(--n-border)",
+              backgroundColor: "var(--n-hover)",
+            }}
+          >
             <tr>
               <th className="th">Perusahaan</th>
               <th className="th">PIC</th>
@@ -163,14 +169,18 @@ export default function Leads() {
               <th className="th">Tahapan</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody
+            style={{ borderTop: "1px solid var(--n-border)" }}
+          >
             {(leads ?? []).map((lead) => (
               <tr
                 key={lead.id}
                 onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
-                className={`cursor-pointer hover:bg-slate-50 ${
-                  selectedId === lead.id ? "bg-indigo-50/50" : ""
-                }`}
+                className="cursor-pointer transition-colors"
+                style={{
+                  backgroundColor:
+                    selectedId === lead.id ? "var(--accent-tint)" : undefined,
+                }}
               >
                 <td className="td font-medium">{lead.company_name}</td>
                 <td className="td">{lead.contact_name ?? "-"}</td>
@@ -184,7 +194,7 @@ export default function Leads() {
                       changeStage.mutate({ id: lead.id, stage: e.target.value });
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className={`badge cursor-pointer border-0 ${BADGE_COLORS[lead.stage]}`}
+                    className={`cursor-pointer border-0 ${STAGE_PILL[lead.stage] ?? "pill p-gray"}`}
                   >
                     {STAGES.map((s) => (
                       <option key={s} value={s}>
@@ -197,7 +207,7 @@ export default function Leads() {
             ))}
             {leads?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada lead.
                 </td>
               </tr>
@@ -351,7 +361,7 @@ export default function Leads() {
             );
           })()}
 
-          <h2 className="mt-6 font-semibold text-notion">Aktivitas</h2>
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas</h2>
           <form
             className="mt-3 flex gap-2"
             onSubmit={(e) => {
@@ -368,12 +378,22 @@ export default function Leads() {
           </form>
           <ul className="mt-3 space-y-2">
             {(activities ?? []).map((a) => (
-              <li key={a.id} className="rounded-lg bg-slate-50 p-3 text-sm">
-                <span className="font-medium text-slate-600">[{a.activity_type}]</span>{" "}
+              <li
+                key={a.id}
+                className="rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--n-hover)" }}
+              >
+                <span className="font-medium" style={{ color: "var(--n-text-muted)" }}>
+                  [{a.activity_type}]
+                </span>{" "}
                 {a.content}
               </li>
             ))}
-            {activities?.length === 0 && <li className="text-sm text-slate-400">Belum ada aktivitas.</li>}
+            {activities?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>
+                Belum ada aktivitas.
+              </li>
+            )}
           </ul>
         </div>
       )}

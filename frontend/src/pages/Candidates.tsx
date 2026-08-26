@@ -17,14 +17,15 @@ interface Candidate {
 
 const STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
 
+// B1: pill palet hex Notion (index.css).
 const BADGE_COLORS: Record<string, string> = {
-  baru: "bg-slate-100 text-slate-600",
-  screening: "bg-blue-100 text-blue-700",
-  interview: "bg-indigo-100 text-indigo-700",
-  offered: "bg-amber-100 text-amber-700",
-  placed: "bg-emerald-100 text-emerald-700",
-  gagal: "bg-red-100 text-red-600",
-  arsip: "bg-slate-100 text-slate-400",
+  baru: "pill p-gray",
+  screening: "pill p-blue",
+  interview: "pill p-indigo",
+  offered: "pill p-yellow",
+  placed: "pill p-green",
+  gagal: "pill p-red",
+  arsip: "pill p-gray",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -215,7 +216,7 @@ export default function Candidates() {
                   <select
                     value={c.status}
                     onChange={(e) => changeStatus.mutate({ id: c.id, status: e.target.value })}
-                    className={`badge cursor-pointer border-0 ${BADGE_COLORS[c.status]}`}
+                    className={`cursor-pointer border-0 ${BADGE_COLORS[c.status]}`}
                   >
                     {STATUSES.map((s) => (
                       <option key={s} value={s}>

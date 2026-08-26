@@ -21,17 +21,17 @@ Estimasi: 1–2 hari. Dampak visual paling besar, tanpa dependency baru.
 | A4 | Kartu upsell di sidebar | `Layout.tsx` | ✅ Kondisional app belum terpasang (prioritas E-Sign → AI → pertama); tombol trial langsung aktif |
 | A5 | App Launcher modal dari workspace switcher | `components/AppLauncherGrid.tsx` (baru), `Apps.tsx`, `Layout.tsx` | ✅ Grid diekstrak bersama; badge ✓ Terpasang / + Install; footer Full Package; workspace switcher membuka modal |
 
-## Fase B — Design Token & Konsistensi Visual
+## Fase B — Design Token & Konsistensi Visual — ✅ Selesai (2026-08-26)
 
 Estimasi: 1–2 hari. Tanpa fitur baru, murni parity tampilan.
 
-| # | Task | File | Catatan |
-|---|------|------|---------|
-| B1 | Palet pill Notion (`.pill .pill-blue/-violet/-green/-orange/-yellow/-red/-gray`) persis hex mockup | `frontend/src/index.css`, `pages/Leads.tsx:30-38` | Ganti `BADGE_COLORS` Tailwind generik; audit badge lain (`grep className.*badge`). |
-| B2 | Skala judul: H1 `text-[38px] font-bold`, emoji `56px`, label properti kolom `168px` | `components/notion.tsx:13-21,53-87` | Sesuaikan juga spacing divider seperti mockup line 145–155. |
-| B3 | Aksen per-app mendalam: set `--accent` via konteks/data-app di shell | `Layout.tsx:23-29,288`, `index.css:43-48` | `.btn`, active nav, callout accent mengikuti `--accent` app aktif, bukan selalu biru global. |
-| B4 | Bersihkan retro-fit dark `!important`: ganti kelas legacy `slate-*`/`indigo-*` ke token `notion.*` | `index.css:92-128`, semua `pages/*.tsx` | Bertahap per halaman (mulai Dashboard, Leads); hapus blok override saat halaman terakhir selesai. |
-| B5 | Dark mode token samakan dengan mockup (`--bg:#191919`, sidebar `#202020`, accent tetap `#2383E2`) | `index.css:21-30` | Perbaiki deviasi accent gelap `#5b9bd5`. |
+| # | Task | File | Status |
+|---|------|------|--------|
+| B1 | Palet pill Notion persis hex mockup | `index.css` (`.pill .p-*`), `Leads.tsx`, `Candidates.tsx`, `JobOrders.tsx` | ✅ 7 warna Notion + `.p-indigo` lokal (#5B5BD6) untuk tahap Presentasi; dark: teks pill dicerahkan. Badge lain (PaymentRequests, Chat, dst.) menyusul bertahap |
+| B2 | Skala judul H1 38px, emoji 56px, properti 168px | `components/notion.tsx` | ✅ PageHeader + PropertyRow mengikuti mockup L145–155; subtitle 15px |
+| B3 | Aksen per-app via token shell | `Layout.tsx`, `index.css`, `notion.tsx`, `AppLauncherGrid.tsx` | ✅ Token `--accent`/`--accent-tint` di-set dari app halaman aktif; dipakai `.btn`, `.input:focus`, tombol Bagikan/upsell/install, callout info |
+| B4 | Bersihkan retro-fit dark `!important` | `Dashboard.tsx`, `Leads.tsx` | 🟨 Mulai: Dashboard & Leads penuh token (tanpa slate legacy). Halaman lain bertahap — blok override global masih diperlukan |
+| B5 | Dark token samakan mockup | `index.css` | ✅ bg #191919, elevated #1F1F1F, sidebar #202020, border/hover/text sesuai mockup, accent tetap #2383E2 |
 
 ## Fase C — Fungsionalitas Mockup
 
@@ -62,8 +62,8 @@ Estimasi: 3–5 hari. Satu-satunya fase yang menambah dependency.
 - [x] Topbar: breadcrumb · ☆ · 💬 · 🌙 · ••• · **Bagikan**. *(Fase A; "Diedit baru saja" disembunyikan sampai ada sumber updated_at)*
 - [x] Sidebar: workspace switcher→modal launcher, 🔍 Pencarian, 🔔 Kotak Masuk+badge, grup aplikasi+page tree, upsell card, chip user. *(Fase A)*
 - [ ] Tabel/Papan/Kalender toggle aktif. *(Fase C2)*
-- [ ] Pill 7 warna hex Notion; H1 38px + emoji 56px; properties 168px. *(Fase B)*
-- [ ] Aksen per-app menerus ke button/callout/active state. *(Fase B3)*
+- [x] Pill 7 warna hex Notion (+1 indigo lokal); H1 38px + emoji 56px; properties 168px. *(Fase B; badge halaman lain menyusul)*
+- [x] Aksen per-app menerus ke button/callout/active state. *(Fase B3 — token `--accent` shell)*
 - [ ] ⌘K mencari entitas lintas app + quick actions. *(Fase C1)*
 - [ ] Kanban drag-and-drop. *(Fase C3)*
 - [ ] Editor blok (TipTap) menggantikan textarea. *(Fase D)*

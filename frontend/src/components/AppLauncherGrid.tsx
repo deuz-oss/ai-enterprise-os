@@ -82,8 +82,8 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
                   disabled={startTrial.isPending || app.status === "kedaluwarsa"}
                   className="rounded px-2 py-0.5 text-[11.5px] font-semibold disabled:opacity-40"
                   style={{
-                    color: "#2383E2",
-                    backgroundColor: "rgba(35,131,226,.14)",
+                    color: "var(--accent)",
+                    backgroundColor: "var(--accent-tint)",
                   }}
                 >
                   {app.status === "kedaluwarsa"
@@ -130,7 +130,7 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
                   to={HOME_ROUTE[app.key] ?? "/"}
                   onClick={() => document.dispatchEvent(new CustomEvent("aeos:close-launcher"))}
                   className="font-medium hover:underline"
-                  style={{ color: "#2383E2" }}
+                  style={{ color: "var(--accent)" }}
                 >
                   Buka →
                 </Link>

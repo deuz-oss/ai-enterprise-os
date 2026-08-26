@@ -29,6 +29,16 @@ const APP_META: Record<AppKey, { label: string; emoji: string; accent: string }>
   finance_accounting: { label: "Finance & Accounting", emoji: "📊", accent: "#cb912f" },
 };
 
+/// B3: hex aksen per app → pasangan [accent, tint] untuk token --accent shell
+/// (sumber: mockup `.shell[data-app=...]`).
+const APP_ACCENT_TOKENS: Record<string, [string, string]> = {
+  sales_crm: ["#2383e2", "rgba(35,131,226,.13)"],
+  recruitment: ["#9065b0", "rgba(144,101,176,.14)"],
+  hr_payroll: ["#0f7b6c", "rgba(15,123,109,.13)"],
+  operations_billing: ["#d9730d", "rgba(217,115,13,.13)"],
+  finance_accounting: ["#cb912f", "rgba(203,145,47,.16)"],
+};
+
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/leads", label: "Pipeline", app: "sales_crm" },
@@ -55,8 +65,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/audit", label: "Audit", roles: ["admin", "management"] },
 ];
 
-const APP_ORDER: AppKey[] = [
-  "sales_crm",
+const APP_ORDER: AppKey[] = [  "sales_crm",
   "recruitment",
   "hr_payroll",
   "operations_billing",
@@ -300,9 +309,22 @@ export default function Layout() {
       : activeItem?.apps?.[0] != null
         ? APP_META[activeItem.apps[0]].label
         : null;
+  // B3: aksen aktif mengikuti aplikasi halaman berjalan (default biru global).
+  const accentTokens =
+    activeItem?.app && APP_ACCENT_TOKENS[activeItem.app]
+      ? APP_ACCENT_TOKENS[activeItem.app]
+      : (["#2383e2", "rgba(35,131,226,.13)"] as [string, string]);
 
   return (
-    <div className="flex min-h-screen">
+    <div
+      className="flex min-h-screen"
+      style={
+        {
+          "--accent": accentTokens[0],
+          "--accent-tint": accentTokens[1],
+        } as React.CSSProperties
+      }
+    >
       {/* ===== Sidebar workspace ===== */}
       <aside
         className="flex w-64 shrink-0 flex-col"
@@ -406,7 +428,7 @@ export default function Layout() {
                 onClick={() => startTrialSidebar.mutate(pick.key)}
                 disabled={startTrialSidebar.isPending}
                 className="mt-2 w-full rounded py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: "#2383E2" }}
+                style={{ backgroundColor: "var(--accent)" }}
               >
                 Coba sekarang
               </button>
@@ -556,7 +578,7 @@ export default function Layout() {
             <button
               onClick={copyLink}
               className="ml-1.5 flex h-7 items-center rounded px-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "#2383E2" }}
+              style={{ backgroundColor: "var(--accent)" }}
               title="Salin tautan halaman ini"
             >
               {shareCopied ? "✓ Tersalin" : "Bagikan"}

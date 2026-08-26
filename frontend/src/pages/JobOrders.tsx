@@ -19,13 +19,14 @@ export interface JobOrder {
 
 const STATUSES = ["open", "screening", "interview_klien", "offering", "filled", "closed"];
 
+// B1: pill palet hex Notion (index.css).
 const BADGE_COLORS: Record<string, string> = {
-  open: "bg-blue-100 text-blue-700",
-  screening: "bg-indigo-100 text-indigo-700",
-  interview_klien: "bg-violet-100 text-violet-700",
-  offering: "bg-amber-100 text-amber-700",
-  filled: "bg-emerald-100 text-emerald-700",
-  closed: "bg-slate-100 text-slate-500",
+  open: "pill p-blue",
+  screening: "pill p-indigo",
+  interview_klien: "pill p-violet",
+  offering: "pill p-yellow",
+  filled: "pill p-green",
+  closed: "pill p-gray",
 };
 
 export default function JobOrders() {
@@ -141,7 +142,7 @@ export default function JobOrders() {
                   <select
                     value={jo.status}
                     onChange={(e) => changeStatus.mutate({ id: jo.id, status: e.target.value })}
-                    className={`badge cursor-pointer border-0 ${BADGE_COLORS[jo.status]}`}
+                    className={`cursor-pointer border-0 ${BADGE_COLORS[jo.status]}`}
                   >
                     {STATUSES.map((s) => (
                       <option key={s} value={s}>

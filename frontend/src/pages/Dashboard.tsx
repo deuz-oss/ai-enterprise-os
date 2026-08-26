@@ -24,13 +24,25 @@ const STAGE_LABELS: Record<string, string> = {
   gagal: "Gagal",
 };
 
+const STAGE_DOT: Record<string, string> = {
+  lead: "#9f9f9f",
+  kontak: "#2383e2",
+  presentasi: "#5b5bd6",
+  penawaran: "#9065b0",
+  negosiasi: "#cb912f",
+  deal: "#0f7b6c",
+  gagal: "#e03e3e",
+};
+
+/// Dashboard — B4: seluruh warna via token notion (tanpa kelas slate legacy).
 export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ["overview"],
     queryFn: () => api.get<Overview>("/overview"),
   });
 
-  if (isLoading || !data) return <p className="text-slate-500">Memuat...</p>;
+  if (isLoading || !data)
+    return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
 
   const stats = [
     { label: "Total Lead", value: data.leads.total, hint: `${data.leads.won} deal` },
@@ -45,27 +57,41 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="card">
-            <p className="text-sm text-slate-500">{s.label}</p>
-            <p className="mt-1 text-3xl font-bold text-slate-800">{s.value}</p>
-            <p className="mt-1 text-xs text-slate-400">{s.hint}</p>
+            <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>{s.label}</p>
+            <p className="mt-1 text-3xl font-bold" style={{ color: "var(--n-text)" }}>{s.value}</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>{s.hint}</p>
           </div>
         ))}
       </div>
       <div className="card">
-        <h2 className="font-semibold text-slate-700">Funnel Pre-sales</h2>
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Funnel Pre-sales</h2>
         <div className="mt-4 space-y-2">
           {data.leads.funnel.map((f) => {
             const max = Math.max(...data.leads.funnel.map((x) => x.count), 1);
             return (
               <div key={f.stage} className="flex items-center gap-3">
-                <span className="w-24 text-sm text-slate-500">{STAGE_LABELS[f.stage] ?? f.stage}</span>
-                <div className="h-6 flex-1 rounded bg-slate-100">
+                <span className="w-24 text-sm" style={{ color: "var(--n-text-muted)" }}>
+                  {STAGE_LABELS[f.stage] ?? f.stage}
+                </span>
+                <div
+                  className="h-6 flex-1 rounded"
+                  style={{ backgroundColor: "var(--n-hover)" }}
+                >
                   <div
-                    className="h-6 rounded bg-indigo-500"
-                    style={{ width: `${(f.count / max) * 100}%` }}
-                  />
+                    className="flex h-6 items-center justify-end rounded pr-1.5 text-[11px] font-semibold"
+                    style={{
+                      width: `${Math.max((f.count / max) * 100, f.count > 0 ? 8 : 0)}%`,
+                      backgroundColor:
+                        f.count > 0 ? STAGE_DOT[f.stage] ?? "var(--accent)" : "transparent",
+                      color: f.count > 0 ? "#ffffff" : "transparent",
+                    }}
+                  >
+                    {f.count}
+                  </div>
                 </div>
-                <span className="w-8 text-right text-sm font-medium text-slate-700">{f.count}</span>
+                <span className="w-8 text-right text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                  {f.count}
+                </span>
               </div>
             );
           })}
