@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.notifications.router import router as notifications_router
+    from app.modules.pages import router as pages_router
     from app.modules.payroll.router import public_router as payroll_public_router
     from app.modules.payroll.router import router as payroll_router
     from app.modules.platform.router import router as platform_router
@@ -185,6 +186,8 @@ def create_app() -> FastAPI:
     app.include_router(rates_router, prefix="/api/v1")
     # Chat Workspace (Fase 11): gratis di semua paket — tanpa guard lisensi.
     app.include_router(chat_router, prefix="/api/v1")
+    # Page tree ala Notion (Fase 7 polish): gratis untuk staf internal.
+    app.include_router(pages_router, prefix="/api/v1")
     # Fase 12: fitur AI kolaborasi ter-guard lisensi ai_addon (chat dasar tetap gratis).
     app.include_router(
         chat_ai_router,

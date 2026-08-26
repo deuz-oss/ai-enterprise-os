@@ -88,6 +88,8 @@ class Candidate(TenantMixin, Base):
     source: Mapped[str | None] = mapped_column(String(120))
     cv_object_key: Mapped[str | None] = mapped_column(String(500))
     cv_file_name: Mapped[str | None] = mapped_column(String(255))
+    # Foto kandidat untuk CV standar (ditampilkan bila branding tenant mengizinkan)
+    photo_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
     status: Mapped[CandidateStatus] = mapped_column(
         Enum(CandidateStatus, native_enum=False, length=50),
         default=CandidateStatus.new,

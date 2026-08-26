@@ -359,3 +359,65 @@ def test_normalize_and_score_unit():
     assert profile["email"] is None  # email invalid dibuang
     assert groups["skill"] < 0.7  # skills kosong → turun
     assert "skill" in needs and "penempatan" in needs
+
+
+def test_foto_kandidat_toggle_show_photo(client, monkeypatch):
+    """Polish §10.3: foto tampil di CV hanya bila branding show_photo aktif."""
+    from app.modules.talentpool import service
+
+    monkeypatch.setattr(service, "extract_profile", lambda db, data, kind: _fake_profile())
+    admin = _auth_header(client)
+
+    bad = client.post(
+        "/api/v1/talentpool/candidates/photo-x/photo",
+        headers=admin,
+        files={"file": ("p.png", _PNG_1PX, "image/png")},
+    )
+    assert bad.status_code == 404  # kandidat tidak dikenal dicek sebelum simpan
+
+    pdf = _minimal_pdf_bytes()
+    intake = client.post(
+        "/api/v1/talentpool/intake",
+        headers=admin,
+        files={"file": ("cv.pdf", io.BytesIO(pdf), "application/pdf")},
+        data={"consent": "true"},
+    ).json()
+    candidate_id = intake["candidate_id"]
+
+    up = client.post(
+        f"/api/v1/talentpool/candidates/{candidate_id}/photo",
+        headers=admin,
+        files={"file": ("pas-foto.png", _PNG_1PX, "image/png")},
+    )
+    assert up.status_code == 201, up.text
+    preview = client.get(f"/api/v1/talentpool/candidates/{candidate_id}/photo/download")
+    if preview.status_code in (401, 403):
+        preview = client.get(
+            f"/api/v1/talentpool/candidates/{candidate_id}/photo/download", headers=admin
+        )
+    assert preview.status_code == 200
+    assert preview.content[:4] == b"\x89PNG"
+
+    # Tanpa show_photo → finalize tetap jalan (foto diabaikan)
+    fin1 = client.post(f"/api/v1/talentpool/intake/{intake['id']}/finalize", headers=admin)
+    assert fin1.status_code == 200
+
+    # Aktifkan toggle lalu finalize CV baru dari intake kedua
+    client.put("/api/v1/talentpool/branding", headers=admin, json={"show_photo": True})
+    intake2 = client.post(
+        "/api/v1/talentpool/intake",
+        headers=admin,
+        files={"file": ("cv2.pdf", io.BytesIO(_minimal_pdf_bytes()), "application/pdf")},
+        data={"consent": "true", "candidate_id": candidate_id},
+    ).json()
+    fin2 = client.post(f"/api/v1/talentpool/intake/{intake2['id']}/finalize", headers=admin)
+    assert fin2.status_code == 200, fin2.text
+    dl = client.get(
+        f"/api/v1/talentpool/cv-versions/{fin2.json()['versions'][0]['id']}/download",
+        headers=admin,
+    )
+    assert dl.content[:5] == b"%PDF-"
+
+    rm = client.delete(f"/api/v1/talentpool/candidates/{candidate_id}/photo", headers=admin)
+    assert rm.status_code == 200
+    assert rm.json()["has_photo"] is False

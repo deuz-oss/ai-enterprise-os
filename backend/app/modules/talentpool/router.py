@@ -1,6 +1,6 @@
 """Router Talent Pool & CV Standardization (Fase 13, PRD §10)."""
 
-from app.core.database import get_db
+from app.core.database import get_db, parse_uuid
 from app.core.security import get_current_user, require_roles
 from app.modules.talentpool import service
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
@@ -105,6 +105,46 @@ def forget_candidate(
 ):
     """Hak hapus atas permintaan subjek data (UU PDP, PRD §10.5)."""
     return service.forget_candidate(db, user=user, candidate_id=candidate_id)
+
+
+# ---------- Foto kandidat untuk CV standar (toggle branding §10.3) ----------
+
+
+@router.post("/candidates/{candidate_id}/photo", status_code=201)
+async def upload_candidate_photo(
+    candidate_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Unggah foto kandidat (PNG/JPEG ≤ 5 MB); tampil bila show_photo aktif."""
+    data = await file.read()
+    return service.upload_candidate_photo(
+        db, user=user, candidate_id=candidate_id, data=data, mime=(file.content_type or "").lower()
+    )
+
+
+@router.delete("/candidates/{candidate_id}/photo")
+def remove_candidate_photo(
+    candidate_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.remove_candidate_photo(db, user=user, candidate_id=candidate_id)
+
+
+@router.get("/candidates/{candidate_id}/photo/download")
+def download_candidate_photo(candidate_id: str, db: Session = Depends(get_db)):
+    from app.core import storage
+    from app.modules.recruitment.models import Candidate
+    from fastapi import HTTPException
+
+    candidate = db.get(Candidate, parse_uuid(candidate_id))
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+    if not candidate.photo_object_key:
+        raise HTTPException(status_code=404, detail="Kandidat belum punya foto")
+    data = storage.get_object(candidate.photo_object_key)
+    mime = "image/png" if candidate.photo_object_key.endswith(".png") else "image/jpeg"
+    return Response(content=data, media_type=mime)
 
 
 @router.get("/branding")

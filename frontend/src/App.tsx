@@ -20,6 +20,7 @@ import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
 import Rates from "./pages/Rates";
 import TalentPool from "./pages/TalentPool";
+import Pages from "./pages/Pages";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -39,6 +40,8 @@ export default function App() {
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/talent-pool" element={<TalentPool />} />
+            <Route path="/pages" element={<Pages />} />
+            <Route path="/pages/:id" element={<Pages />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/chat" element={<Chat />} />

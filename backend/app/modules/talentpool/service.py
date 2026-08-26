@@ -12,6 +12,7 @@ pipeline dapat dijalankan ulang.
 
 import io
 import json
+import logging
 import re
 from datetime import UTC, date, datetime
 
@@ -31,6 +32,8 @@ from app.modules.talentpool.models import (
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_MIME = (
     "application/pdf",
@@ -525,7 +528,12 @@ def finalize_intake(db: Session, *, user, intake_id: str):
 
     profile = json.loads(intake.extracted or "{}")
     branding = get_branding(db)
-    pdf_bytes = render_standard_cv(db, profile, branding)
+    photo_bytes = None
+    if branding.show_photo:
+        candidate_row = db.get(Candidate, intake.candidate_id)
+        if candidate_row is not None:
+            photo_bytes = candidate_photo_bytes(db, candidate_row)
+    pdf_bytes = render_standard_cv(db, profile, branding, photo_bytes=photo_bytes)
     version_key = storage.new_object_key(
         f"talentpool/{intake.candidate_id}/standard-cv",
         f"cv-standar-v{str(intake.id)[:8]}.pdf",
@@ -717,6 +725,64 @@ def forget_candidate(db: Session, *, user, candidate_id: str) -> dict:
     return removed
 
 
+ALLOWED_PHOTO_MIME = ("image/png", "image/jpeg")
+_MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+
+def upload_candidate_photo(db: Session, *, user, candidate_id: str, data: bytes, mime: str):
+    """Unggah foto kandidat untuk CV standar (PNG/JPEG ≤ 5 MB)."""
+    from app.modules.recruitment.service import _get_candidate
+
+    if mime not in ALLOWED_PHOTO_MIME:
+        raise HTTPException(status_code=422, detail="Foto harus PNG atau JPEG")
+    if not data:
+        raise HTTPException(status_code=422, detail="File foto kosong")
+    if len(data) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=422, detail="Foto maksimal 5 MB")
+    candidate = _get_candidate(db, candidate_id)
+    key = storage.new_object_key(
+        f"talentpool/{candidate.id}/photo", "photo.png" if mime == "image/png" else "photo.jpg"
+    )
+    storage.put_object(key, data, mime)
+    candidate.photo_object_key = key
+    db.commit()
+    audit.log_event(
+        db,
+        action="talentpool.photo_uploaded",
+        entity_type="candidate",
+        entity_id=candidate.id,
+        object_key=key,
+        detail={"by": getattr(user, "email", "?"), "size": len(data)},
+    )
+    return {"candidate_id": str(candidate.id), "has_photo": True}
+
+
+def remove_candidate_photo(db: Session, *, user, candidate_id: str):
+    from app.modules.recruitment.service import _get_candidate
+
+    candidate = _get_candidate(db, candidate_id)
+    candidate.photo_object_key = None
+    db.commit()
+    audit.log_event(
+        db,
+        action="talentpool.photo_removed",
+        entity_type="candidate",
+        entity_id=candidate.id,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return {"candidate_id": str(candidate.id), "has_photo": False}
+
+
+def candidate_photo_bytes(db: Session, candidate) -> bytes | None:
+    if not candidate.photo_object_key:
+        return None
+    try:
+        return storage.get_object(candidate.photo_object_key)
+    except Exception:  # noqa: BLE001 - foto hilang tidak boleh gagalkan render
+        logger.warning("Foto kandidat %s gagal dibaca", candidate.id)
+        return None
+
+
 # ---------- Branding per tenant ----------
 
 
@@ -809,9 +875,15 @@ def serialize_branding(branding: TenantCvBranding) -> dict:
 # ---------- Render CV standar (reportlab, §10.3) ----------
 
 
-def render_standard_cv(db: Session, profile: dict, branding: TenantCvBranding) -> bytes:
+def render_standard_cv(
+    db: Session, profile: dict, branding: TenantCvBranding, photo_bytes: bytes | None = None
+) -> bytes:
     """PDF CV standar struktur tetap: identitas → ringkasan → pengalaman →
-    pendidikan → skill/sertifikasi/bahasa → data penempatan."""
+    pendidikan → skill/sertifikasi/bahasa → data penempatan.
+
+    Foto kandidat tampil di kanan header bila branding tenant mengizinkan
+    (show_photo) dan fotonya tersedia.
+    """
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -821,6 +893,8 @@ def render_standard_cv(db: Session, profile: dict, branding: TenantCvBranding) -
         Paragraph,
         SimpleDocTemplate,
         Spacer,
+        Table,
+        TableStyle,
     )
 
     accent = colors.HexColor(branding.accent_color)
@@ -877,11 +951,47 @@ def render_standard_cv(db: Session, profile: dict, branding: TenantCvBranding) -
         except Exception:  # noqa: BLE001 - logo rusak tidak boleh gagalkan render
             pass
 
-    story.append(Paragraph(esc(profile.get("full_name") or "-"), h1))
+    name_para = Paragraph(esc(profile.get("full_name") or "-"), h1)
     contact_bits = [
         b for b in (profile.get("phone"), profile.get("email"), profile.get("domisili")) if b
     ]
-    story.append(Paragraph(" · ".join(esc(b) for b in contact_bits), sub))
+    contact_para = Paragraph(" · ".join(esc(b) for b in contact_bits), sub)
+
+    photo_img = None
+    if photo_bytes:
+        try:
+            from reportlab.lib.utils import ImageReader
+            from reportlab.platypus import Image
+
+            reader = ImageReader(io.BytesIO(photo_bytes))
+            iw, ih = reader.getSize()
+            height = 24 * mm
+            width = min(height * (iw / max(ih, 1)), 20 * mm)
+            photo_img = Image(reader, width=width, height=height)
+        except Exception:  # noqa: BLE001
+            photo_img = None
+
+    if photo_img is not None:
+        header_tbl = Table(
+            [[name_para, photo_img], [contact_para, ""]],
+            colWidths=[120 * mm, 30 * mm],
+        )
+        header_tbl.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ]
+            )
+        )
+        story.append(header_tbl)
+    else:
+        story.append(name_para)
+        story.append(contact_para)
     if profile.get("birth_date"):
         story.append(Paragraph(f"Tanggal lahir: {esc(profile['birth_date'])}", small))
     story.append(HRFlowable(width="100%", thickness=1.2, color=accent, spaceBefore=6, spaceAfter=6))

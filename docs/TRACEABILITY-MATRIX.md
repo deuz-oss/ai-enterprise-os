@@ -565,6 +565,17 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Frontend | Tombol 🧵 Rangkum pada thread, panel 📋 Digest harian, placeholder hint slash/@AEOS di halaman Chat |
 | Test | `backend/tests/test_fase12_ai_kolaborasi.py` (6 skenario: help+/pr status, cuti DM-only + validasi, mention tanpa lisensi, mention dengan LLM mocked + routing, summarize endpoint + blokir thread pendek, digest+ask langsung) |
 
+### 12.27 Polish — Foto Kandidat pada CV Standar & Page Tree Notion
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | §10.3 foto kandidat tampil di CV standar bila branding `show_photo` aktif; halaman buatan user berhierarki untuk sidebar page tree (Fase 7) |
+| Source Code | `talentpool/service.py` (`upload/remove_candidate_photo`, render header dua kolom dengan foto), kolom `candidates.photo_object_key`; modul baru `app/modules/pages.py` (`NotionPage`) |
+| API | `POST|DELETE /talentpool/candidates/{id}/photo` · `GET .../photo/download` · `GET|POST /pages` · `GET|PATCH|DELETE /pages/{id}` (hapus kaskade sub-halaman, anti-siklus parent) |
+| Aturan | Foto PNG/JPEG ≤5 MB; dirender hanya saat branding.show_photo=True dan fotonya terbaca — kegagalan foto tidak menggagalkan PDF; halaman gratis untuk staf (karyawan dilarang menulis); migrasi `r8s9t0u1v2w3` |
+| Frontend | Editor `/pages/:id` (judul, ikon, konten, hapus) + grup "📄 Halaman" dinamis di sidebar dengan sub-halaman terindentasi |
+| Test | `test_pages.py` (CRUD, tree, siklus ditolak, kaskade hapus, karyawan 403) · `test_talentpool.py::test_foto_kandidat_toggle_show_photo` |
+
 ---
 
 # End of Requirement Traceability Matrix

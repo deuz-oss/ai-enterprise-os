@@ -6,6 +6,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Polish: Foto Kandidat pada CV Standar & Page Tree Notion
+
+- **Foto kandidat (§10.3)**: unggah/hapus foto (`/talentpool/candidates/{id}/photo`,
+  PNG/JPEG ≤5 MB); tampil di header CV standar hanya bila branding tenant
+  mengaktifkan `show_photo`; kegagalan baca foto tidak menggagalkan render PDF.
+- **Page tree ala Notion (Fase 7 polish)**: modul `pages` — halaman buatan user
+  berhierarki (parent/child, ikon emoji, konten) dengan anti-siklus induk dan
+  hapus kaskade; editor `/pages/:id` + grup "📄 Halaman" dinamis di sidebar;
+  gratis untuk staf internal. Kolom `candidates.photo_object_key` + tabel
+  `notion_pages` (migrasi `r8s9t0u1v2w3`).
+- Tes: `test_pages.py` (+2), `test_talentpool.py::test_foto_kandidat_toggle_show_photo`.
+
 ### Added — Fase 12: AI Kolaborasi (gelombang 2 chat)
 
 - **Asisten @AEOS**: mention `@AEOS` di channel/DM memicu jawaban dari data

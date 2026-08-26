@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
@@ -78,6 +78,7 @@ const PAGE_EMOJI: Record<string, string> = {
   "/job-orders": "🧲",
   "/candidates": "🧲",
   "/talent-pool": "🧬",
+  "/pages": "📄",
   "/employees": "💼",
   "/attendance": "📅",
   "/chat": "💬",
@@ -264,6 +265,7 @@ export default function Layout() {
           {showAppsMenu() && (
             <SidebarLink to="/apps" emoji="🚀" label="Aplikasi" active={location.pathname === "/apps"} />
           )}
+          <PageTreeSection pathname={location.pathname} visible={showAppsMenu()} />
           {groups.map((g) => (
             <div key={g.label}>
               <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
@@ -396,5 +398,83 @@ function SidebarLink({
       <span>{emoji}</span>
       {label}
     </NavLink>
+  );
+}
+
+/// Page tree ala Notion (Fase 7 polish): daftar halaman buatan user
+/// dari /pages, ditautkan ke editor /pages/{id}.
+function PageTreeSection({
+  pathname,
+  visible,
+}: {
+  pathname: string;
+  visible: boolean;
+}) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const pages = useQuery({
+    queryKey: ["pages"],
+    queryFn: () => api.get<{ id: string; parent_id: string | null; title: string; icon: string }[]>("/pages"),
+    enabled: visible,
+  });
+  const createPage = useMutation({
+    mutationFn: () => api.post<{ id: string }>("/pages", { title: "Tanpa judul" }),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ["pages"] });
+      navigate(`/pages/${created.id}`);
+    },
+  });
+
+  if (!visible) return null;
+  const roots = (pages.data ?? []).filter((p) => !p.parent_id);
+  return (
+    <div>
+      <div className="flex items-center justify-between px-2 pb-1 pt-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+          📄 Halaman
+        </span>
+        <button
+          onClick={() => createPage.mutate()}
+          disabled={createPage.isPending}
+          title="Halaman baru"
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+        >
+          +
+        </button>
+      </div>
+      <div className="space-y-0.5">
+        {roots.map((p) => (
+          <div key={p.id}>
+            <a
+              href={`/pages/${p.id}`}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(`/pages/${p.id}`);
+              }}
+              className="block truncate rounded px-2 py-1 text-sm transition-colors hover:bg-[var(--n-hover)]"
+              style={{ color: pathname === `/pages/${p.id}` ? "var(--n-text)" : "var(--n-text-muted)" }}
+            >
+              {p.icon} {p.title}
+            </a>
+            {(pages.data ?? [])
+              .filter((c) => c.parent_id === p.id)
+              .map((c) => (
+                <a
+                  key={c.id}
+                  href={`/pages/${c.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate(`/pages/${c.id}`);
+                  }}
+                  className="block truncate rounded pl-6 pr-2 py-1 text-xs transition-colors hover:bg-[var(--n-hover)]"
+                  style={{ color: pathname === `/pages/${c.id}` ? "var(--n-text)" : "var(--n-text-muted)" }}
+                >
+                  {c.icon} {c.title}
+                </a>
+              ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
