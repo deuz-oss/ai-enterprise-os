@@ -141,6 +141,9 @@ export default function Layout() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [helpDismissed, setHelpDismissed] = useState(
+    () => localStorage.getItem("aeos_helpchip") === "0"
+  );
   const me = useQuery({
     queryKey: ["me"],
     queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
@@ -638,6 +641,45 @@ export default function Layout() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Fase C4: FAB Tanya AEOS + help chip */}
+      {showAppsMenu() && location.pathname !== "/chat" && (
+        <>
+          {!helpDismissed && (
+            <div
+              className="fixed bottom-4 left-4 z-20 hidden items-center gap-2 rounded-lg px-3 py-2 text-[11.5px] md:flex"
+              style={{
+                backgroundColor: "var(--n-bg-elevated)",
+                border: "1px solid var(--n-border)",
+                color: "var(--n-text-muted)",
+                boxShadow: "0 2px 8px rgba(15,15,15,.08)",
+              }}
+            >
+              <span>
+                💡 Tekan <kbd className="font-mono">⌘K</kbd> untuk cari cepat · sebut{" "}
+                <b style={{ color: "var(--n-text)" }}>@AEOS</b> di chat untuk bertanya
+              </span>
+              <button
+                className="ml-1 text-xs hover:underline"
+                onClick={() => {
+                  localStorage.setItem("aeos_helpchip", "0");
+                  setHelpDismissed(true);
+                }}
+              >
+                tutup
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => navigate("/chat")}
+            className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-105"
+            style={{ backgroundColor: "var(--accent)" }}
+            title="Buka Chat — sebut @AEOS untuk bertanya"
+          >
+            ✨ Tanya AEOS AI
+          </button>
+        </>
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />

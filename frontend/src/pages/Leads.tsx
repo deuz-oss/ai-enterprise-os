@@ -77,7 +77,26 @@ export default function Leads() {
     mutationFn: ({ id, stage }: { id: string; stage: string }) =>
       api.patch(`/leads/${id}`, { stage }),
     onSuccess: invalidate,
+    // C3: rollback bila server menolak perpindahan tahap
+    onError: invalidate,
   });
+
+  // C3: drag-and-drop native (tanpa lib) — optimis update lalu mutasi.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+  function dropToStage(stage: string) {
+    const id = dragId;
+    setDragId(null);
+    setDragOverStage(null);
+    if (!id) return;
+    const lead = (leads ?? []).find((l) => l.id === id);
+    if (!lead || lead.stage === stage) return;
+    qc.setQueryData<Lead[]>(["leads"], (prev) =>
+      (prev ?? []).map((l) => (l.id === id ? { ...l, stage } : l))
+    );
+    changeStage.mutate({ id, stage });
+  }
 
   const addActivity = useMutation({
     mutationFn: ({ id, content }: { id: string; content: string }) =>
@@ -217,17 +236,31 @@ export default function Leads() {
         </div>
       )}
 
-      {/* ===== View Papan (kanban ala Notion) ===== */}
+      {/* ===== View Papan (kanban ala Notion, drag-and-drop C3) ===== */}
       {view === "papan" && (
         <div className="flex gap-3 overflow-x-auto pb-2">
           {STAGES.map((stage) => {
             const cards = (leads ?? []).filter((l) => l.stage === stage);
             const total = cards.reduce((s, l) => s + Number(l.estimated_value ?? 0), 0);
+            const isOver = dragOverStage === stage;
             return (
               <div
                 key={stage}
-                className="w-64 shrink-0 rounded-md"
-                style={{ backgroundColor: "var(--n-hover)" }}
+                className="w-64 shrink-0 rounded-md transition-colors"
+                style={{
+                  backgroundColor: "var(--n-hover)",
+                  boxShadow: isOver ? "inset 0 0 0 2px var(--accent)" : undefined,
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDragOverStage(stage);
+                }}
+                onDragLeave={() => setDragOverStage((s) => (s === stage ? null : s))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  dropToStage(stage);
+                }}
               >
                 <div className="flex items-center justify-between px-3 pt-3">
                   <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--n-text)" }}>
@@ -246,11 +279,19 @@ export default function Leads() {
                   {cards.map((lead) => (
                     <div
                       key={lead.id}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragId(lead.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", lead.id);
+                      }}
+                      onDragEnd={() => setDragId(null)}
                       className="rounded-md p-3 shadow-sm transition-shadow hover:shadow"
                       style={{
                         backgroundColor: "var(--n-bg-elevated)",
                         border: "1px solid var(--n-border)",
-                        cursor: "pointer",
+                        cursor: dragId === lead.id ? "grabbing" : "grab",
+                        opacity: dragId === lead.id ? 0.5 : 1,
                       }}
                       onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
                       title={lead.industry ?? undefined}

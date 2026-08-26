@@ -33,16 +33,16 @@ Estimasi: 1–2 hari. Tanpa fitur baru, murni parity tampilan.
 | B4 | Bersihkan retro-fit dark `!important` | `Dashboard.tsx`, `Leads.tsx` | 🟨 Mulai: Dashboard & Leads penuh token (tanpa slate legacy). Halaman lain bertahap — blok override global masih diperlukan |
 | B5 | Dark token samakan mockup | `index.css` | ✅ bg #191919, elevated #1F1F1F, sidebar #202020, border/hover/text sesuai mockup, accent tetap #2383E2 |
 
-## Fase C — Fungsionalitas Mockup
+## Fase C — Fungsionalitas Mockup — ✅ Selesai (2026-08-26)
 
 Estimasi: 2–4 hari. Butuh koordinasi API ringan.
 
-| # | Task | File | Catatan |
-|---|------|------|---------|
-| C1 | ⌘K cari entitas + quick actions ("Buat job order baru", dsb.) | `CommandPalette.tsx`, `Layout.tsx:192-212` | Debounced search ke API (clients/candidates/job orders/pages) + section "Aksi cepat". |
-| C2 | View **Kalender** (tab ketiga) | `pages/Leads.tsx:107-126` (pattern), target awal Attendance/Payroll | Month grid sederhana, tanpa lib; reuse toggle segmented. |
-| C3 | Kanban **drag-and-drop** pindah tahap | `pages/Leads.tsx:211-316` | HTML5 DnD native dulu (tanpa lib); optimis update + rollback on error. |
-| C4 | FAB "**✨ Tanya AEOS AI ⌘K**" + help chip | `Layout.tsx` | FAB membuka Chat / fokus ⌘K. Sembunyikan di halaman Chat sendiri. |
+| # | Task | File | Status |
+|---|------|------|--------|
+| C1 | ⌘K cari entitas + quick actions | `CommandPalette.tsx`, `Layout.tsx` | ✅ Debounce 250 ms ke klien/kandidat/job order/halaman (maks 12 hit, grup berlabel); section "Aksi cepat": halaman baru, chat, absensi, PR, talent pool |
+| C2 | View Kalender | `pages/Attendance.tsx` | ✅ Toggle ▤ Tabel / ◔ Kalender pada Absensi — grid bulanan Senin-based, titik warna per status + tooltip nama karyawan + legend. Payroll menyusul bila terpakia nyata |
+| C3 | Kanban drag-and-drop | `pages/Leads.tsx` | ✅ HTML5 DnD native; optimis update cache lalu mutasi dengan rollback onError; highlight kolom tujuan; panah ←/→ tetap ada |
+| C4 | FAB "✨ Tanya AEOS AI" + help chip | `Layout.tsx` | ✅ FAB accent app aktif → /chat (sembunyi di halaman Chat); help chip ⌘K/@AEOS dapat ditutup permanen (localStorage) |
 
 ## Fase D — Block Editor (paling berat)
 
@@ -61,11 +61,11 @@ Estimasi: 3–5 hari. Satu-satunya fase yang menambah dependency.
 - [x] Kolom konten center ≤900px; wide hanya untuk board/tabel lebar. *(Fase A)*
 - [x] Topbar: breadcrumb · ☆ · 💬 · 🌙 · ••• · **Bagikan**. *(Fase A; "Diedit baru saja" disembunyikan sampai ada sumber updated_at)*
 - [x] Sidebar: workspace switcher→modal launcher, 🔍 Pencarian, 🔔 Kotak Masuk+badge, grup aplikasi+page tree, upsell card, chip user. *(Fase A)*
-- [ ] Tabel/Papan/Kalender toggle aktif. *(Fase C2)*
+- [x] Tabel/Papan/Kalender toggle aktif. *(Fase C2 — Absensi; halaman lain mengikuti pola yang sama)*
 - [x] Pill 7 warna hex Notion (+1 indigo lokal); H1 38px + emoji 56px; properties 168px. *(Fase B; badge halaman lain menyusul)*
 - [x] Aksen per-app menerus ke button/callout/active state. *(Fase B3 — token `--accent` shell)*
-- [ ] ⌘K mencari entitas lintas app + quick actions. *(Fase C1)*
-- [ ] Kanban drag-and-drop. *(Fase C3)*
+- [x] ⌘K mencari entitas lintas app + quick actions. *(Fase C1)*
+- [x] Kanban drag-and-drop. *(Fase C3)*
 - [ ] Editor blok (TipTap) menggantikan textarea. *(Fase D)*
 - [ ] Tidak ada lagi override dark `!important`; semua warna via token. *(Fase B4)*
 - [ ] `npm run build` + lint bersih; cek visual light & dark vs mockup.

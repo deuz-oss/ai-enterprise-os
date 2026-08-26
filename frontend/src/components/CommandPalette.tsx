@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 
 export interface PaletteItem {
   id: string;
@@ -10,7 +11,111 @@ export interface PaletteItem {
   action?: () => void;
 }
 
-/** Command palette ala Notion: Ctrl/Cmd+K, filter, panah, Enter. */
+interface EntityHit {
+  id: string;
+  label: string;
+  emoji: string;
+  group: string;
+  to: string;
+}
+
+const QUICK_ACTIONS = (navigate: ReturnType<typeof useNavigate>): PaletteItem[] => [
+  {
+    id: "qa-new-page",
+    label: "Buat halaman baru",
+    emoji: "➕",
+    group: "Aksi cepat",
+    action: async () => {
+      const created = await api.post<{ id: string }>("/pages", { title: "Tanpa judul" });
+      navigate(`/pages/${created.id}`);
+    },
+  },
+  { id: "qa-chat", label: "Buka Chat (Tanya @AEOS)", emoji: "💬", group: "Aksi cepat", to: "/chat" },
+  { id: "qa-attendance", label: "Absensi hari ini", emoji: "📅", group: "Aksi cepat", to: "/attendance" },
+  {
+    id: "qa-pr",
+    label: "Payment Request",
+    emoji: "🧾",
+    group: "Aksi cepat",
+    to: "/payment-requests",
+  },
+  {
+    id: "qa-talent",
+    label: "Talent Pool",
+    emoji: "🧬",
+    group: "Aksi cepat",
+    to: "/talent-pool",
+  },
+];
+
+/** C1: pencarian entitas lintas app (debounce) → hit navigasi ke section. */
+function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
+  const [hits, setHits] = useState<EntityHit[]>([]);
+
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (!enabled || q.length < 2) {
+      setHits([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      const [clients, candidates, jos, pages] = await Promise.all([
+        api
+          .get<{ id: string; name: string }[]>("/clients")
+          .catch(() => []),
+        api
+          .get<{ id: string; full_name: string }[]>("/candidates")
+          .catch(() => []),
+        api
+          .get<{ id: string; title: string }[]>("/recruitment/job-orders")
+          .catch(() => []),
+        api
+          .get<{ id: string; title: string; icon: string }[]>("/pages")
+          .catch(() => []),
+      ]);
+      if (!alive) return;
+      const out: EntityHit[] = [];
+      for (const c of clients) {
+        if (c.name?.toLowerCase().includes(q))
+          out.push({ id: `cl-${c.id}`, label: c.name, emoji: "🏢", group: "Klien", to: "/clients" });
+      }
+      for (const c of candidates) {
+        if (c.full_name?.toLowerCase().includes(q))
+          out.push({
+            id: `cd-${c.id}`,
+            label: c.full_name,
+            emoji: "🧑‍💻",
+            group: "Kandidat",
+            to: "/candidates",
+          });
+      }
+      for (const j of jos) {
+        if (j.title?.toLowerCase().includes(q))
+          out.push({ id: `jo-${j.id}`, label: j.title, emoji: "📋", group: "Job Order", to: "/job-orders" });
+      }
+      for (const p of pages) {
+        if (p.title?.toLowerCase().includes(q))
+          out.push({
+            id: `pg-${p.id}`,
+            label: p.title,
+            emoji: p.icon || "📄",
+            group: "Halaman",
+            to: `/pages/${p.id}`,
+          });
+      }
+      setHits(out.slice(0, 12));
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, enabled]);
+
+  return hits;
+}
+
+/** Command palette ala Notion: Ctrl/Cmd+K, filter, entitas, panah, Enter. */
 export default function CommandPalette({
   open,
   onClose,
@@ -33,15 +138,21 @@ export default function CommandPalette({
     }
   }, [open]);
 
+  const entityHits = useEntitySearch(query, open);
+  const quickActions = useMemo(() => QUICK_ACTIONS(navigate), [navigate]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (i) =>
-        i.label.toLowerCase().includes(q) ||
-        (i.group ?? "").toLowerCase().includes(q)
-    );
-  }, [items, query]);
+    const match = (i: PaletteItem) =>
+      !q ||
+      i.label.toLowerCase().includes(q) ||
+      (i.group ?? "").toLowerCase().includes(q);
+    return [
+      ...quickActions.filter(match),
+      ...items.filter(match),
+      ...(q.length >= 2 ? entityHits : []),
+    ];
+  }, [items, query, quickActions, entityHits]);
 
   useEffect(() => {
     if (active >= results.length) setActive(0);
@@ -52,7 +163,8 @@ export default function CommandPalette({
   function choose(item: PaletteItem) {
     onClose();
     if (item.to) navigate(item.to);
-    item.action?.();
+    const maybe = item.action?.() as unknown;
+    if (maybe instanceof Promise) (maybe as Promise<void>).catch(() => undefined);
   }
 
   return (
@@ -86,7 +198,7 @@ export default function CommandPalette({
               choose(results[active]);
             }
           }}
-          placeholder="Cari halaman atau aplikasi..."
+          placeholder="Cari halaman, aplikasi, atau entitas (klien/kandidat/JO)..."
           className="w-full px-4 py-3 text-sm focus:outline-none"
           style={{
             backgroundColor: "transparent",

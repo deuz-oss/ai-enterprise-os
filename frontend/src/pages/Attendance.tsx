@@ -49,12 +49,25 @@ const STATUS_LABELS: Record<string, string> = {
   dinas_luar: "Dinas Luar",
 };
 
+// C2: warna titik kalender per status (hex Notion).
+const STATUS_DOT: Record<string, string> = {
+  hadir: "#0f7b6c",
+  terlambat: "#cb912f",
+  izin: "#2383e2",
+  sakit: "#9065b0",
+  cuti: "#d9730d",
+  alpa: "#e03e3e",
+  libur: "#9f9f9f",
+  dinas_luar: "#5b5bd6",
+};
+
 export default function Attendance() {
   const qc = useQueryClient();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
+  const [view, setView] = useState<"tabel" | "kalender">("tabel");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -143,12 +156,114 @@ export default function Attendance() {
           onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
           className="input w-24"
         />
+        {/* C2: toggle Tabel / Kalender ala segmented view Notion */}
+        <div
+          className="flex overflow-hidden rounded text-sm"
+          style={{ border: "1px solid var(--n-border)" }}
+        >
+          {(["tabel", "kalender"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className="px-3 py-1.5 capitalize transition-colors"
+              style={{
+                backgroundColor: view === v ? "var(--n-hover)" : "transparent",
+                color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                fontWeight: view === v ? 500 : 400,
+              }}
+            >
+              {v === "tabel" ? "▤ " : "◔ "}
+              {v}
+            </button>
+          ))}
+        </div>
         <button className="btn-secondary text-xs" onClick={() => downloadFile("/attendance/template")}>
           Unduh Template CSV
         </button>
       </div>
 
+      {/* C2: Kalender bulanan */}
+      {view === "kalender" && (
+        <div className="card">
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+            Kalender — {period.month}/{period.year}
+          </h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+            Titik warna = status kehadiran per karyawan (arahkan kursor untuk nama).
+          </p>
+          <div className="mt-3 grid grid-cols-7 gap-1 text-xs">
+            {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => (
+              <div
+                key={d}
+                className="pb-1 text-center font-semibold"
+                style={{ color: "var(--n-text-muted)" }}
+              >
+                {d}
+              </div>
+            ))}
+            {(() => {
+              const first = new Date(period.year, period.month - 1, 1);
+              const offset = (first.getDay() + 6) % 7; // Senin = 0
+              const days = new Date(period.year, period.month, 0).getDate();
+              const byDate = new Map<string, DailyRecord[]>();
+              for (const r of records ?? []) {
+                const list = byDate.get(r.date) ?? [];
+                list.push(r);
+                byDate.set(r.date, list);
+              }
+              const cells: (number | null)[] = [
+                ...Array.from({ length: offset }, () => null),
+                ...Array.from({ length: days }, (_, i) => i + 1),
+              ];
+              return cells.map((day, idx) => {
+                if (day === null) return <div key={`pad-${idx}`} />;
+                const iso = `${period.year}-${String(period.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const dayRecords = byDate.get(iso) ?? [];
+                const shown = dayRecords.slice(0, 4);
+                const extra = dayRecords.length - shown.length;
+                return (
+                  <div
+                    key={iso}
+                    className="min-h-[64px] rounded p-1"
+                    style={{ border: "1px solid var(--n-border)" }}
+                  >
+                    <div className="text-right text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+                      {day}
+                    </div>
+                    <div className="flex flex-wrap gap-1 px-0.5 pt-0.5">
+                      {shown.map((r) => {
+                        const emp = empMap.get(r.employee_id);
+                        return (
+                          <span
+                            key={r.id}
+                            title={`${emp?.full_name ?? r.employee_id} · ${STATUS_LABELS[r.status] ?? r.status}`}
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: STATUS_DOT[r.status] ?? "#9f9f9f" }}
+                          />
+                        );
+                      })}
+                      {extra > 0 && (
+                        <span style={{ color: "var(--n-text-muted)" }}>+{extra}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-[11px]">
+            {Object.entries(STATUS_DOT).map(([k, c]) => (
+              <span key={k} className="flex items-center gap-1" style={{ color: "var(--n-text-muted)" }}>
+                <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+                {STATUS_LABELS[k]}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Rekap bulanan - validasi dua jalur */}
+      {view === "tabel" && (
       <div className="card overflow-x-auto p-0">
         <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
           <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
@@ -213,6 +328,7 @@ export default function Attendance() {
           <p className="px-4 pb-3 text-sm text-red-600">{(validateSummary.error as Error).message}</p>
         )}
       </div>
+      )}
 
       {/* Record harian */}
       <div className="card">
@@ -293,6 +409,7 @@ export default function Attendance() {
         )}
       </div>
 
+      {view === "tabel" && (
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--n-hover)" }}>
@@ -334,6 +451,7 @@ export default function Attendance() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
