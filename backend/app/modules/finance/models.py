@@ -99,7 +99,8 @@ class PaymentRequest(TenantMixin, Base):
     """Payment Request (PRD §7) — satu mesin untuk kedua jalur.
 
     DIAJUKAN (Ops utk proyek / HR utk internal)
-      → MENUNGGU_ATASAN (approver: role management/admin, rantai config menyusul)
+      → MENUNGGU_ATASAN (rantai approval configurable per tenant, tahap demi tahap;
+        tanpa rantai → management/admin mana pun memutus)
           ↘ DITOLAK (+catatan) → revisi → ajukan ulang
       → DISETUJUI_ATASAN
       → DIEKSEKUSI (Finance menjalankan pembayaran)
@@ -132,3 +133,35 @@ class PaymentRequest(TenantMixin, Base):
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     executed_by_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PRApprovalStep(TenantMixin, Base):
+    """Satu tahap rantai approval Payment Request per tenant (PRD §7).
+
+    Rantai diurutkan `seq` mulai 1; tiap tahap menunjuk satu user spesifik
+    (`approver_id`) atau satu peran (`approver_role`) — salah satu wajib.
+    Tanpa baris konfigurasi → perilaku legacy: management/admin mana pun
+    dapat memutuskan.
+    """
+
+    __tablename__ = "pr_approval_steps"
+    __table_args__ = (UniqueConstraint("tenant_id", "seq", name="uq_pr_step_tenant_seq"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    seq: Mapped[int] = mapped_column(Integer, index=True)
+    approver_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    approver_role: Mapped[str | None] = mapped_column(String(50), default=None)
+
+
+class PaymentRequestApproval(TenantMixin, Base):
+    """Jejak keputusan per tahap rantai approval PR (audit trail)."""
+
+    __tablename__ = "pr_approvals"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    payment_request_id: Mapped[UUID] = mapped_column(ForeignKey("payment_requests.id"), index=True)
+    step_no: Mapped[int] = mapped_column(Integer)
+    approver_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    approved: Mapped[bool] = mapped_column(default=True)
+    note: Mapped[str | None] = mapped_column(String(500))
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

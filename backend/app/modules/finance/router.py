@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -47,21 +47,28 @@ def list_payment_requests(
     pr_type: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    rows = service.list_payment_requests(db, status=status_filter, pr_type=pr_type)
-    return [
-        {
-            "id": str(p.id),
-            "pr_number": p.pr_number,
-            "pr_type": p.pr_type,
-            "payroll_run_id": str(p.payroll_run_id) if p.payroll_run_id else None,
-            "amount": float(p.amount),
-            "description": p.description,
-            "status": p.status.value,
-            "decision_note": p.decision_note,
-            "created_at": p.created_at.isoformat(),
-        }
-        for p in rows
-    ]
+    return service.list_payment_requests_detail(db, status=status_filter, pr_type=pr_type)
+
+
+@pr_router.get("/approval-chain")
+def get_approval_chain(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Rantai approval PR tenant (urut tahap)."""
+    return service.get_approval_chain(db, user.tenant_id)
+
+
+@pr_router.put("/approval-chain")
+def set_approval_chain(
+    payload: dict, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Ganti rantai approval PR tenant (admin/management).
+
+    Payload: `{"steps": [{"approver_role": "management"}, {"approver_id": "..."}]}`.
+    """
+    raw = payload.get("steps") if isinstance(payload, dict) else None
+    if raw is not None and not isinstance(raw, list):
+        raise HTTPException(status_code=422, detail="steps harus berupa daftar")
+    chain = service.set_approval_chain(db, user=user, steps=raw or [])
+    return {"steps": chain}
 
 
 @pr_router.post("", status_code=201)

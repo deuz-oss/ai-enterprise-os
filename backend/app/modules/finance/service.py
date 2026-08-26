@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
@@ -14,7 +15,9 @@ from app.modules.finance.models import (
     Invoice,
     InvoiceStatus,
     PaymentRequest,
+    PaymentRequestApproval,
     PaymentRequestStatus,
+    PRApprovalStep,
 )
 from app.modules.finance.schemas import (
     AgingRow,
@@ -320,6 +323,150 @@ def cashflow_summary(db: Session, year: int, month: int | None = None) -> dict:
 # ---------- Payment Request (PRD §7) ----------
 
 
+# Peran staf yang boleh dipasang sebagai approver rantai (bukan karyawan/platform).
+_CHAIN_ROLES = ("admin", "management", "finance", "hr", "operations", "business_dev", "recruiter")
+
+
+def _chain_steps(db: Session, tenant_id) -> list[PRApprovalStep]:
+    return list(
+        db.execute(
+            select(PRApprovalStep)
+            .where(PRApprovalStep.tenant_id == tenant_id)
+            .order_by(PRApprovalStep.seq)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_approval_chain(db: Session, tenant_id) -> list[dict]:
+    """Rantai approval aktif tenant, urut tahap."""
+    from app.modules.auth.models import User
+
+    steps = _chain_steps(db, tenant_id)
+    user_ids = {s.approver_id for s in steps if s.approver_id}
+    names: dict = {}
+    if user_ids:
+        rows = db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids))).all()
+        names = {uid: name for uid, name in rows}
+    return [
+        {
+            "seq": s.seq,
+            "approver_id": str(s.approver_id) if s.approver_id else None,
+            "approver_name": names.get(s.approver_id),
+            "approver_role": s.approver_role,
+        }
+        for s in steps
+    ]
+
+
+def set_approval_chain(db: Session, *, user, steps: list[dict]) -> list[dict]:
+    """Ganti seluruh rantai approval tenant (admin/management).
+
+    Payload: daftar tahap berurutan; tiap tahap wajib punya tepat satu dari
+    `approver_id` (user spesifik) atau `approver_role` (peran staf).
+    """
+    from app.modules.auth.models import User
+
+    role_val = getattr(user.role, "value", user.role)
+    if role_val not in ("admin", "management"):
+        raise HTTPException(status_code=403, detail="Hanya admin/management dapat mengatur rantai")
+
+    clean: list[dict] = []
+    for i, raw in enumerate(steps or [], start=1):
+        approver_id = raw.get("approver_id") or None
+        approver_role = (raw.get("approver_role") or "").strip() or None
+        if bool(approver_id) == bool(approver_role):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tahap {i}: isi tepat salah satu dari approver_id atau approver_role",
+            )
+        if approver_id is not None:
+            target = db.get(User, parse_uuid(str(approver_id)))
+            if target is None or target.tenant_id != user.tenant_id:
+                raise HTTPException(status_code=404, detail=f"Tahap {i}: user tidak ditemukan")
+            t_role = getattr(target.role, "value", target.role)
+            if t_role == "employee":
+                raise HTTPException(
+                    status_code=422, detail=f"Tahap {i}: karyawan tidak bisa menjadi approver"
+                )
+        else:
+            if approver_role not in _CHAIN_ROLES:
+                raise HTTPException(
+                    status_code=422, detail=f"Tahap {i}: peran '{approver_role}' tidak valid"
+                )
+        clean.append({"seq": i, "approver_id": approver_id, "approver_role": approver_role})
+
+    for old in _chain_steps(db, user.tenant_id):
+        db.delete(old)
+    for item in clean:
+        db.add(
+            PRApprovalStep(
+                tenant_id=user.tenant_id,
+                seq=item["seq"],
+                approver_id=parse_uuid(item["approver_id"]) if item["approver_id"] else None,
+                approver_role=item["approver_role"],
+            )
+        )
+    db.commit()
+    audit.log_event(
+        db,
+        action="payment_request.chain_updated",
+        entity_type="tenant",
+        entity_id=user.tenant_id,
+        detail={"steps": clean},
+    )
+    return get_approval_chain(db, user.tenant_id)
+
+
+def _step_approvers(db: Session, tenant_id, step: PRApprovalStep) -> list:
+    """Resolusi penerima notifikasi satu tahap: user spesifik atau semua user berperan tsb."""
+    from app.modules.auth.models import User, UserRole
+
+    stmt = select(User).where(User.tenant_id == tenant_id, User.is_active.is_(True))
+    if step.approver_id is not None:
+        stmt = stmt.where(User.id == step.approver_id)
+        return list(db.execute(stmt).scalars())
+    role = UserRole(step.approver_role) if step.approver_role in UserRole.__members__ else None
+    if role is None:
+        return []
+    return list(db.execute(stmt.where(User.role == role)).scalars())
+
+
+def _pr_progress(db: Session, pr: PaymentRequest, steps: list[PRApprovalStep]) -> dict:
+    """Ringkasan progres rantai untuk satu PR."""
+    decisions = (
+        db.execute(
+            select(PaymentRequestApproval)
+            .where(PaymentRequestApproval.payment_request_id == pr.id)
+            .order_by(PaymentRequestApproval.step_no)
+        )
+        .scalars()
+        .all()
+    )
+    total = len(steps)
+    approved_count = sum(1 for d in decisions if d.approved)
+    pending_seq = next(
+        (s.seq for s in steps if not any(d.step_no == s.seq and d.approved for d in decisions)),
+        None,
+    )
+    return {
+        "total_steps": total,
+        "current_step": min(approved_count + 1, total) if total else None,
+        "pending_step": pending_seq,
+        "decisions": [
+            {
+                "step_no": d.step_no,
+                "approver_id": str(d.approver_id),
+                "approved": d.approved,
+                "note": d.note,
+                "decided_at": d.decided_at.isoformat(),
+            }
+            for d in decisions
+        ],
+    }
+
+
 def _next_pr_number(db: Session) -> str:
     count = db.scalar(select(func.count(PaymentRequest.id))) or 0
     return f"PR/{date.today().year}/{count + 1:04d}"
@@ -376,24 +523,30 @@ def create_payment_request(
         entity_id=pr.id,
         detail={"number": pr.pr_number, "type": pr.pr_type, "amount": float(pr.amount)},
     )
-    # Notifikasi ke approver (admin + management tenant).
+    # Notifikasi approver tahap pertama bila rantai dikonfigurasi;
+    # tanpa rantai → legacy: semua admin + management tenant.
     from app.modules.auth.models import User, UserRole
 
-    approvers = (
-        db.execute(
-            select(User.id).where(
-                User.tenant_id == user.tenant_id,
-                User.is_active.is_(True),
-                User.role.in_([UserRole.admin, UserRole.management]),
+    steps = _chain_steps(db, user.tenant_id)
+    approvers: Sequence[User]
+    if steps:
+        approvers = _step_approvers(db, user.tenant_id, steps[0])
+    else:
+        approvers = (
+            db.execute(
+                select(User).where(
+                    User.tenant_id == user.tenant_id,
+                    User.is_active.is_(True),
+                    User.role.in_([UserRole.admin, UserRole.management]),
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
     for uid in approvers:
         notify(
             db,
-            user_id=uid,
+            user_id=uid.id,
             title=f"Payment Request menunggu persetujuan — {pr.pr_number}",
             body=f"{pr.description or pr.pr_type}: Rp{float(pr.amount):,.0f}",
             category="payment",
@@ -427,7 +580,13 @@ def create_payment_request(
 def decide_payment_request(
     db: Session, *, user, pr_id: str, approved: bool, note: str | None = None
 ) -> PaymentRequest:
-    """Atasan (management/admin) menyetujui / menolak PR."""
+    """Putuskan PR pada tahap rantai approval yang sedang berjalan (PRD §7).
+
+    - Rantai terkonfigurasi → hanya approver tahap berjalan (user spesifik atau
+      peran yang cocok) yang dapat memutus; setujui tahap non-akhir melanjutkan
+      ke tahap berikutnya, tolak langsung membatalkan seluruh PR.
+    - Tanpa rantai → legacy: management/admin mana pun.
+    """
     from app.modules.notifications.service import notify
 
     pr = db.get(PaymentRequest, parse_uuid(pr_id))
@@ -435,15 +594,79 @@ def decide_payment_request(
         raise HTTPException(status_code=404, detail="PR tidak ditemukan")
     if pr.status != PaymentRequestStatus.waiting_superior:
         raise HTTPException(status_code=409, detail="PR sudah diputus sebelumnya")
-    if user.role != "admin" and user.role.value != "management":
-        raise HTTPException(status_code=403, detail="Hanya management yang dapat memutuskan PR")
     if not approved and not (note or "").strip():
         raise HTTPException(status_code=422, detail="Catatan wajib saat menolak PR")
 
-    pr.status = PaymentRequestStatus.approved if approved else PaymentRequestStatus.rejected
-    pr.approver_id = user.id
-    pr.decided_at = datetime.now(UTC)
-    pr.decision_note = (note or "").strip()[:500] or None
+    role_val = getattr(user.role, "value", user.role)
+    steps = _chain_steps(db, user.tenant_id)
+    next_step: PRApprovalStep | None = None
+
+    if not steps:
+        # Legacy tanpa rantai: management/admin mana pun.
+        if role_val not in ("admin", "management"):
+            raise HTTPException(status_code=403, detail="Hanya management yang dapat memutuskan PR")
+        step_no = 1
+    else:
+        decisions = (
+            db.execute(
+                select(PaymentRequestApproval).where(
+                    PaymentRequestApproval.payment_request_id == pr.id,
+                    PaymentRequestApproval.approved.is_(True),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        done_seqs = {d.step_no for d in decisions}
+        pending = next((s for s in steps if s.seq not in done_seqs), None)
+        if pending is None:
+            raise HTTPException(status_code=409, detail="Rantai approval sudah selesai")
+        allowed = False
+        if pending.approver_id is not None:
+            allowed = user.id == pending.approver_id
+        elif pending.approver_role is not None:
+            allowed = role_val == pending.approver_role
+        if not allowed:
+            label = f"tahap {pending.seq} ({pending.approver_role or 'approver khusus'})"
+            raise HTTPException(status_code=403, detail=f"Anda bukan approver {label} untuk PR ini")
+        step_no = pending.seq
+        next_step = next((s for s in steps if s.seq > pending.seq), None)
+    db.add(
+        PaymentRequestApproval(
+            tenant_id=pr.tenant_id,
+            payment_request_id=pr.id,
+            step_no=step_no,
+            approver_id=user.id,
+            approved=approved,
+            note=(note or "").strip()[:500] or None,
+        )
+    )
+
+    final_approver = user.id
+    if approved and steps and next_step is not None:
+        # Tahap non-akhir: PR tetap menunggu approver berikutnya.
+        for nxt in _step_approvers(db, pr.tenant_id, next_step):
+            notify(
+                db,
+                user_id=nxt.id,
+                title=f"PR {pr.pr_number} menunggu persetujuan Anda — tahap {next_step.seq}",
+                body=f"{pr.description or pr.pr_type}: Rp{float(pr.amount):,.0f}",
+                category="payment",
+                entity_type="payment_request",
+                entity_id=pr.id,
+            )
+        final_approver = None
+
+    if approved and (not steps or next_step is None):
+        pr.status = PaymentRequestStatus.approved
+        pr.approver_id = final_approver
+        pr.decided_at = datetime.now(UTC)
+        pr.decision_note = (note or "").strip()[:500] or None
+    elif not approved:
+        pr.status = PaymentRequestStatus.rejected
+        pr.approver_id = user.id
+        pr.decided_at = datetime.now(UTC)
+        pr.decision_note = (note or "").strip()[:500] or None
     db.commit()
     db.refresh(pr)
     audit.log_event(
@@ -451,12 +674,18 @@ def decide_payment_request(
         action="payment_request.decided",
         entity_type="payment_request",
         entity_id=pr.id,
-        detail={"approved": approved, "status": pr.status.value},
+        detail={
+            "approved": approved,
+            "status": pr.status.value,
+            "step": step_no,
+            "chain": bool(steps),
+        },
     )
     notify(
         db,
         user_id=pr.requester_id,
-        title=f"PR {pr.pr_number} {'disetujui atasan' if approved else 'ditolak'}",
+        title=f"PR {pr.pr_number} {'disetujui' if approved else 'ditolak'}"
+        + (" sementara (tahap berikutnya)" if approved and steps and next_step is not None else ""),
         body=pr.decision_note,
         category="payment",
         entity_type="payment_request",
@@ -536,3 +765,32 @@ def list_payment_requests(
     if pr_type:
         stmt = stmt.where(PaymentRequest.pr_type == pr_type)
     return list(db.execute(stmt).scalars())
+
+
+def list_payment_requests_detail(
+    db: Session,
+    status: PaymentRequestStatus | None = None,
+    pr_type: str | None = None,
+) -> list[dict]:
+    """Daftar PR + progres rantai approval per baris."""
+    rows = list_payment_requests(db, status=status, pr_type=pr_type)
+    steps_cache: dict = {}
+    result: list[dict] = []
+    for p in rows:
+        if p.tenant_id not in steps_cache:
+            steps_cache[p.tenant_id] = _chain_steps(db, p.tenant_id)
+        result.append(
+            {
+                "id": str(p.id),
+                "pr_number": p.pr_number,
+                "pr_type": p.pr_type,
+                "payroll_run_id": str(p.payroll_run_id) if p.payroll_run_id else None,
+                "amount": float(p.amount),
+                "description": p.description,
+                "status": p.status.value,
+                "decision_note": p.decision_note,
+                "created_at": p.created_at.isoformat(),
+                "progress": _pr_progress(db, p, steps_cache[p.tenant_id]),
+            }
+        )
+    return result
