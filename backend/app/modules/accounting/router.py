@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -199,3 +199,28 @@ def ask_report(payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Pertanyaan wajib diisi")
     year = (payload or {}).get("year")
     return ai_accounting.ask_report(db, question=question, year=int(year) if year else None)
+
+
+@router.post("/ai/ocr-bill")
+async def ocr_bill(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Foto faktur/nota → draft pembelian + saran COA (satu panggilan vision LLM)."""
+    import base64
+
+    mime = (file.content_type or "").lower()
+    raw = await file.read()
+    if len(raw) > 8 * 1024 * 1024:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="Ukuran file maksimal 8 MB")
+    return ai_accounting.ocr_extract_bill(
+        db, image_b64=base64.b64encode(raw).decode(), mime_type=mime
+    )
+
+
+@router.get("/ai/payment-prediction")
+def payment_prediction(db: Session = Depends(get_db)):
+    """Skor risiko telat bayar per klien + prioritas collection (deterministik)."""
+    return ai_accounting.predict_client_payments(db)

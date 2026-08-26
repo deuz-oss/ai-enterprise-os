@@ -83,6 +83,59 @@ def reconcile_bank_transaction(
     return {"id": str(tx.id), "reconciled": tx.reconciled_at is not None}
 
 
+# ---------- Rekening koran & rekonsiliasi cerdas (PRD §8.8 #2) ----------
+
+from fastapi import UploadFile  # noqa: E402
+
+from app.modules.accounting import bank_statement  # noqa: E402
+from app.modules.accounting.models import StatementLineStatus  # noqa: E402
+
+
+@router.get("/cashbank/statement/template")
+def statement_template():
+    """Template CSV rekening koran (tanggal;keterangan;mutasi_masuk;mutasi_keluar)."""
+    from fastapi import Response
+
+    return Response(
+        content=bank_statement.template_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="template-rekening-koran.csv"'},
+    )
+
+
+@router.post("/cashbank/statement/import")
+async def import_statement(file: UploadFile, db: Session = Depends(get_db)):
+    """Impor mutasi rekening koran; matching fuzzy dihitung per baris."""
+    return await bank_statement.import_statement(db, file)
+
+
+@router.get("/cashbank/statement")
+def list_statement(
+    status_filter: str | None = Query(None, alias="status"),
+    db: Session = Depends(get_db),
+):
+    st = StatementLineStatus(status_filter) if status_filter else None
+    return bank_statement.list_statement_lines(db, status=st)
+
+
+@router.post("/cashbank/statement/{line_id}/match")
+def confirm_statement_match(
+    line_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    tx_id = str((payload or {}).get("bank_transaction_id") or "")
+    return bank_statement.confirm_match(db, user=user, line_id=line_id, bank_transaction_id=tx_id)
+
+
+@router.post("/cashbank/statement/{line_id}/ignore")
+def ignore_statement_line(
+    line_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return bank_statement.ignore_line(db, user=user, line_id=line_id)
+
+
 # ---------- Pembelian ----------
 
 

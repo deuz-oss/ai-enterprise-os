@@ -45,11 +45,6 @@ def chat_completion(system: str, user: str, *, json_mode: bool = True) -> dict |
             status_code=503,
             detail="Fitur AI belum aktif. Set AI_BASE_URL (dan AI_API_KEY) di .env.",
         )
-
-    headers = {"Content-Type": "application/json"}
-    if settings.ai_api_key:
-        headers["Authorization"] = f"Bearer {settings.ai_api_key}"
-
     payload: dict = {
         "model": settings.ai_model,
         "messages": [
@@ -60,6 +55,48 @@ def chat_completion(system: str, user: str, *, json_mode: bool = True) -> dict |
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
+    return _post_chat(payload, json_mode=json_mode)
+
+
+def vision_completion(
+    system: str, user: str, *, image_b64: str, mime_type: str = "image/png"
+) -> dict | str:
+    """Chat completion multimodal (satu panggilan OCR + ekstraksi, PRD §10.4).
+
+    Gambar dikirim sebagai data URL base64 pada content bagian `image_url`.
+    """
+    settings = get_settings()
+    if not settings.ai_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Fitur AI belum aktif. Set AI_BASE_URL (dan AI_API_KEY) di .env.",
+        )
+    payload: dict = {
+        "model": settings.ai_model,
+        "messages": [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{image_b64}"},
+                    },
+                ],
+            },
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+    }
+    return _post_chat(payload, json_mode=True)
+
+
+def _post_chat(payload: dict, *, json_mode: bool) -> dict | str:
+    settings = get_settings()
+    headers = {"Content-Type": "application/json"}
+    if settings.ai_api_key:
+        headers["Authorization"] = f"Bearer {settings.ai_api_key}"
 
     url = settings.ai_base_url.rstrip("/") + "/chat/completions"  # type: ignore[union-attr]
     try:

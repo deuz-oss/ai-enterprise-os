@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -471,3 +473,165 @@ def _try_llm_report_answer(question: str, context: str) -> str:
         return str(result).strip()[:2000]
     except Exception:
         return context
+
+
+# ---------- 6. Auto-kategori + OCR faktur (PRD §8.8 #1) ----------
+
+ALLOWED_OCR_MIME = ("image/png", "image/jpeg", "image/webp")
+
+
+def ocr_extract_bill(db: Session, *, image_b64: str, mime_type: str) -> dict:
+    """Foto faktur/nota → draft transaksi pembelian + saran COA.
+
+    Satu panggilan model vision (OCR + ekstraksi terstruktur, pola PRD
+    §10.4); hasil berupa DRAFT — pembuatan bill tetap lewat endpoint
+    pembelian biasa agar jurnal tetap terkontrol.
+    """
+    from app.core.llm import vision_completion
+
+    if mime_type not in ALLOWED_OCR_MIME:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Tipe file harus salah satu dari: {', '.join(ALLOWED_OCR_MIME)}",
+        )
+
+    result = vision_completion(
+        system=(
+            "Anda mesin ekstraksi faktur Indonesia. Baca gambar faktur/nota "
+            "dan kembalikan HANYA JSON dengan skema: "
+            '{"vendor_name": string, "bill_number": string|null, '
+            '"amount": number (dpp tanpa PPN), "ppn_rate": number (desimal, 0 bila tidak ada), '
+            '"entry_date": "YYYY-MM-DD"|null, "due_date": "YYYY-MM-DD"|null, '
+            '"description": string|null}. '
+            "Gunakan null untuk nilai yang tidak terbaca. Jangan mengarang angka."
+        ),
+        user="Ekstrak data faktur dari gambar ini.",
+        image_b64=image_b64,
+        mime_type=mime_type,
+    )
+    data: dict = result if isinstance(result, dict) else {}
+
+    vendor = str(data.get("vendor_name") or "").strip()
+    amount_raw = data.get("amount")
+    try:
+        amount = round(float(amount_raw or 0))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        amount = 0
+    if not vendor or amount <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Tidak dapat membaca vendor/nominal dari gambar. "
+                "Perbaiki pencahayaan/crop lalu coba lagi."
+            ),
+        )
+    try:
+        ppn_rate = min(max(float(data.get("ppn_rate") or 0), 0.0), 1.0)
+    except (TypeError, ValueError):
+        ppn_rate = 0.0
+
+    draft = {
+        "vendor_name": vendor[:255],
+        "bill_number": (str(data.get("bill_number")) or "").strip()[:100] or None,
+        "amount": amount,
+        "ppn_rate": ppn_rate,
+        "entry_date": _safe_date(data.get("entry_date")),
+        "due_date": _safe_date(data.get("due_date")),
+        "description": (str(data.get("description") or "").strip()[:500] or None),
+    }
+    suggestions = suggest_bill_category(db, vendor_name=vendor)
+    return {
+        "draft": draft,
+        "category_suggestions": suggestions["suggestions"],
+        "source": "ocr+llm",
+    }
+
+
+def _safe_date(value) -> str | None:
+    try:
+        parsed = date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed.isoformat()
+
+
+# ---------- 7. Prediksi pembayaran klien (PRD §8.8 #6) ----------
+
+
+def predict_client_payments(db: Session) -> dict:
+    """Skor risiko telat bayar per klien dari histori invoice → prioritas collection.
+
+    Deterministik: rasio keterlambatan historis + rata-rata hari telat +
+    paparan overdue berjalan. Prioritas = outstanding × skor risiko.
+    """
+    from app.modules.clients.models import Client
+
+    today = date.today()
+    invoices = db.execute(select(Invoice)).scalars().all()
+    clients = {c.id: c.name for c in db.execute(select(Client)).scalars().all()}
+
+    history: dict[UUID, dict] = {}
+    for inv in invoices:
+        stats = history.setdefault(inv.client_id, {"paid": 0, "late": 0, "delay_total": 0})
+        if inv.paid_at is None or inv.due_date is None:
+            continue
+        stats["paid"] += 1
+        delay = (inv.paid_at.date() - inv.due_date).days
+        if delay > 0:
+            stats["late"] += 1
+            stats["delay_total"] += delay
+
+    rows: list[dict] = []
+    for client_id, name in clients.items():
+        stats = history.get(client_id, {"paid": 0, "late": 0, "delay_total": 0})
+        paid_count = stats["paid"]
+        late_ratio = stats["late"] / paid_count if paid_count else 0.0
+        avg_delay = stats["delay_total"] / paid_count if paid_count else 0.0
+
+        client_invs = [i for i in invoices if i.client_id == client_id]
+        outstanding = [
+            i
+            for i in client_invs
+            if i.paid_at is None and i.status in (InvoiceStatus.draft, InvoiceStatus.sent)
+        ]
+        outstanding_total = sum(float(i.total_due) for i in outstanding)
+        overdue_total = sum(
+            float(i.total_due) for i in outstanding if i.due_date and i.due_date < today
+        )
+
+        if paid_count == 0:
+            risk = 50.0 if outstanding_total else 0.0  # tanpa histori: netral
+            basis = "belum ada histori pembayaran — skor netral"
+        else:
+            risk = min(100.0, late_ratio * 60.0 + min(avg_delay, 30.0) / 30.0 * 40.0)
+            basis = f"{stats['late']}/{paid_count} invoice telat, rata-rata {avg_delay:.1f} hari"
+        if overdue_total > 0:
+            risk = min(100.0, risk + 10.0)
+
+        priority = outstanding_total * risk / 100.0
+        rows.append(
+            {
+                "client_id": str(client_id),
+                "client_name": name,
+                "risk_score": round(risk),
+                "risk_basis": basis,
+                "avg_delay_days": round(avg_delay, 1),
+                "late_ratio": round(late_ratio, 2),
+                "open_invoices": len(outstanding),
+                "outstanding_total": outstanding_total,
+                "overdue_total": overdue_total,
+                "priority_score": round(priority),
+            }
+        )
+
+    rows.sort(key=lambda r: (-r["priority_score"], -r["outstanding_total"]))
+    active = [r for r in rows if r["open_invoices"] > 0]
+    return {
+        "as_of": today.isoformat(),
+        "clients_ranked": active,
+        "summary": {
+            "clients_with_open_invoices": len(active),
+            "total_outstanding": sum(r["outstanding_total"] for r in active),
+            "total_overdue": sum(r["overdue_total"] for r in active),
+        },
+    }

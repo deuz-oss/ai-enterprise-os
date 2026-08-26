@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { PageHeader, CalloutBlock } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
   id: string;
@@ -56,7 +57,7 @@ const GROUP_LABELS: Record<string, string> = {
   pendapatan_lain: "Pendapatan Lain",
 };
 
-type Tab = "jurnal" | "coa" | "periode";
+type Tab = "jurnal" | "coa" | "periode" | "ai";
 
 export default function Accounting() {
   const qc = useQueryClient();
@@ -172,6 +173,7 @@ export default function Accounting() {
             ["jurnal", "📓 Jurnal"],
             ["coa", "🗂️ Bagan Akun"],
             ["periode", "🔒 Periode & Tutup Buku"],
+            ["ai", "🤖 AI & Rekonsiliasi"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -339,8 +341,7 @@ export default function Accounting() {
           <CalloutBlock emoji="🔒" tone="warning">
             Tutup buku mengunci periode: input jurnal backdate ditolak dan mesin
             auto-journal melewati periode tertutup. Buka ulang tercatat di audit.
-          </CalloutBlock>
-          <div className="card space-y-2">
+          </CalloutBlock>          <div className="card space-y-2">
             <h2 className="font-semibold text-slate-700">Tutup Bulan</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -420,6 +421,8 @@ export default function Accounting() {
           </div>
         </>
       )}
+
+      {tab === "ai" && <AccountingAi />}
 
       {tab === "jurnal" && (
         <>
