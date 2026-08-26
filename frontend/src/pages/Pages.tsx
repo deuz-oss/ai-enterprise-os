@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { PageHeader } from "../components/notion";
+import TiptapEditor from "../components/editor/TiptapEditor";
 
 interface PageRow {
   id: string;
@@ -16,6 +16,29 @@ interface PageDetail extends PageRow {
   content: string;
 }
 
+// D3: emoji picker sederhana — daftar statis cukup (plan Fase D).
+const EMOJIS = [
+  "📄", "📘", "📗", "📒", "💡", "🚀", "🎯", "🧲",
+  "💼", "📊", "🗓️", "✅", "🔥", "⭐", "🧠", "🏗️",
+  "🧾", "💬", "🔔", "🎨", "🧪", "📌", "⚙️", "🤝",
+  "🏢", "🧑‍💻", "💰", "🔒", "📈", "🗂️",
+];
+
+/** D1: konten legacy teks pola → HTML paragraf; HTML dibiarkan apa adanya. */
+function toEditorHtml(raw: string | undefined): string {
+  const text = raw ?? "";
+  if (/^\s*</.test(text)) return text;
+  if (!text.trim()) return "<p></p>";
+  return text
+    .split(/\r?\n/)
+    .map((line) =>
+      line.trim()
+        ? `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`
+        : ""
+    )
+    .join("");
+}
+
 export default function Pages() {
   const params = useParams();
   const navigate = useNavigate();
@@ -24,7 +47,9 @@ export default function Pages() {
 
   const [title, setTitle] = useState<string | null>(null);
   const [icon, setIcon] = useState<string | null>(null);
-  const [content, setContent] = useState<string | null>(null);
+  const [contentHtml, setContentHtml] = useState("");
+  const [preview, setPreview] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const pages = useQuery({
     queryKey: ["pages"],
@@ -41,7 +66,8 @@ export default function Pages() {
     if (detail.data) {
       setTitle(detail.data.title);
       setIcon(detail.data.icon);
-      setContent(detail.data.content);
+      setContentHtml(toEditorHtml(detail.data.content));
+      setPreview(false);
     }
   }, [detail.data]);
 
@@ -79,7 +105,7 @@ export default function Pages() {
       body: {
         title: title ?? undefined,
         icon: icon ?? undefined,
-        content: content ?? undefined,
+        content: preview ? undefined : contentHtml || "<p></p>",
       },
     });
   }
@@ -95,13 +121,17 @@ export default function Pages() {
         style={{ borderRight: "1px solid var(--n-border)" }}
       >
         <div className="flex items-center justify-between px-2 pb-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+          <span
+            className="text-[11px] font-semibold uppercase tracking-wide"
+            style={{ color: "var(--n-text-muted)" }}
+          >
             📄 Halaman
           </span>
           <button
             onClick={() => createPage.mutate({ title: "Tanpa judul" })}
             disabled={createPage.isPending}
             className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            style={{ color: "var(--accent)" }}
           >
             + Baru
           </button>
@@ -109,9 +139,9 @@ export default function Pages() {
         <div className="space-y-0.5">
           {roots.map((p) => (
             <div key={p.id}>
-              <NavLink to={`/pages/${p.id}`} active={pageId === p.id} label={`${p.icon} ${p.title}`} />
+              <TreeLink to={`/pages/${p.id}`} active={pageId === p.id} label={`${p.icon} ${p.title}`} />
               {childrenOf(p.id).map((c) => (
-                <NavLink
+                <TreeLink
                   key={c.id}
                   to={`/pages/${c.id}`}
                   active={pageId === c.id}
@@ -133,11 +163,13 @@ export default function Pages() {
       <div className="min-w-0 flex-1 space-y-4">
         {!pageId && (
           <>
-            <PageHeader
-              emoji="📄"
-              title="Halaman"
-              subtitle="Catatan & dokumen workspace dengan struktur sub-halaman ala Notion"
-            />
+            <div className="mb-4 text-[56px] leading-none">📄</div>
+            <h1 className="text-[38px] font-bold leading-[1.15] tracking-[-0.02em]" style={{ color: "var(--n-text)" }}>
+              Halaman
+            </h1>
+            <p className="mb-6 mt-1 text-[15px]" style={{ color: "var(--n-text-muted)" }}>
+              Catatan & dokumen workspace dengan block editor ala Notion.
+            </p>
             <button
               onClick={() => createPage.mutate({ title: "Tanpa judul" })}
               disabled={createPage.isPending}
@@ -148,56 +180,129 @@ export default function Pages() {
           </>
         )}
 
-        {pageId && detail.data && (
-          <form onSubmit={handleSave} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                value={icon ?? ""}
-                onChange={(e) => setIcon(e.target.value)}
-                className="input w-14 text-center text-xl"
-                aria-label="Ikon"
-              />
-              <input
-                value={title ?? ""}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Judul halaman"
-                className="input flex-1 text-lg font-semibold"
-              />
-            </div>
-            <textarea
-              value={content ?? ""}
-              onChange={(e) => setContent(e.target.value)}
-              rows={18}
-              placeholder="Tulis konten halaman..."
-              className="input w-full"
-            />
-            <div className="flex items-center gap-3 text-xs">
-              <button type="submit" disabled={updatePage.isPending} className="btn-secondary">
-                Simpan
-              </button>
-              {updatePage.isSuccess && !updatePage.isPending && (
-                <span className="text-emerald-600">Tersimpan ✓</span>
-              )}
+        {pageId && (
+          <>
+            {/* Header ala dokumen Notion */}
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm("Hapus halaman ini beserta sub-halamannya?"))
-                    deletePage.mutate(pageId);
-                }}
-                disabled={deletePage.isPending}
-                className="ml-auto text-rose-600 hover:text-rose-800"
+                onClick={() => setIconPickerOpen((v) => !v)}
+                className="block rounded-md px-1 transition-colors hover:bg-[var(--n-hover)]"
+                title="Ganti ikon"
               >
-                Hapus halaman
+                <span className="text-[56px] leading-none">{icon ?? "📄"}</span>
               </button>
+              {iconPickerOpen && (
+                <div
+                  className="absolute left-0 top-16 z-20 grid w-64 grid-cols-6 gap-1 rounded-lg p-2 shadow-lg"
+                  style={{
+                    backgroundColor: "var(--n-bg-elevated)",
+                    border: "1px solid var(--n-border)",
+                  }}
+                >
+                  {EMOJIS.map((em) => (
+                    <button
+                      key={em}
+                      onClick={() => {
+                        setIcon(em);
+                        setIconPickerOpen(false);
+                      }}
+                      className="rounded p-1 text-xl transition-colors hover:bg-[var(--n-hover)]"
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </form>
+
+            <input
+              value={title ?? ""}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Judul halaman"
+              className="w-full border-none bg-transparent text-[38px] font-bold leading-[1.15] tracking-[-0.02em] focus:outline-none"
+              style={{ color: "var(--n-text)" }}
+            />
+
+            <form onSubmit={handleSave} className="space-y-3">
+              <TiptapEditor
+                html={contentHtml}
+                pageKey={pageId}
+                editable={!preview}
+                onChange={(html) => setContentHtml(html)}
+              />
+
+              <div className="flex items-center gap-3 text-xs">
+                {!preview ? (
+                  <>
+                    <button type="submit" disabled={updatePage.isPending} className="btn">
+                      Simpan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreview(true)}
+                      className="btn-secondary"
+                    >
+                      👁 Pratinjau
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => setPreview(false)} className="btn-secondary">
+                    ✏️ Ubah
+                  </button>
+                )}
+                {updatePage.isSuccess && !updatePage.isPending && (
+                  <span style={{ color: "#0f7b6d" }}>Tersimpan ✓</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("Hapus halaman ini beserta sub-halamannya?"))
+                      deletePage.mutate(pageId);
+                  }}
+                  disabled={deletePage.isPending}
+                  className="ml-auto text-rose-600 hover:text-rose-800"
+                >
+                  Hapus halaman
+                </button>
+              </div>
+              {updatePage.error && (
+                <p className="text-xs text-red-600">{(updatePage.error as Error).message}</p>
+              )}
+            </form>
+
+            {/* Sub-halaman */}
+            {(childrenOf(pageId).length > 0 || true) && (
+              <div className="pt-2 text-xs">
+                <b style={{ color: "var(--n-text-muted)" }}>Sub-halaman</b>
+                <div className="mt-1 space-y-0.5">
+                  {childrenOf(pageId).map((c) => (
+                    <TreeLink
+                      key={`inline-${c.id}`}
+                      to={`/pages/${c.id}`}
+                      active={false}
+                      label={`${c.icon} ${c.title}`}
+                    />
+                  ))}
+                  <button
+                    onClick={() => createPage.mutate({ title: "Sub-halaman", parent_id: pageId })}
+                    disabled={createPage.isPending}
+                    className="font-medium hover:underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    + Tambah sub-halaman
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-function NavLink({
+function TreeLink({
   to,
   active,
   label,

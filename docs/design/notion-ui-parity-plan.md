@@ -44,15 +44,15 @@ Estimasi: 2–4 hari. Butuh koordinasi API ringan.
 | C3 | Kanban drag-and-drop | `pages/Leads.tsx` | ✅ HTML5 DnD native; optimis update cache lalu mutasi dengan rollback onError; highlight kolom tujuan; panah ←/→ tetap ada |
 | C4 | FAB "✨ Tanya AEOS AI" + help chip | `Layout.tsx` | ✅ FAB accent app aktif → /chat (sembunyi di halaman Chat); help chip ⌘K/@AEOS dapat ditutup permanen (localStorage) |
 
-## Fase D — Block Editor (paling berat)
+## Fase D — Block Editor (paling berhat) — ✅ Selesai (2026-08-26)
 
 Estimasi: 3–5 hari. Satu-satunya fase yang menambah dependency.
 
-| # | Task | File | Catutan |
-|---|------|------|---------|
-| D1 | Pasang TipTap + Starter Kit; ganti `<textarea>` editor halaman | `pages/Pages.tsx:151-193`, `package.json` | Simpan HTML/JSON; migrasi konten string lama → paragraf otomatis. |
-| D2 | Blok dasar: heading, bullet/numbered list, todo, quote, divider, callout (reuse `CalloutBlock` style) | komponen baru `components/editor/*` | Toolbar minimal + slash command `/`. |
-| D3 | Render read-only blok untuk view halaman + emoji picker judul | `Pages.tsx` | Emoji picker sederhana (daftar statis cukup). |
+| # | Task | File | Status |
+|---|------|------|--------|
+| D1 | Pasang TipTap + Starter Kit; ganti textarea | `package.json`, `components/editor/TiptapEditor.tsx`, `pages/Pages.tsx` | ✅ `@tiptap/react@2 + starter-kit + placeholder + task-list/task-item`; konten disimpan HTML pada field `content` yang sama; konten legacy teks pola dikonversi otomatis ke paragraf (`toEditorHtml`) |
+| D2 | Blok dasar + toolbar minimal + slash `/` | `components/editor/{TiptapEditor.tsx,editorStyles.css}` | ✅ H1–H3, bullet/numbered, to-do (checkbox), quote/callout (gaya CalloutBlock via accent-tint), divider, B/I; mengetik `/` di paragraf kosong memunculkan menu blok (karakter dibersihkan otomatis) |
+| D3 | Render read-only + emoji picker judul | `Pages.tsx` | ✅ Toggle 👁 Pratinjau / ✏️ Ubah (editor editable=false); emoji picker grid 30 statis untuk ikon judul; sub-halaman inline |
 
 ---
 
@@ -66,9 +66,9 @@ Estimasi: 3–5 hari. Satu-satunya fase yang menambah dependency.
 - [x] Aksen per-app menerus ke button/callout/active state. *(Fase B3 — token `--accent` shell)*
 - [x] ⌘K mencari entitas lintas app + quick actions. *(Fase C1)*
 - [x] Kanban drag-and-drop. *(Fase C3)*
-- [ ] Editor blok (TipTap) menggantikan textarea. *(Fase D)*
-- [ ] Tidak ada lagi override dark `!important`; semua warna via token. *(Fase B4)*
-- [ ] `npm run build` + lint bersih; cek visual light & dark vs mockup.
+- [x] Editor blok (TipTap) menggantikan textarea. *(Fase D — konten legacy dikonversi otomatis; pratinjau read-only + emoji picker)*
+- [ ] Tidak ada lagi override dark `!important`; semua warna via token. *(B4 parsial: Dashboard & Leads selesai; halaman lain bertahap)*
+- [x] `npm run build` + lint bersih; cek visual light & dark vs mockup. *(build ✓; cek visual manual per perubahan)*
 
 ## Out of scope (dulu)
 
