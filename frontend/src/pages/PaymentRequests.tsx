@@ -37,11 +37,11 @@ interface ChainStep {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  diajukan: "bg-slate-100 text-slate-600",
-  menunggu_atasan: "bg-amber-100 text-amber-700",
-  disetujui_atasan: "bg-emerald-100 text-emerald-700",
-  dieksekusi: "bg-blue-100 text-blue-700",
-  ditolak: "bg-red-100 text-red-600",
+  diajukan: "pill p-gray",
+  menunggu_atasan: "pill p-yellow",
+  disetujui_atasan: "pill p-green",
+  dieksekusi: "pill p-blue",
+  ditolak: "pill p-red",
 };
 
 const ROLE_OPTIONS = [
@@ -116,7 +116,8 @@ function ApprovalChainPanel() {
                 setDirty(true);
               }}
               disabled={current.length === 0}
-              className="font-medium text-slate-500 hover:text-slate-800 disabled:opacity-40"
+              className="font-medium hover:opacity-80 disabled:opacity-40"
+              style={{ color: "var(--n-text-muted)" }}
             >
               − Hapus Terakhir
             </button>
@@ -178,7 +179,8 @@ function ApprovalChainPanel() {
                 setRows([]);
                 setDirty(false);
               }}
-              className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800"
+              className="px-2 py-1 text-xs hover:opacity-80"
+              style={{ color: "var(--n-text-muted)" }}
             >
               Batal
             </button>
@@ -259,7 +261,7 @@ export default function PaymentRequests() {
                 <td className="td font-semibold">{formatRupiah(Number(p.amount))}</td>
                 <td className="td max-w-xs truncate">{p.description ?? "-"}</td>
                 <td className="td">
-                  <span className={`badge ${STATUS_BADGE[p.status] ?? ""}`}>
+                  <span className={`${STATUS_BADGE[p.status] ?? "pill p-gray"}`}>
                     {p.status.replace("_", " ")}
                   </span>
                   {p.progress?.total_steps > 0 &&

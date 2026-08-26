@@ -77,10 +77,10 @@ const LEAVE_TYPES = [
 ];
 
 const LEAVE_STATUS_BADGES: Record<string, string> = {
-  menunggu: "bg-amber-100 text-amber-700",
-  disetujui: "bg-emerald-100 text-emerald-700",
-  ditolak: "bg-rose-100 text-rose-700",
-  dibatalkan: "bg-slate-100 text-slate-500",
+  menunggu: "pill p-yellow",
+  disetujui: "pill p-green",
+  ditolak: "pill p-red",
+  dibatalkan: "pill p-gray",
 };
 
 interface LeaveRow {
@@ -129,8 +129,8 @@ async function openDownload(path: string) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-0.5 text-sm text-slate-700">{value}</dd>
+      <dt className="text-xs uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>{label}</dt>
+      <dd className="mt-0.5 text-sm" style={{ color: "var(--n-text)" }}>{value}</dd>
     </div>
   );
 }
@@ -231,12 +231,12 @@ export default function MyPortal() {
       setPasswordMsg({ ok: false, text: err instanceof Error ? err.message : "Gagal" }),
   });
 
-  if (isLoading) return <p className="text-slate-500">Memuat portal...</p>;
+  if (isLoading) return <p style={{ color: "var(--n-text-muted)" }}>Memuat portal...</p>;
   if (error || !profile) {
     return (
       <div className="card">
-        <h1 className="text-xl font-bold text-slate-800">Portal Saya</h1>
-        <p className="mt-2 text-sm text-slate-500">
+        <h1 className="text-xl font-bold" style={{ color: "var(--n-text)" }}>Portal Saya</h1>
+        <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Akun ini belum tertaut ke data karyawan. Silakan hubungi HR untuk
           mengaktifkan portal Anda.
         </p>
@@ -250,8 +250,8 @@ export default function MyPortal() {
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-700">Data Pribadi</h2>
-          <span className="badge bg-emerald-100 text-emerald-700">{profile.status}</span>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Data Pribadi</h2>
+          <span className="badge pill p-green">{profile.status}</span>
         </div>
         <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Nomor Induk" value={profile.employee_no} />
@@ -275,11 +275,11 @@ export default function MyPortal() {
       </div>
 
       <div className="card overflow-x-auto p-0">
-        <div className="border-b border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-700">Kontrak Kerja</h2>
+        <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Kontrak Kerja</h2>
         </div>
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Nomor Kontrak</th>
               <th className="th">Periode</th>
@@ -287,7 +287,7 @@ export default function MyPortal() {
               <th className="th">File</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(contracts ?? []).map((c) => (
               <tr key={c.id}>
                 <td className="td font-medium">{c.contract_no}</td>
@@ -299,7 +299,8 @@ export default function MyPortal() {
                   {c.file_name ? (
                     <button
                       onClick={() => openDownload(`/me/contracts/${c.id}/download-url`)}
-                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-sm font-medium hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
                     >
                       Unduh
                     </button>
@@ -311,7 +312,7 @@ export default function MyPortal() {
             ))}
             {contracts?.length === 0 && (
               <tr>
-                <td colSpan={4} className="td py-8 text-center text-slate-400">
+                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada kontrak kerja.
                 </td>
               </tr>
@@ -321,11 +322,11 @@ export default function MyPortal() {
       </div>
 
       <div className="card overflow-x-auto p-0">
-        <div className="border-b border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-700">Dokumen Saya</h2>
+        <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Dokumen Saya</h2>
         </div>
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Judul</th>
               <th className="th">Jenis</th>
@@ -334,7 +335,7 @@ export default function MyPortal() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(documents ?? []).map((d) => (
               <tr key={d.id}>
                 <td className="td font-medium">{d.title}</td>
@@ -344,7 +345,8 @@ export default function MyPortal() {
                 <td className="td">
                   <button
                     onClick={() => openDownload(`/me/documents/${d.id}/download-url`)}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                    className="text-sm font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
                   >
                     Unduh
                   </button>
@@ -353,7 +355,7 @@ export default function MyPortal() {
             ))}
             {documents?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada dokumen.
                 </td>
               </tr>
@@ -363,11 +365,11 @@ export default function MyPortal() {
       </div>
 
       <div className="card overflow-x-auto p-0">
-        <div className="border-b border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-700">Riwayat Slip Gaji</h2>
+        <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Riwayat Slip Gaji</h2>
         </div>
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Periode</th>
               <th className="th">Gaji Pokok</th>
@@ -379,7 +381,7 @@ export default function MyPortal() {
               <th className="th">Diterima</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(payslips ?? []).map((s) => (
               <tr key={s.id}>
                 <td className="td font-medium">
@@ -402,7 +404,7 @@ export default function MyPortal() {
             ))}
             {payslips?.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center text-slate-400">
+                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada slip gaji yang difinalisasi.
                 </td>
               </tr>
@@ -413,7 +415,7 @@ export default function MyPortal() {
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-700">Rekap Kehadiran</h2>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Rekap Kehadiran</h2>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -447,14 +449,14 @@ export default function MyPortal() {
           </div>
         ))}
         {attendance?.length === 0 && (
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm" style={{ color: "var(--n-text-muted)" }}>
             Belum ada rekap kehadiran untuk periode ini.
           </p>
         )}
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-slate-700">Koreksi Absensi</h2>
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Koreksi Absensi</h2>
         <form
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_auto_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
@@ -524,7 +526,7 @@ export default function MyPortal() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(corrections ?? []).map((c) => (
               <tr key={c.id}>
                 <td className="td font-medium">
@@ -554,7 +556,7 @@ export default function MyPortal() {
             ))}
             {corrections?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-6 text-center text-slate-400">
+                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada pengajuan koreksi absensi.
                 </td>
               </tr>
@@ -565,11 +567,11 @@ export default function MyPortal() {
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-700">
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
             Sisa Cuti Tahunan {today.getFullYear()}
           </h2>
           {leaveBalance && (
-            <span className="badge bg-indigo-100 text-indigo-700">
+            <span className="badge pill p-indigo">
               sisa {leaveBalance.remaining} hari
             </span>
           )}
@@ -581,7 +583,7 @@ export default function MyPortal() {
             <Field label="Sisa" value={`${leaveBalance.remaining} hari`} />
           </div>
         ) : (
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm" style={{ color: "var(--n-text-muted)" }}>
             Jatah cuti belum diatur HR — pengajuan cuti tahunan masih bisa
             diajukan tanpa batas kuota.
           </p>
@@ -589,7 +591,7 @@ export default function MyPortal() {
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-slate-700">Ajukan Cuti / Izin</h2>
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Ajukan Cuti / Izin</h2>
         <form
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
@@ -632,7 +634,7 @@ export default function MyPortal() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(leaves ?? []).map((lv) => (
               <tr key={lv.id}>
                 <td className="td">
@@ -652,12 +654,13 @@ export default function MyPortal() {
                   {lv.file_name ? (
                     <button
                       onClick={() => openDownload(`/me/leave-requests/${lv.id}/attachment/download-url`)}
-                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-sm font-medium hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
                     >
                       Lampiran ({(lv.file_size / 1024).toFixed(0)} KB)
                     </button>
                   ) : lv.status === "menunggu" ? (
-                    <label className="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                    <label className="cursor-pointer text-sm font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
                       + Lampirkan
                       <input
                         type="file"
@@ -690,7 +693,7 @@ export default function MyPortal() {
             ))}
             {leaves?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-6 text-center text-slate-400">
+                <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada pengajuan cuti/izin.
                 </td>
               </tr>
@@ -701,7 +704,7 @@ export default function MyPortal() {
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-700">Notifikasi</h2>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Notifikasi</h2>
           {(notifications ?? []).some((n) => !n.read_at) && (
             <button
               onClick={() => markAllNotifications.mutate()}
@@ -716,24 +719,24 @@ export default function MyPortal() {
           {(notifications ?? []).map((n) => (
             <li
               key={n.id}
-              className={`rounded-lg p-3 text-sm ${
-                n.read_at ? "bg-slate-50" : "bg-indigo-50/70"
-              }`}
+              className="rounded-lg p-3 text-sm"
+              style={{ backgroundColor: n.read_at ? "var(--n-hover)" : "var(--accent-tint)" }}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className={`font-medium ${n.read_at ? "text-slate-500" : "text-slate-800"}`}>
+                  <p className="font-medium" style={{ color: n.read_at ? "var(--n-text-muted)" : "var(--n-text)" }}>
                     {n.title}
                   </p>
-                  {n.body && <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>}
-                  <p className="mt-1 text-[11px] text-slate-400">
+                  {n.body && <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>{n.body}</p>}
+                  <p className="mt-1 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
                     {new Date(n.created_at).toLocaleString("id-ID")}
                   </p>
                 </div>
                 {!n.read_at && (
                   <button
                     onClick={() => markNotification.mutate(n.id)}
-                    className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    className="shrink-0 text-xs font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
                   >
                     Tandai dibaca
                   </button>
@@ -742,13 +745,13 @@ export default function MyPortal() {
             </li>
           ))}
           {notifications?.length === 0 && (
-            <li className="text-sm text-slate-400">Belum ada notifikasi.</li>
+            <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada notifikasi.</li>
           )}
         </ul>
       </div>
 
       <div className="card max-w-xl">
-        <h2 className="font-semibold text-slate-700">Ganti Password</h2>
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Ganti Password</h2>
         <form
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {

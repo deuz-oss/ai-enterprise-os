@@ -157,7 +157,7 @@ export default function Accounting() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader emoji="📊" title="Akunting" />
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">Tahun</span>
+          <span className="text-sm" style={{ color: "var(--n-text-muted)" }}>Tahun</span>
           <input
             type="number"
             value={year}
@@ -196,7 +196,7 @@ export default function Accounting() {
         <>
           <form onSubmit={handleCreate} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-semibold text-slate-700">Jurnal Umum Baru</h2>
+              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Jurnal Umum Baru</h2>
               <select name="status" defaultValue="posted" className="input w-auto text-xs">
                 <option value="posted">Langsung posted</option>
                 <option value="memorial">Memorial (draft)</option>
@@ -325,7 +325,7 @@ export default function Accounting() {
                     <td className="td capitalize">{a.normal_balance}</td>
                     <td className="td">
                       {!a.is_active && (
-                        <span className="badge bg-slate-100 text-slate-500">nonaktif</span>
+                        <span className="pill p-gray">nonaktif</span>
                       )}
                     </td>
                   </tr>
@@ -342,7 +342,7 @@ export default function Accounting() {
             Tutup buku mengunci periode: input jurnal backdate ditolak dan mesin
             auto-journal melewati periode tertutup. Buka ulang tercatat di audit.
           </CalloutBlock>          <div className="card space-y-2">
-            <h2 className="font-semibold text-slate-700">Tutup Bulan</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Tutup Bulan</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="number"
@@ -402,7 +402,8 @@ export default function Accounting() {
                     <td className="td">
                       <button
                         onClick={() => reopenPeriod.mutate({ y: p.year, m: p.month })}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        className="text-xs font-medium hover:opacity-80"
+                        style={{ color: "var(--accent)" }}
                       >
                         Buka Ulang
                       </button>
@@ -411,7 +412,7 @@ export default function Accounting() {
                 ))}
                 {periods?.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="td py-8 text-center text-slate-400">
+                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                       Belum ada periode yang ditutup.
                     </td>
                   </tr>
@@ -427,11 +428,11 @@ export default function Accounting() {
       {tab === "jurnal" && (
         <>
           <div className="card overflow-x-auto p-0">
-            <div className="border-b border-slate-200 p-4">
-              <h2 className="font-semibold text-slate-700">Neraca Saldo {year}</h2>
+            <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Neraca Saldo {year}</h2>
             </div>
             <table className="w-full">
-              <thead className="border-b border-slate-200 bg-slate-50">
+              <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
                 <tr>
                   <th className="th">Akun</th>
                   <th className="th">Nama</th>
@@ -439,7 +440,7 @@ export default function Accounting() {
                   <th className="th">Total Kredit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
                 {(trialBalance ?? [])
                   .filter((r) => r.total_debit > 0 || r.total_credit > 0)
                   .map((r) => (
@@ -452,7 +453,7 @@ export default function Accounting() {
                   ))}
                 {(trialBalance ?? []).every((r) => r.total_debit === 0 && r.total_credit === 0) && (
                   <tr>
-                    <td colSpan={4} className="td py-8 text-center text-slate-400">
+                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                       Belum ada mutasi jurnal.
                     </td>
                   </tr>
@@ -463,7 +464,7 @@ export default function Accounting() {
 
           {incomeStatement && (
             <div className="card">
-              <h2 className="font-semibold text-slate-700">Laba Rugi {incomeStatement.year}</h2>
+              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Laba Rugi {incomeStatement.year}</h2>
               <div className="mt-3 grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <p className="text-sm font-semibold text-emerald-700">Pendapatan</p>
@@ -488,7 +489,7 @@ export default function Accounting() {
                   </ul>
                 </div>
               </div>
-              <p className="mt-3 border-t border-slate-200 pt-3 text-right font-semibold">
+              <p className="mt-3 border-t pt-3 text-right font-semibold" style={{ borderColor: "var(--n-border)" }}>
                 Laba Bersih:{" "}
                 <span className={incomeStatement.net_income >= 0 ? "text-emerald-700" : "text-rose-700"}>
                   {formatRupiah(incomeStatement.net_income)}
@@ -521,8 +522,8 @@ function JournalList({ year, onPost }: { year: number; onPost: (id: string) => v
 
   return (
     <div className="card overflow-x-auto p-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
-        <h2 className="font-semibold text-slate-700">Daftar Jurnal {year}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Daftar Jurnal {year}</h2>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -537,7 +538,7 @@ function JournalList({ year, onPost }: { year: number; onPost: (id: string) => v
         </select>
       </div>
       <table className="w-full">
-        <thead className="border-b border-slate-200 bg-slate-50">
+        <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
           <tr>
             <th className="th">Tanggal</th>
             <th className="th">Keterangan</th>
@@ -546,14 +547,14 @@ function JournalList({ year, onPost }: { year: number; onPost: (id: string) => v
             <th className="th">Aksi</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
           {(entries ?? []).map((e) => (
             <tr key={e.id}>
               <td className="td font-mono text-xs">{e.entry_date}</td>
               <td className="td">
                 {e.description}
                 {e.event_code && (
-                  <span className="ml-1 badge bg-slate-100 text-slate-500">{e.event_code}</span>
+                  <span className="ml-1 pill p-gray">{e.event_code}</span>
                 )}
               </td>
               <td className="td text-xs">
@@ -568,19 +569,20 @@ function JournalList({ year, onPost }: { year: number; onPost: (id: string) => v
                 {e.status === "memorial" ? (
                   <button
                     onClick={() => onPost(e.id)}
-                    className="font-medium text-indigo-600 hover:text-indigo-800"
+                    className="font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
                   >
                     Posting
                   </button>
                 ) : (
-                  <span className="badge bg-emerald-100 text-emerald-700">posted</span>
+                  <span className="pill p-green">posted</span>
                 )}
               </td>
             </tr>
           ))}
           {entries?.length === 0 && (
             <tr>
-              <td colSpan={5} className="td py-8 text-center text-slate-400">
+              <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                 Belum ada jurnal.
               </td>
             </tr>

@@ -109,7 +109,7 @@ export default function Clients() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Perusahaan</th>
               <th className="th">NPWP</th>
@@ -118,14 +118,13 @@ export default function Clients() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(clients ?? []).map((c) => (
               <tr
                 key={c.id}
                 onClick={() => setSelectedId(c.id === selectedId ? null : c.id)}
-                className={`cursor-pointer hover:bg-slate-50 ${
-                  selectedId === c.id ? "bg-indigo-50/50" : ""
-                }`}
+                className="cursor-pointer transition-colors hover:bg-[var(--n-hover)]"
+                style={{ backgroundColor: selectedId === c.id ? "var(--accent-tint)" : undefined }}
               >
                 <td className="td font-medium">{c.name}</td>
                 <td className="td">{c.npwp ?? "-"}</td>
@@ -133,10 +132,10 @@ export default function Clients() {
                 <td className="td">{c.contract_end ?? "-"}</td>
                 <td className="td">
                   <span
-                    className={`badge ${
+                    className={`pill ${
                       c.status === "aktif"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-slate-100 text-slate-500"
+                        ? "p-green"
+                        : "p-gray"
                     }`}
                   >
                     {c.status}
@@ -146,7 +145,7 @@ export default function Clients() {
             ))}
             {clients?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada klien.
                 </td>
               </tr>
@@ -157,7 +156,7 @@ export default function Clients() {
 
       {selectedId && (
         <div className="card">
-          <h2 className="font-semibold text-slate-700">Dokumen Legalitas</h2>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Dokumen Legalitas</h2>
           <form
             className="mt-3 flex flex-wrap gap-2"
             onSubmit={(e) => {
@@ -183,13 +182,14 @@ export default function Clients() {
             {(documents ?? []).map((d) => (
               <li
                 key={d.id}
-                className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+                className="flex items-center justify-between rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--n-hover)" }}
               >
                 <div>
-                  <p className="font-medium text-slate-700">
+                  <p className="font-medium" style={{ color: "var(--n-text)" }}>
                     {TYPE_LABELS[d.document_type]} — v{d.version}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
                     {d.file_name} · {(d.file_size / 1024).toFixed(0)} KB
                   </p>
                 </div>
@@ -202,14 +202,15 @@ export default function Clients() {
                     );
                     window.open(url, "_blank");
                   }}
-                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  className="text-sm font-medium hover:opacity-80"
+                  style={{ color: "var(--accent)" }}
                 >
                   Unduh
                 </a>
               </li>
             ))}
             {documents?.length === 0 && (
-              <li className="text-sm text-slate-400">Belum ada dokumen.</li>
+              <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada dokumen.</li>
             )}
           </ul>
         </div>

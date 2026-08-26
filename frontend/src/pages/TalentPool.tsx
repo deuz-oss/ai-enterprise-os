@@ -103,7 +103,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   return (
     <div className="space-y-3 rounded p-3" style={{ backgroundColor: "var(--n-hover)" }}>
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className={`badge ${d.status === "gagal" ? "bg-red-100 text-red-600" : d.status === "finalisasi" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+        <span className={`${d.status === "gagal" ? "pill p-red" : d.status === "finalisasi" ? "pill p-green" : "pill p-yellow"}`}>
           {d.status.replace("_", " ")}
         </span>
         <span style={{ color: "var(--n-text-muted)" }}>{d.file_name} · skema v{d.schema_version}/prompt v{d.prompt_version}</span>
@@ -174,7 +174,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
                 <button
                   onClick={() => review.mutate()}
                   disabled={review.isPending || Object.keys(edits).length === 0}
-                  className="rounded bg-indigo-600 px-3 py-1.5 font-medium text-white disabled:opacity-40"
+                  className="rounded bg-[var(--accent)] px-3 py-1.5 font-medium text-white disabled:opacity-40"
                 >
                   Simpan Koreksi
                 </button>
@@ -210,7 +210,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
                 >
                   Unduh PDF
                 </button>
-                {v.is_locked && <span className="badge ml-1 bg-slate-100 text-slate-600">terkunci submission</span>}
+                {v.is_locked && <span className="pill p-gray ml-1">terkunci submission</span>}
               </li>
             ))}
           </ul>
@@ -328,7 +328,8 @@ function BrandingCard() {
             <button
               onClick={() => removeLogo.mutate()}
               disabled={removeLogo.isPending}
-              className="text-slate-500 hover:text-rose-600"
+              className="hover:text-rose-600"
+              style={{ color: "var(--n-text-muted)" }}
             >
               Hapus Logo
             </button>
@@ -456,9 +457,9 @@ export default function TalentPool() {
                   <td className="td">{r.readiness ? READINESS_LABELS[r.readiness] ?? r.readiness : "-"}</td>
                   <td className="td">{r.expected_salary ? formatRupiah(r.expected_salary) : "-"}</td>
                   <td className="td">
-                    <span className="badge bg-slate-100 text-slate-600">{r.tp_status}</span>
+                    <span className="pill p-gray">{r.tp_status}</span>
                     {r.needs_review_count > 0 && (
-                      <span className="badge ml-1 bg-amber-100 text-amber-700">{r.needs_review_count} perlu cek</span>
+                      <span className="pill p-yellow ml-1">{r.needs_review_count} perlu cek</span>
                     )}
                   </td>
                   <td className="td">{r.latest_cv_version ? `v${r.latest_cv_version}` : "—"}</td>

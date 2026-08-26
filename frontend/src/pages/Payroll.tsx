@@ -107,17 +107,17 @@ function SaltabTable({ runId }: { runId: string | null }) {
 
   if (!runId)
     return (
-      <p className="p-4 text-sm text-slate-400">
+      <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>
         Pilih payroll run (klik "Slip Gaji") untuk melihat grid Saltab.
       </p>
     );
-  if (isLoading) return <p className="p-4 text-sm text-slate-400">Memuat...</p>;
+  if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
 
   return (
-    <div className="divide-y divide-slate-100">
+    <div className="divide-y" style={{ borderColor: "var(--n-border)" }}>
       {(rows ?? []).map((row) => (
         <div key={row.payslip_id} className="px-4 py-3">
-          <p className="text-sm font-medium text-slate-700">{row.employee_name}</p>
+          <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{row.employee_name}</p>
           <table className="mt-1 w-full text-xs">
             <tbody>
               {row.components.map((c) => (
@@ -125,7 +125,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                   <td className="py-0.5 pr-2 capitalize" style={{ color: "var(--n-text-muted)" }}>
                     {c.name}
                     {c.source === "manual" && (
-                      <span className="ml-1 badge bg-indigo-100 text-indigo-700">manual</span>
+                      <span className="ml-1 pill p-indigo">manual</span>
                     )}
                   </td>
                   <td className="py-0.5 pr-2 uppercase text-[10px]" style={{ color: "var(--n-text-muted)" }}>
@@ -158,7 +158,8 @@ function SaltabTable({ runId }: { runId: string | null }) {
                     ) : (
                       <button
                         onClick={() => setEditing(c.id)}
-                        className="text-indigo-600 hover:text-indigo-800"
+                        style={{ color: "var(--accent)" }}
+                        className="hover:opacity-80"
                         title="Override manual"
                       >
                         edit
@@ -189,7 +190,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
         </div>
       ))}
       {rows?.length === 0 && (
-        <p className="p-4 text-sm text-slate-400">Belum ada slip pada run ini.</p>
+        <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada slip pada run ini.</p>
       )}
       {err && <p className="px-4 pb-3 text-sm text-red-600">{err.message}</p>}
     </div>
@@ -288,12 +289,12 @@ export default function Payroll() {
   });
 
   const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-    draft: { label: "Draft", cls: "bg-slate-100 text-slate-600" },
-    submitted_to_client: { label: "Menunggu Klien", cls: "bg-amber-100 text-amber-700" },
-    client_rejected: { label: "Ditolak Klien", cls: "bg-red-100 text-red-600" },
-    client_approved: { label: "Disetujui Klien", cls: "bg-emerald-100 text-emerald-700" },
-    finance_processing: { label: "Proses Finance", cls: "bg-blue-100 text-blue-700" },
-    final: { label: "Final", cls: "bg-slate-800 text-white" },
+    draft: { label: "Draft", cls: "pill p-gray" },
+    submitted_to_client: { label: "Menunggu Klien", cls: "pill p-yellow" },
+    client_rejected: { label: "Ditolak Klien", cls: "pill p-red" },
+    client_approved: { label: "Disetujui Klien", cls: "pill p-green" },
+    finance_processing: { label: "Proses Finance", cls: "pill p-blue" },
+    final: { label: "Final", cls: "pill p-gray" },
   };
 
   function handleAttendance(e: FormEvent<HTMLFormElement>) {
@@ -368,7 +369,7 @@ export default function Payroll() {
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-slate-700">
+        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
           Absensi & Lembur — {period.month}/{period.year} (approval klien)
         </h2>
         <form onSubmit={handleAttendance} className="mt-3 flex flex-wrap items-center gap-2">
@@ -394,7 +395,7 @@ export default function Payroll() {
               <th className="th">Approval Klien</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(attendance ?? []).map((a) => {
               const emp = employees?.find((e) => e.id === a.employee_id);
               return (
@@ -404,7 +405,7 @@ export default function Payroll() {
                   <td className="td">{a.overtime_hours}</td>
                   <td className="td">
                     {a.client_approved ? (
-                      <span className="badge bg-emerald-100 text-emerald-700">disetujui</span>
+                      <span className="pill p-green">disetujui</span>
                     ) : (
                       <button
                         onClick={() => approveAttendance.mutate({ id: a.id, approved: true })}
@@ -419,7 +420,7 @@ export default function Payroll() {
             })}
             {attendance?.length === 0 && (
               <tr>
-                <td colSpan={4} className="td py-6 text-center text-slate-400">
+                <td colSpan={4} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada rekap absensi untuk periode ini.
                 </td>
               </tr>
@@ -432,7 +433,7 @@ export default function Payroll() {
         <CalloutBlock emoji="🔗" tone="success">
           <p className="font-medium">Link approval klien aktif</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <code className="rounded bg-white/70 px-2 py-0.5 text-xs">{clientLink.link}</code>
+            <code className="rounded px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--n-hover)", border: "1px solid var(--n-border)" }}>{clientLink.link}</code>
             <button
               className="btn-secondary py-0.5 text-xs"
               onClick={() => navigator.clipboard.writeText(window.location.origin + clientLink.link)}
@@ -446,7 +447,7 @@ export default function Payroll() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
             <tr>
               <th className="th">Periode</th>
               <th className="th">Jenis / Klien</th>
@@ -454,9 +455,9 @@ export default function Payroll() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(runs ?? []).map((r) => {
-              const badge = STATUS_LABELS[r.status] ?? { label: r.status, cls: "bg-slate-100 text-slate-600" };
+              const badge = STATUS_LABELS[r.status] ?? { label: r.status, cls: "pill p-gray" };
               return (
                 <tr key={r.id}>
                   <td className="td font-medium">
@@ -468,15 +469,15 @@ export default function Payroll() {
                       : "Internal"}
                   </td>
                   <td className="td">
-                    <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                    <span className={`${badge.cls}`}>{badge.label}</span>
                   </td>
                   <td className="td space-x-2 whitespace-nowrap text-sm">
-                    <button onClick={() => setSelectedRunId(r.id)} className="font-medium text-indigo-600 hover:text-indigo-800">
+                    <button onClick={() => setSelectedRunId(r.id)} style={{ color: "var(--accent)" }} className="font-medium hover:opacity-80">
                       Slip Gaji
                     </button>
                     {(r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
                       <>
-                        <button onClick={() => generateSlips.mutate(r.id)} className="text-slate-600 hover:text-slate-900">
+                        <button onClick={() => generateSlips.mutate(r.id)} style={{ color: "var(--n-text-muted)" }} className="hover:opacity-80">
                           Generate
                         </button>
                         {r.run_type === "proyek" ? (
@@ -486,7 +487,8 @@ export default function Payroll() {
                                 onSuccess: (d) => setClientLink({ link: d.link, expires: d.expires_at }),
                               })
                             }
-                            className="font-medium text-indigo-600 hover:text-indigo-800"
+                            style={{ color: "var(--accent)" }}
+                            className="font-medium hover:opacity-80"
                           >
                             Kirim ke Klien
                           </button>
@@ -508,7 +510,7 @@ export default function Payroll() {
                       </button>
                     )}
                     {r.status === "submitted_to_client" && (
-                      <span className="text-xs text-slate-400">menunggu keputusan klien</span>
+                      <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>menunggu keputusan klien</span>
                     )}
                     {r.status === "final" && (
                       <button
@@ -521,7 +523,8 @@ export default function Payroll() {
                             }
                           )
                         }
-                        className="font-medium text-indigo-600 hover:text-indigo-800"
+                        style={{ color: "var(--accent)" }}
+                        className="font-medium hover:opacity-80"
                         title="Ajukan Payment Request pembayaran gaji"
                       >
                         + Payment Request
@@ -533,7 +536,7 @@ export default function Payroll() {
             })}
             {runs?.length === 0 && (
               <tr>
-                <td colSpan={4} className="td py-8 text-center text-slate-400">
+                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada payroll run.
                 </td>
               </tr>
@@ -544,11 +547,11 @@ export default function Payroll() {
 
       {selectedRunId && (
         <div className="card overflow-x-auto p-0">
-          <div className="border-b border-slate-200 p-4">
-            <h2 className="font-semibold text-slate-700">Slip Gaji</h2>
+          <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Slip Gaji</h2>
           </div>
           <table className="w-full">
-            <thead className="border-b border-slate-200 bg-slate-50">
+            <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
               <tr>
                 <th className="th">Karyawan</th>
                 <th className="th">Gaji Pokok</th>
@@ -558,7 +561,7 @@ export default function Payroll() {
                 <th className="th">Diterima</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
               {(slips ?? []).map((s) => {
                 const emp = employees?.find((e) => e.id === s.employee_id);
                 return (
@@ -578,7 +581,7 @@ export default function Payroll() {
               })}
               {slips?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td py-8 text-center text-slate-400">
+                  <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                     Belum ada slip. Tekan "Generate" pada run ini.
                   </td>
                 </tr>
@@ -589,8 +592,8 @@ export default function Payroll() {
       )}
 
       <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
             Saltab (Grid Komponen) — Run terpilih
           </h2>
           {selectedRunId && (
@@ -621,8 +624,8 @@ export default function Payroll() {
       </div>
 
       <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
-          <h2 className="font-semibold text-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
             Rekap Iuran BPJS — {period.year}-{String(period.month).padStart(2, "0")}
           </h2>
           <div className="flex gap-2">
@@ -643,7 +646,7 @@ export default function Payroll() {
           </div>
         </div>
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
             <tr>
               <th className="th">Karyawan</th>
               <th className="th">No BPJS TK</th>
@@ -653,19 +656,19 @@ export default function Payroll() {
               <th className="th">Total</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(bpjsRecap?.rows ?? []).map((r) => (
               <tr key={r.employee_id}>
                 <td className="td font-medium">{r.full_name}</td>
                 <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
                 <td className="td">{formatRupiah(r.salary_kesehatan)}</td>
-                <td className="td text-slate-600">{formatRupiah(r.employer_total)}</td>
+                <td className="td" style={{ color: "var(--n-text-muted)" }}>{formatRupiah(r.employer_total)}</td>
                 <td className="td text-rose-600">-{formatRupiah(r.employee_total)}</td>
                 <td className="td font-semibold">{formatRupiah(r.grand_total)}</td>
               </tr>
             ))}
             {bpjsRecap && bpjsRecap.rows.length > 0 && (
-              <tr className="bg-slate-50 font-bold">
+              <tr className="font-bold" style={{ backgroundColor: "var(--n-hover)" }}>
                 <td className="td" colSpan={3}>
                   Total
                 </td>
@@ -678,7 +681,7 @@ export default function Payroll() {
             )}
             {bpjsRecap?.rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center text-slate-400">
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Tidak ada karyawan aktif.
                 </td>
               </tr>

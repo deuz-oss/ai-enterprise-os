@@ -175,7 +175,7 @@ export default function Candidates() {
       {view === "tabel" && (
         <div className="card overflow-x-auto p-0">
           <table className="w-full">
-            <thead className="border-b border-slate-200 bg-slate-50">
+            <thead className="border-b border-[var(--n-border)] bg-[var(--n-hover)]">
               <tr>
                 <th className="th">Nama</th>
                 <th className="th">Kota</th>
@@ -186,10 +186,10 @@ export default function Candidates() {
                 <th className="th">AI</th>
               </tr>
             </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[var(--n-border)]">
             {(candidates ?? []).map((c) => (
               <Fragment key={c.id}>
-                <tr className="hover:bg-slate-50">
+                <tr className="hover:bg-[var(--n-hover)]">
                 <td className="td font-medium">{c.full_name}</td>
                 <td className="td">{c.city ?? "-"}</td>
                 <td className="td">{formatRupiah(c.expected_salary)}</td>
@@ -204,7 +204,7 @@ export default function Candidates() {
                         );
                         window.open(url, "_blank");
                       }}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-xs font-medium text-[var(--accent)] hover:opacity-80"
                     >
                       {c.cv_file_name}
                     </a>
@@ -258,10 +258,10 @@ export default function Candidates() {
               </tr>
                 {aiCandidateId === c.id && (
                   <tr>
-                    <td colSpan={7} className="bg-slate-50/60 px-4 py-4">
+                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-700">
+                          <span className="text-sm font-semibold text-[var(--n-text)]">
                             Screening AI: {c.full_name}
                           </span>
                           {!c.cv_file_name && (
@@ -303,14 +303,14 @@ export default function Candidates() {
                           </p>
                         )}
                         {screenings.isLoading ? (
-                          <p className="text-sm text-slate-400">Memuat riwayat...</p>
+                          <p className="text-sm text-[var(--n-text-muted)]">Memuat riwayat...</p>
                         ) : (
                           <div className="space-y-2">
                             {(screenings.data ?? []).map((s) => (
                               <AiResultCard key={s.id} screening={s} />
                             ))}
                             {screenings.data?.length === 0 && (
-                              <p className="text-sm text-slate-400">Belum ada hasil screening.</p>
+                              <p className="text-sm text-[var(--n-text-muted)]">Belum ada hasil screening.</p>
                             )}
                           </div>
                         )}
@@ -322,7 +322,7 @@ export default function Candidates() {
             ))}
             {candidates?.length === 0 && (
               <tr>
-                <td colSpan={7} className="td py-8 text-center text-slate-400">
+                <td colSpan={7} className="td py-8 text-center text-[var(--n-text-muted)]">
                   Belum ada kandidat.
                 </td>
               </tr>
@@ -358,7 +358,7 @@ export default function Candidates() {
                       <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
                         {c.city ?? "—"} · {formatRupiah(c.expected_salary)}
                       </p>
-                      {c.cv_file_name && <p className="mt-1 text-xs text-indigo-600">📎 {c.cv_file_name}</p>}
+                      {c.cv_file_name && <p className="mt-1 text-xs text-[var(--accent)]">📎 {c.cv_file_name}</p>}
                       <div className="mt-2 flex items-center justify-between text-xs" onClick={(e) => e.stopPropagation()}>
                         <button
                           disabled={STATUSES.indexOf(c.status) === 0}

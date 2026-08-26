@@ -750,7 +750,7 @@ function PageTreeSection({
           onClick={() => createPage.mutate()}
           disabled={createPage.isPending}
           title="Halaman baru"
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          className="text-xs font-medium text-[var(--accent)] hover:opacity-80"
         >
           +
         </button>
@@ -853,7 +853,7 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
         <button
           onClick={() => readAll.mutate()}
           disabled={readAll.isPending || (items.data?.length ?? 0) === 0}
-          className="text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
+          className="text-[var(--accent)] hover:opacity-80 disabled:opacity-40"
         >
           Tandai semua dibaca
         </button>

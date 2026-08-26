@@ -126,44 +126,6 @@ body {
   }
 }
 
-/* ============================================================
-   Dark mode retro-fit: halaman lama memakai kelas slate-* secara
-   langsung; aturan berikut memetakan pola umum ke token agar
-   seluruh konten ikut gelap tanpa menyentuh setiap file.
-   ============================================================ */
-.dark [class*="bg-white"] {
-  background-color: var(--n-bg-elevated) !important;
-}
-.dark [class*="bg-slate-50"] {
-  background-color: var(--n-hover) !important;
-}
-.dark [class*="bg-slate-100"] {
-  background-color: var(--n-hover) !important;
-}
-.dark [class*="border-slate-100"],
-.dark [class*="border-slate-200"],
-.dark [class*="border-slate-300"] {
-  border-color: var(--n-border) !important;
-}
-.dark [class*="text-slate-800"],
-.dark [class*="text-slate-700"] {
-  color: var(--n-text) !important;
-}
-.dark [class*="text-slate-500"],
-.dark [class*="text-slate-600"],
-.dark [class*="text-slate-400"] {
-  color: var(--n-text-muted) !important;
-}
-/* Badge berwarna tetap terbaca di dark (sedikit diturunkan terangnya). */
-.dark .badge[class*="bg-emerald-100"],
-.dark .badge[class*="bg-amber-100"],
-.dark .badge[class*="bg-indigo-100"],
-.dark .badge[class*="bg-blue-100"],
-.dark .badge[class*="bg-violet-100"],
-.dark .badge[class*="bg-purple-100"] {
-  filter: brightness(0.82);
-}
-
 /* Scrollbar halus ala Notion */
 * {
   scrollbar-width: thin;

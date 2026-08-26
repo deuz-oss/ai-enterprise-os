@@ -37,8 +37,8 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center">
       <form onSubmit={handleSubmit} className="card w-full max-w-sm space-y-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">AI Enterprise OS</h1>
-          <p className="mt-1 text-sm text-slate-500">Masuk ke akun tim Anda</p>
+          <h1 className="text-xl font-bold" style={{ color: "var(--n-text)" }}>AI Enterprise OS</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>Masuk ke akun tim Anda</p>
         </div>
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
         <input

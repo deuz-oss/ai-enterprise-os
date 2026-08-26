@@ -92,7 +92,7 @@ export default function JobOrders() {
       </div>
 
       {!clients?.length && (
-        <p className="text-sm text-slate-500">Tambahkan klien terlebih dahulu untuk membuat job order.</p>
+        <p className="text-sm text-[var(--n-text-muted)]">Tambahkan klien terlebih dahulu untuk membuat job order.</p>
       )}
 
       {showForm && (
@@ -119,7 +119,7 @@ export default function JobOrders() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead className="border-b border-[var(--n-border)] bg-[var(--n-hover)]">
             <tr>
               <th className="th">Posisi</th>
               <th className="th">Klien</th>
@@ -129,9 +129,9 @@ export default function JobOrders() {
               <th className="th">AI Matching</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[var(--n-border)]">
             {(jobOrders ?? []).map((jo) => (
-              <tr key={jo.id} className="hover:bg-slate-50">
+              <tr key={jo.id} className="hover:bg-[var(--n-hover)]">
                 <td className="td font-medium">{jo.title}</td>
                 <td className="td">{clientName(jo.client_id)}</td>
                 <td className="td">{jo.headcount} orang</td>
@@ -164,7 +164,7 @@ export default function JobOrders() {
             ))}
             {jobOrders?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center text-slate-400">
+                <td colSpan={6} className="td py-8 text-center text-[var(--n-text-muted)]">
                   Belum ada job order.
                 </td>
               </tr>
@@ -176,16 +176,16 @@ export default function JobOrders() {
       {(match.isPending || match.error || matchResult) && (
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Hasil AI Matching</h2>
+            <h2 className="text-lg font-semibold text-[var(--n-text)]">Hasil AI Matching</h2>
             {matchResult && (
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-[var(--n-text-muted)]">
                 {matchResult.evaluated} kandidat dinilai
                 {matchResult.reused > 0 && ` · ${matchResult.reused} memakai hasil sebelumnya`}
               </span>
             )}
           </div>
           {match.isPending && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--n-text-muted)]">
               AI sedang menilai kandidat (bisa memakan waktu beberapa saat)...
             </p>
           )}
@@ -196,11 +196,11 @@ export default function JobOrders() {
             <ol className="space-y-2">
               {matchResult.results.map((item, idx) => (
                 <li key={item.candidate.id} className="flex gap-3">
-                  <span className="w-6 pt-4 text-right text-sm font-bold text-slate-400">
+                  <span className="w-6 pt-4 text-right text-sm font-bold text-[var(--n-text-muted)]">
                     {idx + 1}.
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-700">
+                    <p className="text-sm font-medium text-[var(--n-text)]">
                       {item.candidate.full_name}{" "}
                       <span className={`ml-1 text-xs`}>
                         (skor <ScoreBadge score={item.screening.score} />)
@@ -211,7 +211,7 @@ export default function JobOrders() {
                 </li>
               ))}
               {matchResult.results.length === 0 && (
-                <li className="text-sm text-slate-400">
+                <li className="text-sm text-[var(--n-text-muted)]">
                   Tidak ada kandidat aktif untuk job order ini.
                 </li>
               )}

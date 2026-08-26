@@ -30,7 +30,7 @@ Estimasi: 1–2 hari. Tanpa fitur baru, murni parity tampilan.
 | B1 | Palet pill Notion persis hex mockup | `index.css` (`.pill .p-*`), `Leads.tsx`, `Candidates.tsx`, `JobOrders.tsx` | ✅ 7 warna Notion + `.p-indigo` lokal (#5B5BD6) untuk tahap Presentasi; dark: teks pill dicerahkan. Badge lain (PaymentRequests, Chat, dst.) menyusul bertahap |
 | B2 | Skala judul H1 38px, emoji 56px, properti 168px | `components/notion.tsx` | ✅ PageHeader + PropertyRow mengikuti mockup L145–155; subtitle 15px |
 | B3 | Aksen per-app via token shell | `Layout.tsx`, `index.css`, `notion.tsx`, `AppLauncherGrid.tsx` | ✅ Token `--accent`/`--accent-tint` di-set dari app halaman aktif; dipakai `.btn`, `.input:focus`, tombol Bagikan/upsell/install, callout info |
-| B4 | Bersihkan retro-fit dark `!important` | `Dashboard.tsx`, `Leads.tsx` | 🟨 Mulai: Dashboard & Leads penuh token (tanpa slate legacy). Halaman lain bertahap — blok override global masih diperlukan |
+| B4 | Bersihkan retro-fit dark `!important` | `frontend/src/index.css`, semua `pages/*.tsx` + `components/*.tsx` | ✅ Selesai penuh — semua 17+ file bermigrasi ke token Notion / pill / `var(--accent)`; 0 `slate-*`/`indigo-*`/`bg-white` tersisa; blok `!important` global dihapus |
 | B5 | Dark token samakan mockup | `index.css` | ✅ bg #191919, elevated #1F1F1F, sidebar #202020, border/hover/text sesuai mockup, accent tetap #2383E2 |
 
 ## Fase C — Fungsionalitas Mockup — ✅ Selesai (2026-08-26)
@@ -67,7 +67,7 @@ Estimasi: 3–5 hari. Satu-satunya fase yang menambah dependency.
 - [x] ⌘K mencari entitas lintas app + quick actions. *(Fase C1)*
 - [x] Kanban drag-and-drop. *(Fase C3)*
 - [x] Editor blok (TipTap) menggantikan textarea. *(Fase D — konten legacy dikonversi otomatis; pratinjau read-only + emoji picker)*
-- [ ] Tidak ada lagi override dark `!important`; semua warna via token. *(B4 parsial: Dashboard & Leads selesai; halaman lain bertahap)*
+- [x] Tidak ada lagi override dark `!important`; semua warna via token. *(B4 — blok retro-fit dihapus)*
 - [x] `npm run build` + lint bersih; cek visual light & dark vs mockup. *(build ✓; cek visual manual per perubahan)*
 
 ## Out of scope (dulu)

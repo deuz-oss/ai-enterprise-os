@@ -27,8 +27,8 @@ interface LicenseRow {
 }
 
 const STATUS_BADGES: Record<string, string> = {
-  aktif: "bg-emerald-100 text-emerald-700",
-  ditangguhkan: "bg-rose-100 text-rose-700",
+  aktif: "pill p-green",
+  ditangguhkan: "pill p-red",
 };
 
 export default function PlatformTenants() {
@@ -81,7 +81,7 @@ export default function PlatformTenants() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
   });
 
-  if (me.isLoading) return <p className="text-sm text-slate-400">Memuat...</p>;
+  if (me.isLoading) return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
   if (me.data?.role !== "platform_admin") return <Navigate to="/" replace />;
 
   function handleProvision(e: FormEvent<HTMLFormElement>) {
@@ -100,7 +100,7 @@ export default function PlatformTenants() {
     <div className="space-y-4">
       <div>
         <PageHeader emoji="🏢" title="Manajemen Tenant" />
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Platform SaaS — satu tenant = satu perusahaan outsourcing pelanggan.
         </p>
       </div>
@@ -146,7 +146,7 @@ export default function PlatformTenants() {
           <h2 className="font-semibold text-emerald-700">
             Tenant "{provisioned.name}" dibuat
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>
             Kredensial admin pertama — tampilkan <b>sekali ini saja</b>, teruskan ke klien:
           </p>
           <div className="mt-2 flex flex-wrap gap-4 font-mono text-sm">
@@ -164,7 +164,7 @@ export default function PlatformTenants() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Nama</th>
               <th className="th">Slug</th>
@@ -173,9 +173,9 @@ export default function PlatformTenants() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(tenants ?? []).map((t) => (
-              <tr key={t.id} className="hover:bg-slate-50">
+              <tr key={t.id} className="hover:bg-[var(--n-hover)]">
                 <td className="td font-medium">{t.name}</td>
                 <td className="td font-mono text-xs">{t.slug}</td>
                 <td className="td">
@@ -183,7 +183,7 @@ export default function PlatformTenants() {
                     {t.status}
                   </span>
                 </td>
-                <td className="td text-xs text-slate-500">
+                <td className="td text-xs" style={{ color: "var(--n-text-muted)" }}>
                   {new Date(t.created_at).toLocaleDateString("id-ID")}
                 </td>
                 <td className="td">
@@ -206,7 +206,8 @@ export default function PlatformTenants() {
                   )}
                   {" · "}
                   <button
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    className="text-xs font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
                     onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                   >
                     {expandedId === t.id ? "Tutup Lisensi" : "Lisensi"}
@@ -216,14 +217,15 @@ export default function PlatformTenants() {
             ))}
             {(expandedId !== null) && (
               <tr>
-                <td colSpan={5} className="td bg-slate-50">
+                <td colSpan={5} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {(licenses ?? []).map((lic) => (
                       <div
                         key={lic.app_key}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2"
+                        className="flex items-center justify-between gap-2 rounded-lg border p-2"
+                        style={{ backgroundColor: "var(--n-bg-elevated)", borderColor: "var(--n-border)" }}
                       >
-                        <span className="truncate text-xs font-medium text-slate-700">
+                        <span className="truncate text-xs font-medium" style={{ color: "var(--n-text)" }}>
                           {lic.name}
                         </span>
                         <select
@@ -250,7 +252,7 @@ export default function PlatformTenants() {
             )}
             {isLoading === false && tenants?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada tenant.
                 </td>
               </tr>
@@ -259,7 +261,7 @@ export default function PlatformTenants() {
         </table>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
         Menangguhkan tenant langsung memblokir seluruh akun di dalamnya saat login.
       </p>
     </div>

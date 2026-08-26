@@ -227,7 +227,7 @@ export default function Chat() {
                   {ch.name}
                 </span>
                 {ch.unread_count > 0 && (
-                  <span className="ml-1 shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  <span className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: "var(--accent)" }}>
                     {ch.unread_count}
                   </span>
                 )}
@@ -291,7 +291,7 @@ export default function Chat() {
             <div className="max-h-40 overflow-y-auto border-b px-2 py-1" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
               <p className="px-2 py-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
                 Hasil cari "{searchQuery}" — {searchResults.length} pesan
-                <button onClick={() => setSearchQuery("")} className="ml-2 text-indigo-600">
+                <button onClick={() => setSearchQuery("")} className="ml-2" style={{ color: "var(--accent)" }}>
                   tutup
                 </button>
               </p>
@@ -312,7 +312,7 @@ export default function Chat() {
             <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
               <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--n-text)" }}>
                 📋 Digest harian {digest.data?.date ? `· ${digest.data.date}` : ""}
-                <button onClick={() => setShowDigest(false)} className="text-indigo-600">tutup</button>
+                <button onClick={() => setShowDigest(false)} style={{ color: "var(--accent)" }}>tutup</button>
               </p>
               {digest.isLoading && <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Menyusun…</p>}
               {(digest.data?.items ?? []).map((it, i) => (
@@ -343,7 +343,8 @@ export default function Chat() {
                   {m.is_own && !threadParent && (
                     <button
                       onClick={() => setThreadParent(m.id)}
-                      className="shrink-0 text-[11px] text-indigo-600 hover:text-indigo-800"
+                      className="shrink-0 text-[11px] hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
                     >
                       Balas
                     </button>
@@ -418,7 +419,8 @@ export default function Chat() {
                           const next = window.prompt("Edit pesan:", m.content);
                           if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
                         }}
-                        className="ml-auto text-[11px] text-slate-400 hover:text-slate-600"
+                        className="ml-auto text-[11px] hover:opacity-80"
+                        style={{ color: "var(--n-text-muted)" }}
                       >
                         edit
                       </button>

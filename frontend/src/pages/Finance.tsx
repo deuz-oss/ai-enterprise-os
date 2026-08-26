@@ -60,10 +60,10 @@ interface ForecastResult {
 }
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  draft: { label: "draft", cls: "bg-slate-100 text-slate-600" },
-  terkirim: { label: "terkirim", cls: "bg-amber-100 text-amber-700" },
-  dibayar: { label: "dibayar", cls: "bg-emerald-100 text-emerald-700" },
-  dibatalkan: { label: "dibatalkan", cls: "bg-rose-100 text-rose-700" },
+  draft: { label: "draft", cls: "pill p-gray" },
+  terkirim: { label: "terkirim", cls: "pill p-yellow" },
+  dibayar: { label: "dibayar", cls: "pill p-green" },
+  dibatalkan: { label: "dibatalkan", cls: "pill p-red" },
 };
 
 export default function Finance() {
@@ -170,7 +170,7 @@ export default function Finance() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">No. Invoice</th>
               <th className="th">Periode</th>
@@ -181,7 +181,7 @@ export default function Finance() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(invoices ?? []).map((i) => {
               const st = STATUS_LABELS[i.status] ?? STATUS_LABELS.draft;
               return (
@@ -209,7 +209,7 @@ export default function Finance() {
             })}
             {invoices?.length === 0 && (
               <tr>
-                <td colSpan={7} className="td py-8 text-center text-slate-400">
+                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada invoice.
                 </td>
               </tr>
@@ -221,7 +221,7 @@ export default function Finance() {
       <div className="card">
         <h2 className="font-semibold text-rose-700">Aging — Tagihan Terlambat</h2>
         {(aging ?? []).length === 0 ? (
-          <p className="mt-2 text-sm text-slate-400">Tidak ada tagihan lewat jatuh tempo.</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>Tidak ada tagihan lewat jatuh tempo.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {aging!.map((a) => (
@@ -240,7 +240,7 @@ export default function Finance() {
 
       <div className="card">
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-slate-700">Arus Kas</h2>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Arus Kas</h2>
           <input
             type="number"
             value={cfYear}
@@ -260,7 +260,7 @@ export default function Finance() {
         </form>
         <ul className="mt-3 space-y-1 text-sm">
           {(cashflow ?? []).slice(0, 10).map((c) => (
-            <li key={c.id} className="flex justify-between rounded-lg bg-slate-50 p-2">
+            <li key={c.id} className="flex justify-between rounded-lg p-2" style={{ backgroundColor: "var(--n-hover)" }}>
               <span>
                 {c.entry_date} · {c.category}
               </span>
@@ -270,14 +270,14 @@ export default function Finance() {
             </li>
           ))}
           {cashflow?.length === 0 && (
-            <li className="text-sm text-slate-400">Belum ada catatan arus kas.</li>
+            <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada catatan arus kas.</li>
           )}
         </ul>
       </div>
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-indigo-700">Forecast Arus Kas (AI)</h2>
+          <h2 className="font-semibold" style={{ color: "var(--accent)" }}>Forecast Arus Kas (AI)</h2>
           <form
             className="flex gap-2"
             onSubmit={(e) => {
@@ -299,7 +299,7 @@ export default function Finance() {
           </form>
         </div>
         {runForecast.isPending && (
-          <p className="mt-2 text-sm text-slate-400">AI sedang menganalisis tren arus kas...</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>AI sedang menganalisis tren arus kas...</p>
         )}
         {runForecast.error && (
           <p className="mt-2 text-sm text-red-600">{(runForecast.error as Error).message}</p>
@@ -310,23 +310,23 @@ export default function Finance() {
               <span
                 className={`badge border-0 ${
                   forecast.outlook === "positif"
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? "pill p-green"
                     : forecast.outlook === "negatif"
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-amber-100 text-amber-700"
+                      ? "pill p-red"
+                      : "pill p-yellow"
                 }`}
               >
                 Outlook: {forecast.outlook}
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
                 Piutang belum tertagih: {formatRupiah(forecast.pending_receivables)} · model:{" "}
                 {forecast.model}
               </span>
             </div>
-            <p className="text-sm text-slate-600">{forecast.summary}</p>
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>{forecast.summary}</p>
+            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--n-border)" }}>
               <table className="w-full">
-                <thead className="bg-slate-50">
+                <thead style={{ backgroundColor: "var(--n-hover)" }}>
                   <tr>
                     <th className="th">Bulan</th>
                     <th className="th">Masuk</th>
@@ -334,9 +334,9 @@ export default function Finance() {
                     <th className="th">Net</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
                   {forecast.history.map((h) => (
-                    <tr key={`h-${h.year}-${h.month}`} className="text-slate-500">
+                    <tr key={`h-${h.year}-${h.month}`} style={{ color: "var(--n-text-muted)" }}>
                       <td className="td">{`${h.year}-${String(h.month).padStart(2, "0")}`}</td>
                       <td className="td">{formatRupiah(h.inflow)}</td>
                       <td className="td">{formatRupiah(h.outflow)}</td>
@@ -344,7 +344,7 @@ export default function Finance() {
                     </tr>
                   ))}
                   {forecast.projection.map((p) => (
-                    <tr key={`p-${p.year}-${p.month}`} className="bg-indigo-50/40 font-medium">
+                    <tr key={`p-${p.year}-${p.month}`} className="font-medium" style={{ backgroundColor: "var(--accent-tint)" }}>
                       <td className="td">
                         {`${p.year}-${String(p.month).padStart(2, "0")}`} (proyeksi)
                       </td>
@@ -365,7 +365,7 @@ export default function Finance() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
                       Risiko
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
                       {forecast.risks.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}
@@ -377,7 +377,7 @@ export default function Finance() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                       Rekomendasi
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
                       {forecast.recommendations.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}

@@ -241,7 +241,7 @@ function RekonsiliasiCard() {
                     <button
                       onClick={() => ignore.mutate(ln.id)}
                       disabled={ignore.isPending}
-                      className="font-medium text-slate-500 hover:text-slate-800"
+                      className="font-medium text-[var(--n-text-muted)] hover:text-[var(--n-text)]"
                     >
                       Abaikan
                     </button>

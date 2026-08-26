@@ -61,10 +61,10 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 const LEAVE_STATUS_BADGES: Record<string, string> = {
-  menunggu: "bg-amber-100 text-amber-700",
-  disetujui: "bg-emerald-100 text-emerald-700",
-  ditolak: "bg-rose-100 text-rose-700",
-  dibatalkan: "bg-slate-100 text-slate-500",
+  menunggu: "pill p-yellow",
+  disetujui: "pill p-green",
+  ditolak: "pill p-red",
+  dibatalkan: "pill p-gray",
 };
 
 interface ContractRow {
@@ -133,12 +133,12 @@ interface EsignRequestRow {
 }
 
 const ESIGN_STATUS_BADGES: Record<string, string> = {
-  terkirim: "bg-amber-100 text-amber-700",
-  dilihat: "bg-blue-100 text-blue-700",
-  selesai: "bg-emerald-100 text-emerald-700",
-  ditolak: "bg-rose-100 text-rose-700",
-  kedaluwarsa: "bg-slate-100 text-slate-500",
-  gagal: "bg-red-100 text-red-600",
+  terkirim: "pill p-yellow",
+  dilihat: "pill p-blue",
+  selesai: "pill p-green",
+  ditolak: "pill p-red",
+  kedaluwarsa: "pill p-gray",
+  gagal: "pill p-red",
 };
 
 const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "lainnya"];
@@ -369,7 +369,7 @@ export default function Employees() {
               </option>
             ))}
           </select>
-          <p className="self-center text-xs text-slate-400">
+          <p className="self-center text-xs" style={{ color: "var(--n-text-muted)" }}>
             Nomor induk karyawan dibuat otomatis bila dikosongkan.
           </p>
           <button type="submit" disabled={createEmployee.isPending} className="btn sm:col-span-3">
@@ -393,8 +393,8 @@ export default function Employees() {
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-700">Tanya Kontrak (AI)</h2>
-          <span className="text-xs text-slate-400">
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Tanya Kontrak (AI)</h2>
+          <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
             {indexed?.length
               ? `${indexed.length} kontrak terindeks`
               : "Belum ada kontrak terindeks — klik \"Index AI\" pada kontrak"}
@@ -424,7 +424,7 @@ export default function Employees() {
           </button>
         </form>
         {selectedId && (
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
             Pertanyaan dibatasi pada kontrak karyawan yang sedang dipilih.
           </p>
         )}
@@ -432,10 +432,10 @@ export default function Employees() {
           <p className="mt-2 text-sm text-red-600">{(askAi.error as Error).message}</p>
         )}
         {askResult && (
-          <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-4">
-            <p className="text-sm text-slate-700">{askResult.answer}</p>
+          <div className="mt-3 rounded-lg border p-4" style={{ backgroundColor: "var(--accent-tint)", borderColor: "var(--n-border)" }}>
+            <p className="text-sm" style={{ color: "var(--n-text)" }}>{askResult.answer}</p>
             {askResult.sources.length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-slate-500">
+              <ul className="mt-2 space-y-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
                 {askResult.sources.map((s, i) => (
                   <li key={i}>
                     Sumber: {s.employee_name} — {s.contract_no} (skor{" "}
@@ -451,11 +451,11 @@ export default function Employees() {
 
       {(attendanceCorrections ?? []).length > 0 && (
         <div className="card overflow-x-auto p-0">
-          <div className="border-b border-slate-200 p-4">
-            <h2 className="font-semibold text-slate-700">Koreksi Absensi (Portal)</h2>
+          <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Koreksi Absensi (Portal)</h2>
           </div>
           <table className="w-full">
-            <thead className="border-b border-slate-200 bg-slate-50">
+            <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
               <tr>
                 <th className="th">Karyawan</th>
                 <th className="th">Periode</th>
@@ -465,7 +465,7 @@ export default function Employees() {
                 <th className="th">Keputusan</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
               {(attendanceCorrections ?? []).map((c) => {
                 const emp = employees?.find((e) => e.id === c.employee_id);
                 return (
@@ -522,8 +522,8 @@ export default function Employees() {
 
       {(leaveRequests ?? []).length > 0 && (
         <div className="card overflow-x-auto p-0">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4">
-            <h2 className="font-semibold text-slate-700">Pengajuan Cuti / Izin</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Pengajuan Cuti / Izin</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="number"
@@ -566,7 +566,7 @@ export default function Employees() {
             </div>
           </div>
           <table className="w-full">
-            <thead className="border-b border-slate-200 bg-slate-50">
+            <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
               <tr>
                 <th className="th">Karyawan</th>
                 <th className="th">Jenis</th>
@@ -576,7 +576,7 @@ export default function Employees() {
                 <th className="th">Keputusan</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
               {(leaveRequests ?? []).map((lv) => {
                 const emp = employees?.find((e) => e.id === lv.employee_id);
                 return (
@@ -605,7 +605,8 @@ export default function Employees() {
                             );
                             window.open(url, "_blank");
                           }}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                          className="text-xs font-medium hover:opacity-80"
+                          style={{ color: "var(--accent)" }}
                           title={lv.file_name}
                         >
                           Lampiran
@@ -644,7 +645,7 @@ export default function Employees() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">No. Induk</th>
               <th className="th">Nama</th>
@@ -653,14 +654,15 @@ export default function Employees() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(employees ?? []).map((e) => (
               <tr
                 key={e.id}
                 onClick={() => setSelectedId(e.id === selectedId ? null : e.id)}
-                className={`cursor-pointer hover:bg-slate-50 ${
-                  selectedId === e.id ? "bg-indigo-50/50" : ""
-                }`}
+                className="cursor-pointer hover:bg-[var(--n-hover)] transition-colors"
+                style={{
+                  backgroundColor: selectedId === e.id ? "var(--accent-tint)" : undefined,
+                }}
               >
                 <td className="td font-mono text-xs">{e.employee_no}</td>
                 <td className="td font-medium">{e.full_name}</td>
@@ -669,9 +671,7 @@ export default function Employees() {
                 <td className="td">
                   <span
                     className={`badge ${
-                      e.status === "aktif"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-slate-100 text-slate-500"
+                      e.status === "aktif" ? "pill p-green" : "pill p-gray"
                     }`}
                   >
                     {e.status}
@@ -681,7 +681,7 @@ export default function Employees() {
             ))}
             {employees?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center text-slate-400">
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada karyawan.
                 </td>
               </tr>
@@ -712,9 +712,7 @@ export default function Employees() {
               <PropertyRow icon="🏷️" label="Status">
                 <span
                   className={`badge ${
-                    selected.status === "aktif"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-slate-100 text-slate-500"
+                    selected.status === "aktif" ? "pill p-green" : "pill p-gray"
                   }`}
                 >
                   {selected.status}
@@ -726,7 +724,7 @@ export default function Employees() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="card">
-            <h2 className="font-semibold text-slate-700">Kontrak Kerja</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Kontrak Kerja</h2>
             <form
               className="mt-3 flex flex-wrap gap-2"
               onSubmit={(e) => {
@@ -753,11 +751,12 @@ export default function Employees() {
                 return (
                   <li
                     key={c.id}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+                    className="flex items-center justify-between rounded-lg p-3 text-sm"
+                    style={{ backgroundColor: "var(--n-hover)" }}
                   >
                     <div>
-                      <p className="font-medium text-slate-700">{c.contract_no}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="font-medium" style={{ color: "var(--n-text)" }}>{c.contract_no}</p>
+                      <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
                         {c.start_date ?? "?"} s/d {c.end_date ?? "-"}
                         {c.file_name ? ` · ${c.file_name}` : ""}
                       </p>
@@ -775,7 +774,8 @@ export default function Employees() {
                               href={req.sign_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                              className="text-xs font-medium hover:opacity-80"
+                              style={{ color: "var(--accent)" }}
                             >
                               Halaman tanda tangan
                             </a>
@@ -828,7 +828,7 @@ export default function Employees() {
                           Tandai TTD
                         </button>
                       ) : (
-                        <span className="badge bg-emerald-100 text-emerald-700">
+                        <span className="badge pill p-green">
                           ditandatangani
                         </span>
                       )}
@@ -837,7 +837,7 @@ export default function Employees() {
                 );
               })}
               {contracts?.length === 0 && (
-                <li className="text-sm text-slate-400">Belum ada kontrak.</li>
+                <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada kontrak.</li>
               )}
             </ul>
             {tteContract && (
@@ -889,7 +889,7 @@ export default function Employees() {
           </div>
 
           <div className="card">
-            <h2 className="font-semibold text-slate-700">Dokumen HR</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Dokumen HR</h2>
             <form
               className="mt-3 flex flex-wrap gap-2"
               onSubmit={(e) => {
@@ -915,13 +915,14 @@ export default function Employees() {
               {(documents ?? []).map((d) => (
                 <li
                   key={d.id}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+                  className="flex items-center justify-between rounded-lg p-3 text-sm"
+                  style={{ backgroundColor: "var(--n-hover)" }}
                 >
                   <div>
-                    <p className="font-medium text-slate-700">
+                    <p className="font-medium" style={{ color: "var(--n-text)" }}>
                       {TYPE_LABELS[d.document_type]} — v{d.version}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
                       {d.file_name} · {(d.file_size / 1024).toFixed(0)} KB
                     </p>
                   </div>
@@ -934,21 +935,22 @@ export default function Employees() {
                       );
                       window.open(url, "_blank");
                     }}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                    className="text-sm font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
                   >
                     Unduh
                   </a>
                 </li>
               ))}
               {documents?.length === 0 && (
-                <li className="text-sm text-slate-400">Belum ada dokumen.</li>
+                <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada dokumen.</li>
               )}
             </ul>
           </div>
         </div>
 
         <div className="card">
-          <h2 className="font-semibold text-slate-700">Jatah Cuti Tahunan</h2>
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Jatah Cuti Tahunan</h2>
           <form
             className="mt-3 flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
@@ -985,7 +987,7 @@ export default function Employees() {
             </button>
           </form>
           {selectedBalance && (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
               Terpakai {selectedBalance.used_days} hari · sisa{" "}
               <span className="font-semibold">{selectedBalance.remaining}</span> dari{" "}
               {selectedBalance.total_days} hari ({selectedBalance.year})
@@ -999,15 +1001,15 @@ export default function Employees() {
         </div>
 
         <div className="card">
-          <h2 className="font-semibold text-slate-700">Akun Portal Karyawan</h2>
-          <p className="mt-1 text-xs text-slate-400">
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Akun Portal Karyawan</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
             Tautkan akun login (role karyawan) agar karyawan bisa memakai
             Portal Saya: profil, slip gaji, cuti, dan dokumen.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {selected?.user_id ? (
               <>
-                <span className="badge bg-emerald-100 text-emerald-700">
+                <span className="badge pill p-green">
                   Akun portal aktif
                 </span>
                 <button
@@ -1043,7 +1045,7 @@ export default function Employees() {
                 </button>
               </form>
             ) : (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>
                 Belum ada akun karyawan tersedia — buat lewat menu Pengguna
                 dengan role &ldquo;karyawan&rdquo;.
               </p>

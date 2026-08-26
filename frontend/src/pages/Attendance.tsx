@@ -294,7 +294,7 @@ export default function Attendance() {
                   <td className="td">{s.overtime_hours}</td>
                   <td className="td">
                     {s.client_approved ? (
-                      <span className="badge bg-emerald-100 text-emerald-700">tervalidasi</span>
+                      <span className="pill p-green">tervalidasi</span>
                     ) : (
                       <div className="flex gap-2">
                         <button
@@ -430,7 +430,7 @@ export default function Attendance() {
                   <td className="td font-mono text-xs">{r.date}</td>
                   <td className="td">{emp?.full_name ?? r.employee_id}</td>
                   <td className="td">
-                    <span className="badge bg-slate-100 text-slate-600">{STATUS_LABELS[r.status] ?? r.status}</span>
+                    <span className="pill p-gray">{STATUS_LABELS[r.status] ?? r.status}</span>
                   </td>
                   <td className="td text-xs">
                     {r.clock_in ? new Date(r.clock_in).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "—"} /{" "}

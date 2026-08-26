@@ -42,7 +42,7 @@ export default function Users() {
     <div className="space-y-4">
       <div>
         <PageHeader emoji="👥" title="Pengguna" />
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Kelola akun tim. Akun baru dibuat lewat tombol "+ Pengguna Baru".
         </p>
       </div>
@@ -80,7 +80,7 @@ export default function Users() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
             <tr>
               <th className="th">Nama</th>
               <th className="th">Email</th>
@@ -88,16 +88,16 @@ export default function Users() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(users ?? []).map((u) => (
-              <tr key={u.id} className="hover:bg-slate-50">
+              <tr key={u.id} className="hover:bg-[var(--n-hover)]">
                 <td className="td font-medium">{u.full_name}</td>
                 <td className="td">{u.email}</td>
                 <td className="td">
                   <select
                     value={u.role}
                     onChange={(e) => updateUser.mutate({ id: u.id, body: { role: e.target.value } })}
-                    className="badge cursor-pointer border-0 bg-slate-100 text-slate-700"
+                    className="pill p-gray cursor-pointer border-0"
                   >
                     {ROLES.map((r) => (
                       <option key={r.value} value={r.value}>
@@ -111,11 +111,7 @@ export default function Users() {
                     onClick={() =>
                       updateUser.mutate({ id: u.id, body: { is_active: !u.is_active } })
                     }
-                    className={`badge ${
-                      u.is_active
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-red-100 text-red-600"
-                    }`}
+                    className={`${u.is_active ? "pill p-green" : "pill p-red"}`}
                   >
                     {u.is_active ? "aktif" : "nonaktif"}
                   </button>

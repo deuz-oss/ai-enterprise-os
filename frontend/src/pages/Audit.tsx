@@ -17,17 +17,17 @@ interface AuditItem {
 }
 
 const ACTION_BADGES: Record<string, string> = {
-  auth: "bg-slate-100 text-slate-600",
-  cv: "bg-blue-100 text-blue-700",
-  contract: "bg-indigo-100 text-indigo-700",
-  employee_document: "bg-violet-100 text-violet-700",
-  legal_document: "bg-cyan-100 text-cyan-700",
-  esign: "bg-emerald-100 text-emerald-700",
+  auth: "p-gray",
+  cv: "p-blue",
+  contract: "p-indigo",
+  employee_document: "p-violet",
+  legal_document: "p-blue",
+  esign: "p-green",
 };
 
 function badgeCls(action: string): string {
   const prefix = action.split(".")[0];
-  return ACTION_BADGES[prefix] ?? "bg-slate-100 text-slate-600";
+  return ACTION_BADGES[prefix] ?? "p-gray";
 }
 
 export default function Audit() {
@@ -50,7 +50,7 @@ export default function Audit() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader emoji="🛡️" title="Jejak Audit" />
-        <span className="text-xs text-slate-400">
+        <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
           {data ? `${data.total} event` : "..."} · append-only
         </span>
       </div>
@@ -80,7 +80,7 @@ export default function Audit() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
             <tr>
               <th className="th">Waktu</th>
               <th className="th">Aksi</th>
@@ -90,14 +90,14 @@ export default function Audit() {
               <th className="th">User ID</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(data?.items ?? []).map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50">
-                <td className="td whitespace-nowrap text-xs text-slate-500">
+              <tr key={item.id} className="transition-colors hover:bg-[var(--n-hover)]">
+                <td className="td whitespace-nowrap text-xs" style={{ color: "var(--n-text-muted)" }}>
                   {new Date(item.created_at).toLocaleString("id-ID")}
                 </td>
                 <td className="td">
-                  <span className={`badge border-0 ${badgeCls(item.action)}`}>
+                  <span className={`pill ${badgeCls(item.action)}`}>
                     {item.action}
                   </span>
                 </td>
@@ -105,7 +105,7 @@ export default function Audit() {
                   {item.entity_type ?? "-"}
                   {item.entity_id ? ` · ${item.entity_id.slice(0, 8)}…` : ""}
                 </td>
-                <td className="td max-w-sm truncate text-xs text-slate-500">
+                <td className="td max-w-sm truncate text-xs" style={{ color: "var(--n-text-muted)" }}>
                   {item.detail ? JSON.stringify(item.detail) : "-"}
                 </td>
                 <td className="td font-mono text-xs">{item.ip ?? "-"}</td>
@@ -116,7 +116,7 @@ export default function Audit() {
             ))}
             {data?.items.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center text-slate-400">
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada event audit.
                 </td>
               </tr>

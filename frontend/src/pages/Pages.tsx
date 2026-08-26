@@ -130,7 +130,7 @@ export default function Pages() {
           <button
             onClick={() => createPage.mutate({ title: "Tanpa judul" })}
             disabled={createPage.isPending}
-            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            className="text-xs font-medium text-[var(--accent)] hover:opacity-80"
             style={{ color: "var(--accent)" }}
           >
             + Baru
