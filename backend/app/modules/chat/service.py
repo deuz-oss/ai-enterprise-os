@@ -6,6 +6,7 @@ Aturan akses (PRD §9.2):
   terdaftar sebagai member; DM hanya dengan sesama member channel tersebut.
 """
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -20,6 +21,8 @@ from app.modules.chat.models import (
     ChatMessage,
     ChatMessageReaction,
 )
+
+logger = logging.getLogger(__name__)
 
 STAFF_ROLES = {
     "admin",
@@ -199,7 +202,255 @@ def send_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+
+    # Fase 12: slash command dieksekusi server-side; @AEOS memicu asisten AI.
+    if content.startswith("/"):
+        _handle_slash_command(db, user=user, channel=ch, cmd_msg=msg)
+    elif "@aeos" in content.lower():
+        try:
+            from app.modules.ai.collab import ensure_aeos_user
+
+            ensure_aeos_user(db, user.tenant_id)
+            handle_aeos_question(db, user=user, channel=ch, trigger_msg=msg)
+        except Exception:  # noqa: BLE001 - asisten tidak boleh menggagalkan pesan
+            logger.exception("AEOS reply gagal")
     return msg
+
+
+# ---------- Fase 12: slash command & asisten AEOS ----------
+
+
+def _post_aeos_reply(
+    db: Session, *, tenant_id, channel: Channel, parent: ChatMessage | None, content: str
+) -> ChatMessage:
+    """Posting balasan atas nama bot AEOS (identitas per tenant)."""
+    from app.modules.ai.collab import ensure_aeos_user
+
+    aeos = ensure_aeos_user(db, tenant_id)
+    msg = ChatMessage(
+        channel_id=channel.id,
+        sender_id=aeos.id,
+        content=content[:5000],
+        parent_id=parent.id if parent is not None else None,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+def handle_aeos_question(db: Session, *, user, channel: Channel, trigger_msg: ChatMessage) -> dict:
+    """Jawab pesan ber-mention @AEOS via RAG lintas aplikasi; butuh lisensi ai_addon."""
+    from app.modules.ai import collab
+    from app.modules.ai.collab import _ai_license_active
+
+    if not _ai_license_active(db, user.tenant_id):
+        reply = _post_aeos_reply(
+            db,
+            tenant_id=user.tenant_id,
+            channel=channel,
+            parent=trigger_msg,
+            content=(
+                "Fitur AI add-on belum aktif untuk workspace ini. "
+                "Aktifkan trial dari halaman Aplikasi untuk menggunakan @AEOS."
+            ),
+        )
+        return {"answered": False, "reason": "license", "reply_id": str(reply.id)}
+
+    question = trigger_msg.content.replace("@aeos", "", 1).replace("@AEOS", "", 1).strip()
+    result = collab.answer_question(db, user, question or "Berapa ringkasan operasional hari ini?")
+    text = result["answer"]
+    if result.get("route_to"):
+        text += f"\n\n→ Saran routing: tim {result['route_to']['team_label']}"
+    reply = _post_aeos_reply(
+        db, tenant_id=user.tenant_id, channel=channel, parent=trigger_msg, content=text
+    )
+    return {"answered": True, "reply_id": str(reply.id), "route_to": result.get("route_to")}
+
+
+def summarize_thread(db: Session, *, user, root_message_id: str) -> dict:
+    """Rangkum thread (§9.6 poin 2) → poin keputusan/tugas; hasil diposting AEOS."""
+    from app.modules.ai import collab
+
+    root = db.get(ChatMessage, _parse(root_message_id))
+    if root is None or root.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Pesan thread tidak ditemukan")
+    channel = get_channel_with_access_check(db, user, root.channel_id)
+    msgs = list_messages(db, user, str(root.channel_id), parent_id=str(root.id), limit=100)
+    contents = [m.content for m in msgs]
+    if len(contents) < 2:
+        raise HTTPException(status_code=422, detail="Thread terlalu pendek untuk dirangkum")
+
+    result = collab.summarize_messages(db, user, contents)
+    header = "🧵 *Rangkuman thread*"
+    if not result["llm"]:
+        header += " (mode deterministik — AI belum aktif)"
+    reply = _post_aeos_reply(
+        db,
+        tenant_id=user.tenant_id,
+        channel=channel,
+        parent=root,
+        content=f"{header}\n{result['summary']}",
+    )
+    return {
+        "summary": result["summary"],
+        "message_count": result["message_count"],
+        "reply_id": str(reply.id),
+    }
+
+
+_SLASH_HELP = (
+    "Perintah tersedia:\n"
+    "`/help` — daftar perintah\n"
+    "`/pr status` — ringkasan Payment Request\n"
+    "`/jo status [kata kunci]` — status job order\n"
+    "`/cuti sisa` — sisa cuti tahunan Anda (hanya di DM)\n"
+    "`/cuti ajukan <jenis> <tgl-mulai> <tgl-selesai> [alasan]` — ajukan cuti/izin (hanya di DM)\n"
+    "Contoh: `/cuti ajukan izin 2026-09-01 2026-09-02 acara keluarga`\n"
+    "Jenis: cuti_tahunan · izin · sakit · cuti_tak_berbayar. Sebut `@AEOS` untuk bertanya."
+)
+
+
+def _handle_slash_command(db: Session, *, user, channel: Channel, cmd_msg: ChatMessage) -> None:
+    parts = cmd_msg.content[1:].split()
+    name = parts[0].lower() if parts else ""
+    args = parts[1:]
+    is_worker = getattr(user.role, "value", user.role) == "karyawan"
+
+    def respond(text: str):
+        _post_aeos_reply(
+            db, tenant_id=user.tenant_id, channel=channel, parent=cmd_msg, content=text
+        )
+
+    try:
+        if name == "help":
+            respond(_SLASH_HELP)
+            return
+
+        # Perintah personal hanya di DM agar data pribadi tak bocor ke channel.
+        if name == "cuti":
+            if channel.channel_type != "dm":
+                respond(
+                    "Perintah /cuti bersifat pribadi — silakan lanjut di DM "
+                    "(mis. DM dengan @AEOS atau atasan Anda)."
+                )
+                return
+            from datetime import date as date_cls
+
+            from app.modules.ess.schemas import LeaveCreate
+            from app.modules.ess.service import create_leave_request, get_own_leave_balance
+
+            if not args or args[0] == "sisa":
+                from datetime import date as _date
+
+                bal = get_own_leave_balance(db, user, _date.today().year)
+                respond(
+                    f"Sisa cuti tahunan Anda: {bal.total_days - bal.used_days} "
+                    f"dari {bal.total_days} hari."
+                    if bal
+                    else "Jatah cuti tahunan belum diatur HR — pengajuan tetap bisa diajukan."
+                )
+                return
+            if args[0] == "ajukan":
+                if len(args) < 4:
+                    respond(_SLASH_HELP)
+                    return
+                from datetime import date as date_cls
+
+                leave_type = args[1].lower()
+                mapping = {
+                    "cuti_tahunan": "cuti_tahunan",
+                    "izin": "izin",
+                    "sakit": "sakit",
+                    "cuti_tak_berbayar": "cuti_tak_berbayar",
+                }
+                if leave_type not in mapping:
+                    respond(f"Jenis '{leave_type}' tidak dikenal. Gunakan: {', '.join(mapping)}")
+                    return
+                created = create_leave_request(
+                    db,
+                    user,
+                    LeaveCreate(
+                        leave_type=mapping[leave_type],  # type: ignore[arg-type]
+                        start_date=date_cls.fromisoformat(args[2]),
+                        end_date=date_cls.fromisoformat(args[3]),
+                        reason=" ".join(args[4:])[:500] or None,
+                    ),
+                )
+                respond(
+                    f"✅ Pengajuan {mapping[leave_type]} {created.start_date.isoformat()} "
+                    f"s/d {created.end_date.isoformat()} terkirim (menunggu approval HR)."
+                )
+                return
+            respond(_SLASH_HELP)
+            return
+
+        if is_worker:
+            respond("Perintah ini hanya untuk staf.")
+            return
+
+        if name == "pr":
+            from app.modules.finance.models import PaymentRequest, PaymentRequestStatus
+
+            rows = (
+                db.execute(
+                    select(PaymentRequest)
+                    .where(
+                        PaymentRequest.status.in_(
+                            [
+                                PaymentRequestStatus.waiting_superior,
+                                PaymentRequestStatus.approved,
+                            ]
+                        )
+                    )
+                    .order_by(PaymentRequest.created_at.desc())
+                    .limit(5)
+                )
+                .scalars()
+                .all()
+            )
+            if not rows:
+                respond("Tidak ada PR yang menunggu aksi saat ini. 🎉")
+                return
+            lines = [
+                f"- {p.pr_number} ({p.pr_type}) Rp{float(p.amount):,.0f} — {p.status.value}"
+                for p in rows
+            ]
+            respond("*PR menunggu/disetujui:*\n" + "\n".join(lines))
+            return
+
+        if name == "jo":
+            from app.modules.recruitment.models import JobOrder, JobOrderStatus
+
+            stmt = select(JobOrder).where(
+                JobOrder.status.in_([JobOrderStatus.open, JobOrderStatus.screening])
+            )
+            if args:
+                kw = " ".join(args).lower()
+                stmt = stmt.where(JobOrder.title.ilike(f"%{kw}%"))
+            jo_rows = list(db.execute(stmt.order_by(JobOrder.created_at.desc()).limit(5)).scalars())
+            if not jo_rows:
+                respond("Tidak ada job order aktif yang cocok.")
+                return
+            counts = db.execute(
+                select(func.count(JobOrder.id)).where(
+                    JobOrder.status.in_([JobOrderStatus.open, JobOrderStatus.screening])
+                )
+            ).scalar()
+            lines = [
+                f"- {j.title} @ {j.client.name if j.client else '-'} — {j.status.value}"
+                + (f", due {j.due_date.isoformat()}" if j.due_date else "")
+                for j in jo_rows
+            ]
+            respond(f"*Job order aktif ({counts} total):*\n" + "\n".join(lines))
+            return
+
+        respond(_SLASH_HELP)
+    except HTTPException as exc:
+        respond(f"⚠️ {exc.detail}")
+    except Exception:  # noqa: BLE001
+        logger.exception("Slash command gagal")
+        respond("⚠️ Perintah gagal dieksekusi. Coba lagi atau hubungi admin.")
 
 
 def list_messages(

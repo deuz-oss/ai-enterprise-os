@@ -554,6 +554,17 @@ Bagian ini memetakan modul yang **sudah diimplementasikan** di repository (bukan
 | Frontend | Kartu "🎨 Branding CV Standar" di halaman Talent Pool (warna aksen, footer, unggah/hapus logo — admin/management) |
 | Test | `backend/tests/test_talentpool.py::test_logo_upload_render_dan_hapus` (validasi format, upload, preview, finalize dengan logo, hapus) |
 
+### 12.26 Fase 12 — AI Kolaborasi (@AEOS, rangkuman, digest, slash command)
+
+| Aspek | Detail |
+| ------------------------- | ------------------------------------------------------------------ |
+| Capability | Asisten @AEOS lintas app + routing tim; rangkuman thread; digest harian; slash command (PRD §9.6) |
+| Source Code | `backend/app/modules/ai/collab.py` (identitas bot AEOS per tenant, konteks lintas app per scope, routing keyword, digest), hook di `chat/service.py::send_message` (`_handle_slash_command`, `handle_aeos_question`, `_post_aeos_reply`, `summarize_thread`) |
+| API | Slash & mention via `POST /chat/channels/{id}/messages`; ter-guard ai_addon: `POST /chat/messages/{id}/summarize`, `GET /chat/digest`, `POST /chat/ask` |
+| Aturan | Konteks dikumpulkan deterministik (staff: presales/recruitment/hrd/payroll/finance/accounting; karyawan: portal sendiri); LLM hanya lapisan bahasa dengan fallback template + saran routing; slash command tidak butuh lisensi; `/cuti*` hanya di DM; balasan AEOS = user bot per tenant tanpa password aktif; kegagalan asisten tidak pernah menggagalkan pesan user |
+| Frontend | Tombol 🧵 Rangkum pada thread, panel 📋 Digest harian, placeholder hint slash/@AEOS di halaman Chat |
+| Test | `backend/tests/test_fase12_ai_kolaborasi.py` (6 skenario: help+/pr status, cuti DM-only + validasi, mention tanpa lisensi, mention dengan LLM mocked + routing, summarize endpoint + blokir thread pendek, digest+ask langsung) |
+
 ---
 
 # End of Requirement Traceability Matrix

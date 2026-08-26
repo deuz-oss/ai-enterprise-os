@@ -115,6 +115,21 @@ export default function Chat() {
     },
   });
 
+  // Fase 12: AI kolaborasi — digest harian & rangkuman thread
+  const [showDigest, setShowDigest] = useState(false);
+  const digest = useQuery({
+    queryKey: ["chat-digest"],
+    queryFn: () =>
+      api.get<{ date: string; items: { type: string; detail: string; refs: string[] }[] }>(
+        "/chat/digest"
+      ),
+    enabled: showDigest,
+  });
+  const summarize = useMutation({
+    mutationFn: (messageId: string) => api.post(`/chat/messages/${messageId}/summarize`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+  });
+
   // Scroll to bottom on new messages
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -242,9 +257,27 @@ export default function Chat() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="input w-28 py-1 text-xs"
               />
-              {threadParent && (
-                <button onClick={() => setThreadParent(null)} className="btn-secondary py-0.5 text-xs">
-                  Kembali
+              {threadParent ? (
+                <>
+                  <button
+                    onClick={() => summarize.mutate(threadParent)}
+                    disabled={summarize.isPending}
+                    className="btn-secondary py-0.5 text-xs"
+                    title="Rangkum thread jadi poin keputusan/tugas (@AEOS)"
+                  >
+                    🧵 Rangkum
+                  </button>
+                  <button onClick={() => setThreadParent(null)} className="btn-secondary py-0.5 text-xs">
+                    Kembali
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowDigest((v) => !v)}
+                  className="btn-secondary py-0.5 text-xs"
+                  title="Digest harian: approval menunggu, SLA, kontrak, invoice"
+                >
+                  📋 Digest
                 </button>
               )}
               {activeChannel && (
@@ -271,6 +304,27 @@ export default function Chat() {
                 <p className="px-2 py-2 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
                   Tidak ada hasil.
                 </p>
+              )}
+            </div>
+          )}
+
+          {showDigest && !threadParent && (
+            <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+              <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--n-text)" }}>
+                📋 Digest harian {digest.data?.date ? `· ${digest.data.date}` : ""}
+                <button onClick={() => setShowDigest(false)} className="text-indigo-600">tutup</button>
+              </p>
+              {digest.isLoading && <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Menyusun…</p>}
+              {(digest.data?.items ?? []).map((it, i) => (
+                <div key={i} className="py-0.5 text-xs" style={{ color: "var(--n-text)" }}>
+                  • {it.detail}
+                  {it.refs.length > 0 && (
+                    <span style={{ color: "var(--n-text-muted)" }}> — {it.refs.join(", ")}</span>
+                  )}
+                </div>
+              ))}
+              {digest.data && digest.data.items.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada item penting hari ini.</p>
               )}
             </div>
           )}
@@ -399,7 +453,7 @@ export default function Chat() {
                 ref={inputRef}
                 name="content"
                 required
-                placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan... (@ untuk mention)") : "Pilih channel dulu"}
+                placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan... (@ untuk mention, @AEOS untuk bertanya, / untuk perintah)") : "Pilih channel dulu"}
                 disabled={!activeChannel}
                 className="input w-full"
                 onChange={(e) => {

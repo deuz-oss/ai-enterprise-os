@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
     from app.modules.bpjs.router import router as bpjs_router
+    from app.modules.chat.router import ai_router as chat_ai_router
     from app.modules.chat.router import router as chat_router
     from app.modules.chat.router import ws_router as chat_ws_router
     from app.modules.clients.router import router as clients_router
@@ -184,6 +185,12 @@ def create_app() -> FastAPI:
     app.include_router(rates_router, prefix="/api/v1")
     # Chat Workspace (Fase 11): gratis di semua paket — tanpa guard lisensi.
     app.include_router(chat_router, prefix="/api/v1")
+    # Fase 12: fitur AI kolaborasi ter-guard lisensi ai_addon (chat dasar tetap gratis).
+    app.include_router(
+        chat_ai_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("ai_addon"))],
+    )
     app.include_router(chat_ws_router, prefix="/api/v1")
     # Absensi harian (Fase 8): lintas dua aplikasi → guard OR.
     app.include_router(

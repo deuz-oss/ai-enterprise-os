@@ -6,6 +6,27 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 12: AI Kolaborasi (gelombang 2 chat)
+
+- **Asisten @AEOS**: mention `@AEOS` di channel/DM memicu jawaban dari data
+  lintas aplikasi terverifikasi (pipeline, job order, kandidat, karyawan, PR,
+  invoice, payrol, laba rugi) — LLM sebagai lapisan bahasa dengan fallback
+  deterministik; saran routing ke tim yang tepat (Finance / HR-Ops / HR /
+  Recruiter / Business Dev) bila pertanyaan di luar cakupan data.
+- **Rangkuman thread**: `POST /chat/messages/{id}/summarize` merangkum diskusi
+  menjadi poin keputusan/tugas; hasil diposting bot AEOS ke thread.
+- **Digest harian** `GET /chat/digest`: item deterministik — PR menunggu
+  approval, payrol menunggu persetujuan klien, SLA job order ≤7 hari, kontrak
+  berakhir ≤14 hari, invoice overdue; karyawan mendapat versi portal sendiri.
+- **Slash command server-side**: `/help`, `/pr status`, `/jo status [kw]`,
+  `/cuti sisa`, `/cuti ajukan <jenis> <mulai> <selesai> [alasan]` — dijawab
+  bot AEOS sebagai thread reply; perintah personal (`/cuti*`) hanya boleh di DM.
+- **Pemisahan paket**: fitur AI ter-guard lisensi `ai_addon`; slash command &
+  digest gratis mengikuti chat. Identitas AEOS = user bot per tenant tanpa
+  password aktif (tidak bisa login).
+- Frontend Chat: tombol 🧵 Rangkum, panel 📋 Digest, hint slash/@AEOS.
+- Modul baru `ai/collab.py`; tes `test_fase12_ai_kolaborasi.py` (+6).
+
 ### Added — Mobile GPS+selfie Absensi & Logo Branding CV
 
 - **Absensi mobile GPS+selfie (Fase 8 lanjutan)**: `POST /me/attendance/clock-in|clock-out`

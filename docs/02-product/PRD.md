@@ -216,7 +216,7 @@ Spesifikasi penuh di §9; ringkas:
   luar scope (Finance, Direktur, dst.) — dipaksakan di server, bukan hanya UI.
 - Keanggotaan channel proyek tersinkron otomatis dari data placement.
 
-### Fase 12 — AI Kolaborasi *(gelombang 2 chat)*
+### Fase 12 — AI Kolaborasi — ✅ Selesai (2026-08-26)
 
 Setelah dasar chat stabil: asisten **@AEOS** via DM (RAG lintas aplikasi),
 rangkuman thread panjang, digest harian channel, slash command (`/pr`, `/cuti`,
@@ -432,13 +432,28 @@ Admin tenant dapat menghapus pesan siapa pun; pengguna dapat melaporkan pesan;
 semua moderasi tercatat di audit log. Data pribadi karyawan tidak tampil lintas
 scope. Chat bukan kanal dokumen legal — kontrak/PKS tetap lewat modul dokumen+TTE.
 
-### 9.6 Gelombang 2 — AI Kolaborasi
+### 9.6 Gelombang 2 — AI Kolaborasi *(✅ terimplementasi)*
 
 1. **@AEOS** di DM: jawaban atas pertanyaan tenant via RAG lintas aplikasi yang sudah ada.
-2. **Rangkuman thread** panjang menjadi poin-poin keputusan/tugas.
-3. **Digest harian**: ringkasan aktivitas channel penting (approval menunggu, SLA).
-4. **Slash command**: `/pr buat…`, `/cuti ajukan…`, `/jo status…`.
-5. Routing pertanyaan ke tim/peran yang tepat bila AI tidak bisa menjawab.
+   Mention `@AEOS` di channel/DM mana pun memicu jawaban dari data lintas app
+   terverifikasi (pipeline, job order, kandidat, karyawan, PR, invoice, payrol,
+   laba rugi); balasan diposting sebagai pesan bot AEOS per tenant. Tanpa
+   `AI_BASE_URL` tetap berfungsi dengan ringkasan deterministik.
+2. **Rangkuman thread** panjang menjadi poin-poin keputusan/tugas — tombol 🧵 Rangkum
+   pada thread; hasil diposting AEOS ke thread.
+3. **Digest harian**: 📋 panel digest di Chat — item deterministik: PR menunggu
+   approval, payrol menunggu persetujuan klien, job order jatuh tempo ≤7 hari,
+   kontrak berakhir ≤14 hari, invoice overdue. Karyawan melihat versi portal
+   (cuti menunggu + pengingat clock GPS).
+4. **Slash command** dieksekusi server-side: `/help`, `/pr status`, `/jo status [kw]`,
+   `/cuti sisa`, `/cuti ajukan <jenis> <mulai> <selesai> [alasan]` — perintah
+   personal hanya di DM (privasi); hasil dijawab bot AEOS sebagai thread reply.
+5. Routing pertanyaan ke tim/peran yang tepat bila AI tidak bisa menjawab:
+   kata kunci dipetakan ke Finance / HR-Ops / HR / Recruiter / Business Dev dan
+   disertakan pada balasan @AEOS.
+
+Pemisahan paket: fitur AI (@AEOS, rangkuman) ter-guard lisensi **ai_addon**;
+slash command & digest gratis mengikuti chat.
 
 ## 10. Spesifikasi Inti: Talent Pool & CV Standardization *(baru)*
 

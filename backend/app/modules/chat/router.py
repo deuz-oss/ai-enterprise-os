@@ -191,3 +191,33 @@ def handle_card_action(
     return service.handle_card_action(
         db, user=user, message_id=message_id, action_id=action_id, note=note
     )
+
+
+# ---------- Fase 12: AI Kolaborasi ----------
+
+ai_router = APIRouter(prefix="/chat", tags=["chat-ai"])
+
+
+@ai_router.post("/messages/{message_id}/summarize")
+def summarize_thread(
+    message_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Rangkum thread menjadi poin keputusan/tugas; balasan diposting AEOS."""
+    return service.summarize_thread(db, user=user, root_message_id=message_id)
+
+
+@ai_router.get("/digest")
+def daily_digest(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Digest harian deterministik: approval menunggu, SLA, kontrak, invoice."""
+    from app.modules.ai import collab
+
+    return collab.daily_digest(db, user)
+
+
+@ai_router.post("/ask")
+def ask_aeos(payload: dict, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Tanya @AEOS langsung tanpa channel (UI ringan)."""
+    from app.modules.ai import collab
+
+    question = str((payload or {}).get("question") or "").strip()
+    return collab.answer_question(db, user, question)
