@@ -42,6 +42,160 @@ def get_own_employee(db: Session, user) -> Employee:
     return employee
 
 
+# ---------- Mobile GPS+selfie clock in/out (Fase 8 lanjutan) ----------
+
+_ALLOWED_SELFIE_MIME = ("image/jpeg", "image/png")
+_MAX_SELFIE_BYTES = 5 * 1024 * 1024
+
+
+def _valid_coord(lat_raw, long_raw) -> tuple[float, float]:
+    try:
+        lat, lng = float(lat_raw), float(long_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Koordinat GPS tidak valid") from None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise HTTPException(status_code=422, detail="Koordinat GPS di luar jangkauan")
+    return round(lat, 6), round(lng, 6)
+
+
+def _save_selfie(employee: Employee, direction: str, data: bytes, mime: str) -> str:
+    if mime not in _ALLOWED_SELFIE_MIME:
+        raise HTTPException(status_code=422, detail="Selfie harus JPG atau PNG")
+    if len(data) == 0:
+        raise HTTPException(status_code=422, detail="Selfie kosong")
+    if len(data) > _MAX_SELFIE_BYTES:
+        raise HTTPException(status_code=422, detail="Selfie maksimal 5 MB")
+    key = storage.new_object_key(
+        f"attendance/selfies/{employee.id}", f"{direction}-{date.today().isoformat()}.jpg"
+    )
+    storage.put_object(key, data, mime)
+    return key
+
+
+def mobile_clock(
+    db: Session,
+    *,
+    user,
+    direction: str,
+    photo_data: bytes,
+    photo_mime: str,
+    latitude,
+    longitude,
+):
+    """Clock-in/out dari app mobile dengan bukti GPS + selfie.
+
+    - clock-in : buat record hari ini (status hadir, source mobile); 409 bila
+      sudah ada record (duplikat ditolak — pakai alur HR/Ops untuk koreksi).
+    - clock-out: wajib ada record hari ini tanpa clock_out.
+    """
+    from app.modules.attendance.models import AttendanceRecord, AttendanceSource, AttendanceStatus
+    from app.modules.notifications.service import notify
+
+    if direction not in ("in", "out"):
+        raise HTTPException(status_code=422, detail="Arah clock harus 'in' atau 'out'")
+    employee = get_own_employee(db, user)
+    lat, lng = _valid_coord(latitude, longitude)
+    selfie_key = _save_selfie(employee, direction, photo_data, photo_mime)
+
+    today = date.today()
+    record = db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.employee_id == employee.id,
+            AttendanceRecord.date == today,
+        )
+    ).scalar_one_or_none()
+
+    now = datetime.now(UTC)
+    geo = f"{lat},{lng}"
+    if direction == "in":
+        if record is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Absensi hari ini sudah tercatat — ajukan koreksi ke HR/Ops bila keliru",
+            )
+        # Status non-hadir (cuti/izin/sakit disetujui ESS) tidak boleh ditimpa clock-in.
+        record = AttendanceRecord(
+            tenant_id=employee.tenant_id,
+            employee_id=employee.id,
+            date=today,
+            status=AttendanceStatus.hadir,
+            clock_in=now,
+            clock_in_geo=geo,
+            clock_in_selfie_key=selfie_key,
+            source=AttendanceSource.mobile,
+        )
+        db.add(record)
+        action = "attendance.mobile_clock_in"
+        title = f"Clock-in mobile — {employee.full_name}"
+    else:
+        if record is None:
+            raise HTTPException(
+                status_code=409, detail="Belum ada clock-in hari ini untuk di-clock-out"
+            )
+        if record.clock_out is not None:
+            raise HTTPException(status_code=409, detail="Clock-out hari ini sudah tercatat")
+        record.clock_out = now
+        record.clock_out_geo = geo
+        record.clock_out_selfie_key = selfie_key
+        action = "attendance.mobile_clock_out"
+        title = f"Clock-out mobile — {employee.full_name}"
+
+    db.commit()
+    db.refresh(record)
+    audit.log_event(
+        db,
+        action=action,
+        entity_type="attendance_record",
+        entity_id=record.id,
+        object_key=selfie_key,
+        detail={"geo": geo, "employee": str(employee.id)},
+    )
+    # Beri tahu HR & Ops agar anomali (jam aneh, lokasi jauh) cepat terlihat.
+    try:
+        supervisors = (
+            db.execute(
+                select(User).where(
+                    User.tenant_id == user.tenant_id,
+                    User.is_active.is_(True),
+                    User.role.in_([UserRole.hr, UserRole.operations]),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for sup in supervisors:
+            notify(
+                db,
+                user_id=sup.id,
+                title=title,
+                body=f"Pukul {now:%H:%M} · {geo}",
+                category="attendance",
+                entity_type="attendance_record",
+                entity_id=record.id,
+            )
+    except Exception:  # noqa: BLE001 - notifikasi tidak boleh memblokir absensi
+        pass
+    return {
+        "id": str(record.id),
+        "direction": direction,
+        "time": now.isoformat(),
+        "geo": geo,
+        "status": record.status.value,
+    }
+
+
+def own_selfie_url(db: Session, user, record_id: str, which: str) -> str:
+    from app.modules.attendance.models import AttendanceRecord
+
+    record = db.get(AttendanceRecord, parse_uuid(record_id))
+    if record is None or record.employee.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Record absensi tidak ditemukan")
+    key = record.clock_in_selfie_key if which == "in" else record.clock_out_selfie_key
+    if not key:
+        raise HTTPException(status_code=404, detail=f"Tidak ada selfie clock-{which}")
+    return storage.presigned_get_url(key)
+
+
 def list_contracts(db: Session, user) -> list[EmploymentContract]:
     return list(get_own_employee(db, user).contracts)
 

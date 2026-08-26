@@ -106,4 +106,21 @@ class ApiClient {
 
   Future<dynamic> patch(String path, Map<String, dynamic> body) =>
       _send(() => _http.patch(_uri(path), headers: _headers(), body: jsonEncode(body)));
+
+  /// POST multipart (unggah file + field), mis. absensi GPS+selfie.
+  Future<dynamic> postMultipart(
+    String path,
+    List<http.MultipartFile> files, {
+    Map<String, String> fields = const {},
+  }) {
+    return _send(() async {
+      final req = http.MultipartRequest('POST', _uri(path))
+        ..files.addAll(files)
+        ..fields.addAll(fields);
+      final token = _token;
+      if (token != null) req.headers['Authorization'] = 'Bearer $token';
+      final streamed = await _http.send(req);
+      return http.Response.fromStream(streamed);
+    });
+  }
 }

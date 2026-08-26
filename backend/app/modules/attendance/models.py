@@ -51,6 +51,11 @@ class AttendanceRecord(TenantMixin, Base):
     )
     clock_in: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     clock_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Mobile GPS+selfie (Fase 8 lanjutan): koordinat "lat,long" + objek selfie
+    clock_in_geo: Mapped[str | None] = mapped_column(String(60), default=None)
+    clock_out_geo: Mapped[str | None] = mapped_column(String(60), default=None)
+    clock_in_selfie_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    clock_out_selfie_key: Mapped[str | None] = mapped_column(String(500), default=None)
     overtime_hours: Mapped[int] = mapped_column(Integer, default=0)
     source: Mapped[AttendanceSource] = mapped_column(
         Enum(AttendanceSource, native_enum=False, length=50),
@@ -60,3 +65,11 @@ class AttendanceRecord(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee = relationship("Employee", lazy="joined")
+
+    @property
+    def has_clock_in_selfie(self) -> bool:
+        return self.clock_in_selfie_key is not None
+
+    @property
+    def has_clock_out_selfie(self) -> bool:
+        return self.clock_out_selfie_key is not None

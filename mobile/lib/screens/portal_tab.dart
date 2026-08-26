@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import 'self_attendance_screen.dart';
 
 /// Portal self-service karyawan: profil, jatah cuti, slip gaji,
 /// pengajuan cuti/izin, dan notifikasi — konsumsi endpoint /me/*.
@@ -182,6 +183,8 @@ class _PortalTabState extends State<PortalTab> {
             children: [
               _profileCard(profile),
               const SizedBox(height: 12),
+              _selfAttendanceCard(),
+              const SizedBox(height: 12),
               _balanceCard(balance),
               const SizedBox(height: 12),
               _requestLeaveCard(),
@@ -212,6 +215,21 @@ class _PortalTabState extends State<PortalTab> {
               if (profile.joinDate != null)
                 Text('Masuk sejak ${profile.joinDate}'),
             ],
+          ),
+        ),
+      );
+
+  Widget _selfAttendanceCard() => Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: ListTile(
+          leading: const Icon(Icons.fingerprint),
+          title: const Text('Absensi Saya'),
+          subtitle: const Text('Clock-in/out dengan bukti GPS + selfie'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SelfAttendanceScreen()),
           ),
         ),
       );

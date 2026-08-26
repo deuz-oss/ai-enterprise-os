@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -71,6 +71,62 @@ def my_attendance(
     db: Session = Depends(get_db),
 ):
     return service.list_own_attendance(db, current_user, year=year, month=month)
+
+
+# ---------- Mobile GPS+selfie clock in/out ----------
+
+
+@router.post("/attendance/clock-in")
+async def mobile_clock_in(
+    file: UploadFile = File(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clock-in dari app mobile: wajib selfie + koordinat GPS."""
+    data = await file.read()
+    return service.mobile_clock(
+        db,
+        user=current_user,
+        direction="in",
+        photo_data=data,
+        photo_mime=(file.content_type or "").lower(),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+@router.post("/attendance/clock-out")
+async def mobile_clock_out(
+    file: UploadFile = File(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clock-out dari app mobile: wajib selfie + koordinat GPS."""
+    data = await file.read()
+    return service.mobile_clock(
+        db,
+        user=current_user,
+        direction="out",
+        photo_data=data,
+        photo_mime=(file.content_type or "").lower(),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+@router.get("/attendance/{record_id}/selfie/{which}/download-url")
+def my_attendance_selfie_url(
+    record_id: str,
+    which: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Selfie absensi milik sendiri (riwayat portal)."""
+    return {"url": service.own_selfie_url(db, current_user, record_id, which)}
 
 
 # ---------- Pengajuan cuti/izin ----------

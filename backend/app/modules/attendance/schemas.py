@@ -32,6 +32,10 @@ class AttendanceRecordOut(BaseModel):
     status: AttendanceStatus
     clock_in: datetime | None
     clock_out: datetime | None
+    clock_in_geo: str | None = None
+    clock_out_geo: str | None = None
+    has_clock_in_selfie: bool = False
+    has_clock_out_selfie: bool = False
     overtime_hours: int
     source: AttendanceSource
     notes: str | None
