@@ -112,7 +112,12 @@ def overview(db: Session = Depends(get_db)):
         pass
 
     # --- Finance ---
-    finance_summary = {"revenue_mtd": 0, "outstanding": 0, "overdue": 0, "invoices_total": 0}
+    finance_summary: dict[str, float] = {
+        "revenue_mtd": 0,
+        "outstanding": 0,
+        "overdue": 0,
+        "invoices_total": 0,
+    }
     try:
         from app.modules.finance.models import Invoice, InvoiceStatus
 
