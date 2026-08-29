@@ -481,8 +481,10 @@ async def upload_insurance_file(
     data = await file.read()
     if not data:
         raise HTTPException(status_code=422, detail="File kosong")
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Maksimal 10 MB")
+    # PRD v3.0 §5: kartu (JPG/PNG/PDF) ≤5MB, polis (PDF) ≤10MB
+    max_bytes = 5 * 1024 * 1024 if kind == "card" else 10 * 1024 * 1024
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"Maksimal {max_bytes // (1024 * 1024)} MB")
     file_name = file.filename or f"{kind}.pdf"
     object_key = storage.new_object_key(f"insurances/{ins.id}", file_name)
     storage.put_object(object_key, data, file.content_type or "application/octet-stream")

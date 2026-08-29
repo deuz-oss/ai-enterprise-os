@@ -60,6 +60,22 @@ class InvoiceOut(BaseModel):
     efaktur_qr_url: str | None = None
 
 
+class TaxInvoiceSet(BaseModel):
+    tax_invoice_no: str | None = None
+    tax_invoice_date: date | None = None
+    lawan_npwp: str | None = None
+    lawan_nama: str | None = None
+    lawan_alamat: str | None = None
+    dpp_amount: float | None = None
+    kode_transaksi: str | None = None
+    no_seri_faktur: str | None = None
+    tax_invoice_status: str | None = None
+
+
+class TaxInvoiceReplace(BaseModel):
+    pengganti_ref: UUID | None = None
+
+
 class InvoiceUpdate(BaseModel):
     status: InvoiceStatus | None = None
     due_date: date | None = None

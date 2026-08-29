@@ -216,3 +216,68 @@ def test_match_candidates_scores_by_skill_overlap_and_ranks(client):
     ).json()
     assert any(r["candidate_id"] == strong for r in filtered)
     assert all(r["candidate_id"] != weak for r in filtered)
+
+
+def test_interview_schedule_notifies_interviewer_and_posts_to_jo_channel(client):
+    """PRD v3.0 §4 action 1 — 'notif in-app + chat DM + email' saat interview
+    dijadwalkan. Chat DM tidak ada di sistem (tidak ada konsep 1:1 DM),
+    padanan yang tersedia: pesan sistem di channel auto JO."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+
+    db = client.testing_session()
+    try:
+        from app.core.bootstrap import ensure_default_tenant
+        from app.modules.auth.schemas import UserCreate
+        from app.modules.auth.service import create_user
+
+        tenant = ensure_default_tenant(db)
+        interviewer = create_user(
+            db,
+            UserCreate(
+                email="interviewer@outsourcing.co.id",
+                full_name="Ivan Interviewer",
+                password="rahasia-123",
+                role="hr",
+            ),
+            tenant_id=tenant.id,
+        )
+        interviewer_id = str(interviewer.id)
+    finally:
+        db.close()
+
+    created = client.post(
+        "/api/v1/recruitment/interviews",
+        headers=headers,
+        json={
+            "candidate_id": cand_id,
+            "job_order_id": jo_id,
+            "interviewer_id": interviewer_id,
+            "scheduled_at": "2026-09-10T09:00:00",
+            "location": "Kantor Pusat",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    interviewer_headers = client.post(
+        "/api/v1/auth/login",
+        json={"email": "interviewer@outsourcing.co.id", "password": "rahasia-123"},
+    )
+    token = interviewer_headers.json()["access_token"]
+    notif_headers = {"Authorization": f"Bearer {token}"}
+
+    notifications = client.get("/api/v1/me/notifications", headers=notif_headers).json()
+    assert any(
+        n["category"] == "interview" and "Interview dijadwalkan" in n["title"]
+        for n in notifications
+    )
+
+    channels = client.get("/api/v1/chat/channels", headers=headers).json()
+    jo_channel = next((c for c in channels if c["name"] == "JO: Operator Produksi"), None)
+    assert jo_channel is not None, "channel auto JO tidak terbuat"
+    messages = client.get(
+        f"/api/v1/chat/channels/{jo_channel['id']}/messages", headers=headers
+    ).json()
+    assert any("Interview dijadwalkan" in m["content"] for m in messages)

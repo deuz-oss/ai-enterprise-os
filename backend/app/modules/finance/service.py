@@ -24,6 +24,7 @@ from app.modules.finance.schemas import (
     CashFlowCreate,
     InvoiceGenerateRequest,
     InvoiceUpdate,
+    TaxInvoiceSet,
 )
 from app.modules.finance.tax_config import (
     DEFAULT_DUE_DAYS,
@@ -770,24 +771,21 @@ def list_payment_requests(
 # ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
 
 
-def set_tax_invoice(db: Session, invoice_id: str, payload: dict) -> Invoice:
+def set_tax_invoice(db: Session, invoice_id: str, payload: TaxInvoiceSet) -> Invoice:
     inv = _get_invoice(db, invoice_id)
-    for field in [
-        "tax_invoice_no",
-        "tax_invoice_date",
-        "lawan_npwp",
-        "lawan_nama",
-        "lawan_alamat",
-        "dpp_amount",
-        "kode_transaksi",
-        "no_seri_faktur",
-    ]:
-        if field in payload:
-            setattr(inv, field, payload[field])
-    if "tax_invoice_status" in payload:
-        inv.tax_invoice_status = payload["tax_invoice_status"]
-    else:
-        inv.tax_invoice_status = "draft"
+    data = payload.model_dump(exclude_unset=True, exclude={"tax_invoice_status"})
+    no_seri = data.get("no_seri_faktur")
+    if no_seri and no_seri != inv.no_seri_faktur:
+        dupe = db.execute(
+            select(Invoice.id).where(Invoice.no_seri_faktur == no_seri, Invoice.id != inv.id)
+        ).scalar_one_or_none()
+        if dupe is not None:
+            raise HTTPException(
+                status_code=409, detail=f"No. Seri Faktur {no_seri} sudah dipakai invoice lain"
+            )
+    for field, value in data.items():
+        setattr(inv, field, value)
+    inv.tax_invoice_status = payload.tax_invoice_status or "draft"
     db.commit()
     db.refresh(inv)
     audit.log_event(
@@ -863,16 +861,111 @@ def replace_tax_invoice(db: Session, invoice_id: str, pengganti_ref: str | None)
 
 
 def tax_invoice_pdf(db: Session, invoice_id: str) -> tuple[bytes, str]:
+    """Render PDF faktur pajak (reportlab) — draft lokal atau salinan hasil DJP.
+
+    Bukan render resmi e-Faktur DJP (itu dilakukan DJP saat submit sungguhan);
+    ini dokumen internal/draft yang mengikuti data faktur tersimpan.
+    """
+    import io
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     inv = _get_invoice(db, invoice_id)
-    # Simple PDF stub — real would use reportlab
-    content = (
-        f"Faktur Pajak {inv.no_seri_faktur or inv.tax_invoice_no or inv.invoice_no}\n"
-        f"NSFP: {inv.efaktur_nsr or '-'}\n"
-        f"Lawan: {inv.lawan_nama or inv.client.name}\n"
-        f"DPP: {inv.dpp_amount}\n"
-        f"QR: {inv.efaktur_qr_url or '-'}"
-    ).encode()
-    return content, f"faktur-{inv.invoice_no}.pdf"
+    seller_name = "-"
+    try:
+        from app.core.tenancy import get_tenant
+        from app.modules.platform.models import Tenant
+
+        tenant = db.get(Tenant, get_tenant()) if get_tenant() else None
+        seller_name = tenant.name if tenant else "-"
+    except Exception:
+        pass
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        title="Faktur Pajak",
+    )
+    styles = getSampleStyleSheet()
+    accent = colors.HexColor("#0f7b6d")
+    h1 = ParagraphStyle("FPTitle", parent=styles["Title"], fontSize=16, textColor=accent)
+    label = ParagraphStyle(
+        "FPLabel", parent=styles["Normal"], fontSize=8.5, textColor=colors.HexColor("#666666")
+    )
+    body = ParagraphStyle("FPBody", parent=styles["Normal"], fontSize=10, leading=14)
+
+    def esc(value) -> str:
+        from xml.sax.saxutils import escape
+
+        return escape(str(value)) if value is not None else "-"
+
+    def rupiah(value) -> str:
+        return f"Rp{float(value):,.0f}" if value is not None else "-"
+
+    is_simulasi = (inv.efaktur_nsr or "").startswith("NSFP-SIM-")
+    story: list = [
+        Paragraph("FAKTUR PAJAK", h1),
+        Paragraph(
+            "DOKUMEN SIMULASI — belum dikirim ke DJP" if is_simulasi else "e-Faktur DJP",
+            label,
+        ),
+        Spacer(1, 6 * mm),
+        Paragraph(f"No. Seri Faktur: <b>{esc(inv.no_seri_faktur)}</b>", body),
+        Paragraph(f"Tanggal: {esc(inv.tax_invoice_date)}", body),
+        Paragraph(f"Kode Transaksi: {esc(inv.kode_transaksi)}", body),
+        Paragraph(f"NSFP: {esc(inv.efaktur_nsr)}", body),
+        Spacer(1, 6 * mm),
+        Paragraph("Pengusaha Kena Pajak (penjual)", label),
+        Paragraph(esc(seller_name), body),
+        Spacer(1, 4 * mm),
+        Paragraph("Lawan Transaksi (pembeli)", label),
+        Paragraph(f"<b>{esc(inv.lawan_nama or inv.client.name)}</b>", body),
+        Paragraph(f"NPWP: {esc(inv.lawan_npwp)}", body),
+        Paragraph(esc(inv.lawan_alamat), body),
+        Spacer(1, 6 * mm),
+    ]
+
+    table_data = [
+        ["Uraian", "DPP", "PPN"],
+        [
+            f"Invoice {inv.invoice_no} · {inv.month:02d}/{inv.year}",
+            rupiah(inv.dpp_amount),
+            rupiah(inv.ppn_amount),
+        ],
+    ]
+    table = Table(table_data, colWidths=[90 * mm, 42 * mm, 42 * mm])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), accent),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(table)
+    story.append(Spacer(1, 6 * mm))
+    if inv.efaktur_qr_url:
+        story.append(Paragraph(f"QR verifikasi: {esc(inv.efaktur_qr_url)}", label))
+    if inv.faktur_status_detail:
+        story.append(Spacer(1, 3 * mm))
+        story.append(Paragraph(f"Catatan: {esc(inv.faktur_status_detail)}", label))
+
+    doc.build(story)
+    return buffer.getvalue(), f"faktur-{inv.no_seri_faktur or inv.invoice_no}.pdf"
 
 
 def list_payment_requests_detail(

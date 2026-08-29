@@ -321,7 +321,51 @@ def create_interview(
         )
     except Exception:
         pass
+    _notify_interview_scheduled(db, jo=jo, candidate=candidate, sched=sched)
     return sched
+
+
+def _notify_interview_scheduled(db: Session, *, jo, candidate, sched) -> None:
+    """Notif in-app + email ke interviewer + pesan sistem di channel JO
+    (PRD v3.0 §4). Best-effort — kegagalan notifikasi tidak boleh
+    mematahkan penjadwalan interview yang sudah tersimpan."""
+    when = sched.scheduled_at.strftime("%d %b %Y %H:%M")
+    if sched.interviewer_id:
+        try:
+            from app.modules.notifications.service import notify
+
+            notify(
+                db,
+                user_id=sched.interviewer_id,
+                title=f"Interview dijadwalkan: {candidate.full_name}",
+                body=f"JO {jo.title} — {when}" + (f" · {sched.location}" if sched.location else ""),
+                category="interview",
+                entity_type="interview_schedule",
+                entity_id=sched.id,
+            )
+        except Exception:
+            pass
+    try:
+        from app.modules.chat.models import ChatMessage
+        from app.modules.chat.service import ensure_job_order_channel
+
+        ch = ensure_job_order_channel(db, jo)
+        if ch:
+            db.add(
+                ChatMessage(
+                    channel_id=ch.id,
+                    sender_id=ch.created_by_id,
+                    content=(
+                        f"📅 Interview dijadwalkan untuk {candidate.full_name} — {when}"
+                        + (f" di {sched.location}" if sched.location else "")
+                    ),
+                    message_type="system",
+                    tenant_id=ch.tenant_id,
+                )
+            )
+            db.commit()
+    except Exception:
+        db.rollback()
 
 
 def list_interviews(db: Session, job_order_id: str | None = None) -> list[InterviewSchedule]:

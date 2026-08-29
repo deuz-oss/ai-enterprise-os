@@ -226,6 +226,7 @@ def test_tax_invoice_full_lifecycle(client):
     pdf_resp = client.get(f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/pdf", headers=headers)
     assert pdf_resp.status_code == 200
     assert pdf_resp.headers["content-type"] == "application/pdf"
+    assert pdf_resp.content.startswith(b"%PDF-")  # render reportlab sungguhan, bukan stub teks
 
 
 def test_tax_invoice_send_requires_npwp_and_no_seri(client):
@@ -243,3 +244,65 @@ def test_tax_invoice_cancel(client):
     resp = client.post(f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/cancel", headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["tax_invoice_status"] == "dibatalkan"
+
+
+def test_tax_invoice_no_seri_unique_per_tenant(client):
+    """PRD v3.0 §7 — no_seri_faktur unique/tenant/tahun. DB SQLite hanya index
+    biasa (bukan partial unique), jadi ini divalidasi di service layer."""
+    headers = _auth_header(client)
+    client_id, _ = _seed_client_with_payroll(client, headers, name="PT Faktur Ganda")
+    inv_a = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 6, "fee_amount": 100_000},
+    ).json()["id"]
+
+    # invoice kedua: periode berbeda (payrol run tenant-wide per year+month,
+    # klien/karyawan yang sama dipakai ulang agar tidak bentrok unik periode)
+    run2 = client.post("/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 7})
+    assert run2.status_code == 201, run2.text
+    gen2 = client.post(
+        f"/api/v1/payroll/runs/{run2.json()['id']}/generate", headers=headers, json={}
+    )
+    assert gen2.status_code == 201, gen2.text
+    inv_b = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 7, "fee_amount": 100_000},
+    ).json()["id"]
+
+    first = client.put(
+        f"/api/v1/finance/invoices/{inv_a}/tax-invoice",
+        headers=headers,
+        json={"no_seri_faktur": "010.001-26.00000099"},
+    )
+    assert first.status_code == 200, first.text
+
+    dupe = client.put(
+        f"/api/v1/finance/invoices/{inv_b}/tax-invoice",
+        headers=headers,
+        json={"no_seri_faktur": "010.001-26.00000099"},
+    )
+    assert dupe.status_code == 409, dupe.text
+
+    # invoice yang sama boleh set ulang ke no_seri yang sama (tidak dianggap duplikat)
+    resave = client.put(
+        f"/api/v1/finance/invoices/{inv_a}/tax-invoice",
+        headers=headers,
+        json={"no_seri_faktur": "010.001-26.00000099", "lawan_nama": "PT Faktur A Update"},
+    )
+    assert resave.status_code == 200, resave.text
+
+
+def test_tax_invoice_set_rejects_malformed_date(client):
+    """Payload sebelumnya `dict` mentah tanpa validasi Pydantic — tanggal
+    string yang salah format sekarang ditolak 422, bukan 500 di layer DB."""
+    headers = _auth_header(client)
+    invoice_id = _seed_invoice(client, headers, name="PT Tanggal Salah")
+
+    resp = client.put(
+        f"/api/v1/finance/invoices/{invoice_id}/tax-invoice",
+        headers=headers,
+        json={"tax_invoice_date": "bukan-tanggal"},
+    )
+    assert resp.status_code == 422

@@ -19,6 +19,8 @@ from app.modules.finance.schemas import (
     InvoiceGenerateRequest,
     InvoiceOut,
     InvoiceUpdate,
+    TaxInvoiceReplace,
+    TaxInvoiceSet,
 )
 
 router = APIRouter(
@@ -153,7 +155,7 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
 
 
 @router.put("/invoices/{invoice_id}/tax-invoice", response_model=InvoiceOut)
-def set_tax_invoice(invoice_id: str, payload: dict, db: Session = Depends(get_db)):
+def set_tax_invoice(invoice_id: str, payload: TaxInvoiceSet, db: Session = Depends(get_db)):
     return service.set_tax_invoice(db, invoice_id, payload)
 
 
@@ -168,8 +170,9 @@ def cancel_tax_invoice(invoice_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/invoices/{invoice_id}/tax-invoice/replace", response_model=InvoiceOut)
-def replace_tax_invoice(invoice_id: str, payload: dict, db: Session = Depends(get_db)):
-    return service.replace_tax_invoice(db, invoice_id, payload.get("pengganti_ref"))
+def replace_tax_invoice(invoice_id: str, payload: TaxInvoiceReplace, db: Session = Depends(get_db)):
+    pengganti_ref = str(payload.pengganti_ref) if payload.pengganti_ref else None
+    return service.replace_tax_invoice(db, invoice_id, pengganti_ref)
 
 
 @router.get("/invoices/{invoice_id}/tax-invoice/pdf")

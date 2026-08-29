@@ -195,6 +195,36 @@ def test_insurance_crud_and_bpjs_card_status(client):
     assert client.get(f"/api/v1/employees/{emp['id']}/insurances", headers=headers).json() == []
 
 
+def test_insurance_file_size_limits_differ_card_vs_policy(client):
+    """PRD v3.0 §5 — kartu ≤5MB, polis ≤10MB (bukan flat 10MB untuk keduanya)."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "File Limit Test"}
+    ).json()
+    ins = client.post(
+        f"/api/v1/employees/{emp['id']}/insurances",
+        headers=headers,
+        json={"provider": "axa", "policy_no": "POL-LIMIT"},
+    ).json()
+
+    oversized_for_card = b"x" * (6 * 1024 * 1024)  # >5MB, <=10MB
+    card = client.post(
+        f"/api/v1/employees/insurances/{ins['id']}/card",
+        headers=headers,
+        files={"file": ("kartu.jpg", oversized_for_card, "image/jpeg")},
+    )
+    assert card.status_code == 413, card.text
+
+    with patch("app.modules.hrd.service.storage.put_object") as put:
+        put.return_value = "key"
+        policy = client.post(
+            f"/api/v1/employees/insurances/{ins['id']}/policy",
+            headers=headers,
+            files={"file": ("polis.pdf", oversized_for_card, "application/pdf")},
+        )
+    assert policy.status_code == 201, policy.text  # 6MB tetap OK untuk polis (limit 10MB)
+
+
 def test_bpjs_card_upload_and_status_valid_until(client):
     headers = _auth_header(client)
     emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "BPJS Test"}).json()
