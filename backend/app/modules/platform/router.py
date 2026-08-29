@@ -10,6 +10,7 @@ from app.modules.apps.schemas import LicenseSetIn
 from app.modules.platform import service
 from app.modules.platform.models import LicenseStatus, TenantAppLicense
 from app.modules.platform.schemas import (
+    BillingModeUpdate,
     TenantCreate,
     TenantOut,
     TenantProvisionedOut,
@@ -38,6 +39,28 @@ def provision_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
 @router.patch("/tenants/{tenant_id}", response_model=TenantOut)
 def update_tenant(tenant_id: UUID, payload: TenantUpdate, db: Session = Depends(get_db)):
     return service.update_tenant(db, tenant_id, payload)
+
+
+@router.patch("/tenants/{tenant_id}/billing-mode", response_model=TenantOut)
+def set_billing_mode(tenant_id: UUID, payload: BillingModeUpdate, db: Session = Depends(get_db)):
+    """PRD v3.0 per-tenant override inherit|internal|commercial + audit."""
+    tenant = service._get_tenant(db, tenant_id)
+    tenant.billing_mode = payload.billing_mode
+    db.commit()
+    db.refresh(tenant)
+    try:
+        from app.modules.audit.service import log_event
+
+        log_event(
+            db,
+            action="tenant.billing_mode_changed",
+            entity_type="tenant",
+            entity_id=str(tenant.id),
+            detail={"billing_mode": payload.billing_mode},
+        )
+    except Exception:
+        pass
+    return tenant
 
 
 # ---------- Lisensi aplikasi per tenant ----------

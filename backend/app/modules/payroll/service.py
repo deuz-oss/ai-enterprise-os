@@ -55,16 +55,30 @@ _EDITABLE_STATUSES: dict[PayrollRunType, set[PayrollRunStatus]] = {
 
 
 def _assert_run_license(db: Session, tenant_id, run_type: PayrollRunType) -> None:
-    """Guard lisensi data-driven (ADR-0006): mutasi mengikuti run_type."""
+    """Guard lisensi data-driven (PRD v3.0 F): internal=people_ops,
+    proyek=payroll/finance, fallback legacy."""
     from app.modules.platform.service import is_licensed
 
-    key = "hr_payroll" if run_type == PayrollRunType.internal else "operations_billing"
-    if not is_licensed(db, tenant_id, key):
-        label = "HR & Payroll" if key == "hr_payroll" else "Operations & Billing"
-        raise HTTPException(
-            status_code=403,
-            detail=f"Aplikasi {label} belum aktif untuk perusahaan Anda.",
-        )
+    if run_type == PayrollRunType.internal:
+        if (
+            is_licensed(db, tenant_id, "people_ops")
+            or is_licensed(db, tenant_id, "payroll")
+            or is_licensed(db, tenant_id, "hr_payroll")
+        ):
+            return
+        label = "Workforce Cloud"
+    else:
+        if (
+            is_licensed(db, tenant_id, "payroll")
+            or is_licensed(db, tenant_id, "finance")
+            or is_licensed(db, tenant_id, "operations_billing")
+        ):
+            return
+        label = "Revenue Cloud"
+    raise HTTPException(
+        status_code=403,
+        detail=f"Aplikasi {label} belum aktif untuk perusahaan Anda.",
+    )
 
 
 def _transition(run: PayrollRun, target: PayrollRunStatus) -> None:

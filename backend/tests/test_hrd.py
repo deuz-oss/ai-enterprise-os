@@ -144,6 +144,84 @@ def test_upload_hr_document_versions(client):
     assert len(docs) == 3
 
 
+def test_insurance_crud_and_bpjs_card_status(client):
+    """PRD v3.0 §5 — asuransi one-to-many + BPJS status/kartu/valid_until (Employees.tsx)."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Insurance Test"}
+    ).json()
+
+    created = client.post(
+        f"/api/v1/employees/{emp['id']}/insurances",
+        headers=headers,
+        json={"provider": "prudential", "policy_no": "POL-001", "start_date": "2026-01-01"},
+    )
+    assert created.status_code == 201, created.text
+    ins = created.json()
+    assert ins["status"] == "aktif"
+
+    updated = client.patch(
+        f"/api/v1/employees/insurances/{ins['id']}",
+        headers=headers,
+        json={"status": "kedaluwarsa", "valid_until": "2026-12-31"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["status"] == "kedaluwarsa"
+    assert updated.json()["valid_until"] == "2026-12-31"
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/insurances", headers=headers).json()
+    assert len(listed) == 1
+
+    with patch("app.modules.hrd.service.storage.put_object") as put:
+        put.return_value = "key"
+        card = client.post(
+            f"/api/v1/employees/insurances/{ins['id']}/card",
+            headers=headers,
+            files={"file": ("polis.jpg", b"fake-jpeg", "image/jpeg")},
+        )
+    assert card.status_code == 201, card.text
+    assert card.json()["card_object_key"]
+
+    with patch("app.modules.hrd.service.storage.presigned_get_url") as presign:
+        presign.return_value = "https://example.com/signed"
+        url = client.get(
+            f"/api/v1/employees/insurances/{ins['id']}/card/download-url", headers=headers
+        )
+    assert url.status_code == 200
+    assert url.json()["url"] == "https://example.com/signed"
+
+    deleted = client.delete(f"/api/v1/employees/insurances/{ins['id']}", headers=headers)
+    assert deleted.status_code == 204
+    assert client.get(f"/api/v1/employees/{emp['id']}/insurances", headers=headers).json() == []
+
+
+def test_bpjs_card_upload_and_status_valid_until(client):
+    headers = _auth_header(client)
+    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "BPJS Test"}).json()
+
+    with patch("app.modules.hrd.service.storage.put_object") as put:
+        put.return_value = "key"
+        card = client.post(
+            f"/api/v1/employees/{emp['id']}/bpjs-card",
+            headers=headers,
+            files={"file": ("kartu.jpg", b"fake-jpeg", "image/jpeg")},
+            data={"bpjs_type": "kesehatan", "valid_until": "2027-01-31"},
+        )
+    assert card.status_code == 201, card.text
+    assert card.json()["bpjs_kesehatan_card_key"]
+    assert card.json()["bpjs_kesehatan_valid_until"] == "2027-01-31"
+
+    status_update = client.patch(
+        f"/api/v1/employees/{emp['id']}",
+        headers=headers,
+        json={"bpjs_kesehatan_status": "aktif", "bpjs_ketenagakerjaan_status": "menunggu"},
+    )
+    assert status_update.status_code == 200, status_update.text
+    body = status_update.json()
+    assert body["bpjs_kesehatan_status"] == "aktif"
+    assert body["bpjs_ketenagakerjaan_status"] == "menunggu"
+
+
 def test_hr_endpoints_reject_non_admin_role(client):
     """Role recruiter tidak boleh akses modul HRD (hanya hr/management/admin)."""
     db = client.testing_session()

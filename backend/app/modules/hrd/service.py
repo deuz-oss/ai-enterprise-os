@@ -414,3 +414,156 @@ def contract_file_download_url(db: Session, contract_id: str) -> str:
         detail={"file_name": contract.file_name},
     )
     return storage.presigned_get_url(contract.object_key)
+
+
+# ---------- Employee Insurances — PRD v3.0 one-to-many ----------
+
+
+def _get_insurance(db: Session, insurance_id: str):
+    from app.modules.hrd.models import EmployeeInsurance
+
+    ins = db.get(EmployeeInsurance, parse_uuid(insurance_id))
+    if not ins:
+        raise HTTPException(status_code=404, detail="Asuransi tidak ditemukan")
+    return ins
+
+
+def list_insurances(db: Session, employee_id: str):
+    from app.modules.hrd.models import EmployeeInsurance
+
+    _get_employee(db, employee_id)
+    stmt = (
+        select(EmployeeInsurance)
+        .where(EmployeeInsurance.employee_id == parse_uuid(employee_id))
+        .order_by(EmployeeInsurance.created_at.desc())
+    )
+    return list(db.execute(stmt).scalars())
+
+
+def create_insurance(db: Session, employee_id: str, payload, uploaded_by=None):
+    from app.modules.hrd.models import EmployeeInsurance
+
+    _get_employee(db, employee_id)
+    data = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload)
+    ins = EmployeeInsurance(employee_id=parse_uuid(employee_id), uploaded_by=uploaded_by, **data)
+    db.add(ins)
+    db.commit()
+    db.refresh(ins)
+    audit.log_event(
+        db,
+        action="employee.insurance_created",
+        entity_type="employee",
+        entity_id=parse_uuid(employee_id),
+        detail={"policy_no": ins.policy_no},
+    )
+    return ins
+
+
+def update_insurance(db: Session, insurance_id: str, payload):
+    ins = _get_insurance(db, insurance_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(ins, field, value)
+    db.commit()
+    db.refresh(ins)
+    return ins
+
+
+def delete_insurance(db: Session, insurance_id: str):
+    ins = _get_insurance(db, insurance_id)
+    db.delete(ins)
+    db.commit()
+
+
+async def upload_insurance_file(
+    db: Session, insurance_id: str, file: UploadFile, kind: str = "card"
+):
+    ins = _get_insurance(db, insurance_id)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="File kosong")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Maksimal 10 MB")
+    file_name = file.filename or f"{kind}.pdf"
+    object_key = storage.new_object_key(f"insurances/{ins.id}", file_name)
+    storage.put_object(object_key, data, file.content_type or "application/octet-stream")
+    if kind == "card":
+        ins.card_object_key = object_key
+    else:
+        ins.policy_object_key = object_key
+    db.commit()
+    db.refresh(ins)
+    audit.log_event(
+        db,
+        action=f"employee.insurance_{kind}_uploaded",
+        entity_type="employee_insurance",
+        entity_id=ins.id,
+        object_key=object_key,
+    )
+    return ins
+
+
+def insurance_file_url(db: Session, insurance_id: str, kind: str = "card") -> str:
+    ins = _get_insurance(db, insurance_id)
+    key = ins.card_object_key if kind == "card" else ins.policy_object_key
+    if not key:
+        raise HTTPException(status_code=404, detail="File belum ada")
+    audit.log_event(
+        db,
+        action=f"employee.insurance_{kind}_download",
+        entity_type="employee_insurance",
+        entity_id=ins.id,
+        object_key=key,
+    )
+    return storage.presigned_get_url(key)
+
+
+async def upload_bpjs_card(
+    db: Session, employee_id: str, file: UploadFile, bpjs_type: str, valid_until=None
+):
+    emp = _get_employee(db, employee_id)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="File kosong")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Maksimal 5 MB")
+    file_name = file.filename or f"bpjs_{bpjs_type}.pdf"
+    object_key = storage.new_object_key(f"employees/{emp.id}/bpjs", file_name)
+    storage.put_object(object_key, data, file.content_type or "application/octet-stream")
+    if bpjs_type == "kesehatan":
+        emp.bpjs_kesehatan_card_key = object_key
+        if valid_until:
+            emp.bpjs_kesehatan_valid_until = valid_until
+    else:
+        emp.bpjs_ketenagakerjaan_card_key = object_key
+        if valid_until:
+            emp.bpjs_ketenagakerjaan_valid_until = valid_until
+    db.commit()
+    db.refresh(emp)
+    audit.log_event(
+        db,
+        action="employee.bpjs_card_uploaded",
+        entity_type="employee",
+        entity_id=emp.id,
+        object_key=object_key,
+        detail={"type": bpjs_type},
+    )
+    return emp
+
+
+def bpjs_card_url(db: Session, employee_id: str, bpjs_type: str) -> str:
+    emp = _get_employee(db, employee_id)
+    key = (
+        emp.bpjs_kesehatan_card_key
+        if bpjs_type == "kesehatan"
+        else emp.bpjs_ketenagakerjaan_card_key
+    )
+    if not key:
+        raise HTTPException(status_code=404, detail="Kartu BPJS belum ada")
+    audit.log_event(
+        db,
+        action="employee.bpjs_card_download",
+        entity_type="employee",
+        entity_id=emp.id,
+        object_key=key,
+    )
+    return storage.presigned_get_url(key)

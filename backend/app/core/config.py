@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     project_name: str = "AI Enterprise OS"
     app_env: str = "dev"
+    # internal = semua fitur aktif tanpa cek lisensi (fase internal sekarang)
+    # commercial = lisensi per bundle (PRD v2.0)
+    app_mode: str = "internal"
     secret_key: str = "dev-secret-key-change-me"
     access_token_expire_minutes: int = 480
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
@@ -71,6 +74,13 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
 
+    # e-Faktur DJP (PRD v3.0). Kosong = simulasi (draft PDF lokal).
+    efaktur_provider: str = ""  # "" | "djponline" | "sandbox"
+    efaktur_api_url: str | None = None
+    efaktur_api_key: str | None = None
+    efaktur_npkp: str | None = None
+    efaktur_retry_max: int = 3
+
     @field_validator(
         "database_url",
         "storage_endpoint",
@@ -88,6 +98,9 @@ class Settings(BaseSettings):
         "smtp_user",
         "smtp_password",
         "smtp_from",
+        "efaktur_api_url",
+        "efaktur_api_key",
+        "efaktur_npkp",
         mode="before",
     )
     @classmethod

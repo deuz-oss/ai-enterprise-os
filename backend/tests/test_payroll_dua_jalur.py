@@ -216,18 +216,20 @@ def test_expired_token_rejected(client):
 
 
 def test_license_guard_per_run_type(client):
-    """Revoke operations_billing → payrol proyek diblokir, internal tetap jalan."""
+    """Revoke payroll+finance → payrol proyek diblokir,
+    internal (people_ops) tetap jalan — PRD v3.0 F."""
     admin = _auth_header(client)
     plat = _platform_admin_header(client)
     tenants = client.get("/api/v1/platform/tenants", headers=plat).json()
     default_id = next(t["id"] for t in tenants if t["slug"] == "default")
 
-    revoke = client.patch(
-        f"/api/v1/platform/tenants/{default_id}/licenses/operations_billing",
-        headers=plat,
-        json={"status": "kedaluwarsa"},
-    )
-    assert revoke.status_code == 200
+    for key in ("payroll", "finance"):
+        revoke = client.patch(
+            f"/api/v1/platform/tenants/{default_id}/licenses/{key}",
+            headers=plat,
+            json={"status": "kedaluwarsa"},
+        )
+        assert revoke.status_code == 200
 
     proyek = client.post(
         "/api/v1/payroll/runs",
@@ -240,17 +242,18 @@ def test_license_guard_per_run_type(client):
         },
     )
     assert proyek.status_code == 403
-    assert "Operations & Billing" in proyek.json()["detail"]
+    assert "Revenue Cloud" in proyek.json()["detail"]
 
     internal = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 10})
     assert internal.status_code == 201
 
     # Pulihkan
-    client.patch(
-        f"/api/v1/platform/tenants/{default_id}/licenses/operations_billing",
-        headers=plat,
-        json={"status": "aktif"},
-    )
+    for key in ("payroll", "finance", "operations_billing"):
+        client.patch(
+            f"/api/v1/platform/tenants/{default_id}/licenses/{key}",
+            headers=plat,
+            json={"status": "aktif"},
+        )
 
 
 def test_proyek_generate_hanya_karyawan_klien_tersebut(client):

@@ -129,29 +129,31 @@ def create_app() -> FastAPI:
     app.include_router(
         hrd_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+        dependencies=[Depends(require_licensed_app("people_ops"))],
     )
     app.include_router(
         ess_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+        dependencies=[Depends(require_licensed_app("people_ops"))],
     )
     app.include_router(
         notifications_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+        dependencies=[Depends(require_licensed_app("people_ops"))],
     )
     app.include_router(
         esign_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("esign"))],
+        dependencies=[Depends(require_licensed_app("people_ops"))],
     )
     app.include_router(esign_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
     app.include_router(
         payroll_router,
         prefix="/api/v1",
         dependencies=[
-            Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+            # people_ops cukup untuk run internal (Workforce Cloud); run proyek
+            # tetap disaring lebih ketat oleh _assert_run_license di service layer.
+            Depends(require_any_licensed_app("people_ops", "payroll")),
             Depends(require_roles("operations", "management", "hr")),
         ],
     )
@@ -160,27 +162,28 @@ def create_app() -> FastAPI:
     app.include_router(
         bpjs_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("hr_payroll"))],
+        dependencies=[Depends(require_licensed_app("people_ops"))],
     )
     app.include_router(
         finance_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("operations_billing"))],
+        dependencies=[Depends(require_licensed_app("finance"))],
     )
-    # Payment Request lintas jalur (Fase 9c): guard OR dua aplikasi.
+    # Payment Request lintas bundle finance (PRD v2.0) — guard finance.
     app.include_router(
         payment_request_router,
         prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("finance"))],
     )
     app.include_router(
         accounting_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("finance_accounting"))],
+        dependencies=[Depends(require_licensed_app("accounting"))],
     )
     app.include_router(
         accounting_tx_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("finance_accounting"))],
+        dependencies=[Depends(require_licensed_app("accounting"))],
     )
     app.include_router(apps_router, prefix="/api/v1")
     app.include_router(rates_router, prefix="/api/v1")
@@ -195,12 +198,12 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_licensed_app("ai_addon"))],
     )
     app.include_router(chat_ws_router, prefix="/api/v1")
-    # Absensi harian (Fase 8): lintas dua aplikasi → guard OR.
+    # Absensi harian: bagian dari people_ops (PRD v2.0) — guard bundle.
     app.include_router(
         attendance_router,
         prefix="/api/v1",
         dependencies=[
-            Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+            Depends(require_licensed_app("people_ops")),
             Depends(require_roles("operations", "hr", "management")),
         ],
     )

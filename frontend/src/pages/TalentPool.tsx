@@ -1,7 +1,9 @@
 import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
+import { ScoreBadge } from "../components/Ai";
 import { CalloutBlock, PageHeader } from "../components/notion";
+import type { JobOrder } from "./JobOrders";
 
 interface TpRow {
   candidate_id: string;
@@ -47,6 +49,13 @@ const READINESS_LABELS: Record<string, string> = {
   n_minggu: "n minggu",
   belum_tentu: "Belum tentu",
 };
+
+interface MatchItem {
+  candidate_id: string;
+  match_score: number;
+  explain: string;
+  missing: string[];
+}
 
 function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   const qc = useQueryClient();
@@ -351,6 +360,8 @@ export default function TalentPool() {
   const [domisili, setDomisili] = useState("");
   const [skill, setSkill] = useState("");
   const [readiness, setReadiness] = useState("");
+  const [matchJobOrderId, setMatchJobOrderId] = useState("");
+  const [minMatchScore, setMinMatchScore] = useState("");
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -365,6 +376,24 @@ export default function TalentPool() {
     queryKey: ["talentpool", q, domisili, skill, readiness],
     queryFn: () => api.get<TpRow[]>(`/talentpool?${params.toString()}`),
   });
+
+  const { data: jobOrders } = useQuery({
+    queryKey: ["job-orders"],
+    queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
+  });
+
+  // Skor matching native Talent Cloud (PRD v3.0 §4) — hanya diambil saat JO dipilih.
+  const { data: matchScores } = useQuery({
+    queryKey: ["talentpool-match-scores", matchJobOrderId, minMatchScore],
+    queryFn: () =>
+      api.get<MatchItem[]>(
+        `/recruitment/job-orders/${matchJobOrderId}/matches?top_k=500&min_score=${minMatchScore || 0}`
+      ),
+    enabled: Boolean(matchJobOrderId),
+  });
+  const scoreByCandidate = new Map((matchScores ?? []).map((m) => [m.candidate_id, m]));
+  const matchedIds = matchJobOrderId ? new Set((matchScores ?? []).map((m) => m.candidate_id)) : null;
+  const visibleRows = (pool.data ?? []).filter((r) => !matchedIds || matchedIds.has(r.candidate_id));
 
   const intake = useMutation({
     mutationFn: (file: File) => {
@@ -431,6 +460,34 @@ export default function TalentPool() {
           <option value="belum_tentu">Belum tentu</option>
         </select>
         <button type="submit" className="btn-secondary">Filter</button>
+        <span className="mx-1" style={{ color: "var(--n-border)" }}>|</span>
+        <select
+          value={matchJobOrderId}
+          onChange={(e) => {
+            setMatchJobOrderId(e.target.value);
+            if (!e.target.value) setMinMatchScore("");
+          }}
+          className="input w-auto"
+          title="Nilai kecocokan terhadap job order (Talent Cloud native matching)"
+        >
+          <option value="">Skor match: semua talent</option>
+          {(jobOrders ?? []).map((jo) => (
+            <option key={jo.id} value={jo.id}>
+              Skor match vs {jo.title}
+            </option>
+          ))}
+        </select>
+        {matchJobOrderId && (
+          <input
+            type="number"
+            min={0}
+            max={100}
+            placeholder="Skor min."
+            value={minMatchScore}
+            onChange={(e) => setMinMatchScore(e.target.value)}
+            className="input w-24"
+          />
+        )}
       </form>
 
       <div className="card overflow-x-auto p-0">
@@ -444,11 +501,14 @@ export default function TalentPool() {
               <th className="th">Ekspektasi</th>
               <th className="th">Status TP</th>
               <th className="th">CV Standar</th>
+              {matchJobOrderId && <th className="th">Skor Match</th>}
               <th className="th"></th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
-            {(pool.data ?? []).map((r) => (
+            {visibleRows.map((r) => {
+              const match = scoreByCandidate.get(r.candidate_id);
+              return (
               <Fragment key={r.candidate_id}>
                 <tr>
                   <td className="td font-medium">{r.full_name}</td>
@@ -463,6 +523,11 @@ export default function TalentPool() {
                     )}
                   </td>
                   <td className="td">{r.latest_cv_version ? `v${r.latest_cv_version}` : "—"}</td>
+                  {matchJobOrderId && (
+                    <td className="td" title={match?.explain}>
+                      {match ? <ScoreBadge score={match.match_score} /> : "-"}
+                    </td>
+                  )}
                   <td className="td">
                     {r.latest_intake_id && (
                       <button
@@ -476,17 +541,20 @@ export default function TalentPool() {
                 </tr>
                 {openRow === r.candidate_id && r.latest_intake_id && (
                   <tr>
-                    <td colSpan={8} className="td">
+                    <td colSpan={matchJobOrderId ? 9 : 8} className="td">
                       <IntakeReviewPanel intakeId={r.latest_intake_id} />
                     </td>
                   </tr>
                 )}
               </Fragment>
-            ))}
-            {pool.data?.length === 0 && (
+              );
+            })}
+            {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
-                  Talent pool kosong pada filter ini. Unggah CV untuk memulai.
+                <td colSpan={matchJobOrderId ? 9 : 8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                  {matchJobOrderId
+                    ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
+                    : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
                 </td>
               </tr>
             )}

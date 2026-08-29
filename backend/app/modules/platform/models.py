@@ -31,6 +31,8 @@ class Tenant(Base):
     status: Mapped[TenantStatus] = mapped_column(
         Enum(TenantStatus, native_enum=False, length=50), default=TenantStatus.active
     )
+    # PRD v3.0 per-tenant billing override (inherit = ikut APP_MODE global)
+    billing_mode: Mapped[str] = mapped_column(String(20), default="inherit")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

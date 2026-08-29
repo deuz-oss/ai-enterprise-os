@@ -13,6 +13,26 @@ export interface EmployeeRow {
   join_date: string | null;
   status: string;
   user_id: string | null;
+  bpjs_kesehatan_no: string | null;
+  bpjs_ketenagakerjaan_no: string | null;
+  bpjs_kesehatan_status: string | null;
+  bpjs_ketenagakerjaan_status: string | null;
+  bpjs_kesehatan_valid_until: string | null;
+  bpjs_ketenagakerjaan_valid_until: string | null;
+  bpjs_kesehatan_card_key: string | null;
+  bpjs_ketenagakerjaan_card_key: string | null;
+}
+
+interface InsuranceRow {
+  id: string;
+  employee_id: string;
+  provider: string;
+  policy_no: string;
+  status: string;
+  start_date: string | null;
+  valid_until: string | null;
+  card_object_key: string | null;
+  policy_object_key: string | null;
 }
 
 interface SelfserviceAccount {
@@ -143,6 +163,39 @@ const ESIGN_STATUS_BADGES: Record<string, string> = {
 
 const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "lainnya"];
 
+// BPJS + Asuransi — PRD v3.0 §5 Workforce Cloud.
+const BPJS_STATUS_BADGES: Record<string, string> = {
+  aktif: "pill p-green",
+  nonaktif: "pill p-gray",
+  menunggu: "pill p-yellow",
+};
+
+const INSURANCE_STATUS_BADGES: Record<string, string> = {
+  aktif: "pill p-green",
+  kedaluwarsa: "pill p-red",
+  nonaktif: "pill p-gray",
+};
+
+const INSURANCE_PROVIDERS = [
+  "prudential",
+  "allianz",
+  "axa",
+  "manulife",
+  "bri_life",
+  "sinarmas",
+  "other",
+];
+
+const INSURANCE_PROVIDER_LABELS: Record<string, string> = {
+  prudential: "Prudential",
+  allianz: "Allianz",
+  axa: "AXA",
+  manulife: "Manulife",
+  bri_life: "BRI Life",
+  sinarmas: "Sinarmas",
+  other: "Lainnya",
+};
+
 const TYPE_LABELS: Record<string, string> = {
   ktp: "KTP",
   npwp: "NPWP",
@@ -163,6 +216,9 @@ export default function Employees() {
   });
   const fileRef = useRef<HTMLInputElement>(null);
   const docTypeRef = useRef<HTMLSelectElement>(null);
+  const bpjsKesehatanFileRef = useRef<HTMLInputElement>(null);
+  const bpjsKetenagakerjaanFileRef = useRef<HTMLInputElement>(null);
+  const [showInsuranceForm, setShowInsuranceForm] = useState(false);
 
   const { data: employees } = useQuery({
     queryKey: ["employees"],
@@ -217,6 +273,11 @@ export default function Employees() {
     queryKey: ["attendance-corrections"],
     queryFn: () => api.get<AttendanceCorrectionRow[]>("/employees/attendance-corrections"),
   });
+  const { data: insurances } = useQuery({
+    queryKey: ["employee-insurances", selectedId],
+    queryFn: () => api.get<InsuranceRow[]>(`/employees/${selectedId}/insurances`),
+    enabled: Boolean(selectedId),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees"] });
@@ -229,6 +290,47 @@ export default function Employees() {
       api.patch(`/employees/${id}`, { user_id: userId }),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["selfservice-accounts"] }),
+  });
+
+  const updateBpjsStatus = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/employees/${id}`, body),
+    onSuccess: invalidate,
+  });
+
+  const uploadBpjsCard = useMutation({
+    mutationFn: ({ id, formData }: { id: string; formData: FormData }) =>
+      api.upload(`/employees/${id}/bpjs-card`, formData),
+    onSuccess: invalidate,
+  });
+
+  const invalidateInsurances = () =>
+    qc.invalidateQueries({ queryKey: ["employee-insurances", selectedId] });
+
+  const createInsurance = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post(`/employees/${id}/insurances`, body),
+    onSuccess: () => {
+      setShowInsuranceForm(false);
+      invalidateInsurances();
+    },
+  });
+
+  const updateInsurance = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/employees/insurances/${id}`, body),
+    onSuccess: invalidateInsurances,
+  });
+
+  const deleteInsurance = useMutation({
+    mutationFn: (id: string) => api.delete(`/employees/insurances/${id}`),
+    onSuccess: invalidateInsurances,
+  });
+
+  const uploadInsuranceFile = useMutation({
+    mutationFn: ({ id, kind, formData }: { id: string; kind: "card" | "policy"; formData: FormData }) =>
+      api.upload(`/employees/insurances/${id}/${kind}`, formData),
+    onSuccess: invalidateInsurances,
   });
 
   const createEmployee = useMutation({
@@ -947,6 +1049,250 @@ export default function Employees() {
               )}
             </ul>
           </div>
+        </div>
+
+        <div className="card">
+          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>BPJS</h2>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {(
+              [
+                { type: "kesehatan", label: "BPJS Kesehatan", no: selected?.bpjs_kesehatan_no, statusVal: selected?.bpjs_kesehatan_status, validUntil: selected?.bpjs_kesehatan_valid_until, cardKey: selected?.bpjs_kesehatan_card_key, fileRef: bpjsKesehatanFileRef },
+                { type: "ketenagakerjaan", label: "BPJS Ketenagakerjaan", no: selected?.bpjs_ketenagakerjaan_no, statusVal: selected?.bpjs_ketenagakerjaan_status, validUntil: selected?.bpjs_ketenagakerjaan_valid_until, cardKey: selected?.bpjs_ketenagakerjaan_card_key, fileRef: bpjsKetenagakerjaanFileRef },
+              ] as const
+            ).map((b) => (
+              <div key={b.type} className="rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{b.label}</p>
+                  {b.statusVal && (
+                    <span className={`badge ${BPJS_STATUS_BADGES[b.statusVal] ?? "pill p-gray"}`}>{b.statusVal}</span>
+                  )}
+                </div>
+                <p className="mt-1 font-mono text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  {b.no ?? "Nomor belum diisi"}
+                </p>
+                <form
+                  className="mt-2 flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!selectedId) return;
+                    const form = new FormData(e.currentTarget);
+                    updateBpjsStatus.mutate({
+                      id: selectedId,
+                      body: {
+                        [`bpjs_${b.type}_status`]: form.get("status") || null,
+                        [`bpjs_${b.type}_valid_until`]: form.get("valid_until") || null,
+                      },
+                    });
+                  }}
+                >
+                  <select name="status" defaultValue={b.statusVal ?? ""} className="input w-auto py-1 text-xs">
+                    <option value="">—</option>
+                    <option value="aktif">aktif</option>
+                    <option value="nonaktif">nonaktif</option>
+                    <option value="menunggu">menunggu</option>
+                  </select>
+                  <input
+                    name="valid_until"
+                    type="date"
+                    defaultValue={b.validUntil ?? ""}
+                    className="input w-auto py-1 text-xs"
+                    title="Berlaku hingga"
+                  />
+                  <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
+                    Simpan
+                  </button>
+                </form>
+                <form
+                  className="mt-2 flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!selectedId || !b.fileRef.current?.files?.[0]) return;
+                    const fd = new FormData();
+                    fd.append("file", b.fileRef.current.files[0]);
+                    fd.append("bpjs_type", b.type);
+                    uploadBpjsCard.mutate({ id: selectedId, formData: fd });
+                    b.fileRef.current.value = "";
+                  }}
+                >
+                  <input ref={b.fileRef} type="file" required className="input w-auto py-1 text-xs" />
+                  <button disabled={uploadBpjsCard.isPending} className="btn-secondary py-1 text-xs">
+                    Upload Kartu
+                  </button>
+                  {b.cardKey && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!selectedId) return;
+                        const { url } = await api.get<{ url: string }>(
+                          `/employees/${selectedId}/bpjs-card/${b.type}/download-url`
+                        );
+                        window.open(url, "_blank");
+                      }}
+                      className="text-xs font-medium hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      Lihat Kartu
+                    </button>
+                  )}
+                </form>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Asuransi</h2>
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => setShowInsuranceForm(!showInsuranceForm)}
+            >
+              {showInsuranceForm ? "Tutup" : "+ Tambah Polis"}
+            </button>
+          </div>
+          {showInsuranceForm && (
+            <form
+              className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedId) return;
+                const form = new FormData(e.currentTarget);
+                createInsurance.mutate({
+                  id: selectedId,
+                  body: {
+                    provider: form.get("provider"),
+                    policy_no: form.get("policy_no"),
+                    start_date: form.get("start_date") || null,
+                    valid_until: form.get("valid_until") || null,
+                  },
+                });
+              }}
+            >
+              <select name="provider" defaultValue="prudential" className="input">
+                {INSURANCE_PROVIDERS.map((p) => (
+                  <option key={p} value={p}>
+                    {INSURANCE_PROVIDER_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+              <input name="policy_no" required placeholder="No. Polis" className="input" />
+              <input name="start_date" type="date" placeholder="Mulai" className="input" />
+              <input name="valid_until" type="date" placeholder="Berlaku hingga" className="input" />
+              <button disabled={createInsurance.isPending} className="btn sm:col-span-4">
+                Simpan Polis
+              </button>
+              {createInsurance.error && (
+                <p className="text-sm text-red-600 sm:col-span-4">
+                  {(createInsurance.error as Error).message}
+                </p>
+              )}
+            </form>
+          )}
+          <ul className="mt-3 space-y-2">
+            {(insurances ?? []).map((ins) => (
+              <li
+                key={ins.id}
+                className="rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--n-hover)" }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium" style={{ color: "var(--n-text)" }}>
+                      {INSURANCE_PROVIDER_LABELS[ins.provider] ?? ins.provider} · {ins.policy_no}
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      {ins.start_date ?? "?"} s/d {ins.valid_until ?? "-"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={ins.status}
+                      disabled={updateInsurance.isPending}
+                      onChange={(e) =>
+                        updateInsurance.mutate({ id: ins.id, body: { status: e.target.value } })
+                      }
+                      className={`badge cursor-pointer border-0 ${INSURANCE_STATUS_BADGES[ins.status] ?? "pill p-gray"}`}
+                    >
+                      <option value="aktif">aktif</option>
+                      <option value="kedaluwarsa">kedaluwarsa</option>
+                      <option value="nonaktif">nonaktif</option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        if (confirm("Hapus polis ini?")) deleteInsurance.mutate(ins.id);
+                      }}
+                      className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                  <label className="cursor-pointer font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
+                    {ins.card_object_key ? "Ganti Kartu" : "Upload Kartu"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        uploadInsuranceFile.mutate({ id: ins.id, kind: "card", formData: fd });
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {ins.card_object_key && (
+                    <button
+                      onClick={async () => {
+                        const { url } = await api.get<{ url: string }>(
+                          `/employees/insurances/${ins.id}/card/download-url`
+                        );
+                        window.open(url, "_blank");
+                      }}
+                      className="hover:opacity-80"
+                      style={{ color: "var(--n-text-muted)" }}
+                    >
+                      Lihat Kartu
+                    </button>
+                  )}
+                  <label className="cursor-pointer font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
+                    {ins.policy_object_key ? "Ganti Polis" : "Upload Polis"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        uploadInsuranceFile.mutate({ id: ins.id, kind: "policy", formData: fd });
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {ins.policy_object_key && (
+                    <button
+                      onClick={async () => {
+                        const { url } = await api.get<{ url: string }>(
+                          `/employees/insurances/${ins.id}/policy/download-url`
+                        );
+                        window.open(url, "_blank");
+                      }}
+                      className="hover:opacity-80"
+                      style={{ color: "var(--n-text-muted)" }}
+                    >
+                      Lihat Polis
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+            {insurances?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada polis asuransi.</li>
+            )}
+          </ul>
         </div>
 
         <div className="card">

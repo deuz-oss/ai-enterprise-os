@@ -2,8 +2,7 @@ import { FormEvent, useState } from "react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
-import { AiResultCard, ScoreBadge } from "../components/Ai";
-import type { MatchResult } from "../components/Ai";
+import { ScoreBadge } from "../components/Ai";
 import type { ClientRow } from "./Clients";
 
 export interface JobOrder {
@@ -15,6 +14,20 @@ export interface JobOrder {
   salary_max: number | null;
   due_date: string | null;
   status: string;
+}
+
+interface MatchCandidateRow {
+  id: string;
+  full_name: string;
+  city: string | null;
+  expected_salary: number | null;
+}
+
+interface MatchItem {
+  candidate_id: string;
+  match_score: number;
+  explain: string;
+  missing: string[];
 }
 
 const STATUSES = ["open", "screening", "interview_klien", "offering", "filled", "closed"];
@@ -32,7 +45,8 @@ const BADGE_COLORS: Record<string, string> = {
 export default function JobOrders() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchJoId, setMatchJoId] = useState<string | null>(null);
+  const [matchResults, setMatchResults] = useState<MatchItem[] | null>(null);
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -40,6 +54,10 @@ export default function JobOrders() {
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
+  });
+  const { data: matchCandidates } = useQuery({
+    queryKey: ["candidates-for-match"],
+    queryFn: () => api.get<MatchCandidateRow[]>("/recruitment/candidates"),
   });
 
   const invalidate = () => {
@@ -62,8 +80,9 @@ export default function JobOrders() {
   });
 
   const match = useMutation({
-    mutationFn: (id: string) => api.post<MatchResult>(`/ai/job-orders/${id}/match`),
-    onSuccess: (data) => setMatchResult(data),
+    mutationFn: (id: string) =>
+      api.post<MatchItem[]>(`/recruitment/job-orders/${id}/match`, { top_k: 20 }),
+    onSuccess: (data) => setMatchResults(data),
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -155,9 +174,12 @@ export default function JobOrders() {
                   <button
                     className="btn-secondary py-1 text-xs"
                     disabled={match.isPending}
-                    onClick={() => match.mutate(jo.id)}
+                    onClick={() => {
+                      setMatchJoId(jo.id);
+                      match.mutate(jo.id);
+                    }}
                   >
-                    {match.isPending ? "AI menilai..." : "Cari Kandidat"}
+                    {match.isPending && matchJoId === jo.id ? "AI menilai..." : "Cari Kandidat"}
                   </button>
                 </td>
               </tr>
@@ -173,17 +195,22 @@ export default function JobOrders() {
         </table>
       </div>
 
-      {(match.isPending || match.error || matchResult) && (
+      {(match.isPending || match.error || matchResults) && (
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[var(--n-text)]">Hasil AI Matching</h2>
-            {matchResult && (
+            <h2 className="text-lg font-semibold text-[var(--n-text)]">
+              Hasil AI Matching — Talent Cloud
+            </h2>
+            {matchJoId && (
               <span className="text-xs text-[var(--n-text-muted)]">
-                {matchResult.evaluated} kandidat dinilai
-                {matchResult.reused > 0 && ` · ${matchResult.reused} memakai hasil sebelumnya`}
+                {jobOrders?.find((j) => j.id === matchJoId)?.title}
               </span>
             )}
           </div>
+          <p className="text-[11px] text-[var(--n-text-muted)]">
+            Matching native Talent Cloud — dikenakan 2k per pencarian job order, bukan per
+            kandidat.
+          </p>
           {match.isPending && (
             <p className="text-sm text-[var(--n-text-muted)]">
               AI sedang menilai kandidat (bisa memakan waktu beberapa saat)...
@@ -192,25 +219,41 @@ export default function JobOrders() {
           {match.error && (
             <p className="text-sm text-red-600">{(match.error as Error).message}</p>
           )}
-          {matchResult && (
+          {matchResults && (
             <ol className="space-y-2">
-              {matchResult.results.map((item, idx) => (
-                <li key={item.candidate.id} className="flex gap-3">
-                  <span className="w-6 pt-4 text-right text-sm font-bold text-[var(--n-text-muted)]">
-                    {idx + 1}.
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--n-text)]">
-                      {item.candidate.full_name}{" "}
-                      <span className={`ml-1 text-xs`}>
-                        (skor <ScoreBadge score={item.screening.score} />)
-                      </span>
-                    </p>
-                    <AiResultCard screening={item.screening} />
-                  </div>
-                </li>
-              ))}
-              {matchResult.results.length === 0 && (
+              {matchResults.map((item, idx) => {
+                const cand = matchCandidates?.find((c) => c.id === item.candidate_id);
+                return (
+                  <li key={item.candidate_id} className="flex gap-3">
+                    <span className="w-6 pt-0.5 text-right text-sm font-bold text-[var(--n-text-muted)]">
+                      {idx + 1}.
+                    </span>
+                    <div className="min-w-0 flex-1 rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
+                      <p className="text-sm font-medium text-[var(--n-text)]">
+                        {cand?.full_name ?? item.candidate_id}{" "}
+                        <span className="ml-1 text-xs">
+                          (skor <ScoreBadge score={item.match_score} />/100)
+                        </span>
+                      </p>
+                      <p className="text-xs text-[var(--n-text-muted)]">
+                        {cand?.city ?? "-"}
+                        {cand?.expected_salary ? ` · ${formatRupiah(cand.expected_salary)}` : ""}
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--n-text)]">{item.explain}</p>
+                      {item.missing.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {item.missing.map((m) => (
+                            <span key={m} className="pill p-red text-[10px]">
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+              {matchResults.length === 0 && (
                 <li className="text-sm text-[var(--n-text-muted)]">
                   Tidak ada kandidat aktif untuk job order ini.
                 </li>

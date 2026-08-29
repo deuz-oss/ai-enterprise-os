@@ -9,6 +9,7 @@ interface TenantRow {
   name: string;
   slug: string;
   status: string;
+  billing_mode: string;
   created_at: string;
 }
 
@@ -29,6 +30,14 @@ interface LicenseRow {
 const STATUS_BADGES: Record<string, string> = {
   aktif: "pill p-green",
   ditangguhkan: "pill p-red",
+};
+
+// Mode billing per-tenant — PRD v3.0 §1: internal bypass semua guard lisensi,
+// commercial selalu enforce, inherit ikut APP_MODE global (.env).
+const BILLING_MODE_LABELS: Record<string, { label: string; cls: string; hint: string }> = {
+  inherit: { label: "inherit", cls: "pill p-gray", hint: "ikut APP_MODE global (.env)" },
+  internal: { label: "internal", cls: "pill p-blue", hint: "bypass semua guard lisensi" },
+  commercial: { label: "commercial", cls: "pill p-orange", hint: "selalu enforce lisensi" },
 };
 
 export default function PlatformTenants() {
@@ -57,6 +66,12 @@ export default function PlatformTenants() {
   const toggleStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/platform/tenants/${id}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-tenants"] }),
+  });
+
+  const setBillingMode = useMutation({
+    mutationFn: ({ id, billingMode }: { id: string; billingMode: string }) =>
+      api.patch(`/platform/tenants/${id}/billing-mode`, { billing_mode: billingMode }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-tenants"] }),
   });
 
@@ -169,12 +184,15 @@ export default function PlatformTenants() {
               <th className="th">Nama</th>
               <th className="th">Slug</th>
               <th className="th">Status</th>
+              <th className="th">Mode Billing</th>
               <th className="th">Dibuat</th>
               <th className="th">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
-            {(tenants ?? []).map((t) => (
+            {(tenants ?? []).map((t) => {
+              const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
+              return (
               <tr key={t.id} className="hover:bg-[var(--n-hover)]">
                 <td className="td font-medium">{t.name}</td>
                 <td className="td font-mono text-xs">{t.slug}</td>
@@ -182,6 +200,23 @@ export default function PlatformTenants() {
                   <span className={`badge border-0 ${STATUS_BADGES[t.status] ?? ""}`}>
                     {t.status}
                   </span>
+                </td>
+                <td className="td">
+                  <select
+                    title={bm.hint}
+                    value={t.billing_mode}
+                    disabled={setBillingMode.isPending}
+                    onChange={(e) =>
+                      setBillingMode.mutate({ id: t.id, billingMode: e.target.value })
+                    }
+                    className={`badge cursor-pointer border-0 ${bm.cls}`}
+                  >
+                    {Object.entries(BILLING_MODE_LABELS).map(([value, meta]) => (
+                      <option key={value} value={value}>
+                        {meta.label}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="td text-xs" style={{ color: "var(--n-text-muted)" }}>
                   {new Date(t.created_at).toLocaleDateString("id-ID")}
@@ -214,10 +249,11 @@ export default function PlatformTenants() {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {(expandedId !== null) && (
               <tr>
-                <td colSpan={5} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
+                <td colSpan={6} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {(licenses ?? []).map((lic) => (
                       <div
@@ -252,7 +288,7 @@ export default function PlatformTenants() {
             )}
             {isLoading === false && tenants?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada tenant.
                 </td>
               </tr>

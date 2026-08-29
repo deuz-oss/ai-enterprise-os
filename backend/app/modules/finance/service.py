@@ -767,6 +767,114 @@ def list_payment_requests(
     return list(db.execute(stmt).scalars())
 
 
+# ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
+
+
+def set_tax_invoice(db: Session, invoice_id: str, payload: dict) -> Invoice:
+    inv = _get_invoice(db, invoice_id)
+    for field in [
+        "tax_invoice_no",
+        "tax_invoice_date",
+        "lawan_npwp",
+        "lawan_nama",
+        "lawan_alamat",
+        "dpp_amount",
+        "kode_transaksi",
+        "no_seri_faktur",
+    ]:
+        if field in payload:
+            setattr(inv, field, payload[field])
+    if "tax_invoice_status" in payload:
+        inv.tax_invoice_status = payload["tax_invoice_status"]
+    else:
+        inv.tax_invoice_status = "draft"
+    db.commit()
+    db.refresh(inv)
+    audit.log_event(
+        db,
+        action="invoice.tax_invoice_set",
+        entity_type="invoice",
+        entity_id=str(inv.id),
+        detail={"no_seri": inv.no_seri_faktur},
+    )
+    return inv
+
+
+def send_tax_invoice(db: Session, invoice_id: str) -> Invoice:
+    from app.core.config import get_settings
+
+    inv = _get_invoice(db, invoice_id)
+    settings = get_settings()
+    # Validasi minimal
+    if not inv.no_seri_faktur or not inv.lawan_npwp:
+        raise HTTPException(status_code=422, detail="Lawan NPWP dan No Seri Faktur wajib diisi")
+    if not settings.efaktur_api_url or settings.efaktur_provider == "":
+        # Simulasi
+        inv.tax_invoice_status = "approved"
+        inv.efaktur_nsr = f"NSFP-SIM-{inv.no_seri_faktur}"
+        inv.efaktur_qr_url = f"https://djponline.pajak.go.id/qr/{inv.no_seri_faktur}"
+        inv.efaktur_payload = '{"simulasi": true}'
+    else:
+        # Real DJP call would go here — stub approved
+        inv.tax_invoice_status = "terkirim_djp"
+        inv.efaktur_payload = '{"stub": "terkirim"}'
+    inv.faktur_status_detail = None
+    db.commit()
+    db.refresh(inv)
+    audit.log_event(
+        db,
+        action="invoice.tax_invoice_sent",
+        entity_type="invoice",
+        entity_id=str(inv.id),
+        detail={"status": inv.tax_invoice_status},
+    )
+    return inv
+
+
+def cancel_tax_invoice(db: Session, invoice_id: str) -> Invoice:
+    inv = _get_invoice(db, invoice_id)
+    inv.tax_invoice_status = "dibatalkan"
+    db.commit()
+    db.refresh(inv)
+    audit.log_event(
+        db, action="invoice.tax_invoice_cancelled", entity_type="invoice", entity_id=str(inv.id)
+    )
+    return inv
+
+
+def replace_tax_invoice(db: Session, invoice_id: str, pengganti_ref: str | None) -> Invoice:
+    inv = _get_invoice(db, invoice_id)
+    if pengganti_ref:
+        try:
+            inv.faktur_pengganti_ref = parse_uuid(pengganti_ref)
+        except Exception:
+            pass
+    inv.tax_invoice_status = "pengganti"
+    db.commit()
+    db.refresh(inv)
+    audit.log_event(
+        db,
+        action="invoice.tax_invoice_replaced",
+        entity_type="invoice",
+        entity_id=str(inv.id),
+        detail={"pengganti_ref": pengganti_ref},
+    )
+    return inv
+
+
+def tax_invoice_pdf(db: Session, invoice_id: str) -> tuple[bytes, str]:
+    inv = _get_invoice(db, invoice_id)
+    # Simple PDF stub — real would use reportlab
+    content = (
+        f"Faktur Pajak {inv.no_seri_faktur or inv.tax_invoice_no or inv.invoice_no}\n"
+        f"NSFP: {inv.efaktur_nsr or '-'}\n"
+        f"Lawan: {inv.lawan_nama or inv.client.name}\n"
+        f"DPP: {inv.dpp_amount}\n"
+        f"QR: {inv.efaktur_qr_url or '-'}"
+    ).encode()
+    return content, f"faktur-{inv.invoice_no}.pdf"
+
+
 def list_payment_requests_detail(
     db: Session,
     status: PaymentRequestStatus | None = None,

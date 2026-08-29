@@ -168,3 +168,78 @@ def test_cashflow_crud_and_summary(client):
 
     entries = client.get("/api/v1/finance/cashflow", headers=headers, params={"year": 2026}).json()
     assert len(entries) == 2
+
+
+def _seed_invoice(client, headers, name="PT Faktur Jaya"):
+    client_id, _ = _seed_client_with_payroll(client, headers, name=name)
+    resp = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 6, "fee_amount": 1_000_000},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def test_tax_invoice_full_lifecycle(client):
+    """Faktur DJP PRD v3.0 §7: set → send (simulasi, EFAKTUR_PROVIDER kosong di test) → replace.
+
+    Regresi untuk bug audit.log_event(target_type=/target_id=/payload=) yang membuat
+    keempat endpoint ini 500 di setiap panggilan sebelum diperbaiki.
+    """
+    headers = _auth_header(client)
+    invoice_id = _seed_invoice(client, headers)
+
+    set_resp = client.put(
+        f"/api/v1/finance/invoices/{invoice_id}/tax-invoice",
+        headers=headers,
+        json={
+            "lawan_npwp": "01.234.567.8-901.000",
+            "lawan_nama": "PT Faktur Jaya",
+            "dpp_amount": 1_000_000,
+            "kode_transaksi": "01",
+            "no_seri_faktur": "010.001-26.00000001",
+        },
+    )
+    assert set_resp.status_code == 200, set_resp.text
+    inv = set_resp.json()
+    assert inv["tax_invoice_status"] == "draft"
+    assert inv["no_seri_faktur"] == "010.001-26.00000001"
+
+    send_resp = client.post(
+        f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/send", headers=headers
+    )
+    assert send_resp.status_code == 200, send_resp.text
+    sent = send_resp.json()
+    assert sent["tax_invoice_status"] == "approved"  # mode simulasi: efaktur_provider kosong
+    assert sent["efaktur_nsr"]
+    assert sent["efaktur_qr_url"]
+
+    replace_resp = client.post(
+        f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/replace",
+        headers=headers,
+        json={"pengganti_ref": None},
+    )
+    assert replace_resp.status_code == 200, replace_resp.text
+    assert replace_resp.json()["tax_invoice_status"] == "pengganti"
+
+    pdf_resp = client.get(f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/pdf", headers=headers)
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+
+
+def test_tax_invoice_send_requires_npwp_and_no_seri(client):
+    headers = _auth_header(client)
+    invoice_id = _seed_invoice(client, headers, name="PT Belum Lengkap")
+
+    resp = client.post(f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/send", headers=headers)
+    assert resp.status_code == 422
+
+
+def test_tax_invoice_cancel(client):
+    headers = _auth_header(client)
+    invoice_id = _seed_invoice(client, headers, name="PT Batal Faktur")
+
+    resp = client.post(f"/api/v1/finance/invoices/{invoice_id}/tax-invoice/cancel", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["tax_invoice_status"] == "dibatalkan"

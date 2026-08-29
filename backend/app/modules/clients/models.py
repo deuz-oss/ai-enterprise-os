@@ -35,6 +35,8 @@ class Client(TenantMixin, Base):
     status: Mapped[ClientStatus] = mapped_column(
         Enum(ClientStatus, native_enum=False, length=50), default=ClientStatus.active
     )
+    # PRD v3.0 auto prospek→aktif
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     contract_start: Mapped[date | None] = mapped_column(Date, default=None)
     contract_end: Mapped[date | None] = mapped_column(Date, default=None, index=True)
     lead_id: Mapped[UUID | None] = mapped_column(ForeignKey("leads.id"), default=None)

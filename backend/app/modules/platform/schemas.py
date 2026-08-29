@@ -17,6 +17,11 @@ class TenantCreate(BaseModel):
 class TenantUpdate(BaseModel):
     name: str | None = None
     status: TenantStatus | None = None
+    billing_mode: str | None = Field(default=None, pattern=r"^(inherit|internal|commercial)$")
+
+
+class BillingModeUpdate(BaseModel):
+    billing_mode: str = Field(pattern=r"^(inherit|internal|commercial)$")
 
 
 class TenantOut(BaseModel):
@@ -26,6 +31,7 @@ class TenantOut(BaseModel):
     name: str
     slug: str
     status: TenantStatus
+    billing_mode: str = "inherit"
     created_at: datetime
 
 

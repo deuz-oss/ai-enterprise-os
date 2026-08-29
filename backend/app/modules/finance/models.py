@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -24,6 +25,18 @@ class InvoiceStatus(str, enum.Enum):
     sent = "terkirim"
     paid = "dibayar"
     cancelled = "dibatalkan"
+
+
+class TaxInvoiceStatus(str, enum.Enum):
+    """Status faktur pajak e-Faktur DJP — PRD v2.0 Finance."""
+
+    belum_buat = "belum_buat"
+    draft = "draft"
+    menunggu_approval = "menunggu_approval"
+    terkirim_djp = "terkirim_djp"
+    approved = "approved"
+    ditolak = "ditolak"
+    dibatalkan = "dibatalkan"
 
 
 class Invoice(TenantMixin, Base):
@@ -42,6 +55,27 @@ class Invoice(TenantMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), index=True)
     invoice_no: Mapped[str] = mapped_column(String(50), index=True)
+    # Faktur pajak — PRD v3.0 lengkap (13 kolom, TEXT payload)
+    tax_invoice_no: Mapped[str | None] = mapped_column(String(50), default=None, index=True)
+    tax_invoice_status: Mapped[str | None] = mapped_column(String(30), default=None, index=True)
+    tax_invoice_date: Mapped[date | None] = mapped_column(Date, default=None)
+    lawan_npwp: Mapped[str | None] = mapped_column(String(20), default=None)
+    lawan_nama: Mapped[str | None] = mapped_column(String(255), default=None)
+    lawan_alamat: Mapped[str | None] = mapped_column(String(500), default=None)
+    dpp_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
+    kode_transaksi: Mapped[str | None] = mapped_column(String(3), default=None)  # 01/04/09
+    no_seri_faktur: Mapped[str | None] = mapped_column(
+        String(30), default=None, index=True
+    )  # 010.001-24.12345678
+    faktur_pengganti_ref: Mapped[UUID | None] = mapped_column(
+        ForeignKey("invoices.id"), default=None
+    )
+    faktur_status_detail: Mapped[str | None] = mapped_column(String(500), default=None)
+    efaktur_nsr: Mapped[str | None] = mapped_column(String(100), default=None)  # NSFP DJP
+    efaktur_qr_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    efaktur_payload: Mapped[str | None] = mapped_column(
+        Text, default=None
+    )  # JSON DJP response — TEXT
     year: Mapped[int] = mapped_column(Integer, index=True)
     month: Mapped[int] = mapped_column(Integer, index=True)
     payroll_total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)

@@ -149,6 +149,41 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
     return service.update_invoice(db, invoice_id, payload)
 
 
+# ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
+
+
+@router.put("/invoices/{invoice_id}/tax-invoice", response_model=InvoiceOut)
+def set_tax_invoice(invoice_id: str, payload: dict, db: Session = Depends(get_db)):
+    return service.set_tax_invoice(db, invoice_id, payload)
+
+
+@router.post("/invoices/{invoice_id}/tax-invoice/send", response_model=InvoiceOut)
+def send_tax_invoice(invoice_id: str, db: Session = Depends(get_db)):
+    return service.send_tax_invoice(db, invoice_id)
+
+
+@router.post("/invoices/{invoice_id}/tax-invoice/cancel", response_model=InvoiceOut)
+def cancel_tax_invoice(invoice_id: str, db: Session = Depends(get_db)):
+    return service.cancel_tax_invoice(db, invoice_id)
+
+
+@router.post("/invoices/{invoice_id}/tax-invoice/replace", response_model=InvoiceOut)
+def replace_tax_invoice(invoice_id: str, payload: dict, db: Session = Depends(get_db)):
+    return service.replace_tax_invoice(db, invoice_id, payload.get("pengganti_ref"))
+
+
+@router.get("/invoices/{invoice_id}/tax-invoice/pdf")
+def tax_invoice_pdf(invoice_id: str, db: Session = Depends(get_db)):
+    pdf_bytes, filename = service.tax_invoice_pdf(db, invoice_id)
+    from fastapi import Response
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ---------- Cash flow ----------
 
 

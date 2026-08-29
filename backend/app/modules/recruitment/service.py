@@ -1,14 +1,20 @@
+import json
+import math
+from datetime import UTC
+
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import storage
 from app.core.database import parse_uuid
+from app.core.llm import ai_configured, chat_completion, embed_texts
 from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.recruitment.models import (
     Candidate,
     CandidateStatus,
+    InterviewSchedule,
     JobOrder,
     JobOrderStatus,
     Placement,
@@ -17,10 +23,13 @@ from app.modules.recruitment.models import (
 from app.modules.recruitment.schemas import (
     CandidateCreate,
     CandidateUpdate,
+    InterviewScheduleCreate,
+    InterviewScheduleUpdate,
     JobOrderCreate,
     JobOrderUpdate,
     PlacementCreate,
 )
+from app.modules.talentpool.models import CvIntake
 
 # ---------- Job orders ----------
 
@@ -188,6 +197,42 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
         jo.status = JobOrderStatus.screening
     db.commit()
     db.refresh(placement)
+    # PRD v3.0 auto prospek→aktif: placement pertama untuk client ini → client aktif
+    try:
+        from datetime import datetime
+
+        from app.modules.clients.models import ClientStatus
+
+        client = db.get(Client, jo.client_id)
+        if client and client.status != ClientStatus.active:
+            existing_active = (
+                db.execute(
+                    select(Placement)
+                    .join(JobOrder, Placement.job_order_id == JobOrder.id)
+                    .where(
+                        JobOrder.client_id == client.id,
+                        Placement.status != PlacementStatus.cancelled,
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if existing_active and existing_active.id == placement.id:
+                client.status = ClientStatus.active
+                try:
+                    client.activated_at = datetime.now(UTC)
+                except Exception:
+                    pass
+                audit.log_event(
+                    db,
+                    action="client.auto_activated",
+                    entity_type="client",
+                    entity_id=str(client.id),
+                    detail={"placement_id": str(placement.id)},
+                )
+                db.commit()
+    except Exception:
+        pass
     # Fase 13: kunci versi CV standar terbaru sebagai bukti submission (§10.3).
     try:
         from app.modules.talentpool.service import lock_version_for_placement
@@ -244,3 +289,241 @@ def update_placement_status(
     db.commit()
     db.refresh(placement)
     return placement
+
+
+# ---------- Interview Schedules — PRD v3.0 Talent Cloud ----------
+
+
+def create_interview(
+    db: Session, payload: InterviewScheduleCreate, created_by=None
+) -> InterviewSchedule:
+    candidate = _get_candidate(db, str(payload.candidate_id))
+    jo = _get_job_order(db, str(payload.job_order_id))
+    sched = InterviewSchedule(
+        candidate_id=candidate.id,
+        job_order_id=jo.id,
+        interviewer_id=payload.interviewer_id,
+        scheduled_at=payload.scheduled_at,
+        location=payload.location,
+        meeting_url=payload.meeting_url,
+        created_by=created_by,
+    )
+    db.add(sched)
+    db.commit()
+    db.refresh(sched)
+    try:
+        audit.log_event(
+            db,
+            action="interview.scheduled",
+            entity_type="job_order",
+            entity_id=str(jo.id),
+            detail={"candidate_id": str(candidate.id), "scheduled_at": str(sched.scheduled_at)},
+        )
+    except Exception:
+        pass
+    return sched
+
+
+def list_interviews(db: Session, job_order_id: str | None = None) -> list[InterviewSchedule]:
+    stmt = select(InterviewSchedule).order_by(InterviewSchedule.scheduled_at.desc())
+    if job_order_id:
+        stmt = stmt.where(InterviewSchedule.job_order_id == parse_uuid(job_order_id))
+    return list(db.execute(stmt).scalars())
+
+
+def update_interview(
+    db: Session, interview_id: str, payload: InterviewScheduleUpdate
+) -> InterviewSchedule:
+    sched = db.get(InterviewSchedule, parse_uuid(interview_id))
+    if not sched:
+        raise HTTPException(status_code=404, detail="Interview tidak ditemukan")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(sched, field, value)
+    db.commit()
+    db.refresh(sched)
+    return sched
+
+
+# ---------- AI Matching Native — PRD v3.0 Talent Cloud ----------
+
+
+def _candidate_profile(db: Session, candidate: Candidate) -> dict:
+    """Profil kandidat untuk matching, sumber utama `CvIntake.extracted` JSON
+    terstruktur (menutup gap audit `ai/service.py:64` — bukan `cv_text` mentah),
+    fallback field `Candidate` mentah bila belum ada intake."""
+    intake = db.execute(
+        select(CvIntake)
+        .where(CvIntake.candidate_id == candidate.id, CvIntake.extracted.is_not(None))
+        .order_by(CvIntake.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    data: dict = {}
+    if intake and intake.extracted:
+        try:
+            data = json.loads(intake.extracted)
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+
+    skills = [str(s) for s in (data.get("skills") or [])] or (candidate.skills or "").split()
+    experience = data.get("experience") or []
+    certifications = [
+        str(c.get("nama")) for c in (data.get("certifications") or []) if c.get("nama")
+    ]
+    domisili = data.get("domisili") or candidate.city
+    readiness = data.get("readiness") or (intake.readiness if intake else None)
+    expected_salary = data.get("expected_salary") or (
+        float(candidate.expected_salary) if candidate.expected_salary else None
+    )
+
+    text_parts = [data.get("summary") or ""]
+    if skills:
+        text_parts.append("Skill: " + ", ".join(skills))
+    for exp in experience[:5]:
+        text_parts.append(
+            (
+                f"{exp.get('posisi') or ''} di {exp.get('perusahaan') or ''}. "
+                f"{exp.get('ringkasan') or ''}"
+            ).strip()
+        )
+    if certifications:
+        text_parts.append("Sertifikasi: " + ", ".join(certifications))
+    text = "\n".join(p for p in text_parts if p) or candidate.full_name
+
+    return {
+        "text": text,
+        "skills": [s.lower() for s in skills],
+        "domisili": (domisili or "").lower(),
+        "readiness": readiness,
+        "expected_salary": expected_salary,
+        "certifications": [c.lower() for c in certifications],
+    }
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if not norm_a or not norm_b:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _rule_bonus(jo: JobOrder, profile: dict) -> int:
+    bonus = 0
+    jo_blob = f"{jo.title or ''} {jo.requirements or ''}".lower()
+    if profile["domisili"] and profile["domisili"] in jo_blob:
+        bonus += 8
+    if profile["readiness"] == "segera":
+        bonus += 5
+    elif profile["readiness"] == "n_minggu":
+        bonus += 2
+    salary = profile["expected_salary"]
+    if salary and jo.salary_min and jo.salary_max:
+        try:
+            if float(jo.salary_min) <= float(salary) <= float(jo.salary_max):
+                bonus += 7
+        except (TypeError, ValueError):
+            pass
+    return bonus
+
+
+def _missing_requirements(jo: JobOrder, profile: dict) -> list[str]:
+    missing: list[str] = []
+    if jo.requirements and "k3" in jo.requirements.lower():
+        blob = " ".join(profile["skills"] + profile["certifications"])
+        if "k3" not in blob:
+            missing.append("sertifikasi K3")
+    return missing
+
+
+def _llm_rerank_explain(jo: JobOrder, entries: list[tuple[Candidate, dict]]) -> dict:
+    """Satu panggilan LLM untuk explain top kandidat (PRD §4 — LLM rerank).
+    Gagal apapun (AI belum dikonfigurasi/provider error) → dict kosong,
+    caller fallback ke explain deterministik. Tidak boleh mematahkan matching."""
+    if not entries:
+        return {}
+    system = (
+        "Anda asisten rekrutmen. Untuk tiap kandidat, jelaskan singkat (<=15 kata, "
+        "Bahasa Indonesia) mengapa cocok untuk job order ini berdasarkan profil yang diberikan. "
+        'Balas HANYA JSON: {"explanations": {"<candidate_id>": "<alasan singkat>"}}'
+    )
+    user_payload = {
+        "job_order": {"title": jo.title, "requirements": jo.requirements},
+        "candidates": [
+            {
+                "candidate_id": str(cand.id),
+                "skills": profile["skills"][:10],
+                "text": profile["text"][:500],
+            }
+            for cand, profile in entries
+        ],
+    }
+    try:
+        result = chat_completion(system, json.dumps(user_payload, ensure_ascii=False))
+        explanations = result.get("explanations", {}) if isinstance(result, dict) else {}
+        return {str(k): str(v) for k, v in explanations.items()}
+    except Exception:  # noqa: BLE001 - AI rerank tidak boleh mematahkan matching
+        return {}
+
+
+def match_candidates(db: Session, job_order_id: str, top_k: int = 50) -> list[dict]:
+    """Matching native 0-100: embedding cosine (bila AI aktif) + rules
+    (domisili, readiness, expected_salary) + LLM rerank explain untuk top hasil.
+    Fallback deterministik (skills overlap) bila AI belum dikonfigurasi/gagal."""
+    jo = _get_job_order(db, job_order_id)
+    candidates = list(
+        db.execute(
+            select(Candidate).where(Candidate.status != CandidateStatus.archived).limit(500)
+        ).scalars()
+    )
+    profiles = [_candidate_profile(db, cand) for cand in candidates]
+
+    jo_text = "\n".join(filter(None, [jo.title, jo.description, jo.requirements])) or (
+        jo.title or ""
+    )
+    jo_vec: list[float] | None = None
+    cand_vecs: list[list[float]] | None = None
+    if ai_configured() and jo_text.strip():
+        try:
+            vectors = embed_texts([jo_text] + [p["text"] for p in profiles])
+            jo_vec, cand_vecs = vectors[0], vectors[1:]
+        except Exception:  # noqa: BLE001 - AI gagal → fallback heuristik, jangan putus matching
+            jo_vec, cand_vecs = None, None
+
+    jo_skills = set((jo.requirements or jo.title or "").lower().split())
+    scored: list[tuple[Candidate, int, dict]] = []
+    for idx, cand in enumerate(candidates):
+        profile = profiles[idx]
+        if jo_vec is not None and cand_vecs is not None:
+            similarity = max(0.0, _cosine(jo_vec, cand_vecs[idx]))
+            base = round(similarity * 80)
+        else:
+            overlap = len(jo_skills & set(profile["skills"])) if jo_skills else 0
+            base = min(80, 50 + overlap * 10) if jo_skills else 50
+        score = max(0, min(100, base + _rule_bonus(jo, profile)))
+        scored.append((cand, score, profile))
+
+    scored.sort(key=lambda row: row[1], reverse=True)
+    top = scored[:top_k]
+
+    explains: dict[str, str] = {}
+    if jo_vec is not None and top:
+        explains = _llm_rerank_explain(jo, [(cand, profile) for cand, _, profile in top[:10]])
+
+    results: list[dict] = []
+    for cand, score, profile in top:
+        explain = explains.get(str(cand.id))
+        if not explain:
+            matched = sorted(jo_skills & set(profile["skills"]))
+            explain = f"skill cocok: {', '.join(matched)}" if matched else "kecocokan umum"
+        results.append(
+            {
+                "candidate_id": cand.id,
+                "match_score": score,
+                "explain": explain,
+                "missing": _missing_requirements(jo, profile),
+            }
+        )
+    return results

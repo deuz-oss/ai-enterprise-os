@@ -161,3 +161,40 @@ def test_tenant_ditangguhkan_tidak_bisa_login(client):
         json={"email": "admin-gamma@example.com", "password": "password123"},
     )
     assert denied.status_code == 403
+
+
+def test_billing_mode_override_per_tenant(client):
+    """PRD v3.0 §1 — mode operasi per-tenant override (PlatformTenants.tsx).
+
+    Regresi untuk bug audit.log_event(target_type=/target_id=/payload=) yang
+    membuat endpoint ini pernah gagal diam-diam sebelum diperbaiki.
+    """
+    body = _provision(client, "delta")
+    plat = _platform_admin_header(client)
+
+    listed = client.get("/api/v1/platform/tenants", headers=plat).json()
+    seeded = next(t for t in listed if t["id"] == body["id"])
+    assert seeded["billing_mode"] == "inherit"
+
+    to_internal = client.patch(
+        f"/api/v1/platform/tenants/{body['id']}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "internal"},
+    )
+    assert to_internal.status_code == 200, to_internal.text
+    assert to_internal.json()["billing_mode"] == "internal"
+
+    to_commercial = client.patch(
+        f"/api/v1/platform/tenants/{body['id']}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "commercial"},
+    )
+    assert to_commercial.status_code == 200
+    assert to_commercial.json()["billing_mode"] == "commercial"
+
+    invalid = client.patch(
+        f"/api/v1/platform/tenants/{body['id']}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "gratis"},
+    )
+    assert invalid.status_code == 422

@@ -126,3 +126,93 @@ def test_duplicate_job_order_requires_existing_client(client):
         json={"client_id": "00000000-0000-0000-0000-000000000000", "title": "X"},
     )
     assert resp.status_code == 404
+
+
+def test_interview_schedule_crud(client):
+    """PRD v3.0 §4 action 1 — Schedule Interview.
+
+    Regresi untuk bug audit.log_event(target_type=/target_id=/payload=) yang membuat
+    audit trail `interview.scheduled` gagal ditulis sebelum diperbaiki (dibungkus
+    try/except sehingga sebelumnya lolos diam-diam tanpa 500, tapi tanpa jejak audit).
+    """
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+
+    created = client.post(
+        "/api/v1/recruitment/interviews",
+        headers=headers,
+        json={
+            "candidate_id": cand_id,
+            "job_order_id": jo_id,
+            "scheduled_at": "2026-09-10T09:00:00",
+            "location": "Kantor Pusat",
+        },
+    )
+    assert created.status_code == 201, created.text
+    interview_id = created.json()["id"]
+    assert created.json()["status"] == "terjadwal"
+
+    listed = client.get(
+        "/api/v1/recruitment/interviews", headers=headers, params={"job_order_id": jo_id}
+    ).json()
+    assert len(listed) == 1
+
+    updated = client.patch(
+        f"/api/v1/recruitment/interviews/{interview_id}",
+        headers=headers,
+        json={"status": "selesai", "feedback": "Bagus", "score": 4},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["status"] == "selesai"
+    assert updated.json()["score"] == 4
+
+
+def test_match_candidates_scores_by_skill_overlap_and_ranks(client):
+    """PRD v3.0 §4 AI Matching Native — jalur fallback deterministik (AI belum
+    dikonfigurasi di test env). Kandidat dengan skill lebih cocok harus lebih
+    tinggi skornya dan endpoint match/matches harus konsisten."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid, title="Operator Produksi")
+    client.patch(
+        f"/api/v1/recruitment/job-orders/{jo_id}",
+        headers=headers,
+        json={"requirements": "operator produksi berpengalaman las"},
+    )
+
+    strong = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={
+            "full_name": "Kandidat Cocok",
+            "city": "Surabaya",
+            "skills": "operator produksi las",
+            "expected_salary": 5_000_000,
+        },
+    ).json()["id"]
+    weak = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={"full_name": "Kandidat Tak Cocok", "city": "Medan", "skills": "desain grafis"},
+    ).json()["id"]
+
+    matched = client.post(
+        f"/api/v1/recruitment/job-orders/{jo_id}/match", headers=headers, json={"top_k": 10}
+    )
+    assert matched.status_code == 200, matched.text
+    results = matched.json()
+    by_id = {r["candidate_id"]: r for r in results}
+    assert by_id[strong]["match_score"] > by_id[weak]["match_score"]
+    for r in results:
+        assert 0 <= r["match_score"] <= 100
+        assert isinstance(r["explain"], str) and r["explain"]
+
+    filtered = client.get(
+        f"/api/v1/recruitment/job-orders/{jo_id}/matches",
+        headers=headers,
+        params={"min_score": by_id[strong]["match_score"]},
+    ).json()
+    assert any(r["candidate_id"] == strong for r in filtered)
+    assert all(r["candidate_id"] != weak for r in filtered)

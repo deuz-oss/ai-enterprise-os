@@ -75,6 +75,7 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "due": today + timedelta(days=20),
             },
             # Klien Telat: dua invoice lunas sangat terlambat + satu overdue berjalan
+            # (bulan berbeda agar tidak clash unique client/year/month)
             {
                 "client": "CV Telat",
                 "invoice_no": "INV/T/1",
@@ -87,9 +88,9 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "client": "CV Telat",
                 "invoice_no": "INV/T/2",
                 "total_due": 12_000_000,
-                "date": today - timedelta(days=90),
-                "due": today - timedelta(days=60),
-                "paid_at": today - timedelta(days=20),  # telat 40 hari
+                "date": today - timedelta(days=60),
+                "due": today - timedelta(days=30),
+                "paid_at": today - timedelta(days=20),  # telat 10 hari
             },
             {
                 "client": "CV Telat",

@@ -106,6 +106,8 @@ def update_tenant(db: Session, tenant_id: UUID, payload: TenantUpdate) -> Tenant
         tenant.name = payload.name
     if payload.status is not None:
         tenant.status = payload.status
+    if payload.billing_mode is not None:
+        tenant.billing_mode = payload.billing_mode
     db.commit()
     db.refresh(tenant)
     return TenantOut.model_validate(tenant)

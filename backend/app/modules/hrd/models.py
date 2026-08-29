@@ -53,7 +53,48 @@ class HrDocumentType(str, enum.Enum):
     npwp = "npwp"
     bpjs_kesehatan = "bpjs_kesehatan"
     bpjs_ketenagakerjaan = "bpjs_ketenagakerjaan"
+    kartu_bpjs_kesehatan = "kartu_bpjs_kesehatan"
+    kartu_bpjs_ketenagakerjaan = "kartu_bpjs_ketenagakerjaan"
     other = "lainnya"
+
+
+class InsuranceProvider(str, enum.Enum):
+    """Provider asuransi swasta (polis + kartu) — PRD v2.0 People & Ops."""
+
+    prudential = "prudential"
+    allianz = "allianz"
+    axa = "axa"
+    manulife = "manulife"
+    bri_life = "bri_life"
+    sinarmas = "sinarmas"
+    other = "lainnya"
+
+
+class InsuranceStatus(str, enum.Enum):
+    aktif = "aktif"
+    nonaktif = "nonaktif"
+    menunggu = "menunggu"
+
+
+class EmployeeInsurance(TenantMixin, Base):
+    """Asuransi one-to-many per karyawan — PRD v3.0 Workforce Cloud."""
+
+    __tablename__ = "employee_insurances"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(50), default="lainnya")
+    policy_no: Mapped[str] = mapped_column(String(100), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="aktif")
+    start_date: Mapped[date | None] = mapped_column(Date, default=None)
+    valid_until: Mapped[date | None] = mapped_column(Date, default=None, index=True)
+    card_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    policy_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    uploaded_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Employee(TenantMixin, Base):
@@ -72,6 +113,19 @@ class Employee(TenantMixin, Base):
     npwp_no: Mapped[str | None] = mapped_column(String(50))
     bpjs_kesehatan_no: Mapped[str | None] = mapped_column(String(50))
     bpjs_ketenagakerjaan_no: Mapped[str | None] = mapped_column(String(50))
+    # Kartu BPJS — PRD v3.0 + valid_until
+    bpjs_kesehatan_card_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    bpjs_ketenagakerjaan_card_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    bpjs_kesehatan_status: Mapped[str | None] = mapped_column(String(20), default=None)
+    bpjs_ketenagakerjaan_status: Mapped[str | None] = mapped_column(String(20), default=None)
+    bpjs_kesehatan_valid_until: Mapped[date | None] = mapped_column(Date, default=None)
+    bpjs_ketenagakerjaan_valid_until: Mapped[date | None] = mapped_column(Date, default=None)
+    # Asuransi swasta — polis + kartu (PRD v2.0)
+    insurance_provider: Mapped[str | None] = mapped_column(String(50), default=None)
+    insurance_policy_no: Mapped[str | None] = mapped_column(String(100), default=None)
+    insurance_status: Mapped[str | None] = mapped_column(String(20), default=None)
+    insurance_card_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    insurance_policy_key: Mapped[str | None] = mapped_column(String(500), default=None)
     phone: Mapped[str | None] = mapped_column(String(60))
     address: Mapped[str | None] = mapped_column(String(500))
     bank_name: Mapped[str | None] = mapped_column(String(100))

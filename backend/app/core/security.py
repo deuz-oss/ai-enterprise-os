@@ -113,14 +113,34 @@ def require_platform_admin():
     return dependency
 
 
-def require_licensed_app(app_key: str):
-    """Guard lisensi Fase 7: endpoint aplikasi tanpa lisensi → 403.
+def _is_billing_bypass(db: Session, tenant_id) -> bool:
+    """PRD v3.0 per-tenant override: inherit → ikut APP_MODE global."""
+    from app.core.config import get_settings as _get_settings
 
-    Berlaku untuk SELURUH role dalam tenant (lisensi milik tenant, bukan
-    user). Dipasang lewat include_router(dependencies=[...]) di main.py.
-    """
+    mode = _get_settings().app_mode
+    if tenant_id is None:
+        return mode == "internal"
+    try:
+        from app.modules.platform.models import Tenant
+
+        tenant = db.get(Tenant, tenant_id)
+        if tenant and hasattr(tenant, "billing_mode"):
+            bm = (tenant.billing_mode or "inherit").lower()
+            if bm == "internal":
+                return True
+            if bm == "commercial":
+                return False
+    except Exception:
+        pass
+    return mode == "internal"
+
+
+def require_licensed_app(app_key: str):
+    """Guard lisensi PRD v3.0: per-tenant + global → 403 jika tanpa lisensi."""
 
     def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
+        if _is_billing_bypass(db, user.tenant_id):
+            return user
         from app.modules.platform.service import is_licensed
 
         if user.role == "platform_admin" or user.tenant_id is None:
@@ -128,7 +148,11 @@ def require_licensed_app(app_key: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akun platform tidak memiliki akses ke data tenant",
             )
-        if not is_licensed(db, user.tenant_id, app_key):
+        # LEGACY_KEY_MAP untuk backward compat test/seed lama
+        from app.core.apps import LEGACY_KEY_MAP
+
+        resolved = LEGACY_KEY_MAP.get(app_key, app_key)
+        if not is_licensed(db, user.tenant_id, resolved):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
@@ -142,10 +166,11 @@ def require_licensed_app(app_key: str):
 
 
 def require_any_licensed_app(*app_keys: str):
-    """Guard OR: cukup salah satu aplikasi berlisensi (mis. Absensi dipakai
-    HR & Payroll maupun Operations & Billing)."""
+    """Guard OR: cukup salah satu bundle berlisensi. Per-tenant override."""
 
     def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
+        if _is_billing_bypass(db, user.tenant_id):
+            return user
         from app.modules.platform.service import is_licensed
 
         if user.role == "platform_admin" or user.tenant_id is None:
@@ -153,7 +178,10 @@ def require_any_licensed_app(*app_keys: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akun platform tidak memiliki akses ke data tenant",
             )
-        if not any(is_licensed(db, user.tenant_id, key) for key in app_keys):
+        from app.core.apps import LEGACY_KEY_MAP
+
+        resolved_keys = [LEGACY_KEY_MAP.get(k, k) for k in app_keys]
+        if not any(is_licensed(db, user.tenant_id, key) for key in resolved_keys):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(

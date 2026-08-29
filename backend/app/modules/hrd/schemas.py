@@ -52,6 +52,10 @@ class EmployeeUpdate(BaseModel):
     employment_type: EmploymentType | None = None
     # Taut/lepas akun login self-service (role karyawan); null = lepas tautan.
     user_id: UUID | None = None
+    bpjs_kesehatan_status: str | None = None
+    bpjs_ketenagakerjaan_status: str | None = None
+    bpjs_kesehatan_valid_until: date | None = None
+    bpjs_ketenagakerjaan_valid_until: date | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -77,8 +81,47 @@ class EmployeeOut(BaseModel):
     employment_type: EmploymentType
     user_id: UUID | None
     status: EmployeeStatus
+    bpjs_kesehatan_status: str | None = None
+    bpjs_ketenagakerjaan_status: str | None = None
+    bpjs_kesehatan_valid_until: date | None = None
+    bpjs_ketenagakerjaan_valid_until: date | None = None
+    bpjs_kesehatan_card_key: str | None = None
+    bpjs_ketenagakerjaan_card_key: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class InsuranceCreate(BaseModel):
+    provider: str = "lainnya"
+    policy_no: str
+    status: str = "aktif"
+    start_date: date | None = None
+    valid_until: date | None = None
+
+
+class InsuranceUpdate(BaseModel):
+    provider: str | None = None
+    policy_no: str | None = None
+    status: str | None = None
+    start_date: date | None = None
+    valid_until: date | None = None
+
+
+class InsuranceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    provider: str
+    policy_no: str
+    status: str
+    start_date: date | None
+    valid_until: date | None
+    card_object_key: str | None
+    policy_object_key: str | None
+    uploaded_by: UUID | None
+    uploaded_at: datetime
+    created_at: datetime
 
 
 class OnboardCreate(BaseModel):

@@ -120,3 +120,48 @@ class PlacementOut(BaseModel):
     start_date: date | None
     status: PlacementStatus
     created_at: datetime
+
+
+class InterviewScheduleCreate(BaseModel):
+    candidate_id: UUID
+    job_order_id: UUID
+    interviewer_id: UUID | None = None
+    scheduled_at: datetime
+    location: str | None = None
+    meeting_url: str | None = None
+
+
+class InterviewScheduleUpdate(BaseModel):
+    scheduled_at: datetime | None = None
+    location: str | None = None
+    meeting_url: str | None = None
+    status: str | None = None
+    feedback: str | None = None
+    score: int | None = None
+
+
+class InterviewScheduleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    candidate_id: UUID
+    job_order_id: UUID
+    interviewer_id: UUID | None
+    scheduled_at: datetime
+    location: str | None
+    meeting_url: str | None
+    status: str
+    feedback: str | None
+    score: int | None
+    created_at: datetime
+
+
+class MatchRequest(BaseModel):
+    top_k: int = 50
+
+
+class MatchResult(BaseModel):
+    candidate_id: UUID
+    match_score: int
+    explain: str
+    missing: list[str] = []

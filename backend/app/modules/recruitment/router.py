@@ -13,9 +13,14 @@ from app.modules.recruitment.schemas import (
     CandidateCreate,
     CandidateOut,
     CandidateUpdate,
+    InterviewScheduleCreate,
+    InterviewScheduleOut,
+    InterviewScheduleUpdate,
     JobOrderCreate,
     JobOrderOut,
     JobOrderUpdate,
+    MatchRequest,
+    MatchResult,
     PlacementCreate,
     PlacementOut,
     PlacementUpdate,
@@ -121,3 +126,42 @@ def create_placement(payload: PlacementCreate, db: Session = Depends(get_db)):
 @router.patch("/placements/{placement_id}", response_model=PlacementOut)
 def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = Depends(get_db)):
     return service.update_placement_status(db, placement_id, payload.status)
+
+
+# ---------- Interviews — PRD v3.0 Talent Cloud ----------
+
+
+@router.get("/interviews", response_model=list[InterviewScheduleOut])
+def list_interviews(job_order_id: str | None = None, db: Session = Depends(get_db)):
+    return service.list_interviews(db, job_order_id=job_order_id)
+
+
+@router.post(
+    "/interviews", response_model=InterviewScheduleOut, status_code=status.HTTP_201_CREATED
+)
+def create_interview(
+    payload: InterviewScheduleCreate, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.create_interview(db, payload, created_by=user.id)
+
+
+@router.patch("/interviews/{interview_id}", response_model=InterviewScheduleOut)
+def update_interview(
+    interview_id: str, payload: InterviewScheduleUpdate, db: Session = Depends(get_db)
+):
+    return service.update_interview(db, interview_id, payload)
+
+
+# ---------- AI Matching Native — PRD v3.0 Talent Cloud ----------
+
+
+@router.post("/job-orders/{jo_id}/match", response_model=list[MatchResult])
+def match_for_jo(jo_id: str, payload: MatchRequest | None = None, db: Session = Depends(get_db)):
+    top_k = payload.top_k if payload else 50
+    return service.match_candidates(db, jo_id, top_k=top_k)
+
+
+@router.get("/job-orders/{jo_id}/matches", response_model=list[MatchResult])
+def get_matches(jo_id: str, top_k: int = 50, min_score: int = 0, db: Session = Depends(get_db)):
+    results = service.match_candidates(db, jo_id, top_k=top_k)
+    return [r for r in results if r["match_score"] >= min_score]

@@ -45,6 +45,19 @@ class InvoiceOut(BaseModel):
     due_date: date | None
     paid_at: datetime | None
     notes: str | None
+    tax_invoice_no: str | None = None
+    tax_invoice_status: str | None = None
+    tax_invoice_date: date | None = None
+    lawan_npwp: str | None = None
+    lawan_nama: str | None = None
+    lawan_alamat: str | None = None
+    dpp_amount: float | None = None
+    kode_transaksi: str | None = None
+    no_seri_faktur: str | None = None
+    faktur_pengganti_ref: UUID | None = None
+    faktur_status_detail: str | None = None
+    efaktur_nsr: str | None = None
+    efaktur_qr_url: str | None = None
 
 
 class InvoiceUpdate(BaseModel):

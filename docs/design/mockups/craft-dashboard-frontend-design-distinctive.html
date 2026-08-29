@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AEOS — Frontend Design (Distinctive: Ledger + Stamp)</title>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@600;700;800&family=Satoshi:wght@400;500;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<style>
+  :root{--paper:#FFFBF5;--ink:#0a0a0a;--slate:#6b7280;--line:#e7e2d9;--vermillion:#DC2626;--forest:#059669;--amber:#D97706}
+  *{font-family:'Satoshi',system-ui,sans-serif}
+  h1,h2{font-family:'Cabinet Grotesk',sans-serif}
+  .mono{font-family:'JetBrains Mono',monospace}
+  /* signature: stamped badge */
+  .stamp{font:700 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border:1.8px solid currentColor;border-radius:2px;transform:rotate(-1.5deg);display:inline-block}
+  .stamp-approved{color:var(--forest);border-color:var(--forest);background:#ecfdf5}
+  .stamp-overdue{color:var(--vermillion);border-color:var(--vermillion);background:#fef2f2;transform:rotate(1.2deg)}
+  .stamp-pending{color:var(--amber);border-color:var(--amber);background:#fffbeb;transform:rotate(-0.8deg)}
+</style>
+</head>
+<body class="bg-[var(--paper)] text-[var(--ink)] antialiased">
+<!-- Ground: subject = workforce ledger, audience = ops manager, job = scannable payroll -->
+<div class="min-h-screen grid lg:grid-cols-[240px_1fr]">
+  <aside class="border-r border-[var(--line)] bg-white lg:h-screen lg:sticky lg:top-0 p-4 flex flex-col gap-5">
+    <div>
+      <div class="text-[10px] tracking-[.14em] uppercase text-[var(--slate)]">AEOS — Ledger OS</div>
+      <div class="text-[15px] font-bold tracking-tight" style="font-family:'Cabinet Grotesk',sans-serif">Workforce Ledger</div>
+      <div class="text-xs text-[var(--slate)]">PRD v3.0 · 4 Clouds · metered</div>
+    </div>
+    <nav class="space-y-1 text-[13px]">
+      <a class="flex justify-between items-center px-3 py-2 bg-[var(--ink)] text-white rounded-[6px]"><span class="flex gap-2 items-center"><i class="ph ph-squares-four"></i> Dashboard</span><span class="text-[10px] mono text-white/60">⌘K</span></a>
+      <a class="flex justify-between items-center px-3 py-2 hover:bg-[var(--paper)] rounded-[6px]"><span class="flex gap-2 items-center"><i class="ph ph-users-three"></i> Talent Cloud</span><span class="mono text-xs text-[var(--slate)]">15k/t</span></a>
+      <a class="flex justify-between items-center px-3 py-2 hover:bg-[var(--paper)] rounded-[6px]"><span class="flex gap-2 items-center"><i class="ph ph-identification-card"></i> Workforce</span><span class="mono text-xs">10k/e</span></a>
+      <a class="flex justify-between items-center px-3 py-2 hover:bg-[var(--paper)] rounded-[6px]"><span class="flex gap-2 items-center"><i class="ph ph-receipt"></i> Revenue</span><span class="mono text-xs">5k/8k</span></a>
+      <a class="flex justify-between items-center px-3 py-2 hover:bg-[var(--paper)] rounded-[6px]"><span class="flex gap-2 items-center"><i class="ph ph-chart-bar"></i> Govern Cloud</span><span class="mono text-xs">flat 5-7jt</span></a>
+    </nav>
+    <div class="mt-auto border border-[var(--line)] rounded-lg p-3 bg-[var(--paper)]">
+      <div class="text-[11px] font-bold tracking-wide uppercase flex gap-2 items-center"><i class="ph ph-chat-circle-dots"></i> Chat — Mobile</div>
+      <div class="text-xs text-[var(--slate)]">6 tab · tanpa Talent</div>
+    </div>
+  </aside>
+
+  <main class="p-5 md:p-6 max-w-[1400px] mx-auto w-full">
+    <!-- Hero is thesis: live payroll ledger snippet, not big number + gradient (template) -->
+    <div class="border border-[var(--line)] bg-white">
+      <div class="grid md:grid-cols-[1.1fr_.9fr] divide-y md:divide-y-0 md:divide-x divide-[var(--line)]">
+        <div class="p-5">
+          <div class="text-[11px] tracking-[.1em] uppercase text-[var(--slate)]">Thesis — Live Ledger</div>
+          <h1 class="text-[28px] md:text-[34px] font-extrabold leading-[.95] tracking-tight mt-1" style="font-family:'Cabinet Grotesk',sans-serif">
+            80 orang gajian.<br>
+            <span class="font-light">2 faktur belum.</span>
+          </h1>
+          <p class="text-sm text-[var(--slate)] mt-2 max-w-[48ch]">Bukan angka besar dengan gradient. Ini slip nyata — prorata, BPJS, PPh21 — yang ops cek tiap pagi.</p>
+          <div class="mt-4 flex gap-2 text-xs">
+            <span class="stamp stamp-approved">Approved 74/80</span>
+            <span class="stamp stamp-overdue">Overdue 2</span>
+          </div>
+        </div>
+        <div class="p-0">
+          <div class="text-[11px] tracking-wide uppercase bg-[var(--paper)] px-3 py-2 border-b border-[var(--line)]">Saltab — 2026-08</div>
+          <table class="w-full text-xs">
+            <thead class="text-[10px] tracking-wide uppercase text-[var(--slate)]"><tr><th class="text-left p-2 font-medium">NIK</th><th class="text-left p-2 font-medium">Nama</th><th class="text-right p-2 font-medium">THP</th><th class="p-2"></th></tr></thead>
+            <tbody class="mono text-[11px] divide-y divide-[var(--line)]">
+              <tr><td class="p-2">E-012</td><td class="font-sans text-[12px]">Siti Aminah</td><td class="text-right font-semibold">3.200.000</td><td><span class="stamp stamp-approved" style="font-size:9px">Paid</span></td></tr>
+              <tr><td class="p-2">E-013</td><td class="font-sans text-[12px]">Budi Hartono</td><td class="text-right font-semibold">2.890.000</td><td><span class="stamp stamp-pending" style="font-size:9px">Pending</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Structure is information — bento varied, not 4 equal cards -->
+    <div class="grid lg:grid-cols-12 gap-3 mt-3">
+      <div class="lg:col-span-7 border border-[var(--line)] bg-white p-4">
+        <div class="text-[11px] tracking-wide uppercase font-bold flex gap-2 items-center"><i class="ph ph-users-three"></i> Matching Native — 0-100</div>
+        <p class="text-xs text-[var(--slate)]">Talent milik tenant, 15k/talent + 2k/match. Sumber: CvIntake.extracted</p>
+        <table class="w-full text-xs mt-3">
+          <thead class="text-[10px] tracking-wide uppercase text-[var(--slate)]"><tr><th class="text-left py-2">JO</th><th class="text-left py-2">Klien</th><th class="text-left py-2">Score</th></tr></thead>
+          <tbody class="mono text-[11px] divide-y divide-[var(--line)]">
+            <tr><td class="py-2">#JO-042</td><td class="font-sans">Bank Daerah Jaya</td><td><span class="stamp stamp-approved">92, skill 90%</span></td></tr>
+            <tr><td class="py-2">#JO-041</td><td class="font-sans">Retail Makmur</td><td><span class="stamp stamp-approved">84</span></td></tr>
+            <tr><td class="py-2">#JO-039</td><td class="font-sans">Logistik Nusantara</td><td><span class="stamp stamp-pending">71, missing K3</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="lg:col-span-5 border border-[var(--line)] bg-[var(--ink)] text-white p-4">
+        <div class="text-[11px] tracking-wide uppercase font-bold flex gap-2 items-center"><i class="ph ph-shield-check"></i> BPJS / Asuransi — Valid Until</div>
+        <div class="grid grid-cols-2 gap-3 mt-3 divide-x divide-white/10">
+          <div class="text-center px-2"><div class="text-xl font-bold mono">74/80</div><div class="text-xs text-white/60">BPJS aktif</div></div>
+          <div class="text-center px-2"><div class="text-xl font-bold mono">6</div><div class="text-xs text-amber-300">Asuransi ≤14 hari</div></div>
+        </div>
+        <div class="mt-3 text-xs text-white/60">One-to-many employee_insurances. Upload kartu via mobile kamera.</div>
+      </div>
+      <div class="lg:col-span-5 border border-[var(--line)] bg-white p-4">
+        <div class="text-[11px] tracking-wide uppercase font-bold">Revenue — Ink Numbers</div>
+        <div class="mt-2 mono text-[22px] font-semibold">Rp 842.000.000 <span class="text-xs font-normal text-[var(--slate)]">▲ 6,2%</span></div>
+        <div class="mt-3 h-[80px] border-t border-[var(--line)] pt-3 flex items-end gap-1">
+          <div class="flex-1 bg-[var(--ink)] h-[40%]"></div><div class="flex-1 bg-[var(--ink)] h-[65%]"></div><div class="flex-1 bg-[var(--vermillion)] h-[85%]"></div><div class="flex-1 bg-[var(--ink)] h-[55%]"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-7 border border-amber-200 bg-amber-50 p-4">
+        <div class="text-[11px] tracking-wide uppercase font-bold flex gap-2 items-center"><i class="ph ph-chart-bar"></i> Govern Cloud — Accurate.id</div>
+        <p class="text-xs text-[var(--slate)]">CoA dinamis, jurnal memorial→posted, kas-bank, pembelian, aset, periode & tutup buku, laporan + AI 7 fitur</p>
+        <div class="mt-3 flex gap-2">
+          <span class="stamp stamp-approved">Period Closed 2</span>
+          <span class="stamp stamp-pending">Memorial 3</span>
+          <span class="stamp" style="color:var(--ink);border-color:var(--ink);background:#fff">L/R MTD</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 text-center text-xs text-[var(--slate)]">Front-end Design — Ledger + Stamp signature · Cabinet Grotesk + Satoshi + JetBrains Mono · Paper #FFFBF5 + Ink + Vermillion · No Inter, no purple, one accent lock</div>
+  </main>
+</div>
+</body>
+</html>

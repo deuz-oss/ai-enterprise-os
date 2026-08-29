@@ -46,6 +46,36 @@ class PlacementStatus(str, enum.Enum):
     cancelled = "dibatalkan"
 
 
+class InterviewStatus(str, enum.Enum):
+    scheduled = "terjadwal"
+    done = "selesai"
+    no_show = "tidak_hadir"
+    cancelled = "dibatalkan"
+
+
+class InterviewSchedule(TenantMixin, Base):
+    """Jadwal interview — PRD v3.0 Talent Cloud."""
+
+    __tablename__ = "interview_schedules"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    candidate_id: Mapped[UUID] = mapped_column(ForeignKey("candidates.id"), index=True)
+    job_order_id: Mapped[UUID] = mapped_column(ForeignKey("job_orders.id"), index=True)
+    interviewer_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    location: Mapped[str | None] = mapped_column(String(255), default=None)
+    meeting_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    status: Mapped[InterviewStatus] = mapped_column(
+        Enum(InterviewStatus, native_enum=False, length=50),
+        default=InterviewStatus.scheduled,
+        index=True,
+    )
+    feedback: Mapped[str | None] = mapped_column(Text, default=None)
+    score: Mapped[int | None] = mapped_column(Integer, default=None)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class JobOrder(TenantMixin, Base):
     __tablename__ = "job_orders"
 

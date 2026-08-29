@@ -20,20 +20,20 @@ def _provision_tenant(client, platform_headers, slug: str) -> dict:
 
 
 def test_registry_covers_all_business_prefixes():
-    """Setiap prefix bisnis harus terpetakan ke satu aplikasi registry."""
+    """Setiap prefix bisnis harus terpetakan ke satu aplikasi registry — PRD v3.0 F."""
     from app.core.apps import app_for_path
 
     pemetaan = {
         "/leads": "sales_crm",
         "/clients/abc/documents": "sales_crm",
         "/recruitment/candidates": "recruitment",
-        "/employees": "hr_payroll",
-        "/payroll/runs": "hr_payroll",
-        "/me/payslips": "hr_payroll",
-        "/me/notifications": "hr_payroll",
-        "/finance": "operations_billing",
-        "/accounting/journals": "finance_accounting",
-        "/esign/requests": "esign",
+        "/employees": "people_ops",
+        "/payroll/runs": "payroll",
+        "/me/payslips": "people_ops",
+        "/me/notifications": "people_ops",
+        "/finance": "finance",
+        "/accounting/journals": "accounting",
+        "/esign/requests": "people_ops",
         "/ai/contracts/ask": "ai_addon",
     }
     for path, expected in pemetaan.items():
@@ -68,6 +68,13 @@ def test_guard_blocks_and_trial_reactivates(client):
     tenants = client.get("/api/v1/platform/tenants", headers=plat).json()
     default_id = next(t["id"] for t in tenants if t["slug"] == "default")
 
+    # PRD v3.0: set commercial agar guard tidak bypass (APP_MODE internal di test)
+    client.patch(
+        f"/api/v1/platform/tenants/{default_id}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "commercial"},
+    )
+
     revoke = client.patch(
         f"/api/v1/platform/tenants/{default_id}/licenses/sales_crm",
         headers=plat,
@@ -100,6 +107,12 @@ def test_guard_blocks_and_trial_reactivates(client):
     )
     assert renewed.status_code == 200
     assert client.get("/api/v1/leads", headers=admin).status_code == 200
+    # Kembalikan billing_mode
+    client.patch(
+        f"/api/v1/platform/tenants/{default_id}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "inherit"},
+    )
 
 
 def test_trial_flow_on_provisioned_tenant_then_expiry(client):
@@ -119,7 +132,13 @@ def test_trial_flow_on_provisioned_tenant_then_expiry(client):
     )
     token = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-    # Tenant provisioning baru mulai tanpa lisensi → endpoint app 403.
+    # Tenant provisioning baru mulai tanpa lisensi → endpoint app 403
+    # (set commercial agar guard tidak bypass di test APP_MODE internal)
+    client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/billing-mode",
+        headers=plat,
+        json={"billing_mode": "commercial"},
+    )
     apps = {a["key"]: a for a in client.get("/api/v1/apps", headers=token).json()}
     assert all(not a["licensed"] for a in apps.values())
     blocked = client.get("/api/v1/me/profile", headers=token)
@@ -128,7 +147,7 @@ def test_trial_flow_on_provisioned_tenant_then_expiry(client):
 
     # Trial diaktifkan mandiri oleh admin tenant → lisensi jalan (404 karena
     # belum ada data karyawan, bukan lagi 403 lisensi).
-    trial = client.post("/api/v1/apps/hr_payroll/trial", headers=token)
+    trial = client.post("/api/v1/apps/people_ops/trial", headers=token)
     assert trial.status_code == 200, trial.text
     assert trial.json()["status"] == "trial"
     expires = datetime.fromisoformat(trial.json()["expires_at"])
@@ -143,11 +162,11 @@ def test_trial_flow_on_provisioned_tenant_then_expiry(client):
 
     # Trial kedua untuk aplikasi yang sama ditolak meski sudah dicabut platform.
     client.patch(
-        f"/api/v1/platform/tenants/{tenant_id}/licenses/hr_payroll",
+        f"/api/v1/platform/tenants/{tenant_id}/licenses/people_ops",
         headers=plat,
         json={"status": "kedaluwarsa"},
     )
-    second = client.post("/api/v1/apps/hr_payroll/trial", headers=token)
+    second = client.post("/api/v1/apps/people_ops/trial", headers=token)
     assert second.status_code == 409
 
     # Trial yang sudah kedaluwarsa dianggap tidak berlisensi.

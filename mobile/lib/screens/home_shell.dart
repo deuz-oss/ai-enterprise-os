@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../models/models.dart';
 import 'attendance_tab.dart';
+import 'chat_tab.dart';
 import 'contracts_tab.dart';
 import 'dashboard_tab.dart';
 import 'login_screen.dart';
@@ -53,6 +54,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       // Portal self-service: karyawan (dan admin untuk preview).
       _TabSpec('Portal', Icons.person_outline, {'karyawan', 'admin'}, (_) => const PortalTab()),
+      _TabSpec('Chat', Icons.chat_bubble_outline, all, (_) => const ChatTab()),
     ];
   }
 

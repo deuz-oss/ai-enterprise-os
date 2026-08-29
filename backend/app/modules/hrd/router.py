@@ -23,6 +23,9 @@ from app.modules.hrd.schemas import (
     EmployeeCreate,
     EmployeeOut,
     EmployeeUpdate,
+    InsuranceCreate,
+    InsuranceOut,
+    InsuranceUpdate,
     OnboardCreate,
 )
 
@@ -257,3 +260,84 @@ def list_documents(employee_id: str, db: Session = Depends(get_db)):
 @router.get("/documents/{document_id}/download-url")
 def download_url(document_id: str, db: Session = Depends(get_db)):
     return {"url": service.document_download_url(db, document_id)}
+
+
+# ---------- Asuransi one-to-many — PRD v3.0 Workforce Cloud ----------
+
+
+@router.get("/{employee_id}/insurances", response_model=list[InsuranceOut])
+def list_insurances(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_insurances(db, employee_id)
+
+
+@router.post("/{employee_id}/insurances", response_model=InsuranceOut, status_code=201)
+def create_insurance(
+    employee_id: str,
+    payload: InsuranceCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return service.create_insurance(db, employee_id, payload, uploaded_by=current_user.id)
+
+
+@router.patch("/insurances/{insurance_id}", response_model=InsuranceOut)
+def update_insurance(insurance_id: str, payload: InsuranceUpdate, db: Session = Depends(get_db)):
+    return service.update_insurance(db, insurance_id, payload)
+
+
+@router.delete("/insurances/{insurance_id}", status_code=204)
+def delete_insurance(insurance_id: str, db: Session = Depends(get_db)):
+    service.delete_insurance(db, insurance_id)
+
+
+@router.post("/insurances/{insurance_id}/card", response_model=InsuranceOut, status_code=201)
+async def upload_insurance_card(
+    insurance_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+):
+    return await service.upload_insurance_file(db, insurance_id, file, kind="card")
+
+
+@router.post("/insurances/{insurance_id}/policy", response_model=InsuranceOut, status_code=201)
+async def upload_insurance_policy(
+    insurance_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+):
+    return await service.upload_insurance_file(db, insurance_id, file, kind="policy")
+
+
+@router.get("/insurances/{insurance_id}/card/download-url")
+def insurance_card_url(insurance_id: str, db: Session = Depends(get_db)):
+    return {"url": service.insurance_file_url(db, insurance_id, kind="card")}
+
+
+@router.get("/insurances/{insurance_id}/policy/download-url")
+def insurance_policy_url(insurance_id: str, db: Session = Depends(get_db)):
+    return {"url": service.insurance_file_url(db, insurance_id, kind="policy")}
+
+
+# ---------- BPJS kartu + valid_until — PRD v3.0 ----------
+
+
+@router.post("/{employee_id}/bpjs-card", status_code=201)
+async def upload_bpjs_card(
+    employee_id: str,
+    file: UploadFile = File(...),
+    bpjs_type: str = Form(...),
+    valid_until: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    from datetime import date
+
+    vu = None
+    if valid_until:
+        try:
+            vu = date.fromisoformat(valid_until)
+        except Exception:
+            vu = None
+    return await service.upload_bpjs_card(
+        db, employee_id, file, bpjs_type=bpjs_type, valid_until=vu
+    )
+
+
+@router.get("/{employee_id}/bpjs-card/{bpjs_type}/download-url")
+def bpjs_card_download(employee_id: str, bpjs_type: str, db: Session = Depends(get_db)):
+    return {"url": service.bpjs_card_url(db, employee_id, bpjs_type)}
