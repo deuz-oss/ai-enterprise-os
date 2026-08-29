@@ -512,10 +512,21 @@ def _llm_rerank_explain(jo: JobOrder, entries: list[tuple[Candidate, dict]]) -> 
         return {}
 
 
-def match_candidates(db: Session, job_order_id: str, top_k: int = 50) -> list[dict]:
+def match_candidates(
+    db: Session, job_order_id: str, top_k: int = 50, *, billable: bool = False
+) -> list[dict]:
     """Matching native 0-100: embedding cosine (bila AI aktif) + rules
     (domisili, readiness, expected_salary) + LLM rerank explain untuk top hasil.
-    Fallback deterministik (skills overlap) bila AI belum dikonfigurasi/gagal."""
+    Fallback deterministik (skills overlap) bila AI belum dikonfigurasi/gagal.
+
+    `billable=True` (dipanggil dari POST /match) mencatat audit event
+    `recruitment.match_executed` — sumber hitung metered 2k/match (PRD v3.0
+    §2). GET /matches (filter min_score) sengaja tidak dihitung: tanpa cache
+    hasil, endpoint itu mengeksekusi ulang algoritma yang sama tiap panggilan
+    — menghitungnya sebagai billable akan menagih per-poll, bukan per-JO
+    sesuai PRD. Known limitation: begitu hasil match di-cache/disimpan,
+    revisit titik ini.
+    """
     jo = _get_job_order(db, job_order_id)
     candidates = list(
         db.execute(
@@ -570,4 +581,15 @@ def match_candidates(db: Session, job_order_id: str, top_k: int = 50) -> list[di
                 "missing": _missing_requirements(jo, profile),
             }
         )
+    if billable:
+        try:
+            audit.log_event(
+                db,
+                action="recruitment.match_executed",
+                entity_type="job_order",
+                entity_id=str(jo.id),
+                detail={"evaluated": len(candidates), "top_k": top_k},
+            )
+        except Exception:
+            pass
     return results

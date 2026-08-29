@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, formatRupiah } from "../api/client";
 
 interface TenantRow {
   id: string;
@@ -25,6 +25,31 @@ interface LicenseRow {
   app_key: string;
   name: string;
   status: string | null;
+}
+
+interface UsageLine {
+  sku: string;
+  label: string;
+  metric: string;
+  qty?: number;
+  qty_invoice?: number;
+  qty_faktur?: number;
+  rate?: number;
+  base?: number;
+  amount: number | null;
+  note?: string;
+}
+
+interface UsageReport {
+  period: string;
+  billing_mode: string;
+  lines: UsageLine[];
+  total_known: number;
+}
+
+function currentPeriod(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 const STATUS_BADGES: Record<string, string> = {
@@ -94,6 +119,17 @@ export default function PlatformTenants() {
     }) =>
       api.patch(`/platform/tenants/${tenantId}/licenses/${appKey}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
+  });
+
+  const [usageExpandedId, setUsageExpandedId] = useState<string | null>(null);
+  const [usagePeriod, setUsagePeriod] = useState<string>(currentPeriod);
+  const { data: usage, isLoading: usageLoading } = useQuery({
+    queryKey: ["tenant-usage", usageExpandedId, usagePeriod],
+    queryFn: () =>
+      api.get<UsageReport>(
+        `/platform/tenants/${usageExpandedId}/usage?period=${usagePeriod}`
+      ),
+    enabled: Boolean(usageExpandedId),
   });
 
   if (me.isLoading) return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
@@ -247,6 +283,14 @@ export default function PlatformTenants() {
                   >
                     {expandedId === t.id ? "Tutup Lisensi" : "Lisensi"}
                   </button>
+                  {" · "}
+                  <button
+                    className="text-xs font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
+                    onClick={() => setUsageExpandedId(usageExpandedId === t.id ? null : t.id)}
+                  >
+                    {usageExpandedId === t.id ? "Tutup Tagihan" : "Estimasi Tagihan"}
+                  </button>
                 </td>
               </tr>
               );
@@ -283,6 +327,72 @@ export default function PlatformTenants() {
                       </div>
                     ))}
                   </div>
+                </td>
+              </tr>
+            )}
+            {usageExpandedId !== null && (
+              <tr>
+                <td colSpan={6} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+                      Estimasi tagihan — belum menagih, hanya laporan pemakaian
+                    </p>
+                    <input
+                      type="month"
+                      value={usagePeriod}
+                      onChange={(e) => setUsagePeriod(e.target.value || currentPeriod())}
+                      className="input w-auto py-1 text-xs"
+                    />
+                  </div>
+                  {usageLoading && (
+                    <p className="mt-2 text-xs" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>
+                  )}
+                  {usage && (
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr style={{ color: "var(--n-text-muted)" }}>
+                            <th className="py-1 text-left">SKU</th>
+                            <th className="py-1 text-right">Jumlah</th>
+                            <th className="py-1 text-right">Estimasi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+                          {usage.lines.map((line, idx) => (
+                            <tr key={`${line.sku}-${line.metric}-${idx}`}>
+                              <td className="py-1.5" style={{ color: "var(--n-text)" }}>
+                                {line.label}
+                              </td>
+                              <td className="py-1.5 text-right" style={{ color: "var(--n-text-muted)" }}>
+                                {line.qty !== undefined
+                                  ? line.qty
+                                  : line.qty_invoice !== undefined
+                                    ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
+                                    : "—"}
+                              </td>
+                              <td className="py-1.5 text-right font-medium" style={{ color: "var(--n-text)" }}>
+                                {line.amount !== null ? formatRupiah(line.amount) : (
+                                  <span title={line.note} style={{ color: "var(--n-text-muted)" }}>
+                                    belum diketahui
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {usage.lines.length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--n-text-muted)" }}>
+                                Tidak ada SKU berlisensi untuk periode ini.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+                        Total diketahui: {formatRupiah(usage.total_known)}
+                      </p>
+                    </div>
+                  )}
                 </td>
               </tr>
             )}

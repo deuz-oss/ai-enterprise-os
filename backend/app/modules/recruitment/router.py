@@ -158,7 +158,7 @@ def update_interview(
 @router.post("/job-orders/{jo_id}/match", response_model=list[MatchResult])
 def match_for_jo(jo_id: str, payload: MatchRequest | None = None, db: Session = Depends(get_db)):
     top_k = payload.top_k if payload else 50
-    return service.match_candidates(db, jo_id, top_k=top_k)
+    return service.match_candidates(db, jo_id, top_k=top_k, billable=True)
 
 
 @router.get("/job-orders/{jo_id}/matches", response_model=list[MatchResult])
