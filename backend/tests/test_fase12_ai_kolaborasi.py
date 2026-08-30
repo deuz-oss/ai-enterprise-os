@@ -58,12 +58,20 @@ def _replies(client, headers, channel_id, root_id):
     return rows
 
 
+def _toplevel(client, headers, channel_id):
+    """Pesan level-atas channel (parent_id=None) — tempat balasan AEOS/slash
+    command sungguhan muncul saat trigger-nya sendiri top-level (regresi:
+    dulu selalu ke-nest jadi balasan thread di bawah pesan pemicu, jadi tak
+    pernah tampil di sini)."""
+    return client.get(f"/api/v1/chat/channels/{channel_id}/messages", headers=headers).json()
+
+
 def test_slash_help_dan_pr_status_di_channel_public(client):
     h = _setup(client)
     ch = _channel(client, h["admin"], "general")
 
-    sent = _send(client, h["admin"], ch, "/help")
-    replies = _replies(client, h["admin"], ch, sent["id"])
+    _send(client, h["admin"], ch, "/help")
+    replies = _toplevel(client, h["admin"], ch)
     assert any("Perintah tersedia" in r["content"] for r in replies)
 
     # Seed PR menunggu langsung via DB agar fokus ke perintahnya
@@ -92,8 +100,8 @@ def test_slash_help_dan_pr_status_di_channel_public(client):
     finally:
         db.close()
 
-    sent2 = _send(client, h["admin"], ch, "/pr status")
-    replies2 = _replies(client, h["admin"], ch, sent2["id"])
+    _send(client, h["admin"], ch, "/pr status")
+    replies2 = _toplevel(client, h["admin"], ch)
     assert any("PR/2026/9001" in r["content"] for r in replies2)
 
 
@@ -102,13 +110,13 @@ def test_cuti_hanya_di_dm_dan_ajukan_butuh_karyawan_tertaut(client):
     pub = _channel(client, h["admin"], "pub-cuti")
 
     # Di channel public ditolak dengan arahan DM
-    sent = _send(client, h["hr"], pub, "/cuti sisa")
-    replies = _replies(client, h["hr"], pub, sent["id"])
+    _send(client, h["hr"], pub, "/cuti sisa")
+    replies = _toplevel(client, h["hr"], pub)
     assert any("bersifat pribadi" in r["content"] for r in replies)
 
     dm = _channel(client, h["hr"], "DM HR-AEOS", channel_type="dm")
-    sent2 = _send(client, h["hr"], dm, "/cuti sisa")
-    replies2 = _replies(client, h["hr"], dm, sent2["id"])
+    _send(client, h["hr"], dm, "/cuti sisa")
+    replies2 = _toplevel(client, h["hr"], dm)
     # Tanpa karyawan tertaut → pesan ramah; dengan kuota → angka sisa.
     assert replies2
     joined = "\n".join(r["content"] for r in replies2)
@@ -119,13 +127,13 @@ def test_cuti_hanya_di_dm_dan_ajukan_butuh_karyawan_tertaut(client):
     # Ajukan tanpa karyawan tertaut → pesan ramah dari AEOS, bukan crash
     tomorrow = date.today() + timedelta(days=1)
     day_after = date.today() + timedelta(days=2)
-    sent3 = _send(
+    _send(
         client,
         h["hr"],
         dm,
         f"/cuti ajukan izin {tomorrow.isoformat()} {day_after.isoformat()} acara keluarga",
     )
-    replies3 = _replies(client, h["hr"], dm, sent3["id"])
+    replies3 = _toplevel(client, h["hr"], dm)
     assert replies3, "harus ada balasan AEOS"
     assert any("⚠️" in r["content"] or "✅" in r["content"] for r in replies3)
 
@@ -137,9 +145,13 @@ def test_aeos_mention_tanpa_lisensi_memberi_pesan_ramah(client):
     ch = _channel(client, h["admin"], "ai-room")
 
     with patch.object(collab, "_ai_license_active", return_value=False):
-        sent = _send(client, h["admin"], ch, "@AEOS berapa total invoice belum lunas?")
-    replies = _replies(client, h["admin"], ch, sent["id"])
+        _send(client, h["admin"], ch, "@AEOS berapa total invoice belum lunas?")
+    replies = _toplevel(client, h["admin"], ch)
     assert any("AI add-on" in r["content"] for r in replies)
+    # Regresi: balasan harus top-level (parent_id None) sama seperti pemicu,
+    # bukan di-nest sebagai thread di bawahnya (tak akan tampil di channel utama).
+    aeos_reply = next(r for r in replies if "AI add-on" in r["content"])
+    assert aeos_reply["parent_id"] is None
 
 
 def test_aeos_mention_dengan_llm_mocked_membalas_jawaban(client):
@@ -151,14 +163,14 @@ def test_aeos_mention_dengan_llm_mocked_membalas_jawaban(client):
     with patch.object(
         collab, "chat_completion", return_value="Pendapatan tahun ini Rp100.000.000."
     ):
-        sent = _send(client, h["admin"], ch, "@AEOS bagaimana laba rugi tahun ini?")
-    replies = _replies(client, h["admin"], ch, sent["id"])
+        _send(client, h["admin"], ch, "@AEOS bagaimana laba rugi tahun ini?")
+    replies = _toplevel(client, h["admin"], ch)
     assert any("Rp100.000.000" in r["content"] for r in replies)
 
     # Pertanyaan di luar data + kata kunci finance → saran routing Finance
     with patch.object(collab, "chat_completion", return_value="Saya tidak menemukan datanya."):
-        sent2 = _send(client, h["admin"], ch, "@AEOS kapan PPN faktur lama dikoreksi?")
-    replies2 = _replies(client, h["admin"], ch, sent2["id"])
+        _send(client, h["admin"], ch, "@AEOS kapan PPN faktur lama dikoreksi?")
+    replies2 = _toplevel(client, h["admin"], ch)
     assert any("routing" in r["content"].lower() for r in replies2)
 
 

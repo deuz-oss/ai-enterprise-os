@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    tenant_name: str | None = None
 
 
 class Token(BaseModel):
@@ -34,6 +35,10 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
 
 
 class UserUpdate(BaseModel):
@@ -56,3 +61,7 @@ class PasswordResetIssueOut(BaseModel):
 class PasswordResetIn(BaseModel):
     token: str
     new_password: str
+
+
+class ForgotPasswordAckOut(BaseModel):
+    detail: str

@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { BarChart3, Bot, BookOpen, FolderTree, Lock } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -155,7 +156,7 @@ export default function Accounting() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader emoji="📊" title="Akunting" />
+        <PageHeader icon={BarChart3} title="Akunting" />
         <div className="flex items-center gap-2">
           <span className="text-sm" style={{ color: "var(--n-text-muted)" }}>Tahun</span>
           <input
@@ -170,16 +171,16 @@ export default function Accounting() {
       <div className="flex gap-2">
         {(
           [
-            ["jurnal", "📓 Jurnal"],
-            ["coa", "🗂️ Bagan Akun"],
-            ["periode", "🔒 Periode & Tutup Buku"],
-            ["ai", "🤖 AI & Rekonsiliasi"],
+            ["jurnal", "Jurnal", BookOpen],
+            ["coa", "Bagan Akun", FolderTree],
+            ["periode", "Periode & Tutup Buku", Lock],
+            ["ai", "AI & Rekonsiliasi", Bot],
           ] as const
-        ).map(([k, label]) => (
+        ).map(([k, label, Icon]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className="rounded px-3 py-1.5 text-sm transition-colors"
+            className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors"
             style={{
               border: "1px solid var(--n-border)",
               backgroundColor: tab === k ? "var(--n-hover)" : "transparent",
@@ -187,6 +188,7 @@ export default function Accounting() {
               fontWeight: tab === k ? 500 : 400,
             }}
           >
+            <Icon className="h-3.5 w-3.5" />
             {label}
           </button>
         ))}
@@ -338,7 +340,7 @@ export default function Accounting() {
 
       {tab === "periode" && (
         <>
-          <CalloutBlock emoji="🔒" tone="warning">
+          <CalloutBlock tone="warning">
             Tutup buku mengunci periode: input jurnal backdate ditolak dan mesin
             auto-journal melewati periode tertutup. Buka ulang tercatat di audit.
           </CalloutBlock>          <div className="card space-y-2">

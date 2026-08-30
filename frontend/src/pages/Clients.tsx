@@ -1,4 +1,5 @@
 import { FormEvent, useRef, useState } from "react";
+import { Building2 } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -88,7 +89,7 @@ export default function Clients() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageHeader emoji="🎯" title="Klien" />
+        <PageHeader icon={Building2} title="Klien" />
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Tutup" : "+ Klien Baru"}
         </button>

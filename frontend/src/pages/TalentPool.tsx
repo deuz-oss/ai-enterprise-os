@@ -2,6 +2,7 @@ import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
+import { Dna, Palette } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/notion";
 import type { JobOrder } from "./JobOrders";
 
@@ -128,7 +129,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
       </div>
 
       {d.status === "gagal" && (
-        <CalloutBlock emoji="⚠️" tone="warning">
+        <CalloutBlock tone="warning">
           Ekstraksi gagal: {d.needs_review.length ? "" : ""}
           {"AI belum dikonfigurasi atau dokumen tidak terbaca. Coba proses ulang."}
         </CalloutBlock>
@@ -283,7 +284,9 @@ function BrandingCard() {
   if (!b) return null;
   return (
     <div className="card space-y-2 p-4">
-      <h3 className="text-sm font-semibold">🎨 Branding CV Standar</h3>
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        <Palette className="h-4 w-4" /> Branding CV Standar
+      </h3>
       <div className="flex flex-wrap items-center gap-3 text-xs">
         {b.has_logo && b.logo_url && (
           <img
@@ -416,7 +419,7 @@ export default function TalentPool() {
   return (
     <div className="space-y-4">
       <PageHeader
-        emoji="🧬"
+        icon={Dna}
         title="Talent Pool"
         subtitle="CV terstandar otomatis: unggah → ekstraksi AI → review recruiter → CV standar berversi (PRD §10)"
       />

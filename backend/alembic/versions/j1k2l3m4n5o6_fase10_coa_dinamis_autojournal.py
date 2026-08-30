@@ -142,24 +142,31 @@ def upgrade() -> None:
 
     tenants = [r[0] for r in conn.execute(sa.text("SELECT id FROM tenants")).fetchall()]
     for tenant_id in tenants:
-        tid = str(tenant_id)
+        # UUID (bukan str): Postgres menolak assignment VARCHAR->uuid secara
+        # implisit (SQLite lolos karena tidak menegakkan tipe kolom).
+        # .bindparams(**kwargs) (bukan dict kedua ke conn.execute) supaya
+        # SQLAlchemy infer tipe dari nilai Python & proses bind sesuai
+        # dialek -- dict mentah ke conn.execute tidak melalui jalur itu,
+        # jadi UUID mentah gagal di SQLite (unsupported type) meski benar
+        # di Postgres, dan sebaliknya untuk str.
+        tid = uuid.UUID(str(tenant_id))
         for code, name, group, normal, cash, ar_ap in DEFAULT_COA:
             conn.execute(
                 sa.text(
                     "INSERT INTO accounts (id, tenant_id, code, name, group_type, normal_balance, "
                     "is_cash_bank, is_control_ar_ap, is_active) "
-                    "VALUES (:id, :tid, :code, :name, :grp, :nb, :cash, :arap, 1)"
-                ),
-                {
-                    "id": str(uuid.uuid4()),
-                    "tid": tid,
-                    "code": code,
-                    "name": name,
-                    "grp": group,
-                    "nb": normal,
-                    "cash": int(cash),
-                    "arap": int(ar_ap),
-                },
+                    "VALUES (:id, :tid, :code, :name, :grp, :nb, :cash, :arap, :active)"
+                ).bindparams(
+                    id=uuid.uuid4(),
+                    tid=tid,
+                    code=code,
+                    name=name,
+                    grp=group,
+                    nb=normal,
+                    cash=bool(cash),
+                    arap=bool(ar_ap),
+                    active=True,
+                )
             )
         # Map baris jurnal lama ke akun COA berdasar kode (dalam tenant sama).
         conn.execute(
@@ -175,17 +182,22 @@ def upgrade() -> None:
                 WHERE account_id IS NULL
                   AND tenant_id = :tid
                 """
-            ),
-            {"tid": tid},
+            ).bindparams(tid=tid)
         )
         for event, d, c in DEFAULT_RULES:
             conn.execute(
                 sa.text(
                     "INSERT INTO journal_rules (id, tenant_id, event_code, debit_account_code, "
                     "credit_account_code, is_active) "
-                    "VALUES (:id, :tid, :ev, :d, :c, 1)"
-                ),
-                {"id": str(uuid.uuid4()), "tid": tid, "ev": event, "d": d, "c": c},
+                    "VALUES (:id, :tid, :ev, :d, :c, :active)"
+                ).bindparams(
+                    id=uuid.uuid4(),
+                    tid=tid,
+                    ev=event,
+                    d=d,
+                    c=c,
+                    active=True,
+                )
             )
 
 

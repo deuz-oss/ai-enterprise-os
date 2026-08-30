@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Magnet } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -104,7 +105,7 @@ export default function JobOrders() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageHeader emoji="🧲" title="Job Orders" />
+        <PageHeader icon={Magnet} title="Job Orders" />
         <button className="btn" onClick={() => setShowForm(!showForm)} disabled={!clients?.length}>
           {showForm ? "Tutup" : "+ Job Order Baru"}
         </button>

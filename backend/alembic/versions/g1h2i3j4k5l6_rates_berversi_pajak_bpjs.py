@@ -122,7 +122,7 @@ def upgrade() -> None:
     # Seed versi awal dari konstanta kode (fallback yang sudah teruji)
     conn = op.get_bind()
     # PPh21 2025
-    import json
+    from datetime import date
 
     from app.modules.bpjs.engine import (
         DEFAULT_JKK_CATEGORY,
@@ -158,25 +158,35 @@ def upgrade() -> None:
         return [[None if upper == float("inf") else upper, rate] for upper, rate in brackets]
 
     pph21_id = "00000000-0000-0000-0000-000000000001"
+    # .bindparams(**kwargs) (bukan dict kedua ke conn.execute) supaya
+    # SQLAlchemy infer tipe dari nilai Python & proses bind sesuai dialek --
+    # dict mentah ke conn.execute tidak melalui jalur itu, jadi str tanggal
+    # gagal cast implisit ke kolom Date di Postgres.
     conn.execute(
         sa.text(
             "INSERT INTO pph21_configs (id, effective_from, ptkp_diri, ptkp_kawin, "
             "ptkp_tanggungan, "
             "max_tanggungan, pasal17_brackets, ter_a, ter_b, ter_c) "
             "VALUES (:id, :eff, :diri, :kawin, :tang, :max, :pasal, :a, :b, :c)"
-        ),
-        {
-            "id": pph21_id,
-            "eff": "2025-01-01",
-            "diri": PTKP_DIRI_SENDIRI,
-            "kawin": PTKP_KAWIN,
-            "tang": PTKP_TANGGUNGAN,
-            "max": MAX_TANGGUNGAN,
-            "pasal": json.dumps(_ser_brackets(PASAL_17_BRACKETS)),
-            "a": json.dumps(_ser_brackets(TER_A)),
-            "b": json.dumps(_ser_brackets(TER_B)),
-            "c": json.dumps(_ser_brackets(TER_C)),
-        },
+        ).bindparams(
+            # Kolom JSON: deklarasikan type_ eksplisit + kirim objek Python
+            # asli (bukan json.dumps string) supaya SQLAlchemy serialize
+            # sesuai dialek (Postgres json/jsonb vs SQLite text).
+            sa.bindparam("pasal", type_=sa.JSON()),
+            sa.bindparam("a", type_=sa.JSON()),
+            sa.bindparam("b", type_=sa.JSON()),
+            sa.bindparam("c", type_=sa.JSON()),
+            id=pph21_id,
+            eff=date(2025, 1, 1),
+            diri=PTKP_DIRI_SENDIRI,
+            kawin=PTKP_KAWIN,
+            tang=PTKP_TANGGUNGAN,
+            max=MAX_TANGGUNGAN,
+            pasal=_ser_brackets(PASAL_17_BRACKETS),
+            a=_ser_brackets(TER_A),
+            b=_ser_brackets(TER_B),
+            c=_ser_brackets(TER_C),
+        )
     )
 
     bpjs_id = "00000000-0000-0000-0000-000000000002"
@@ -186,23 +196,23 @@ def upgrade() -> None:
             "kesehatan_cap, jht_employer, jht_employee, jp_employer, jp_employee, jp_cap, "
             "jkm_rate, jkk_rates, default_jkk_category) "
             "VALUES (:id, :eff, :ke, :ke2, :kecap, :jhte, :jhte2, :jpe, "
-            ":jpe2, :jpcap, :jkm, :jkk, :def)"
-        ),
-        {
-            "id": bpjs_id,
-            "eff": "2025-01-01",
-            "ke": KESEHATAN_EMPLOYER,
-            "ke2": KESEHATAN_EMPLOYEE,
-            "kecap": KESEHATAN_SALARY_CAP,
-            "jhte": JHT_EMPLOYER,
-            "jhte2": JHT_EMPLOYEE,
-            "jpe": JP_EMPLOYER,
-            "jpe2": JP_EMPLOYEE,
-            "jpcap": JP_SALARY_CAP,
-            "jkm": JKM_RATE,
-            "jkk": json.dumps(JKK_RATES),
-            "def": DEFAULT_JKK_CATEGORY,
-        },
+            ":jpe2, :jpcap, :jkm, :jkk, :jkk_category)"
+        ).bindparams(
+            sa.bindparam("jkk", type_=sa.JSON()),
+            id=bpjs_id,
+            eff=date(2025, 1, 1),
+            ke=KESEHATAN_EMPLOYER,
+            ke2=KESEHATAN_EMPLOYEE,
+            kecap=KESEHATAN_SALARY_CAP,
+            jhte=JHT_EMPLOYER,
+            jhte2=JHT_EMPLOYEE,
+            jpe=JP_EMPLOYER,
+            jpe2=JP_EMPLOYEE,
+            jpcap=JP_SALARY_CAP,
+            jkm=JKM_RATE,
+            jkk=JKK_RATES,
+            jkk_category=DEFAULT_JKK_CATEGORY,
+        )
     )
 
     billing_id = "00000000-0000-0000-0000-000000000003"
@@ -210,14 +220,13 @@ def upgrade() -> None:
         sa.text(
             "INSERT INTO billing_tax_configs (id, effective_from, ppn_rate, pph23_rate, due_days) "
             "VALUES (:id, :eff, :ppn, :pph23, :due)"
-        ),
-        {
-            "id": billing_id,
-            "eff": "2025-01-01",
-            "ppn": DEFAULT_PPN_RATE,
-            "pph23": DEFAULT_PPH23_RATE,
-            "due": DEFAULT_DUE_DAYS,
-        },
+        ).bindparams(
+            id=billing_id,
+            eff=date(2025, 1, 1),
+            ppn=DEFAULT_PPN_RATE,
+            pph23=DEFAULT_PPH23_RATE,
+            due=DEFAULT_DUE_DAYS,
+        )
     )
 
     # Bank fees default: Mandiri group gratis, lainnya 3500
@@ -233,13 +242,12 @@ def upgrade() -> None:
             sa.text(
                 "INSERT INTO bank_fee_configs (id, bank_name, fee, is_mandiri_group) "
                 "VALUES (:id, :name, :fee, :is_m)"
-            ),
-            {
-                "id": str(uuid.uuid4()),
-                "name": name,
-                "fee": 0 if is_mandiri else 3500,
-                "is_m": is_mandiri,
-            },
+            ).bindparams(
+                id=str(uuid.uuid4()),
+                name=name,
+                fee=0 if is_mandiri else 3500,
+                is_m=is_mandiri,
+            )
         )
 
 

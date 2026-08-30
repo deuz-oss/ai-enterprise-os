@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { ClipboardList } from "lucide-react";
 import { PageHeader } from "../components/notion";
 
 interface PrDecision {
@@ -221,7 +222,7 @@ export default function PaymentRequests() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader
-          emoji="🧾"
+          icon={ClipboardList}
           title="Payment Request"
           subtitle="Diajukan → Menunggu Atasan (rantai approval per tenant) → Disetujui → Dieksekusi Finance"
         />

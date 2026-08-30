@@ -9,6 +9,7 @@ Aman untuk database yang sudah berisi data:
 Semua perubahan struktural memakai batch_alter_table agar kompatibel SQLite.
 """
 
+import uuid
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -20,7 +21,10 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # ID deterministik untuk tenant default hasil backfill.
-DEFAULT_TENANT_ID = "0a000000-0000-4000-8000-000000000001"
+# uuid.UUID (bukan str) agar SQLAlchemy infer tipe bind param sebagai
+# Uuid, bukan VARCHAR -- Postgres menolak assignment VARCHAR->uuid
+# secara implisit (SQLite lolos karena tidak menegakkan tipe kolom).
+DEFAULT_TENANT_ID = uuid.UUID("0a000000-0000-4000-8000-000000000001")
 
 # Tabel bisnis dengan tenant_id NOT NULL (semua model TenantMixin).
 BUSINESS_TABLES = [
@@ -77,7 +81,10 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO tenants (id, name, slug, status, created_at) "
-            "VALUES (:id, 'Default', 'default', 'aktif', CURRENT_TIMESTAMP)"
+            # 'active' = nama anggota enum TenantStatus.active (SQLAlchemy
+            # Enum(PyEnumClass, native_enum=False) default menyimpan .name,
+            # BUKAN .value 'aktif' -- keduanya beda untuk enum ini).
+            "VALUES (:id, 'Default', 'default', 'active', CURRENT_TIMESTAMP)"
         ).bindparams(id=DEFAULT_TENANT_ID)
     )
     for table in BUSINESS_TABLES + ["users"]:

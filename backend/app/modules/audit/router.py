@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import AUDIT_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.audit import service
 from app.modules.audit.schemas import AuditListOut
@@ -12,7 +13,7 @@ from app.modules.audit.schemas import AuditListOut
 router = APIRouter(
     prefix="/audit",
     tags=["audit"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*AUDIT_ROLES))],
 )
 
 

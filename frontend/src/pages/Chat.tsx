@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { ClipboardList, CornerUpLeft, Hash, Lock, MessageCircle, Megaphone } from "lucide-react";
 import { PageHeader } from "../components/notion";
 
 interface ChannelRow {
@@ -172,7 +173,7 @@ export default function Chat() {
   return (
     <div className="space-y-4">
       <PageHeader
-        emoji="💬"
+        icon={MessageCircle}
         title="Chat Workspace"
         subtitle="Gratis di semua paket — channel proyek ter-scope per penempatan"
       />
@@ -222,9 +223,15 @@ export default function Chat() {
                   color: activeChannel === ch.id ? "var(--n-text)" : "var(--n-text-muted)",
                 }}
               >
-                <span className="truncate">
-                  {ch.channel_type === "private" ? "🔒 " : ch.channel_type === "broadcast" ? "📢 " : "# "}
-                  {ch.name}
+                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  {ch.channel_type === "private" ? (
+                    <Lock className="h-3.5 w-3.5 shrink-0" />
+                  ) : ch.channel_type === "broadcast" ? (
+                    <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <Hash className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <span className="truncate">{ch.name}</span>
                 </span>
                 {ch.unread_count > 0 && (
                   <span className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: "var(--accent)" }}>
@@ -247,8 +254,9 @@ export default function Chat() {
             className="flex items-center justify-between gap-2 px-4 py-2"
             style={{ borderBottom: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
           >
-            <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
-              {threadParent ? "↩ Thread Balasan" : channelName}
+            <span className="flex items-center gap-1.5 truncate font-medium" style={{ color: "var(--n-text)" }}>
+              {threadParent && <CornerUpLeft className="h-3.5 w-3.5 shrink-0" />}
+              {threadParent ? "Thread Balasan" : channelName}
             </span>
             <div className="flex items-center gap-1.5">
               <input
@@ -262,10 +270,10 @@ export default function Chat() {
                   <button
                     onClick={() => summarize.mutate(threadParent)}
                     disabled={summarize.isPending}
-                    className="btn-secondary py-0.5 text-xs"
+                    className="btn-secondary flex items-center gap-1 py-0.5 text-xs"
                     title="Rangkum thread jadi poin keputusan/tugas (@AEOS)"
                   >
-                    🧵 Rangkum
+                    <CornerUpLeft className="h-3 w-3" /> Rangkum
                   </button>
                   <button onClick={() => setThreadParent(null)} className="btn-secondary py-0.5 text-xs">
                     Kembali
@@ -274,10 +282,10 @@ export default function Chat() {
               ) : (
                 <button
                   onClick={() => setShowDigest((v) => !v)}
-                  className="btn-secondary py-0.5 text-xs"
+                  className="btn-secondary flex items-center gap-1 py-0.5 text-xs"
                   title="Digest harian: approval menunggu, SLA, kontrak, invoice"
                 >
-                  📋 Digest
+                  <ClipboardList className="h-3 w-3" /> Digest
                 </button>
               )}
               {activeChannel && (
@@ -311,7 +319,9 @@ export default function Chat() {
           {showDigest && !threadParent && (
             <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
               <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--n-text)" }}>
-                📋 Digest harian {digest.data?.date ? `· ${digest.data.date}` : ""}
+                <span className="flex items-center gap-1.5">
+                  <ClipboardList className="h-3.5 w-3.5" /> Digest harian {digest.data?.date ? `· ${digest.data.date}` : ""}
+                </span>
                 <button onClick={() => setShowDigest(false)} style={{ color: "var(--accent)" }}>tutup</button>
               </p>
               {digest.isLoading && <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Menyusun…</p>}

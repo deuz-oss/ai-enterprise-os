@@ -108,3 +108,63 @@ def test_overview_widget5_active_placements_by_client(client):
     assert after["operations"]["active_placements_by_client"] == [
         {"client": "PT Widget5", "active_placements": 1}
     ]
+
+
+def test_overview_people_bpjs_and_insurance_complete(client):
+    """Dashboard §8 widget "People & Compliance" — bpjs_complete/insurance_complete.
+
+    Regresi: insurance_complete sebelumnya menghitung kolom lama
+    `Employee.insurance_policy_no` (PRD v2.0) yang sudah tidak pernah diisi
+    UI — polis asuransi sekarang disimpan di tabel one-to-many
+    `EmployeeInsurance` (PRD v3.0). Widget selalu 0% walau polis sungguhan
+    sudah dibuat lewat `/employees/{id}/insurances`."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Widget People Test"}
+    ).json()
+
+    before = client.get("/api/v1/overview", headers=headers).json()
+    assert before["people"]["bpjs_complete"] == 0
+    assert before["people"]["insurance_complete"] == 0
+
+    bpjs = client.patch(
+        f"/api/v1/employees/{emp['id']}",
+        headers=headers,
+        json={"bpjs_kesehatan_no": "0001234567890"},
+    )
+    assert bpjs.status_code == 200, bpjs.text
+
+    ins = client.post(
+        f"/api/v1/employees/{emp['id']}/insurances",
+        headers=headers,
+        json={"provider": "prudential", "policy_no": "POL-1"},
+    )
+    assert ins.status_code == 201, ins.text
+
+    after = client.get("/api/v1/overview", headers=headers).json()
+    assert after["people"]["bpjs_complete"] == 1
+    assert after["people"]["insurance_complete"] == 1
+
+
+def test_overview_payroll_summary_maps_real_status_values(client):
+    """Dashboard widget "Payroll Run" — bucket draft/submitted/approved/finalized.
+
+    Regresi: dict lama diisi pakai key literal "submitted"/"approved"/
+    "finalized" yang TIDAK PERNAH cocok dengan value asli
+    `PayrollRunStatus` (submitted_to_client/client_approved/final) — jadi
+    breakdown selalu 0 walau ada run yang sudah final."""
+    headers = _auth_header(client)
+    client.post("/api/v1/employees", headers=headers, json={"full_name": "Dashboard Payroll Test"})
+
+    run = client.post(
+        "/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 5}
+    ).json()
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    client.post(f"/api/v1/payroll/runs/{run['id']}/start-processing", headers=headers)
+    finalized = client.post(f"/api/v1/payroll/runs/{run['id']}/finalize", headers=headers)
+    assert finalized.status_code == 200, finalized.text
+    assert finalized.json()["status"] == "final"
+
+    data = client.get("/api/v1/overview", headers=headers).json()
+    assert data["payroll"]["finalized"] == 1
+    assert data["payroll"]["draft"] == 0

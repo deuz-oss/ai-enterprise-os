@@ -144,6 +144,11 @@ class Placement(TenantMixin, Base):
     status: Mapped[PlacementStatus] = mapped_column(
         Enum(PlacementStatus, native_enum=False, length=50), default=PlacementStatus.proposed
     )
+    # PRD v3.0 §4 aksi "Offering": surat penawaran PDF dibrandingi + esign.
+    offering_letter_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    offering_signed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     candidate = relationship("Candidate", lazy="joined")

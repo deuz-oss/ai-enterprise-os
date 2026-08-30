@@ -100,7 +100,7 @@ function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
             id: `pg-${p.id}`,
             label: p.title,
             emoji: p.icon || "📄",
-            group: "Halaman",
+            group: "Workspace",
             to: `/pages/${p.id}`,
           });
       }
@@ -212,7 +212,7 @@ export default function CommandPalette({
               <button
                 onClick={() => choose(item)}
                 onMouseEnter={() => setActive(i)}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm"
+                className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm"
                 style={{
                   backgroundColor:
                     i === active ? "var(--n-hover)" : "transparent",

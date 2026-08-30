@@ -1,6 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile } from "../api/client";
+import { api, downloadFile, formatRupiah } from "../api/client";
+import { Banknote, Calendar, IdCard, Phone, Tag, User } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
 
 export interface EmployeeRow {
@@ -12,6 +13,7 @@ export interface EmployeeRow {
   npwp_no: string | null;
   join_date: string | null;
   status: string;
+  base_salary: number;
   user_id: string | null;
   bpjs_kesehatan_no: string | null;
   bpjs_ketenagakerjaan_no: string | null;
@@ -288,8 +290,10 @@ export default function Employees() {
   const linkAccount = useMutation({
     mutationFn: ({ id, userId }: { id: string; userId: string | null }) =>
       api.patch(`/employees/${id}`, { user_id: userId }),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["selfservice-accounts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["selfservice-accounts"] });
+      invalidate();
+    },
   });
 
   const updateBpjsStatus = useMutation({
@@ -450,7 +454,7 @@ export default function Employees() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageHeader emoji="💼" title="Karyawan" />
+        <PageHeader icon={IdCard} title="Karyawan" />
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Tutup" : "+ Karyawan Baru"}
         </button>
@@ -481,7 +485,7 @@ export default function Employees() {
       )}
 
       {(expiring ?? []).length > 0 && (
-        <CalloutBlock emoji="⏰" tone="warning">
+        <CalloutBlock tone="warning">
           <p className="font-medium">Reminder Kontrak ≤30 hari</p>
           <ul className="mt-1 list-inside list-disc text-xs">
             {expiring!.map((c) => (
@@ -798,20 +802,20 @@ export default function Employees() {
         {selected && (
           <div className="card">
             <h1 className="flex items-center gap-3 text-2xl font-bold text-notion">
-              <span className="text-4xl leading-none">👤</span>
+              <User className="h-8 w-8 shrink-0" style={{ color: "var(--n-text-muted)" }} />
               {selected.full_name}
             </h1>
             <PropertiesPanel className="mt-4 max-w-2xl">
-              <PropertyRow icon="🆔" label="No. Induk">
+              <PropertyRow icon={IdCard} label="No. Induk">
                 <span className="font-mono text-xs">{selected.employee_no}</span>
               </PropertyRow>
-              <PropertyRow icon="📞" label="Telepon">
+              <PropertyRow icon={Phone} label="Telepon">
                 {selected.phone ?? "—"}
               </PropertyRow>
-              <PropertyRow icon="📅" label="Tanggal Masuk">
+              <PropertyRow icon={Calendar} label="Tanggal Masuk">
                 {selected.join_date ?? "—"}
               </PropertyRow>
-              <PropertyRow icon="🏷️" label="Status">
+              <PropertyRow icon={Tag} label="Status">
                 <span
                   className={`badge ${
                     selected.status === "aktif" ? "pill p-green" : "pill p-gray"
@@ -819,6 +823,33 @@ export default function Employees() {
                 >
                   {selected.status}
                 </span>
+              </PropertyRow>
+              <PropertyRow icon={Banknote} label="Gaji Pokok">
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    updateBpjsStatus.mutate({
+                      id: selectedId,
+                      body: { base_salary: Number(form.get("base_salary")) || 0 },
+                    });
+                  }}
+                >
+                  <input
+                    name="base_salary"
+                    type="number"
+                    min="0"
+                    defaultValue={selected.base_salary}
+                    className="input w-auto py-1 text-xs"
+                  />
+                  <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
+                    Simpan
+                  </button>
+                  <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    {formatRupiah(selected.base_salary)}/bulan
+                  </span>
+                </form>
               </PropertyRow>
             </PropertiesPanel>
           </div>
@@ -1079,12 +1110,19 @@ export default function Employees() {
                     updateBpjsStatus.mutate({
                       id: selectedId,
                       body: {
+                        [`bpjs_${b.type}_no`]: form.get("no") || null,
                         [`bpjs_${b.type}_status`]: form.get("status") || null,
                         [`bpjs_${b.type}_valid_until`]: form.get("valid_until") || null,
                       },
                     });
                   }}
                 >
+                  <input
+                    name="no"
+                    defaultValue={b.no ?? ""}
+                    placeholder="Nomor BPJS"
+                    className="input w-auto py-1 text-xs"
+                  />
                   <select name="status" defaultValue={b.statusVal ?? ""} className="input w-auto py-1 text-xs">
                     <option value="">—</option>
                     <option value="aktif">aktif</option>

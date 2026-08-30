@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import AI_FINANCE_ROLES, AI_HR_ROLES, AI_RECRUITMENT_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.ai import forecast as forecast_service
 from app.modules.ai import rag as rag_service
@@ -24,7 +25,7 @@ from app.modules.ai.schemas import (
 recruitment_router = APIRouter(
     prefix="/ai",
     tags=["ai"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("recruiter", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*AI_RECRUITMENT_ROLES))],
 )
 
 
@@ -58,7 +59,7 @@ def match_job_order(job_order_id: UUID, db: Session = Depends(get_db)):
 hr_router = APIRouter(
     prefix="/ai",
     tags=["ai"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("hr", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*AI_HR_ROLES))],
 )
 
 
@@ -81,7 +82,7 @@ def index_contract(contract_id: UUID, db: Session = Depends(get_db)):
 finance_router = APIRouter(
     prefix="/ai",
     tags=["ai"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("finance", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*AI_FINANCE_ROLES))],
 )
 
 

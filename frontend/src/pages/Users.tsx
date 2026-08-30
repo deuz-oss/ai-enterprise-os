@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { UserCog } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { api } from "../api/client";
 
@@ -18,6 +19,7 @@ const ROLES = [
   { value: "operations", label: "Operations" },
   { value: "finance", label: "Finance" },
   { value: "management", label: "Management" },
+  { value: "karyawan", label: "Karyawan (Portal Saya)" },
 ];
 
 export default function Users() {
@@ -41,7 +43,7 @@ export default function Users() {
   return (
     <div className="space-y-4">
       <div>
-        <PageHeader emoji="👥" title="Pengguna" />
+        <PageHeader icon={UserCog} title="Pengguna" />
         <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Kelola akun tim. Akun baru dibuat lewat tombol "+ Pengguna Baru".
         </p>

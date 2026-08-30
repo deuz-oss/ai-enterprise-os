@@ -1,6 +1,9 @@
 import os
 from logging.config import fileConfig
 
+# Satu-satunya model di luar app.modules.* — rate-limit itu concern
+# cross-cutting core/, bukan modul bisnis (lihat core/ratelimit.py).
+import app.core.ratelimit  # noqa: F401
 import app.modules.accounting.models  # noqa: F401
 import app.modules.ai.models  # noqa: F401
 import app.modules.attendance.models  # noqa: F401

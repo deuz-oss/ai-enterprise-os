@@ -8,6 +8,13 @@ from tests.conftest import _auth_header
 # ---------- Prediksi pembayaran klien (deterministik) ----------
 
 
+def _months_back(d: date, months: int) -> date:
+    """`d` mundur `months` bulan kalender (hari diklem ke 1) — dipakai untuk
+    bucket year/month invoice yang deterministik lintas tanggal suite dijalankan."""
+    total = d.year * 12 + (d.month - 1) - months
+    return date(total // 12, total % 12 + 1, 1)
+
+
 def _seed_invoices(client, rows: list[dict]):
     """Seed klien + invoice langsung via DB (skor dari histori, bukan alur payrol)."""
     from app.core.bootstrap import ensure_default_tenant
@@ -47,6 +54,12 @@ def _seed_invoices(client, rows: list[dict]):
 def test_payment_prediction_ranks_late_payers_first(client):
     admin = _auth_header(client)
     today = date.today()
+    # Skoring (predict_client_payments) hanya memakai due_date/paid_at/today —
+    # field `date` (issued_date) cuma menentukan bucket unique client+year+month.
+    # Dipakai _months_back (bukan timedelta(days=..)) supaya bucket antar
+    # invoice satu klien selalu beda bulan apa pun tanggal suite dijalankan;
+    # timedelta 30/15-harian bisa collide bulan tergantung today (regresi:
+    # gagal di 2026-08-30 karena today-60 & today-45 sama-sama jatuh Juli).
     _seed_invoices(
         client,
         [
@@ -55,7 +68,7 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "client": "PT Rajin",
                 "invoice_no": "INV/R/1",
                 "total_due": 10_000_000,
-                "date": today - timedelta(days=95),
+                "date": _months_back(today, 5),
                 "due": today - timedelta(days=65),
                 "paid_at": today - timedelta(days=70),
             },
@@ -63,7 +76,7 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "client": "PT Rajin",
                 "invoice_no": "INV/R/2",
                 "total_due": 10_000_000,
-                "date": today - timedelta(days=65),
+                "date": _months_back(today, 3),
                 "due": today - timedelta(days=35),
                 "paid_at": today - timedelta(days=40),
             },
@@ -75,12 +88,11 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "due": today + timedelta(days=20),
             },
             # Klien Telat: dua invoice lunas sangat terlambat + satu overdue berjalan
-            # (bulan berbeda agar tidak clash unique client/year/month)
             {
                 "client": "CV Telat",
                 "invoice_no": "INV/T/1",
                 "total_due": 12_000_000,
-                "date": today - timedelta(days=120),
+                "date": _months_back(today, 6),
                 "due": today - timedelta(days=90),
                 "paid_at": today - timedelta(days=50),  # telat 40 hari
             },
@@ -88,7 +100,7 @@ def test_payment_prediction_ranks_late_payers_first(client):
                 "client": "CV Telat",
                 "invoice_no": "INV/T/2",
                 "total_due": 12_000_000,
-                "date": today - timedelta(days=60),
+                "date": _months_back(today, 4),
                 "due": today - timedelta(days=30),
                 "paid_at": today - timedelta(days=20),  # telat 10 hari
             },

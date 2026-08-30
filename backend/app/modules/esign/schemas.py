@@ -15,7 +15,8 @@ class EsignRequestOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    contract_id: UUID
+    contract_id: UUID | None
+    placement_id: UUID | None
     provider: str
     provider_document_id: str
     signer_name: str

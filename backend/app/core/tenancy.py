@@ -119,7 +119,9 @@ def install_tenancy_listeners() -> None:
         if bind.dialect.name != "postgresql":
             return
         tid = get_tenant()
-        transaction.connection.execute(
+        # Session.connection() (bukan transaction.connection, yang di SQLAlchemy
+        # 2.0 adalah method butuh bindkey Mapper, bukan atribut Connection).
+        session.connection().execute(
             text("SELECT set_config('app.current_tenant', :v, true)"),
             {"v": str(tid) if tid else ""},
         )

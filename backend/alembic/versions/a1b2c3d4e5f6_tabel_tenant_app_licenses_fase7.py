@@ -8,6 +8,7 @@ Create Date: 2026-08-25 05:30:00.000000
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from alembic import op
@@ -61,21 +62,29 @@ def upgrade() -> None:
     # penjualan granular dilakukan dengan mencabut lisensi, bukan menutup akses.
     conn = op.get_bind()
     tenant_rows = conn.execute(sa.text("SELECT id FROM tenants")).fetchall()
-    stamp = "2026-08-25 00:00:00"
+    # datetime (bukan str): kolom started_at bertipe timestamptz,
+    # Postgres menolak assignment VARCHAR->timestamptz secara implisit.
+    stamp = datetime(2026, 8, 25, 0, 0, 0, tzinfo=UTC)
     for (tenant_id,) in tenant_rows:
+        tid = uuid.UUID(str(tenant_id))
         for key in APP_REGISTRY:
+            # .bindparams(**kwargs) (bukan dict kedua ke conn.execute) supaya
+            # SQLAlchemy infer tipe dari nilai Python & proses bind sesuai
+            # dialek -- dict mentah ke conn.execute tidak melalui jalur itu.
             conn.execute(
                 sa.text(
                     "INSERT INTO tenant_app_licenses "
                     "(id, tenant_id, app_key, status, started_at, expires_at) "
-                    "VALUES (:id, :tenant_id, :app_key, 'aktif', :started_at, NULL)"
-                ),
-                {
-                    "id": str(uuid.uuid4()),
-                    "tenant_id": str(tenant_id),
-                    "app_key": key,
-                    "started_at": stamp,
-                },
+                    # 'active' = nama anggota enum LicenseStatus.active (SQLAlchemy
+                    # Enum(PyEnumClass, native_enum=False) default menyimpan .name,
+                    # BUKAN .value 'aktif').
+                    "VALUES (:id, :tenant_id, :app_key, 'active', :started_at, NULL)"
+                ).bindparams(
+                    id=uuid.uuid4(),
+                    tenant_id=tid,
+                    app_key=key,
+                    started_at=stamp,
+                )
             )
 
 

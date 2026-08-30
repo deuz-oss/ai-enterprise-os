@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Building2 } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
@@ -25,6 +26,14 @@ interface LicenseRow {
   app_key: string;
   name: string;
   status: string | null;
+}
+
+interface BundleRow {
+  key: string;
+  name: string;
+  apps: string[];
+  description: string;
+  price_model: string;
 }
 
 interface UsageLine {
@@ -106,6 +115,14 @@ export default function PlatformTenants() {
     queryFn: () => api.get<LicenseRow[]>(`/platform/tenants/${expandedId}/licenses`),
     enabled: Boolean(expandedId),
   });
+  // 4 bundel komersial Opsi F (Talent/Workforce/Revenue/Govern Cloud) — dari
+  // backend (core/apps.py BUNDLE_REGISTRY), bukan hardcode, supaya selalu
+  // sinkron dengan definisi resmi.
+  const { data: bundles } = useQuery({
+    queryKey: ["bundles"],
+    queryFn: () => api.get<BundleRow[]>("/platform/bundles"),
+    enabled: Boolean(expandedId),
+  });
 
   const setLicense = useMutation({
     mutationFn: ({
@@ -118,6 +135,23 @@ export default function PlatformTenants() {
       status: string;
     }) =>
       api.patch(`/platform/tenants/${tenantId}/licenses/${appKey}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
+  });
+
+  // Grant/cabut SEMUA app teknis dalam satu bundle sekaligus — mencegah
+  // bundle "setengah aktif" (mis. recruitment nyala tanpa sales_crm) yang
+  // bisa terjadi kalau app_key diatur satu-satu.
+  const setBundle = useMutation({
+    mutationFn: ({
+      tenantId,
+      bundleKey,
+      status,
+    }: {
+      tenantId: string;
+      bundleKey: string;
+      status: string;
+    }) =>
+      api.patch(`/platform/tenants/${tenantId}/bundles/${bundleKey}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
   });
 
@@ -150,7 +184,7 @@ export default function PlatformTenants() {
   return (
     <div className="space-y-4">
       <div>
-        <PageHeader emoji="🏢" title="Manajemen Tenant" />
+        <PageHeader icon={Building2} title="Manajemen Tenant" />
         <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Platform SaaS — satu tenant = satu perusahaan outsourcing pelanggan.
         </p>
@@ -298,34 +332,76 @@ export default function PlatformTenants() {
             {(expandedId !== null) && (
               <tr>
                 <td colSpan={6} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    {(licenses ?? []).map((lic) => (
-                      <div
-                        key={lic.app_key}
-                        className="flex items-center justify-between gap-2 rounded-lg border p-2"
-                        style={{ backgroundColor: "var(--n-bg-elevated)", borderColor: "var(--n-border)" }}
-                      >
-                        <span className="truncate text-xs font-medium" style={{ color: "var(--n-text)" }}>
-                          {lic.name}
-                        </span>
-                        <select
-                          value={lic.status ?? ""}
-                          onChange={(e) =>
-                            setLicense.mutate({
-                              tenantId: expandedId,
-                              appKey: lic.app_key,
-                              status: e.target.value,
-                            })
-                          }
-                          className="input w-auto py-1 text-xs"
+                  <p className="mb-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
+                    supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
+                    aktif"), atau atur app satu-satu lewat dropdown bila perlu.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {(bundles ?? []).map((b) => {
+                      const rows = (licenses ?? []).filter((lic) => b.apps.includes(lic.app_key));
+                      const allActive = rows.length > 0 && rows.every((r) => r.status === "aktif");
+                      return (
+                        <div
+                          key={b.key}
+                          className="rounded-lg border p-2.5"
+                          style={{ backgroundColor: "var(--n-bg-elevated)", borderColor: "var(--n-border)" }}
                         >
-                          <option value="">—</option>
-                          <option value="aktif">aktif</option>
-                          <option value="trial">trial</option>
-                          <option value="kedaluwarsa">kedaluwarsa</option>
-                        </select>
-                      </div>
-                    ))}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold" style={{ color: "var(--n-text)" }}>
+                              {b.name}
+                            </span>
+                            <div className="flex shrink-0 gap-1.5">
+                              <button
+                                disabled={setBundle.isPending}
+                                onClick={() =>
+                                  setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "aktif" })
+                                }
+                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{ color: "var(--accent)", backgroundColor: "var(--accent-tint)" }}
+                              >
+                                Aktifkan Semua
+                              </button>
+                              <button
+                                disabled={setBundle.isPending || !allActive}
+                                onClick={() =>
+                                  setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "kedaluwarsa" })
+                                }
+                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                style={{ backgroundColor: "rgba(225,29,72,.08)" }}
+                              >
+                                Cabut Semua
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-2 space-y-1.5">
+                            {rows.map((lic) => (
+                              <div key={lic.app_key} className="flex items-center justify-between gap-2">
+                                <span className="truncate text-xs" style={{ color: "var(--n-text-muted)" }}>
+                                  {lic.name}
+                                </span>
+                                <select
+                                  value={lic.status ?? ""}
+                                  onChange={(e) =>
+                                    setLicense.mutate({
+                                      tenantId: expandedId,
+                                      appKey: lic.app_key,
+                                      status: e.target.value,
+                                    })
+                                  }
+                                  className="input w-auto py-1 text-xs"
+                                >
+                                  <option value="">—</option>
+                                  <option value="aktif">aktif</option>
+                                  <option value="trial">trial</option>
+                                  <option value="kedaluwarsa">kedaluwarsa</option>
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>

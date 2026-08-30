@@ -248,3 +248,28 @@ def set_license_status(
     db.commit()
     db.refresh(license_row)
     return license_row
+
+
+def set_bundle_status(
+    db: Session,
+    tenant_id: UUID,
+    bundle_key: str,
+    status: LicenseStatus,
+    expires_at=None,
+) -> list[TenantAppLicense]:
+    """Atur lisensi SEMUA app teknis dalam satu bundle Opsi F sekaligus (mis.
+    "talent" -> sales_crm + recruitment bersamaan), supaya bundle komersial
+    tidak bisa "setengah aktif" seperti saat app_key diatur satu-satu lewat
+    `set_license_status`.
+    """
+    from app.core.apps import BUNDLE_REGISTRY, apps_for_bundle
+
+    if bundle_key not in BUNDLE_REGISTRY:
+        raise HTTPException(status_code=404, detail="Bundle tidak dikenal")
+    app_keys = apps_for_bundle(bundle_key)
+    if not app_keys:
+        raise HTTPException(
+            status_code=422,
+            detail="Bundle ini tidak punya app teknis untuk dilisensikan (mis. Foundation/Add-on)",
+        )
+    return [set_license_status(db, tenant_id, key, status, expires_at) for key in app_keys]

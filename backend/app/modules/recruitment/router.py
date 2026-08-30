@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import RECRUITMENT_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.recruitment import service
 from app.modules.recruitment.models import (
@@ -21,6 +22,8 @@ from app.modules.recruitment.schemas import (
     JobOrderUpdate,
     MatchRequest,
     MatchResult,
+    OfferingSendIn,
+    OfferingSummaryOut,
     PlacementCreate,
     PlacementOut,
     PlacementUpdate,
@@ -29,7 +32,7 @@ from app.modules.recruitment.schemas import (
 router = APIRouter(
     prefix="/recruitment",
     tags=["recruitment"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("recruiter", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*RECRUITMENT_ROLES))],
 )
 
 # ---------- Job orders ----------
@@ -123,9 +126,24 @@ def create_placement(payload: PlacementCreate, db: Session = Depends(get_db)):
     return service.create_placement(db, payload)
 
 
+@router.get("/placements/offering-summary", response_model=OfferingSummaryOut)
+def get_offering_summary(db: Session = Depends(get_db)):
+    """Ringkasan pipeline offering — widget "Offering" Talent Cloud."""
+    return service.offering_summary(db)
+
+
 @router.patch("/placements/{placement_id}", response_model=PlacementOut)
 def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = Depends(get_db)):
     return service.update_placement_status(db, placement_id, payload.status)
+
+
+@router.post("/placements/{placement_id}/offering")
+def send_offering(placement_id: str, payload: OfferingSendIn, db: Session = Depends(get_db)):
+    """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF branded -> esign."""
+    from app.modules.esign.schemas import EsignRequestOut
+
+    request = service.send_offering_letter(db, placement_id, payload)
+    return EsignRequestOut.model_validate(request)
 
 
 # ---------- Interviews — PRD v3.0 Talent Cloud ----------

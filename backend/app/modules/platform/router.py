@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.apps import APP_REGISTRY
+from app.core.apps import APP_REGISTRY, BUNDLE_REGISTRY
 from app.core.database import get_db
 from app.core.security import get_current_user, require_platform_admin
 from app.modules.apps.schemas import LicenseSetIn
@@ -121,3 +121,48 @@ def set_license(
         "status": row.status.value,
         "expires_at": row.expires_at,
     }
+
+
+# ---------- Bundle komersial Opsi F (4 paket = gabungan SKU teknis) ----------
+
+
+@router.get("/bundles")
+def list_bundles():
+    """4 bundel komersial Opsi F + isi SKU teknisnya — dipakai UI Lisensi supaya
+    grouping bundle bersumber dari backend, bukan hardcode di frontend."""
+    return [
+        {
+            "key": b.key,
+            "name": b.name,
+            "apps": list(b.apps),
+            "description": b.description,
+            "price_model": b.price_model,
+        }
+        for b in BUNDLE_REGISTRY.values()
+        if b.apps  # Foundation/starter/growth/dst di luar 4 bundel F tak relevan di sini
+        and b.key in {"talent", "workforce", "revenue", "govern"}
+    ]
+
+
+@router.patch("/tenants/{tenant_id}/bundles/{bundle_key}")
+def set_bundle(
+    tenant_id: UUID,
+    bundle_key: str,
+    payload: LicenseSetIn,
+    db: Session = Depends(get_db),
+):
+    """Aktifkan/perpanjang/cabut SEMUA app teknis dalam satu bundle Opsi F
+    sekaligus (mis. "talent" -> sales_crm + recruitment bersamaan) — mencegah
+    bundle komersial "setengah aktif" akibat app_key diatur satu-satu."""
+    try:
+        status_enum = LicenseStatus(payload.status)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Status tidak valid; gunakan {', '.join(s.value for s in LicenseStatus)}",
+        ) from None
+    rows = service.set_bundle_status(db, tenant_id, bundle_key, status_enum, payload.expires_at)
+    return [
+        {"app_key": row.app_key, "status": row.status.value, "expires_at": row.expires_at}
+        for row in rows
+    ]

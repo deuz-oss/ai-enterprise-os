@@ -221,9 +221,16 @@ def send_message(
 
 
 def _post_aeos_reply(
-    db: Session, *, tenant_id, channel: Channel, parent: ChatMessage | None, content: str
+    db: Session, *, tenant_id, channel: Channel, parent_id, content: str
 ) -> ChatMessage:
-    """Posting balasan atas nama bot AEOS (identitas per tenant)."""
+    """Posting balasan atas nama bot AEOS (identitas per tenant).
+
+    `parent_id` menentukan level tempat balasan muncul — bukan otomatis
+    `parent.id` dari pesan pemicu. Regresi: dulu selalu di-nest sebagai
+    balasan thread DI BAWAH pesan pemicu, jadi tak pernah muncul di channel
+    utama (yang cuma tampilkan pesan top-level) kecuali user tahu harus
+    buka thread — @AEOS/slash command jadi seolah tidak menjawab.
+    """
     from app.modules.ai.collab import ensure_aeos_user
 
     aeos = ensure_aeos_user(db, tenant_id)
@@ -231,7 +238,7 @@ def _post_aeos_reply(
         channel_id=channel.id,
         sender_id=aeos.id,
         content=content[:5000],
-        parent_id=parent.id if parent is not None else None,
+        parent_id=parent_id,
     )
     db.add(msg)
     db.commit()
@@ -249,7 +256,7 @@ def handle_aeos_question(db: Session, *, user, channel: Channel, trigger_msg: Ch
             db,
             tenant_id=user.tenant_id,
             channel=channel,
-            parent=trigger_msg,
+            parent_id=trigger_msg.parent_id,
             content=(
                 "Fitur AI add-on belum aktif untuk workspace ini. "
                 "Aktifkan trial dari halaman Aplikasi untuk menggunakan @AEOS."
@@ -263,7 +270,7 @@ def handle_aeos_question(db: Session, *, user, channel: Channel, trigger_msg: Ch
     if result.get("route_to"):
         text += f"\n\n→ Saran routing: tim {result['route_to']['team_label']}"
     reply = _post_aeos_reply(
-        db, tenant_id=user.tenant_id, channel=channel, parent=trigger_msg, content=text
+        db, tenant_id=user.tenant_id, channel=channel, parent_id=trigger_msg.parent_id, content=text
     )
     return {"answered": True, "reply_id": str(reply.id), "route_to": result.get("route_to")}
 
@@ -289,7 +296,7 @@ def summarize_thread(db: Session, *, user, root_message_id: str) -> dict:
         db,
         tenant_id=user.tenant_id,
         channel=channel,
-        parent=root,
+        parent_id=root.id,
         content=f"{header}\n{result['summary']}",
     )
     return {
@@ -319,7 +326,7 @@ def _handle_slash_command(db: Session, *, user, channel: Channel, cmd_msg: ChatM
 
     def respond(text: str):
         _post_aeos_reply(
-            db, tenant_id=user.tenant_id, channel=channel, parent=cmd_msg, content=text
+            db, tenant_id=user.tenant_id, channel=channel, parent_id=cmd_msg.parent_id, content=text
         )
 
     try:

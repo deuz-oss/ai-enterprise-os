@@ -411,9 +411,14 @@ def post_auto_event(
 
 
 def _posted_totals(
-    db: Session, until: str, start: str | None = None
+    db: Session, until: date, start: date | None = None
 ) -> dict[str, tuple[float, float]]:
-    """Total debit/kredit per kode akun dari jurnal POSTED."""
+    """Total debit/kredit per kode akun dari jurnal POSTED.
+
+    `until`/`start` harus objek date (bukan str) -- Postgres menolak
+    perbandingan date <= character varying (SQLite lolos, tidak
+    menegakkan tipe kolom).
+    """
     join_cond = [
         JournalLine.entry_id == JournalEntry.id,
         JournalEntry.status == JournalEntryStatus.posted,
@@ -464,7 +469,7 @@ class _LegacyShim:
 
 
 def trial_balance(db: Session, year: int) -> list[TrialBalanceRow]:
-    end = f"{year}-12-31"
+    end = date(year, 12, 31)
     totals = _posted_totals(db, end)
     by_code, group_of = _coa_maps(db)
     _ensure_legacy_codes(totals, by_code)
@@ -504,8 +509,8 @@ def ledger(db: Session, account_code: str, year: int):
         group = legacy.category
         normal_debit = group in ("aset", "beban")
 
-    start = f"{year}-01-01"
-    end = f"{year}-12-31"
+    start = date(year, 1, 1)
+    end = date(year, 12, 31)
     stmt = (
         select(JournalLine, JournalEntry)
         .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
@@ -545,8 +550,8 @@ def income_statement(
     db: Session, year: int, month: int | None = None, client_dim_id: str | None = None
 ) -> IncomeStatement:
     end_day = 31 if month is None else monthrange(year, month)[1]
-    end = f"{year}-{str(month or 12).zfill(2)}-{end_day:02d}"
-    start = f"{year}-01-01" if month is None else f"{year}-{str(month).zfill(2)}-01"
+    end = date(year, month or 12, end_day)
+    start = date(year, 1, 1) if month is None else date(year, month, 1)
     totals = _posted_totals(db, end, start=start)
     by_code, group_of = _coa_maps(db)
     _ensure_legacy_codes(totals, by_code)
@@ -584,7 +589,8 @@ def income_statement(
 
 
 def balance_sheet(db: Session, as_of: str) -> BalanceSheet:
-    totals = _posted_totals(db, as_of)
+    as_of_date = date.fromisoformat(as_of)
+    totals = _posted_totals(db, as_of_date)
     by_code, group_of = _coa_maps(db)
     _ensure_legacy_codes(totals, by_code)
 
@@ -622,7 +628,7 @@ def balance_sheet(db: Session, as_of: str) -> BalanceSheet:
     equity.total = round(equity.total + net_income, 2)
 
     return BalanceSheet(
-        as_of=date.fromisoformat(as_of),
+        as_of=as_of_date,
         assets=assets,
         liabilities=liabilities,
         equity=equity,
@@ -634,9 +640,12 @@ def profit_by_client(db: Session, year: int, month: int | None = None) -> list[d
     """Laba rugi per kontrak klien dari dimensi baris jurnal (PRD §8.6)."""
     from app.modules.clients.models import Client
 
+    # date (bukan f-string): entry_date kolom Date -- Postgres menolak
+    # perbandingan date >= character varying (SQLite lolos, tidak
+    # menegakkan tipe kolom).
     end_day = 31 if month is None else monthrange(year, month)[1]
-    start = f"{year}-01-01" if month is None else f"{year}-{str(month).zfill(2)}-01"
-    end = f"{year}-{str(month or 12).zfill(2)}-{end_day:02d}"
+    start = date(year, 1, 1) if month is None else date(year, month, 1)
+    end = date(year, month or 12, end_day)
 
     stmt = (
         select(

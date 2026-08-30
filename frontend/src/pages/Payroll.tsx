@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Wallet } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
@@ -79,6 +80,7 @@ interface SaltabComp {
 
 interface SaltabRow {
   payslip_id: string;
+  employee_id: string;
   employee_name: string;
   components: SaltabComp[];
   total_earnings: number;
@@ -117,7 +119,19 @@ function SaltabTable({ runId }: { runId: string | null }) {
     <div className="divide-y" style={{ borderColor: "var(--n-border)" }}>
       {(rows ?? []).map((row) => (
         <div key={row.payslip_id} className="px-4 py-3">
-          <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{row.employee_name}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{row.employee_name}</p>
+            <button
+              onClick={() =>
+                downloadFile(`/payroll/runs/${runId}/bukti-potong/${row.employee_id}/pdf`)
+              }
+              className="cursor-pointer text-xs font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+              title="Unduh Bukti Potong PPh 21 karyawan ini"
+            >
+              Bukti Potong PPh 21
+            </button>
+          </div>
           <table className="mt-1 w-full text-xs">
             <tbody>
               {row.components.map((c) => (
@@ -312,7 +326,7 @@ export default function Payroll() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader emoji="💼" title="Payroll" />
+        <PageHeader icon={Wallet} title="Payroll" />
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -430,7 +444,7 @@ export default function Payroll() {
       </div>
 
       {clientLink && (
-        <CalloutBlock emoji="🔗" tone="success">
+        <CalloutBlock tone="success">
           <p className="font-medium">Link approval klien aktif</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <code className="rounded px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--n-hover)", border: "1px solid var(--n-border)" }}>{clientLink.link}</code>

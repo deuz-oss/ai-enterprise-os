@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import FINANCE_ROLES, PAYMENT_REQUEST_ROLES
 from app.core.security import (
     get_current_user,
     require_any_licensed_app,
@@ -26,7 +27,7 @@ from app.modules.finance.schemas import (
 router = APIRouter(
     prefix="/finance",
     tags=["finance"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("finance", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*FINANCE_ROLES))],
 )
 
 
@@ -38,7 +39,7 @@ pr_router = APIRouter(
     dependencies=[
         Depends(get_current_user),
         Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
-        Depends(require_roles("operations", "hr", "finance", "management")),
+        Depends(require_roles(*PAYMENT_REQUEST_ROLES)),
     ],
 )
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import PAYROLL_ROLES
 from app.core.security import get_current_user, require_any_licensed_app, require_roles
 from app.modules.payroll import service
 from app.modules.payroll.schemas import (
@@ -24,7 +25,7 @@ router = APIRouter(
     dependencies=[
         Depends(get_current_user),
         Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
-        Depends(require_roles("operations", "management", "hr")),
+        Depends(require_roles(*PAYROLL_ROLES)),
     ],
 )
 
@@ -146,6 +147,23 @@ def export_saltab_pdf(run_id: str, db: Session = Depends(get_db)):
     from fastapi import Response
 
     content, filename = service.saltab_export_pdf(db, run_id)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/runs/{run_id}/bukti-potong/{employee_id}/pdf")
+def export_bukti_potong_pdf(
+    run_id: str,
+    employee_id: str,
+    db: Session = Depends(get_db),
+):
+    """PRD v3.0 §6 — Bukti Pemotongan PPh 21 per karyawan (dokumen compliance)."""
+    from fastapi import Response
+
+    content, filename = service.bukti_potong_pdf(db, run_id, employee_id)
     return Response(
         content=content,
         media_type="application/pdf",

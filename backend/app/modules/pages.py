@@ -33,6 +33,14 @@ class NotionPage(TenantMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
+# TEMUAN AUDIT RBAC (belum diperbaiki, sengaja dibiarkan sampai dikonfirmasi
+# Brian): docstring modul di atas bilang "karyawan outsourcing tidak
+# mendapat akses", tapi router ini TIDAK punya require_roles(...) apa pun,
+# cuma get_current_user per-endpoint — jadi role "karyawan" tidak benar-benar
+# ditolak backend, cuma disembunyikan dari sidebar frontend
+# (KARYAWAN_ALLOWED_PATHS di Layout.tsx). Kalau proteksi role memang
+# dimaksud, tambahkan require_roles(...) di sini; kalau kebijakannya sudah
+# berubah (semua staf boleh), update docstring di atas.
 router = APIRouter(prefix="/pages", tags=["pages"])
 
 

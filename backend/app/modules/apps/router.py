@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.apps import APP_REGISTRY
 from app.core.database import get_db
+from app.core.permissions import APPS_TRIAL_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.apps.schemas import AppEntitlementOut, TrialActivatedOut
 from app.modules.platform.models import TenantAppLicense
@@ -47,7 +48,7 @@ def start_trial(
     app_key: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
-    _manager=Depends(require_roles("admin", "management")),
+    _manager=Depends(require_roles(*APPS_TRIAL_ROLES)),
 ):
     """Aktivasi trial mandiri 14 hari; sekali per aplikasi per tenant."""
     license_row = activate_trial(db, current_user.tenant_id, app_key)

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Enterprise OS — Talent Cloud</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  *{font-family:'Inter',system-ui,sans-serif}
+  /* subtle card hover */
+  .card-hover{transition:box-shadow .15s,transform .15s}
+  .card-hover:hover{box-shadow:0 4px 12px rgba(15,23,42,.06)}
+</style>
+</head>
+<body class="bg-[#f8fafc] text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
+<header class="h-14 bg-white/90 backdrop-blur border-b border-slate-200 flex items-center gap-4 px-4 lg:px-6 sticky top-0 z-20">
+  <div class="flex items-center gap-3 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-bold text-xs shadow-sm">AE</div>
+    <div class="hidden sm:block"><div class="text-sm font-semibold leading-none tracking-tight">AI Enterprise OS v3.0</div><div class="text-xs text-slate-500">PRD v3.0 · Internal-first</div></div>
+  </div>
+  <div class="hidden md:flex items-center gap-2 border rounded-full bg-slate-50 px-3 py-1.5 text-sm">
+    <i data-lucide="building-2" class="w-4 h-4 text-slate-500"></i>
+    <span class="font-medium">PT Techno Talent Solutions</span>
+    <i data-lucide="chevrons-up-down" class="w-4 h-4 text-slate-400"></i>
+  </div>
+  <div class="flex-1 max-w-md hidden lg:flex items-center relative ml-2">
+    <i data-lucide="search" class="w-4 h-4 absolute left-3 text-slate-400"></i>
+    <input placeholder="Cari kandidat, skill, JO..." class="w-full pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition">
+  </div>
+  <div class="flex items-center gap-2 ml-auto">
+    <button class="h-8 px-3 rounded-full border border-slate-200 bg-white text-sm font-medium hidden sm:flex items-center gap-1.5 hover:bg-slate-50 transition"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Intake CV</button>
+    <button class="h-8 px-4 rounded-full bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center gap-1.5 shadow-sm transition"><i data-lucide="zap" class="w-3.5 h-3.5"></i> Match</button>
+    <button class="relative p-2 rounded-full hover:bg-slate-100 lg:hidden"><i data-lucide="bell" class="w-5 h-5 text-slate-600"></i></button>
+  </div>
+</header>
+
+<div class="flex min-h-[calc(100vh-56px)]">
+  <aside class="hidden lg:flex w-[264px] border-r bg-white flex-col shrink-0 sticky top-14 h-[calc(100vh-56px)]">
+    <div class="flex-1 overflow-auto p-4 space-y-6">
+      <div>
+        <div class="text-[11px] tracking-widest uppercase font-semibold text-slate-400 mb-2 px-2">Foundation</div>
+        <nav class="space-y-1">
+          <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Overview</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"><i data-lucide="message-circle" class="w-4 h-4"></i> Chat Workspace</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition"><i data-lucide="file-text" class="w-4 h-4"></i> Pages</a>
+        </nav>
+      </div>
+      <div>
+        <div class="text-[11px] tracking-widest uppercase font-semibold text-slate-400 mb-2 px-2">Aplikasi</div>
+        <nav class="space-y-1">
+          <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium shadow-sm"><span class="w-7 h-7 rounded-lg bg-white/10 border border-white/10 grid place-items-center"><i data-lucide="users" class="w-3.5 h-3.5"></i></span> Talent Cloud</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200 transition"><span class="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="id-card" class="w-3.5 h-3.5 text-emerald-600"></i></span> Workforce</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200 transition"><span class="w-7 h-7 rounded-lg bg-amber-50 border border-amber-200 grid place-items-center"><i data-lucide="receipt" class="w-3.5 h-3.5 text-amber-600"></i></span> Revenue</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200 transition"><span class="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 grid place-items-center"><i data-lucide="scale" class="w-3.5 h-3.5 text-slate-700"></i></span> Govern</a>
+        </nav>
+      </div>
+    </div>
+    <div class="p-3 border-t bg-slate-50/50">
+      <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <img src="https://i.pravatar.cc/100?img=15" class="w-9 h-9 rounded-full object-cover">
+        <div class="min-w-0"><div class="text-sm font-semibold truncate">Brian</div><div class="text-xs text-slate-500 truncate">Head of Ops</div></div>
+        <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full"></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="flex-1 min-w-0 p-4 lg:p-6 space-y-5 max-w-[1440px] mx-auto w-full">
+    <!-- Title row -->
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-[22px] font-semibold tracking-tight flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="users" class="w-4 h-4"></i></span> Talent Cloud</h1>
+          <span class="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600"><i data-lucide="sparkles" class="w-3 h-3"></i> AI Native</span>
+        </div>
+        <p class="text-sm text-slate-500 mt-1.5">80 talent pool · 12 JO aktif · 24 klien aktif.</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <select class="h-8 px-3 pr-7 bg-white border border-slate-200 rounded-full text-xs font-medium focus:outline-none"><option>Semua JO</option><option>#JO-042 Bank Daerah Jaya</option><option>#JO-041 Retail Makmur</option></select>
+        <button class="h-8 px-3 rounded-full border border-slate-200 bg-white text-xs font-semibold hidden sm:flex items-center gap-1.5 hover:bg-slate-50 transition"><i data-lucide="download" class="w-3.5 h-3.5"></i> Export</button>
+        <button class="h-8 px-4 rounded-full bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center gap-1.5 shadow-sm transition"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Kandidat</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Klien Aktif</span><span class="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="building-2" class="w-3.5 h-3.5 text-emerald-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">24 <span class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">+2</span></div>
+        <div class="text-xs text-slate-500 mt-1">18 outsourcing · 6 direct hire</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:84%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Leads</span><span class="w-7 h-7 rounded-full bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="filter" class="w-3.5 h-3.5 text-violet-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">18 <span class="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">5 hot</span></div>
+        <div class="text-xs text-slate-500 mt-1">8 qualified · 5 proposal</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-violet-600 rounded-full" style="width:62%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Open JO</span><span class="w-7 h-7 rounded-full bg-amber-50 border border-amber-200 grid place-items-center"><i data-lucide="briefcase" class="w-3.5 h-3.5 text-amber-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">12 <span class="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">3 overdue</span></div>
+        <div class="text-xs text-slate-500 mt-1">Butuh 28 kandidat</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500 rounded-full" style="width:55%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Talent Pool</span><span class="w-7 h-7 rounded-full bg-slate-900 text-white grid place-items-center"><i data-lucide="database" class="w-3.5 h-3.5"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">80</div>
+        <div class="text-xs text-slate-500 mt-1">4 siap segera · 12 baru minggu ini</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width:72%"></div></div>
+      </div>
+    </div>
+
+    <!-- Recruitment Funnel -->
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="git-branch" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Recruitment Funnel</div><div class="text-xs text-slate-500">sourcing → screening → interview → offering → hired</div></div></div>
+        <span class="hidden sm:inline-flex text-xs font-medium px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200">80 total</span>
+      </div>
+      <div class="mt-4 h-2.5 bg-slate-100 rounded-full overflow-hidden flex p-1 gap-1">
+        <div class="bg-slate-900 rounded-full flex-1" style="max-width:25%"></div>
+        <div class="bg-amber-400 rounded-full flex-1" style="max-width:22%"></div>
+        <div class="bg-violet-600 rounded-full flex-1" style="max-width:20%"></div>
+        <div class="bg-emerald-500 rounded-full flex-1" style="max-width:18%"></div>
+        <div class="bg-slate-300 rounded-full flex-1" style="max-width:15%"></div>
+      </div>
+      <div class="grid grid-cols-5 gap-2 mt-3 text-center">
+        <div><div class="text-sm font-semibold">28</div><div class="text-xs text-slate-500">Sourcing</div></div>
+        <div><div class="text-sm font-semibold">18</div><div class="text-xs text-slate-500">Screening</div></div>
+        <div><div class="text-sm font-semibold">12</div><div class="text-xs text-violet-600">Interview</div></div>
+        <div><div class="text-sm font-semibold">8</div><div class="text-xs text-slate-500">Offering</div></div>
+        <div><div class="text-sm font-semibold">14</div><div class="text-xs text-emerald-600">Hired</div></div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <!-- Left 2/3 -->
+      <div class="lg:col-span-2 space-y-5">
+        <div class="rounded-2xl p-5 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#020617 0%,#1e3a5f 100%)">
+          <div class="absolute -right-10 -bottom-10 w-40 h-40 rounded-full border border-white/10"></div>
+          <div class="relative">
+            <div class="text-xs font-semibold tracking-widest uppercase flex items-center gap-2 text-white/80"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> AI Insight</div>
+            <p class="text-sm leading-relaxed mt-2.5 max-w-[560px]">2 kandidat ≥85% siap interview. Ahmad butuh sertifikasi K3 — tawarkan training 2 hari untuk naik ke 84%.</p>
+            <div class="mt-3 flex gap-2 flex-wrap"><span class="text-xs bg-white/10 border border-white/15 px-2.5 py-1 rounded-full backdrop-blur">top 3 auto-ranked</span><span class="text-xs bg-white/10 border border-white/15 px-2.5 py-1 rounded-full backdrop-blur">tanpa LLM</span></div>
+          </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden card-hover">
+          <div class="p-4 border-b flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="sparkles" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Talent Pool & AI Matching</div><div class="text-xs text-slate-500">CvIntake.extracted · deterministik tanpa LLM</div></div></div>
+            <button class="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-900 text-white text-xs font-medium hover:bg-black transition"><i data-lucide="zap" class="w-3.5 h-3.5"></i> Match 50</button>
+          </div>
+          <div class="p-3 flex flex-wrap gap-2 border-b bg-slate-50/70">
+            <div class="relative flex-1 min-w-[200px]">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input placeholder="Cari nama, skill, lokasi..." class="w-full h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-slate-900">
+            </div>
+            <select class="h-9 px-3 pr-7 bg-white border border-slate-200 rounded-full text-xs font-medium"><option>Readiness: Semua</option><option>Segera</option></select>
+            <select class="h-9 px-3 pr-7 bg-white border border-slate-200 rounded-full text-xs font-medium"><option>Lokasi: Semua</option><option>Jabodetabek</option></select>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <div class="p-4 flex gap-3 items-center hover:bg-slate-50/70 transition">
+              <img src="https://i.pravatar.cc/100?img=32" class="w-11 h-11 rounded-full object-cover ring-2 ring-emerald-100">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold truncate">Rina Wulandari — #JO-042 Bank Daerah Jaya</div>
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                  <span class="text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full">92% Match</span>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">skill 90%</span>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">lokasi OK</span>
+                  <span class="hidden sm:inline text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">segera</span>
+                </div>
+                <div class="text-xs text-slate-500 mt-1">Teller · 2th · K3 certified · Jakarta Pusat</div>
+              </div>
+              <div class="hidden sm:flex flex-col items-end gap-1.5">
+                <span class="text-xs font-mono bg-slate-900 text-white px-2.5 py-1 rounded-full font-semibold">92%</span>
+                <div class="flex gap-1"><button class="w-8 h-8 grid place-items-center rounded-full border bg-white hover:bg-slate-50 transition"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button><button class="w-8 h-8 grid place-items-center rounded-full bg-slate-900 text-white hover:bg-black transition"><i data-lucide="calendar" class="w-3.5 h-3.5"></i></button></div>
+              </div>
+            </div>
+            <div class="p-4 flex gap-3 items-center hover:bg-slate-50/70 transition">
+              <img src="https://i.pravatar.cc/100?img=12" class="w-11 h-11 rounded-full object-cover">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold truncate">Ahmad Fauzi — #JO-041 Retail Makmur</div>
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                  <span class="text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full">71% Match</span>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">missing: K3</span>
+                </div>
+                <div class="text-xs text-slate-500 mt-1">Sales · 1th · Bekasi</div>
+              </div>
+              <div class="hidden sm:flex flex-col items-end gap-1.5">
+                <span class="text-xs font-mono bg-amber-500 text-white px-2.5 py-1 rounded-full font-semibold">71%</span>
+                <div class="flex gap-1"><button class="w-8 h-8 grid place-items-center rounded-full border bg-white hover:bg-slate-50"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button><button class="w-8 h-8 grid place-items-center rounded-full bg-white border hover:bg-slate-50"><i data-lucide="calendar" class="w-3.5 h-3.5"></i></button></div>
+              </div>
+            </div>
+            <div class="p-4 flex gap-3 items-center hover:bg-slate-50/70 transition opacity-75">
+              <img src="https://i.pravatar.cc/100?img=45" class="w-11 h-11 rounded-full object-cover grayscale">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold truncate">Siti Nurhaliza — #JO-039 Logistik Nusantara</div>
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                  <span class="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-0.5 rounded-full">48% Match</span>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">lokasi jauh</span>
+                </div>
+                <div class="text-xs text-slate-500 mt-1">Admin · Fresh grad · Surabaya</div>
+              </div>
+              <div class="hidden sm:flex flex-col items-end gap-1.5">
+                <span class="text-xs font-mono bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full">48%</span>
+                <button class="w-8 h-8 grid place-items-center rounded-full border bg-white hover:bg-slate-50"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="p-3 flex items-center justify-between border-t bg-slate-50/70 text-xs">
+            <span class="text-slate-500">Menampilkan 3 dari 80</span>
+            <div class="flex items-center gap-1"><button class="w-7 h-7 grid place-items-center rounded-full border bg-white hover:bg-slate-50"><i data-lucide="chevron-left" class="w-3.5 h-3.5"></i></button><span class="px-2.5 font-medium">1 / 27</span><button class="w-7 h-7 grid place-items-center rounded-full border bg-white hover:bg-slate-50"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+          </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+          <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="calendar-plus" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Set Interview Schedule</div><div class="text-xs text-slate-500">Jadwalkan langsung dari talent pool</div></div></div>
+          <div class="mt-4 grid grid-cols-2 gap-2.5">
+            <select class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"><option>Rina Wulandari</option><option>Ahmad Fauzi</option></select>
+            <select class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white"><option>#JO-042 Teller</option><option>#JO-041 Sales</option></select>
+            <input type="date" value="2026-08-30" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+            <input type="time" value="10:00" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+          </div>
+          <div class="mt-2.5 relative">
+            <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input value="Room A · Bank Daerah Jaya" class="w-full h-9 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none">
+          </div>
+          <button class="w-full mt-3 h-10 rounded-full bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition"><i data-lucide="calendar-check" class="w-4 h-4"></i> Jadwalkan Interview</button>
+          <div class="mt-2 text-xs text-center text-slate-500">Otomatis kirim undangan ke kandidat & klien</div>
+        </div>
+      </div>
+
+      <div class="space-y-5">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+          <div class="flex items-center justify-between"><div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="briefcase" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Job Orders Aktif</div><div class="text-xs text-slate-500">12 aktif · 3 overdue</div></div></div><span class="text-xs font-mono bg-slate-50 border border-slate-200 px-2 py-1 rounded-full">12</span></div>
+          <div class="mt-4 space-y-2.5">
+            <div class="rounded-xl border-2 border-slate-900 bg-slate-50 p-3">
+              <div class="text-sm font-semibold">#JO-042 — Teller Bank Daerah Jaya</div>
+              <div class="text-xs text-slate-600 mt-1">Butuh 5 · terisi 2 · <span class="text-amber-700 font-medium">3 interview minggu ini</span></div>
+              <div class="mt-2.5 flex gap-1.5"><span class="text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-full font-medium">fee 8%</span><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">due 3 hari</span></div>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3 hover:border-slate-300 transition">
+              <div class="text-sm font-medium">#JO-041 — Sales Retail Makmur</div>
+              <div class="text-xs text-slate-500 mt-1">Butuh 3 · screening 2</div>
+              <div class="mt-2.5 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-amber-400 rounded-full" style="width:66%"></div></div>
+            </div>
+          </div>
+          <button class="w-full mt-3 h-9 rounded-full border border-slate-200 bg-white text-xs font-semibold hover:bg-slate-50 transition">Lihat semua JO →</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+          <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="building-2" class="w-4 h-4 text-emerald-600"></i></span><div><div class="text-sm font-semibold">Klien Aktif</div><div class="text-xs text-slate-500">24 aktif · 18 outsourcing · 6 direct hire</div></div></div>
+          <div class="mt-4 space-y-2">
+            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-slate-900 text-white grid place-items-center text-xs font-bold">BD</div><div><div class="text-sm font-semibold">Bank Daerah Jaya</div><div class="text-xs text-slate-500">5 JO · 12 karyawan</div></div></div><span class="text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">Aktif</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition">
+              <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-amber-500 text-white grid place-items-center text-xs font-bold">RM</div><div><div class="text-sm font-medium">Retail Makmur</div><div class="text-xs text-slate-500">3 JO · 5 karyawan</div></div></div><span class="text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full">Onboarding</span>
+            </div>
+          </div>
+          <button class="w-full mt-3 h-9 rounded-full border border-slate-200 bg-white text-xs font-semibold hover:bg-slate-50 transition">Lihat semua klien →</button>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+          <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="filter" class="w-4 h-4 text-violet-600"></i></span><div><div class="text-sm font-semibold">List Leads</div><div class="text-xs text-slate-500">18 total · 5 hot</div></div></div>
+          <div class="mt-4 space-y-2">
+            <div class="flex items-center justify-between p-3 rounded-xl border border-violet-200 bg-violet-50/70">
+              <div><div class="text-sm font-semibold">PT Maju Jaya</div><div class="text-xs text-slate-600">4 Teller · hot · 2 hari lalu</div></div><span class="text-xs font-semibold bg-violet-600 text-white px-2.5 py-1 rounded-full">Hot</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition">
+              <div><div class="text-sm font-semibold">CV Sejahtera Abadi</div><div class="text-xs text-slate-500">2 Admin · qualified</div></div><span class="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full">Qualified</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition">
+              <div><div class="text-sm font-semibold">PT Logistik Nusantara</div><div class="text-xs text-slate-500">Proposal sent</div></div><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">Proposal</span>
+            </div>
+          </div>
+          <button class="w-full mt-3 h-9 rounded-full border border-slate-200 bg-white text-xs font-semibold hover:bg-slate-50 transition">Lihat semua leads →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="calendar" class="w-3.5 h-3.5"></i></span><div><div class="text-sm font-semibold">Interview Schedule</div><div class="text-xs text-slate-500">5 minggu ini · 2 hari ini</div></div></div>
+        <div class="mt-4 space-y-2.5">
+          <div class="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-900 bg-slate-50">
+            <div class="w-10 h-10 rounded-xl bg-slate-900 text-white grid place-items-center text-xs font-bold leading-none">30<br><span class="text-[10px] font-normal">Agu</span></div>
+            <div class="flex-1 min-w-0"><div class="text-sm font-semibold truncate">Rina W. — Teller #JO-042</div><div class="text-xs text-slate-500">10:00 · Room A</div></div>
+            <span class="text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">Confirmed</span>
+          </div>
+          <div class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition">
+            <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 grid place-items-center text-xs font-bold leading-none">30<br><span class="text-[10px] font-normal">Agu</span></div>
+            <div class="flex-1 min-w-0"><div class="text-sm font-semibold truncate">Ahmad F. — Sales #JO-041</div><div class="text-xs text-slate-500">14:00 · GMeet</div></div>
+            <span class="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full">Pending</span>
+          </div>
+        </div>
+        <button class="w-full mt-3 h-9 rounded-full border border-slate-200 bg-white text-xs font-semibold hover:bg-slate-50 transition">Lihat jadwal →</button>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="activity" class="w-4 h-4 text-emerald-600"></i></span><div><div class="text-sm font-semibold">Aktivitas Terbaru</div><div class="text-xs text-slate-500">real-time</div></div></div>
+        <div class="mt-4 space-y-3">
+          <div class="flex gap-3"><span class="w-2 h-2 bg-emerald-500 rounded-full mt-2 shrink-0"></span><div class="flex-1 min-w-0"><div class="text-xs leading-relaxed">Rina W. dijadwalkan interview <span class="font-semibold">Bank Daerah Jaya</span> — 30 Agu 10:00</div><div class="text-xs text-slate-500">oleh Brian · 2 jam lalu</div></div></div>
+          <div class="flex gap-3"><span class="w-2 h-2 bg-violet-500 rounded-full mt-2 shrink-0"></span><div class="flex-1 min-w-0"><div class="text-xs leading-relaxed">Lead baru <span class="font-semibold">PT Maju Jaya</span> masuk — 4 Teller</div><div class="text-xs text-slate-500">sistem · 5 jam lalu</div></div></div>
+          <div class="flex gap-3"><span class="w-2 h-2 bg-amber-500 rounded-full mt-2 shrink-0"></span><div class="flex-1 min-w-0"><div class="text-xs leading-relaxed">JO #JO-041 overdue 2 hari</div><div class="text-xs text-slate-500">sistem · kemarin</div></div></div>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 grid place-items-center"><i data-lucide="gift" class="w-4 h-4 text-amber-600"></i></span><div><div class="text-sm font-semibold">Offering</div><div class="text-xs text-slate-500">8 aktif · 3 menunggu ttd</div></div></div>
+        <div class="mt-4 space-y-2.5">
+          <div class="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50/70">
+            <div><div class="text-sm font-semibold">Rina W. → Bank Daerah Jaya</div><div class="text-xs text-slate-600">Rp 5.2M · menunggu kandidat</div></div><span class="text-xs font-semibold bg-amber-500 text-white px-2.5 py-1 rounded-full">Sent</span>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200">
+            <div><div class="text-sm font-semibold">Ahmad F. → Retail Makmur</div><div class="text-xs text-slate-500">71% → 84% jika training</div></div><span class="text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full">Draft</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>lucide.createIcons()</script>
+</body>
+</html>

@@ -5,6 +5,10 @@ from app.core.database import get_db
 from app.core.security import decode_token, get_current_user
 from app.modules.chat import service
 
+# Sengaja tanpa require_roles(...): Chat Workspace itu fitur Foundation
+# gratis (PRD v3.0 §2.1) utk seluruh staf tenant yang login, tanpa
+# pembatasan role — bukan celah RBAC yang kelewatan. Lihat audit permukaan
+# RBAC di core/permissions.py.
 router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(get_current_user)])
 
 # Router publik untuk WebSocket (handshake via token query, bukan Bearer header)

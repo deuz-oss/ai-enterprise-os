@@ -1,6 +1,6 @@
 import json
 import math
-from datetime import UTC
+from datetime import UTC, date, timedelta, timezone
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
@@ -27,6 +27,7 @@ from app.modules.recruitment.schemas import (
     InterviewScheduleUpdate,
     JobOrderCreate,
     JobOrderUpdate,
+    OfferingSendIn,
     PlacementCreate,
 )
 from app.modules.talentpool.models import CvIntake
@@ -291,6 +292,195 @@ def update_placement_status(
     return placement
 
 
+def _get_placement(db: Session, placement_id: str) -> Placement:
+    placement = db.get(Placement, parse_uuid(placement_id))
+    if placement is None:
+        raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
+    return placement
+
+
+def _offering_letter_pdf(
+    db: Session,
+    placement: Placement,
+    candidate: Candidate,
+    jo: JobOrder,
+    client: Client,
+    offered_salary: float,
+) -> bytes:
+    """PDF surat penawaran kerja dibrandingi tenant — PRD v3.0 §4 aksi "Offering"."""
+    from io import BytesIO
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
+
+    from app.modules.platform.models import Tenant
+
+    tenant = db.get(Tenant, placement.tenant_id)
+    tenant_name = tenant.name if tenant else "-"
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=22 * mm,
+        rightMargin=22 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+        title=f"Surat Penawaran Kerja - {candidate.full_name}",
+    )
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    normal.fontSize = 10
+    normal.leading = 15
+
+    today = date.today().strftime("%d %B %Y")
+    start = (
+        placement.start_date.strftime("%d %B %Y") if placement.start_date else "menyusul konfirmasi"
+    )
+
+    story = [
+        Paragraph(f"<b>{tenant_name}</b>", styles["Heading2"]),
+        Spacer(1, 4),
+        Paragraph(f"{today}", normal),
+        Spacer(1, 14),
+        Paragraph("<b>SURAT PENAWARAN KERJA</b>", styles["Heading3"]),
+        Spacer(1, 10),
+        Paragraph(f"Kepada Yth. <b>{candidate.full_name}</b>", normal),
+        Spacer(1, 10),
+        Paragraph(
+            f"Dengan hormat, sehubungan dengan proses rekrutmen untuk posisi "
+            f"<b>{jo.title}</b> pada klien <b>{client.name}</b>, dengan ini kami "
+            f"sampaikan penawaran bekerja dengan rincian sebagai berikut:",
+            normal,
+        ),
+        Spacer(1, 8),
+        Table(
+            [
+                ["Posisi", ": " + jo.title],
+                ["Penempatan (Klien)", ": " + client.name],
+                ["Gaji Ditawarkan", f": Rp {offered_salary:,.0f} / bulan"],
+                ["Perkiraan Tanggal Mulai", ": " + start],
+            ],
+            colWidths=[50 * mm, 105 * mm],
+        ),
+        Spacer(1, 14),
+        Paragraph(
+            "Mohon konfirmasi kesediaan Anda dengan menandatangani surat ini secara "
+            "elektronik. Rincian lengkap syarat &amp; ketentuan kerja akan dituangkan "
+            "dalam kontrak kerja setelah penawaran ini diterima.",
+            normal,
+        ),
+        Spacer(1, 20),
+        Paragraph(f"Hormat kami,<br/>{tenant_name}", normal),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
+def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn):
+    """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> status offered -> esign."""
+    from app.modules.esign.service import send_placement_offering
+
+    placement = _get_placement(db, placement_id)
+    candidate = _get_candidate(db, str(placement.candidate_id))
+    jo = _get_job_order(db, str(placement.job_order_id))
+    client = db.get(Client, jo.client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klien job order tidak ditemukan")
+
+    if payload.offered_salary is not None:
+        placement.offered_salary = payload.offered_salary
+    if payload.start_date is not None:
+        placement.start_date = payload.start_date
+    if placement.offered_salary is None:
+        raise HTTPException(
+            status_code=422, detail="Gaji yang ditawarkan wajib diisi sebelum kirim penawaran"
+        )
+
+    pdf_bytes = _offering_letter_pdf(
+        db, placement, candidate, jo, client, float(placement.offered_salary)
+    )
+    file_name = f"offering-{placement.id}.pdf"
+    object_key = storage.new_object_key(f"offerings/{placement.id}", file_name)
+    storage.put_object(object_key, pdf_bytes, "application/pdf")
+    placement.offering_letter_object_key = object_key
+
+    request = send_placement_offering(
+        db,
+        placement.id,
+        pdf_bytes=pdf_bytes,
+        file_name=file_name,
+        title=f"Surat Penawaran Kerja - {candidate.full_name} - {jo.title}",
+        signer_name=payload.signer_name,
+        signer_email=payload.signer_email,
+    )
+
+    candidate.status = CandidateStatus.offered
+    if jo.status in (JobOrderStatus.open, JobOrderStatus.screening, JobOrderStatus.interview):
+        jo.status = JobOrderStatus.offering
+    db.commit()
+    audit.log_event(
+        db,
+        action="recruitment.offering_sent",
+        entity_type="placement",
+        entity_id=placement.id,
+        detail={"candidate_id": str(candidate.id), "job_order_id": str(jo.id)},
+    )
+    return request
+
+
+def offering_summary(db: Session) -> dict:
+    """Ringkasan pipeline offering — dipakai widget "Offering" Talent Cloud.
+
+    "Aktif" = surat penawaran sudah dibuat (`offering_letter_object_key` terisi).
+    "Menunggu ttd" = permintaan TTE-nya masih berstatus terkirim/dilihat (belum
+    ditandatangani/ditolak/kedaluwarsa). Ambil `EsignRequest` TERBARU per placement
+    (bisa lebih dari satu kalau pernah expired/declined lalu dikirim ulang).
+    """
+    from app.modules.esign.models import EsignRequest, EsignStatus
+
+    placements = (
+        db.execute(select(Placement).where(Placement.offering_letter_object_key.is_not(None)))
+        .scalars()
+        .all()
+    )
+    items: list[dict] = []
+    awaiting = 0
+    for placement in placements:
+        candidate = db.get(Candidate, placement.candidate_id)
+        jo = db.get(JobOrder, placement.job_order_id)
+        if candidate is None or jo is None:
+            continue
+        client = db.get(Client, jo.client_id)
+        latest_request = db.scalars(
+            select(EsignRequest)
+            .where(EsignRequest.placement_id == placement.id)
+            .order_by(EsignRequest.created_at.desc())
+            .limit(1)
+        ).first()
+        esign_status = latest_request.status.value if latest_request else None
+        if latest_request and latest_request.status in (EsignStatus.sent, EsignStatus.viewed):
+            awaiting += 1
+        items.append(
+            {
+                "placement_id": placement.id,
+                "candidate_name": candidate.full_name,
+                "job_order_title": jo.title,
+                "client_name": client.name if client else "-",
+                "offered_salary": (
+                    float(placement.offered_salary)
+                    if placement.offered_salary is not None
+                    else None
+                ),
+                "esign_status": esign_status,
+            }
+        )
+    items.sort(key=lambda i: i["candidate_name"])
+    return {"total_active": len(items), "awaiting_signature": awaiting, "items": items}
+
+
 # ---------- Interview Schedules — PRD v3.0 Talent Cloud ----------
 
 
@@ -328,8 +518,17 @@ def create_interview(
 def _notify_interview_scheduled(db: Session, *, jo, candidate, sched) -> None:
     """Notif in-app + email ke interviewer + pesan sistem di channel JO
     (PRD v3.0 §4). Best-effort — kegagalan notifikasi tidak boleh
-    mematahkan penjadwalan interview yang sudah tersimpan."""
-    when = sched.scheduled_at.strftime("%d %b %Y %H:%M")
+    mematahkan penjadwalan interview yang sudah tersimpan.
+
+    `scheduled_at` tersimpan UTC (aware); ditampilkan dalam WIB (UTC+7,
+    tanpa DST) karena teks ini dibaca langsung oleh recruiter, bukan
+    di-render ulang di frontend seperti field API lain.
+    """
+    scheduled_at = sched.scheduled_at
+    if scheduled_at.tzinfo is None:
+        scheduled_at = scheduled_at.replace(tzinfo=UTC)
+    local_dt = scheduled_at.astimezone(timezone(timedelta(hours=7)))
+    when = local_dt.strftime("%d %b %Y %H:%M") + " WIB"
     if sched.interviewer_id:
         try:
             from app.modules.notifications.service import notify

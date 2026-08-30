@@ -1,6 +1,20 @@
 import { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PageHeader } from "../components/notion";
+import {
+  BarChart3,
+  FileText,
+  Hourglass,
+  Info,
+  LayoutDashboard,
+  type LucideIcon,
+  Palmtree,
+  Pin,
+  PenLine,
+  Receipt,
+  Sparkles,
+  Wallet,
+} from "lucide-react";
+import { PageHeader, CalloutBlock } from "../components/notion";
 import { api, formatRupiah } from "../api/client";
 
 interface Overview {
@@ -52,25 +66,20 @@ interface Digest {
   items: DigestItem[];
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  lead: "Lead",
-  kontak: "Kontak",
-  presentasi: "Presentasi",
-  penawaran: "Penawaran",
-  negosiasi: "Negosiasi",
-  deal: "Deal",
-  gagal: "Gagal",
-};
+interface ClientRow {
+  id: string;
+  name: string;
+}
 
-const STAGE_DOT: Record<string, string> = {
-  lead: "#9f9f9f",
-  kontak: "#2383e2",
-  presentasi: "#5b5bd6",
-  penawaran: "#9065b0",
-  negosiasi: "#cb912f",
-  deal: "#0f7b6c",
-  gagal: "#e03e3e",
-};
+interface InvoiceRow {
+  id: string;
+  invoice_no: string;
+  client_id: string;
+  total_due: number;
+  status: string;
+  tax_invoice_status: string | null;
+  no_seri_faktur: string | null;
+}
 
 const JO_STAGE_LABELS: Record<string, string> = {
   open: "Open",
@@ -81,57 +90,124 @@ const JO_STAGE_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 const JO_STAGE_ORDER = ["open", "screening", "interview_klien", "offering", "filled", "closed"];
-
-const DIGEST_ICON: Record<string, string> = {
-  approval_menunggu: "🖊️",
-  payroll_klien: "💼",
-  sla_job_order: "⏳",
-  kontrak_berakhir: "📄",
-  invoice_overdue: "🧾",
-  cuti_menunggu: "🌴",
-  pengingat: "📌",
-  ringkasan: "📊",
+const JO_STAGE_COLORS: Record<string, string> = {
+  open: "#7c3aed",
+  screening: "#8b5cf6",
+  interview_klien: "#d97706",
+  offering: "#059669",
+  filled: "#0f172a",
+  closed: "#94a3b8",
 };
 
-function pct(part: number, total: number): string {
-  if (!total) return "-";
-  return `${Math.round((part / total) * 100)}%`;
+const CANDIDATE_STATUS_LABELS: Record<string, string> = {
+  baru: "Baru",
+  screening: "Screening",
+  interview: "Interview",
+  offered: "Offered",
+  placed: "Placed",
+  gagal: "Gagal",
+  arsip: "Arsip",
+};
+
+const INVOICE_STATUS_PILL: Record<string, string> = {
+  draft: "p-gray",
+  terkirim: "p-yellow",
+  dibayar: "p-green",
+};
+
+const FAKTUR_STATUS_LABEL: Record<string, string> = {
+  belum_buat: "Faktur belum dibuat",
+  draft: "Faktur draft",
+  approved: "Faktur approved",
+  ditolak: "Faktur ditolak DJP",
+  dibatalkan: "Faktur dibatalkan",
+  pengganti: "Faktur pengganti",
+};
+
+const DIGEST_ICON: Record<string, LucideIcon> = {
+  approval_menunggu: PenLine,
+  payroll_klien: Wallet,
+  sla_job_order: Hourglass,
+  kontrak_berakhir: FileText,
+  invoice_overdue: Receipt,
+  cuti_menunggu: Palmtree,
+  pengingat: Pin,
+  ringkasan: BarChart3,
+};
+
+function pct(part: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
 }
 
-/** Widget kartu Dashboard Umum — kerangka konsisten label/isi/sumber SKU. */
-function Widget({
+/** Kartu KPI baris atas ala dashboard.html: label, angka besar, hint, progress bar tipis. */
+function KpiCard({
+  label,
+  value,
+  hint,
+  barPct,
+  barColor,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  barPct?: number;
+  barColor?: string;
+}) {
+  return (
+    <div className="card">
+      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+        {value}
+      </p>
+      {hint && (
+        <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+          {hint}
+        </p>
+      )}
+      {barPct !== undefined && (
+        <div className="mt-3 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${Math.min(Math.max(barPct, 0), 100)}%`, backgroundColor: barColor ?? "var(--accent)" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionCard({
   title,
-  sku,
+  subtitle,
   children,
 }: {
   title: string;
-  sku?: string;
+  subtitle?: string;
   children: ReactNode;
 }) {
   return (
     <div className="card">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>{title}</h2>
-        {sku && (
-          <span className="pill p-gray text-[10px] uppercase tracking-wide">{sku}</span>
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+          {title}
+        </h2>
+        {subtitle && (
+          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+            {subtitle}
+          </p>
         )}
       </div>
-      <div className="mt-3">{children}</div>
+      {children}
     </div>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <div>
-      <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{label}</p>
-      <p className="text-xl font-bold" style={{ color: "var(--n-text)" }}>{value}</p>
-      {hint && <p className="text-[11px]" style={{ color: "var(--n-text-muted)" }}>{hint}</p>}
-    </div>
-  );
-}
-
-/// Dashboard — PRD v3.0 §8: 8+1 widget cross-bundle, 3 kolom desktop / 1 kolom mobile.
+/// Dashboard — ringkasan lintas modul, layout ala docs/design/mockups/dashboard.html
+/// (data 100% dari /overview + /chat/digest + /finance/invoices yang sudah ada,
+/// tanpa badge harga/SKU komersial — sesuai arahan prioritas trial internal).
 export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ["overview"],
@@ -141,206 +217,247 @@ export default function Dashboard() {
     queryKey: ["chat-digest"],
     queryFn: () => api.get<Digest>("/chat/digest"),
   });
+  const { data: clients } = useQuery({
+    queryKey: ["clients"],
+    queryFn: () => api.get<ClientRow[]>("/clients"),
+  });
+  const { data: invoices } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: () => api.get<InvoiceRow[]>("/finance/invoices"),
+  });
 
   if (isLoading || !data)
     return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
 
-  const winRate = data.leads.total > 0 ? Math.round((data.leads.won / data.leads.total) * 100) : 0;
-  const payrollTotal = Object.values(data.payroll).reduce((a, b) => a + b, 0);
+  const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
+  const recentInvoices = [...(invoices ?? [])].reverse().slice(0, 5);
+
+  const revenueShare = pct(data.finance.revenue_mtd, data.finance.revenue_mtd + data.finance.outstanding);
 
   return (
-    <div className="space-y-4">
-      <PageHeader emoji="🏠" title="Dashboard" />
+    <div className="space-y-5">
+      <PageHeader icon={LayoutDashboard} title="Dashboard" subtitle="Ringkasan operasional hari ini" />
 
-      {/* Widget 1 — Ringkasan Eksekutif (Foundation) */}
-      <div className="card">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Ringkasan Eksekutif Hari Ini</h2>
-          <span className="pill p-gray text-[10px] uppercase tracking-wide">Foundation</span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="Klien Aktif" value={data.clients} hint={`${data.documents} dokumen legal`} />
-          <Stat label="Pipeline" value={data.leads.total} hint={`${data.leads.won} deal (${winRate}% win rate)`} />
-          <Stat
-            label="Job Order"
-            value={data.job_orders.open}
-            hint={`open · ${data.job_orders.filled} filled`}
-          />
-          <Stat label="Headcount Aktif" value={data.people.active_employees} hint={`dari ${data.people.total_employees} karyawan`} />
-          <Stat label="Payroll Run" value={payrollTotal} hint={`${data.payroll.finalized ?? 0} final bulan ini`} />
-          <Stat label="Revenue MTD" value={formatRupiah(data.finance.revenue_mtd)} />
-        </div>
+      {/* Baris KPI */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Headcount Aktif"
+          value={data.people.active_employees}
+          hint={`dari ${data.people.total_employees} karyawan terdaftar`}
+          barPct={pct(data.people.active_employees, data.people.total_employees)}
+          barColor="#059669"
+        />
+        <KpiCard
+          label="Job Order Terbuka"
+          value={data.job_orders.open}
+          hint={`${data.job_orders.filled} filled · ${data.candidates.total} kandidat`}
+          barPct={pct(data.job_orders.filled, data.job_orders.open + data.job_orders.filled)}
+          barColor="#7c3aed"
+        />
+        <KpiCard
+          label="Revenue MTD"
+          value={formatRupiah(data.finance.revenue_mtd)}
+          hint={`${data.finance.invoices_total} invoice tercatat`}
+          barPct={revenueShare}
+          barColor="#d97706"
+        />
+        <KpiCard
+          label="Outstanding & Faktur"
+          value={formatRupiah(data.finance.outstanding)}
+          hint={`${data.finance.overdue} overdue · ${data.finance.faktur_belum} faktur belum dibuat`}
+          barPct={pct(data.finance.overdue, Math.max(data.finance.invoices_total, 1))}
+          barColor="#dc2626"
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Widget 2 — Sales & Pipeline (Talent Cloud) */}
-        <Widget title="Sales & Pipeline" sku="Talent Cloud">
-          <div className="space-y-1.5">
-            {data.leads.funnel.map((f) => {
-              const max = Math.max(...data.leads.funnel.map((x) => x.count), 1);
-              return (
-                <div key={f.stage} className="flex items-center gap-2">
-                  <span className="w-16 text-xs" style={{ color: "var(--n-text-muted)" }}>
-                    {STAGE_LABELS[f.stage] ?? f.stage}
-                  </span>
-                  <div className="h-4 flex-1 rounded" style={{ backgroundColor: "var(--n-hover)" }}>
-                    <div
-                      className="h-4 rounded"
-                      style={{
-                        width: `${Math.max((f.count / max) * 100, f.count > 0 ? 8 : 0)}%`,
-                        backgroundColor: f.count > 0 ? STAGE_DOT[f.stage] ?? "var(--accent)" : "transparent",
-                      }}
-                    />
-                  </div>
-                  <span className="w-5 text-right text-xs font-medium" style={{ color: "var(--n-text)" }}>
-                    {f.count}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
-            Win rate: {winRate}% · {data.job_orders.open} JO terbuka
-          </p>
-        </Widget>
-
-        {/* Widget 3 — Recruitment & Talent (Talent Cloud) */}
-        <Widget title="Recruitment & Talent" sku="Talent Cloud">
-          <div className="space-y-1.5">
-            {JO_STAGE_ORDER.map((stage) => {
-              const count = data.recruitment_talent.job_orders_by_stage[stage] ?? 0;
-              const max = Math.max(...Object.values(data.recruitment_talent.job_orders_by_stage), 1);
-              return (
-                <div key={stage} className="flex items-center gap-2">
-                  <span className="w-16 text-xs" style={{ color: "var(--n-text-muted)" }}>
-                    {JO_STAGE_LABELS[stage]}
-                  </span>
-                  <div className="h-4 flex-1 rounded" style={{ backgroundColor: "var(--n-hover)" }}>
-                    <div
-                      className="h-4 rounded"
-                      style={{
-                        width: `${Math.max((count / max) * 100, count > 0 ? 8 : 0)}%`,
-                        backgroundColor: count > 0 ? "var(--accent)" : "transparent",
-                      }}
-                    />
-                  </div>
-                  <span className="w-5 text-right text-xs font-medium" style={{ color: "var(--n-text)" }}>
-                    {count}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
-            {data.recruitment_talent.interviews_this_week} interview terjadwal minggu ini
-          </p>
-        </Widget>
-
-        {/* Widget 4 — People & Compliance (Workforce Cloud) */}
-        <Widget title="People & Compliance" sku="Workforce Cloud">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Karyawan Aktif" value={data.people.active_employees} />
-            <Stat
-              label="Kontrak ≤14 hari"
-              value={data.people.expiring_contracts_14d}
-              hint={data.people.expiring_contracts_14d > 0 ? "perlu tindak lanjut" : undefined}
-            />
-            <Stat
-              label="BPJS Lengkap"
-              value={pct(data.people.bpjs_complete, data.people.total_employees)}
-              hint={`${data.people.bpjs_complete}/${data.people.total_employees}`}
-            />
-            <Stat
-              label="Asuransi Lengkap"
-              value={pct(data.people.insurance_complete, data.people.total_employees)}
-              hint={`${data.people.insurance_complete}/${data.people.total_employees}`}
-            />
-          </div>
-        </Widget>
-
-        {/* Widget 5 — Operations & Projects (Workforce Cloud) */}
-        <Widget title="Operations & Projects" sku="Workforce Cloud">
-          {data.operations.active_placements_by_client.length > 0 ? (
-            <ul className="space-y-1">
-              {data.operations.active_placements_by_client.slice(0, 6).map((row) => {
-                const profit = data.operations.profit_by_client.find((p) => p.client === row.client);
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Kolom kiri */}
+        <div className="space-y-5 lg:col-span-2">
+          <SectionCard title="Recruitment & AI Matching" subtitle="Progres tahap job order & status kandidat">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium" style={{ color: "var(--n-text)" }}>
+                Tahap Job Order
+              </span>
+              <span style={{ color: "var(--n-text-muted)" }}>
+                {data.recruitment_talent.interviews_this_week} interview minggu ini
+              </span>
+            </div>
+            <div className="mt-2 flex h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+              {JO_STAGE_ORDER.map((stage) => {
+                const count = data.recruitment_talent.job_orders_by_stage[stage] ?? 0;
+                if (!count) return null;
                 return (
-                  <li key={row.client} className="flex items-center justify-between text-xs">
-                    <span style={{ color: "var(--n-text)" }}>{row.client}</span>
-                    <span className="text-right" style={{ color: "var(--n-text-muted)" }}>
-                      {row.active_placements} placement
-                      {profit && (
-                        <span className={profit.margin >= 0 ? "ml-2 text-emerald-600" : "ml-2 text-rose-600"}>
-                          margin {formatRupiah(profit.margin)}
-                        </span>
-                      )}
-                    </span>
-                  </li>
+                  <div
+                    key={stage}
+                    style={{ flexGrow: count, backgroundColor: JO_STAGE_COLORS[stage] }}
+                  />
                 );
               })}
-            </ul>
-          ) : (
-            <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
-              Belum ada placement aktif per klien.
-            </p>
-          )}
-        </Widget>
-
-        {/* Widget 6 — Payroll & Compliance (Workforce Cloud) */}
-        <Widget title="Payroll & Compliance" sku="Workforce Cloud">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Draft" value={data.payroll.draft ?? 0} />
-            <Stat label="Diajukan" value={data.payroll.submitted ?? 0} />
-            <Stat label="Disetujui" value={data.payroll.approved ?? 0} />
-            <Stat label="Final" value={data.payroll.finalized ?? 0} />
-          </div>
-        </Widget>
-
-        {/* Widget 7 — Finance & Cashflow (Revenue Cloud) */}
-        <Widget title="Finance & Cashflow" sku="Revenue Cloud">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Revenue MTD" value={formatRupiah(data.finance.revenue_mtd)} />
-            <Stat label="Outstanding" value={formatRupiah(data.finance.outstanding)} />
-            <Stat
-              label="Overdue"
-              value={data.finance.overdue}
-              hint={data.finance.overdue > 0 ? "invoice lewat jatuh tempo" : undefined}
-            />
-            <Stat
-              label="Faktur Belum Dibuat"
-              value={data.finance.faktur_belum}
-              hint={`dari ${data.finance.invoices_total} invoice`}
-            />
-          </div>
-        </Widget>
-
-        {/* Widget 8 — Accounting Health (Govern Cloud) */}
-        <Widget title="Accounting Health" sku="Govern Cloud">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Periode Tercatat" value={data.accounting.period_closed} />
-            <Stat
-              label="Jurnal Memorial"
-              value={data.accounting.memorial_unposted}
-              hint={data.accounting.memorial_unposted > 0 ? "belum posted" : "semua posted"}
-            />
-          </div>
-        </Widget>
-
-        {/* Widget 9 — AI Insight (fallback deterministik: GET /chat/digest) */}
-        <Widget title="AI Insight" sku="AI Add-on">
-          {digest && digest.items.length > 0 ? (
-            <ul className="space-y-1.5">
-              {digest.items.map((item, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-xs" style={{ color: "var(--n-text)" }}>
-                  <span>{DIGEST_ICON[item.type] ?? "•"}</span>
-                  <span>{item.detail}</span>
-                </li>
+            </div>
+            <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs" style={{ color: "var(--n-text-muted)" }}>
+              {JO_STAGE_ORDER.map((stage) => (
+                <span key={stage}>
+                  {data.recruitment_talent.job_orders_by_stage[stage] ?? 0} {JO_STAGE_LABELS[stage]}
+                </span>
               ))}
-            </ul>
-          ) : (
-            <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{data.ai_insight.hint}</p>
-          )}
-        </Widget>
+            </div>
+
+            <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--n-border)" }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: "var(--n-text)" }}>
+                Status Kandidat
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(data.candidates.by_status).map(([status, count]) => (
+                  <span key={status} className="pill p-gray">
+                    {CANDIDATE_STATUS_LABELS[status] ?? status}: {count}
+                  </span>
+                ))}
+                {data.candidates.total === 0 && (
+                  <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    Belum ada kandidat.
+                  </span>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Finance & e-Faktur" subtitle="Invoice terbaru">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="th">Invoice</th>
+                    <th className="th">Klien</th>
+                    <th className="th text-right">Jumlah</th>
+                    <th className="th">Status</th>
+                    <th className="th">Faktur</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+                  {recentInvoices.map((inv) => (
+                    <tr key={inv.id}>
+                      <td className="td font-mono text-xs">{inv.invoice_no}</td>
+                      <td className="td">{clientName(inv.client_id)}</td>
+                      <td className="td text-right font-mono">{formatRupiah(inv.total_due)}</td>
+                      <td className="td">
+                        <span className={`pill ${INVOICE_STATUS_PILL[inv.status] ?? "p-gray"}`}>{inv.status}</span>
+                      </td>
+                      <td className="td text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        {FAKTUR_STATUS_LABEL[inv.tax_invoice_status ?? "belum_buat"] ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {recentInvoices.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="td text-center" style={{ color: "var(--n-text-muted)" }}>
+                        Belum ada invoice.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* Kolom kanan */}
+        <div className="space-y-5">
+          <div
+            className="rounded-xl p-4 text-white"
+            style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)" }}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/70">
+              <Sparkles className="h-3.5 w-3.5" /> AI Executive Digest
+            </div>
+            {digest && digest.items.length > 0 ? (
+              <ul className="mt-2 space-y-1.5">
+                {digest.items.map((item, idx) => {
+                  const ItemIcon = DIGEST_ICON[item.type] ?? Info;
+                  return (
+                    <li key={idx} className="flex items-start gap-2 text-sm leading-relaxed">
+                      <ItemIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{item.detail}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm leading-relaxed text-white/90">{data.ai_insight.hint}</p>
+            )}
+          </div>
+
+          <SectionCard title="People & Compliance">
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: "var(--n-text)" }}>BPJS Lengkap</span>
+                  <span className="font-mono font-medium" style={{ color: "var(--n-text)" }}>
+                    {data.people.bpjs_complete}/{data.people.total_employees} ·{" "}
+                    {pct(data.people.bpjs_complete, data.people.total_employees)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+                  <div
+                    className="h-full rounded-full bg-emerald-500"
+                    style={{ width: `${pct(data.people.bpjs_complete, data.people.total_employees)}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: "var(--n-text)" }}>Asuransi Lengkap</span>
+                  <span className="font-mono font-medium" style={{ color: "var(--n-text)" }}>
+                    {data.people.insurance_complete}/{data.people.total_employees} ·{" "}
+                    {pct(data.people.insurance_complete, data.people.total_employees)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+                  <div
+                    className="h-full rounded-full bg-amber-500"
+                    style={{ width: `${pct(data.people.insurance_complete, data.people.total_employees)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            {data.people.expiring_contracts_14d > 0 && (
+              <div className="mt-3">
+                <CalloutBlock tone="warning">
+                  <span className="font-semibold">Expiry ≤14 hari:</span>{" "}
+                  {data.people.expiring_contracts_14d} kontrak perlu tindak lanjut.
+                </CalloutBlock>
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Client Profit Margin" subtitle="Laba per klien bulan berjalan">
+            {data.operations.profit_by_client.length > 0 ? (
+              <div className="space-y-2.5">
+                {data.operations.profit_by_client.slice(0, 6).map((row) => {
+                  const marginPct = row.revenue > 0 ? Math.round((row.margin / row.revenue) * 100) : 0;
+                  return (
+                    <div key={row.client} className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                          {row.client}
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                          {formatRupiah(row.revenue)}
+                        </p>
+                      </div>
+                      <span className={`pill ${marginPct >= 15 ? "p-green" : marginPct >= 0 ? "p-yellow" : "p-red"}`}>
+                        {marginPct}% margin
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                Belum ada data margin per klien.
+              </p>
+            )}
+          </SectionCard>
+        </div>
       </div>
     </div>
   );

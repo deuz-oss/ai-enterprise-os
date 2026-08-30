@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import ACCOUNTING_TRANSACTIONS_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.accounting import transactions_service as tx_service
 from app.modules.accounting.transactions_schemas import (
@@ -17,7 +18,10 @@ from app.modules.accounting.transactions_schemas import (
 router = APIRouter(
     prefix="/accounting",
     tags=["accounting"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("finance", "management"))],
+    dependencies=[
+        Depends(get_current_user),
+        Depends(require_roles(*ACCOUNTING_TRANSACTIONS_ROLES)),
+    ],
 )
 
 

@@ -1,13 +1,22 @@
-import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Info, Lock, Mail, Sparkles, ArrowRight } from "lucide-react";
 import { api, setToken } from "../api/client";
 
+/** Login dua panel ala mockup login.html — hero brand (desktop) + form.
+ * Elemen dekoratif tanpa dukungan backend nyata (SSO Google, Magic Link,
+ * slug tenant manual, remember-me, KPI ringkasan palsu) sengaja tidak
+ * diikutkan — email sudah unik global sehingga tenant otomatis terdeteksi
+ * saat login, tanpa perlu input tambahan.
+ */
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -33,34 +42,185 @@ export default function Login() {
     }
   }
 
+  // ⌘/Ctrl+Enter submit dari mana pun di form, selaras hint mockup.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        formRef.current?.requestSubmit();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <form onSubmit={handleSubmit} className="card w-full max-w-sm space-y-4">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--n-text)" }}>AI Enterprise OS</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>Masuk ke akun tim Anda</p>
+    <div className="flex min-h-screen bg-slate-50 antialiased">
+      <div
+        className="fixed inset-x-0 top-0 h-1"
+        style={{ background: "linear-gradient(90deg,#0f172a 0%,#1e3a5f 40%,#a16207 100%)" }}
+      />
+
+      {/* LEFT: brand hero (desktop only) */}
+      <div
+        className="relative hidden overflow-hidden text-white lg:flex lg:w-[52%]"
+        style={{ background: "linear-gradient(135deg,#020617 0%,#0f172a 55%,#1e3a5f 100%)" }}
+      >
+        <div
+          className="absolute inset-0 opacity-[0.08]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 30% 20%,white 1px,transparent 1px),radial-gradient(circle at 70% 80%,white 1px,transparent 1px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+        <div className="absolute -bottom-24 -right-24 h-[520px] w-[520px] rounded-full border border-white/10" />
+        <div className="absolute -bottom-10 -right-10 h-[380px] w-[380px] rounded-full border border-white/10" />
+        <div className="relative z-10 flex w-full flex-col p-10 xl:p-12">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-sm font-bold text-slate-900">
+              AE
+            </div>
+            <div>
+              <div className="text-sm font-semibold leading-none tracking-tight">
+                AI Enterprise OS
+              </div>
+              <div className="text-xs text-white/60">Outsourcing Operations</div>
+            </div>
+          </div>
+
+          <div className="mt-16 max-w-[520px] xl:mt-20">
+            <h1 className="mt-5 text-[34px] font-semibold leading-[1.05] tracking-tight xl:text-[40px]">
+              Operasional enterprise,
+              <br />
+              <span className="text-white/60">satu pintu.</span>
+            </h1>
+            <p className="mt-4 text-sm leading-relaxed text-white/65">
+              Talent Cloud · Workforce Cloud · Revenue Cloud · Govern Cloud — rekrutmen, HR,
+              payroll, tagihan, dan pembukuan dalam satu workspace.
+            </p>
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-slate-900">
+              <Sparkles className="h-3.5 w-3.5 text-violet-600" /> AI Native
+            </div>
+          </div>
+
+          <div className="mt-auto flex items-center gap-3 pt-10 text-xs text-white/50">
+            <span>© 2026 AI Enterprise OS</span>
+          </div>
         </div>
-        {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
-        <input
-          type="email"
-          required
-          placeholder="Email"
-          className="input"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          required
-          placeholder="Password"
-          className="input"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button type="submit" disabled={loading} className="btn w-full">
-          {loading ? "Memproses..." : "Masuk"}
-        </button>
-      </form>
+      </div>
+
+      {/* RIGHT: form */}
+      <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-5 lg:hidden">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white">
+            AE
+          </div>
+          <div>
+            <div className="text-sm font-semibold leading-none text-slate-900">
+              AI Enterprise OS
+            </div>
+            <div className="text-xs text-slate-500">Outsourcing Operations</div>
+          </div>
+        </div>
+
+        <div className="flex flex-1 items-center justify-center p-6 lg:p-10">
+          <div className="w-full max-w-[420px]">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+              <h2 className="text-[20px] font-semibold tracking-tight text-slate-900">
+                Masuk ke workspace
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Gunakan email &amp; kata sandi akun tenant Anda.
+              </p>
+
+              {error && (
+                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
+
+              <form ref={formRef} onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Email
+                  </label>
+                  <div className="relative mt-1.5">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="email"
+                      required
+                      autoFocus
+                      placeholder="nama@perusahaan.co.id"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      Kata sandi
+                    </label>
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
+                    >
+                      Lupa kata sandi?
+                    </Link>
+                  </div>
+                  <div className="relative mt-1.5">
+                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                      title={showPassword ? "Sembunyikan sandi" : "Tampilkan sandi"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? "Memproses..." : "Masuk"}
+                  {!loading && <ArrowRight className="h-4 w-4" />}
+                </button>
+                <p className="hidden text-center text-xs text-slate-400 sm:block">
+                  ⌘ + Enter untuk masuk
+                </p>
+              </form>
+
+              <div className="mt-6 flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <div className="text-xs leading-relaxed">
+                  <div className="font-semibold text-amber-900">Akses mengikuti lisensi tenant</div>
+                  <div className="text-amber-800">
+                    Jika modul terkunci, minta admin tenant mengaktifkan lewat halaman Aplikasi,
+                    atau hubungi platform admin.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-center text-xs text-slate-400">
+              © 2026 AI Enterprise OS
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -418,8 +418,12 @@ def list_fixed_assets(db: Session, include_disposed: bool = False) -> list[Fixed
 # ---------- Arus kas metode tidak langsung (PRD §8.7) ----------
 
 
-def _balances_at(db: Session, until: str) -> dict[str, float]:
-    """Saldo normal per 'grup|kode' dari jurnal posted s.d. tanggal."""
+def _balances_at(db: Session, until: date) -> dict[str, float]:
+    """Saldo normal per 'grup|kode' dari jurnal posted s.d. tanggal.
+
+    `until` harus objek date (bukan str) -- Postgres menolak perbandingan
+    date <= character varying (SQLite lolos, tidak menegakkan tipe kolom).
+    """
     effective_code = func.coalesce(Account.code, JournalLine.account_code)
     stmt = (
         select(
@@ -485,8 +489,8 @@ def cash_flow_indirect(db: Session, year: int) -> dict:
 
     Net Change Cash = CFO + CFI + CFF (harus cocok dengan Δ saldo kas-bank).
     """
-    prev = _balances_at(db, f"{year - 1}-12-31")
-    now = _balances_at(db, f"{year}-12-31")
+    prev = _balances_at(db, date(year - 1, 12, 31))
+    now = _balances_at(db, date(year, 12, 31))
 
     net_income = income_statement(db, year=year).net_income
 

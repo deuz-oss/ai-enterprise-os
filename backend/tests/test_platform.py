@@ -200,6 +200,88 @@ def test_billing_mode_override_per_tenant(client):
     assert invalid.status_code == 422
 
 
+def test_bundle_grant_mengaktifkan_semua_app_teknis_sekaligus(client):
+    """PRD v3.0 Opsi F: bundle komersial = gabungan >=1 SKU teknis (mis. Talent
+    Cloud = sales_crm+recruitment). Sebelum endpoint /bundles ini ada, admin
+    cuma bisa nyalakan app_key satu-satu lewat /licenses/{app_key} — sehingga
+    bundle bisa "setengah aktif" (satu app nyala, satunya belum). Endpoint ini
+    memastikan grant satu bundle menyalakan SEMUA app di dalamnya sekaligus.
+    """
+    plat = _platform_admin_header(client)
+    resp = client.post(
+        "/api/v1/platform/tenants",
+        headers=plat,
+        json={
+            "name": "Tenant Zeta",
+            "slug": "zeta",
+            "admin_email": "admin-zeta@example.com",
+            "admin_password": "password123",
+            "admin_full_name": "Admin Zeta",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    tenant_id = resp.json()["id"]
+
+    bundles = client.get("/api/v1/platform/bundles", headers=plat).json()
+    by_key = {b["key"]: b for b in bundles}
+    assert set(by_key) == {"talent", "workforce", "revenue", "govern"}
+    assert by_key["talent"]["apps"] == ["sales_crm", "recruitment"]
+    assert by_key["revenue"]["apps"] == ["payroll", "finance"]
+    assert by_key["workforce"]["apps"] == ["people_ops"]
+    assert by_key["govern"]["apps"] == ["accounting"]
+
+    # Belum ada lisensi apa pun (tenant baru).
+    licenses_before = client.get(
+        f"/api/v1/platform/tenants/{tenant_id}/licenses", headers=plat
+    ).json()
+    assert all(lic["status"] is None for lic in licenses_before)
+
+    # Grant "talent" -> sales_crm & recruitment aktif bersamaan, app lain tetap kosong.
+    granted = client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/bundles/talent",
+        headers=plat,
+        json={"status": "aktif"},
+    )
+    assert granted.status_code == 200, granted.text
+    granted_keys = {row["app_key"]: row["status"] for row in granted.json()}
+    assert granted_keys == {"sales_crm": "aktif", "recruitment": "aktif"}
+
+    licenses_after = {
+        lic["app_key"]: lic["status"]
+        for lic in client.get(f"/api/v1/platform/tenants/{tenant_id}/licenses", headers=plat).json()
+    }
+    assert licenses_after["sales_crm"] == "aktif"
+    assert licenses_after["recruitment"] == "aktif"
+    assert licenses_after["people_ops"] is None
+    assert licenses_after["payroll"] is None
+
+    # Bundle tak dikenal -> 404.
+    unknown = client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/bundles/nonexistent",
+        headers=plat,
+        json={"status": "aktif"},
+    )
+    assert unknown.status_code == 404
+
+    # Bundle tanpa app teknis (Foundation) -> 422, bukan silent no-op.
+    empty_bundle = client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/bundles/foundation",
+        headers=plat,
+        json={"status": "aktif"},
+    )
+    assert empty_bundle.status_code == 422
+
+    # Cabut bundle "talent" -> kedua app kembali kedaluwarsa bersamaan.
+    revoked = client.patch(
+        f"/api/v1/platform/tenants/{tenant_id}/bundles/talent",
+        headers=plat,
+        json={"status": "kedaluwarsa"},
+    )
+    assert revoked.status_code == 200
+    revoked_keys = {row["app_key"]: row["status"] for row in revoked.json()}
+    assert revoked_keys == {"sales_crm": "kedaluwarsa", "recruitment": "kedaluwarsa"}
+
+
 def test_tenant_usage_report(client):
     """PRD v3.0 §2 — laporan estimasi pemakaian & tagihan (read-only)."""
     from tests.test_finance import _seed_client_with_payroll

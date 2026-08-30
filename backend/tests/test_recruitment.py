@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import patch
 
 from tests.conftest import _auth_header
@@ -116,6 +117,140 @@ def test_placement_flow_updates_statuses(client):
         json={"candidate_id": cand_id, "job_order_id": jo_id},
     )
     assert duplicate.status_code == 409
+
+
+def test_offering_letter_pdf_dan_esign_sandbox(client):
+    """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> esign -> status offered.
+
+    Regresi untuk gap yang sebelumnya ditemukan saat audit progres PRD: aksi
+    "Offering" cuma PATCH status candidate, tanpa surat penawaran & esign
+    sungguhan.
+    """
+    from tests.test_esign import _sandbox_settings
+
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    )
+    assert placement.status_code == 201
+    pid = placement.json()["id"]
+
+    # Gaji belum diisi & belum diberikan di payload -> wajib ditolak, bukan default 0.
+    with _sandbox_settings():
+        missing_salary = client.post(
+            f"/api/v1/recruitment/placements/{pid}/offering",
+            headers=headers,
+            json={"signer_name": "Andi", "signer_email": "andi@example.com"},
+        )
+    assert missing_salary.status_code == 422
+
+    with _sandbox_settings():
+        sent = client.post(
+            f"/api/v1/recruitment/placements/{pid}/offering",
+            headers=headers,
+            json={
+                "signer_name": "Andi",
+                "signer_email": "andi@example.com",
+                "offered_salary": 5_200_000,
+            },
+        )
+    assert sent.status_code == 200, sent.text
+    body = sent.json()
+    assert body["placement_id"] == pid
+    assert body["contract_id"] is None
+    assert body["status"] == "terkirim"
+    assert body["provider_document_id"].startswith("sbx-")
+
+    cand = client.get(f"/api/v1/recruitment/candidates/{cand_id}", headers=headers).json()
+    assert cand["status"] == "offered"
+    jo = client.get(f"/api/v1/recruitment/job-orders/{jo_id}", headers=headers).json()
+    assert jo["status"] == "offering"
+
+    # Masih ada permintaan berjalan -> kirim ulang ditolak (anti-duplikat).
+    with _sandbox_settings():
+        duplicate = client.post(
+            f"/api/v1/recruitment/placements/{pid}/offering",
+            headers=headers,
+            json={"signer_name": "Andi", "signer_email": "andi@example.com"},
+        )
+    assert duplicate.status_code == 409
+
+    # Simulasi kandidat menandatangani -> placement.offering_signed_at terisi.
+    with _sandbox_settings():
+        done = client.post(
+            f"/api/v1/esign/requests/{body['id']}/simulate-complete", headers=headers
+        )
+    assert done.status_code == 200
+    assert done.json()["status"] == "selesai"
+
+    from app.modules.recruitment.models import Placement
+
+    with client.testing_session() as db:  # type: ignore[attr-defined]
+        row = db.get(Placement, uuid.UUID(pid))
+        assert row is not None
+        assert row.offering_signed_at is not None
+        assert row.offering_letter_object_key is not None
+
+
+def test_offering_summary_pipeline(client):
+    """Widget "Offering" Talent Cloud — GET /recruitment/placements/offering-summary."""
+    from tests.test_esign import _sandbox_settings
+
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid, title="Teller")
+    cand_id = _create_candidate(client, headers, name="Rina Wulandari")
+
+    empty = client.get("/api/v1/recruitment/placements/offering-summary", headers=headers).json()
+    assert empty == {"total_active": 0, "awaiting_signature": 0, "items": []}
+
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    ).json()
+    pid = placement["id"]
+
+    with _sandbox_settings():
+        sent = client.post(
+            f"/api/v1/recruitment/placements/{pid}/offering",
+            headers=headers,
+            json={
+                "signer_name": "Rina",
+                "signer_email": "rina@example.com",
+                "offered_salary": 5_200_000,
+            },
+        )
+    assert sent.status_code == 200, sent.text
+    request_id = sent.json()["id"]
+
+    active = client.get("/api/v1/recruitment/placements/offering-summary", headers=headers).json()
+    assert active["total_active"] == 1
+    assert active["awaiting_signature"] == 1
+    item = active["items"][0]
+    assert item["placement_id"] == pid
+    assert item["candidate_name"] == "Rina Wulandari"
+    assert item["job_order_title"] == "Teller"
+    assert item["client_name"] == "PT Pemberi Kerja"
+    assert item["offered_salary"] == 5_200_000
+    assert item["esign_status"] == "terkirim"
+
+    with _sandbox_settings():
+        done = client.post(
+            f"/api/v1/esign/requests/{request_id}/simulate-complete", headers=headers
+        )
+    assert done.status_code == 200
+
+    signed = client.get("/api/v1/recruitment/placements/offering-summary", headers=headers).json()
+    assert signed["total_active"] == 1
+    assert signed["awaiting_signature"] == 0
+    assert signed["items"][0]["esign_status"] == "selesai"
 
 
 def test_duplicate_job_order_requires_existing_client(client):
@@ -281,3 +416,6 @@ def test_interview_schedule_notifies_interviewer_and_posts_to_jo_channel(client)
         f"/api/v1/chat/channels/{jo_channel['id']}/messages", headers=headers
     ).json()
     assert any("Interview dijadwalkan" in m["content"] for m in messages)
+    # scheduled_at "09:00" tanpa offset dianggap UTC lalu ditampilkan WIB
+    # (UTC+7) di teks notifikasi/chat — regresi bug tampilan jam mentah UTC.
+    assert any("10 Sep 2026 16:00 WIB" in m["content"] for m in messages)

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { api } from "../api/client";
 import TiptapEditor from "../components/editor/TiptapEditor";
 
@@ -125,7 +126,7 @@ export default function Pages() {
             className="text-[11px] font-semibold uppercase tracking-wide"
             style={{ color: "var(--n-text-muted)" }}
           >
-            📄 Halaman
+            📄 Workspace
           </span>
           <button
             onClick={() => createPage.mutate({ title: "Tanpa judul" })}
@@ -165,7 +166,7 @@ export default function Pages() {
           <>
             <div className="mb-4 text-[56px] leading-none">📄</div>
             <h1 className="text-[38px] font-bold leading-[1.15] tracking-[-0.02em]" style={{ color: "var(--n-text)" }}>
-              Halaman
+              Workspace
             </h1>
             <p className="mb-6 mt-1 text-[15px]" style={{ color: "var(--n-text-muted)" }}>
               Catatan & dokumen workspace dengan block editor ala Notion.
@@ -183,37 +184,51 @@ export default function Pages() {
         {pageId && (
           <>
             {/* Header ala dokumen Notion */}
-            <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIconPickerOpen((v) => !v)}
+                  className="block rounded-md px-1 transition-colors hover:bg-[var(--n-hover)]"
+                  title="Ganti ikon"
+                >
+                  <span className="text-[56px] leading-none">{icon ?? "📄"}</span>
+                </button>
+                {iconPickerOpen && (
+                  <div
+                    className="absolute left-0 top-16 z-20 grid w-64 grid-cols-6 gap-1 rounded-lg p-2 shadow-lg"
+                    style={{
+                      backgroundColor: "var(--n-bg-elevated)",
+                      border: "1px solid var(--n-border)",
+                    }}
+                  >
+                    {EMOJIS.map((em) => (
+                      <button
+                        key={em}
+                        onClick={() => {
+                          setIcon(em);
+                          setIconPickerOpen(false);
+                        }}
+                        className="rounded p-1 text-xl transition-colors hover:bg-[var(--n-hover)]"
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => setIconPickerOpen((v) => !v)}
-                className="block rounded-md px-1 transition-colors hover:bg-[var(--n-hover)]"
-                title="Ganti ikon"
+                onClick={() => {
+                  if (window.confirm("Hapus halaman ini beserta sub-halamannya?"))
+                    deletePage.mutate(pageId);
+                }}
+                disabled={deletePage.isPending}
+                title="Hapus halaman"
+                className="mt-2 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <span className="text-[56px] leading-none">{icon ?? "📄"}</span>
+                <Trash2 className="h-3.5 w-3.5" /> Hapus halaman
               </button>
-              {iconPickerOpen && (
-                <div
-                  className="absolute left-0 top-16 z-20 grid w-64 grid-cols-6 gap-1 rounded-lg p-2 shadow-lg"
-                  style={{
-                    backgroundColor: "var(--n-bg-elevated)",
-                    border: "1px solid var(--n-border)",
-                  }}
-                >
-                  {EMOJIS.map((em) => (
-                    <button
-                      key={em}
-                      onClick={() => {
-                        setIcon(em);
-                        setIconPickerOpen(false);
-                      }}
-                      className="rounded p-1 text-xl transition-colors hover:bg-[var(--n-hover)]"
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <input
@@ -254,17 +269,6 @@ export default function Pages() {
                 {updatePage.isSuccess && !updatePage.isPending && (
                   <span style={{ color: "#0f7b6d" }}>Tersimpan ✓</span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm("Hapus halaman ini beserta sub-halamannya?"))
-                      deletePage.mutate(pageId);
-                  }}
-                  disabled={deletePage.isPending}
-                  className="ml-auto text-rose-600 hover:text-rose-800"
-                >
-                  Hapus halaman
-                </button>
               </div>
               {updatePage.error && (
                 <p className="text-xs text-red-600">{(updatePage.error as Error).message}</p>

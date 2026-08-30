@@ -8,6 +8,14 @@ from app.core.ratelimit import reset_all_limiters
 from tests.conftest import _auth_header, _login_header
 
 
+def _reset_limiters(client) -> None:
+    db = client.testing_session()
+    try:
+        reset_all_limiters(db)
+    finally:
+        db.close()
+
+
 def _register(client, headers, email, role="hr"):
     resp = client.post(
         "/api/v1/auth/register",
@@ -95,6 +103,46 @@ def test_reset_password_alur_admin_token(client):
     assert login.status_code == 200
 
 
+def test_forgot_password_self_service_generic_dan_anti_enumerasi(client):
+    """Endpoint publik baru: user minta reset sendiri via email (tanpa admin).
+
+    - Balasan generik SAMA baik email terdaftar atau tidak (anti-enumerasi).
+    - Email tak dikenal: tidak ada token dibuat, tidak ada email dikirim.
+    - Email dikenal: token asli dibuat & terkirim (di-mock) -> bisa dipakai
+      sungguhan lewat /auth/reset-password, sama seperti jalur admin-issued.
+    """
+    from unittest.mock import patch
+
+    admin = _auth_header(client)
+    user = _register(client, admin, "lupa-sandi@example.com")
+
+    unknown = client.post("/api/v1/auth/forgot-password", json={"email": "tidak-ada@example.com"})
+    assert unknown.status_code == 202
+    unknown_detail = unknown.json()["detail"]
+
+    with patch("app.modules.notifications.service.send_raw_email") as send_mock:
+        known = client.post("/api/v1/auth/forgot-password", json={"email": user["email"]})
+        assert known.status_code == 202
+        assert known.json()["detail"] == unknown_detail  # balasan sama persis
+        assert send_mock.call_count == 1
+        to, subject, body = send_mock.call_args[0]
+        assert to == user["email"]
+        assert "reset-password?token=" in body
+
+    token = body.split("token=", 1)[1].strip()
+    reset = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "sandi-baru-123"},
+    )
+    assert reset.status_code == 200, reset.text
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "lupa-sandi@example.com", "password": "sandi-baru-123"},
+    )
+    assert login.status_code == 200
+
+
 def test_reset_token_tidak_valid_atau_kedaluwarsa(client):
     resp = client.post(
         "/api/v1/auth/reset-password",
@@ -129,9 +177,37 @@ def test_reset_token_lintas_tenant_ditolak_admin_lain(client):
     del prov
 
 
+def test_list_users_tidak_bocor_lintas_tenant(client):
+    """GET /auth/users — regresi: `User` tidak pakai `TenantMixin` (tenant_id
+    nullable utk platform_admin) jadi tidak ikut auto-scope
+    `with_loader_criteria`; endpoint list sebelumnya `select(User)` tanpa
+    filter manual → admin tenant mana pun bisa lihat nama/email seluruh user
+    tenant lain + akun platform_admin."""
+    from tests.conftest import _platform_admin_header as plat
+
+    client.post(
+        "/api/v1/platform/tenants",
+        headers=plat(client),
+        json={
+            "name": "T Beta",
+            "slug": "beta-sec",
+            "admin_email": "admin-beta-sec@example.com",
+            "admin_password": "password123",
+            "admin_full_name": "B",
+        },
+    )
+
+    default_admin = _auth_header(client)
+    listed = client.get("/api/v1/auth/users", headers=default_admin).json()
+    emails = {u["email"] for u in listed}
+    assert "admin-beta-sec@example.com" not in emails
+    assert "platform@example.com" not in emails
+    assert all(u.get("email") for u in listed)
+
+
 def test_rate_limit_login(client):
     settings = get_settings()
-    reset_all_limiters()
+    _reset_limiters(client)
     # Seed admin SEBELUM percobaan diblokir agar email dikenali saat lookup
     admin = _auth_header(client)
     with (
@@ -153,7 +229,7 @@ def test_rate_limit_login(client):
         )
         assert blocked.status_code == 429
         assert int(blocked.headers["Retry-After"]) > 0
-    reset_all_limiters()
+    _reset_limiters(client)
 
     logs = client.get(
         "/api/v1/audit/logs",
@@ -165,7 +241,7 @@ def test_rate_limit_login(client):
 
 def test_rate_limit_endpoint_reset(client):
     settings = get_settings()
-    reset_all_limiters()
+    _reset_limiters(client)
     with patch.object(settings, "reset_rate_limit_max", 2):
         for _ in range(2):
             r = client.post(
@@ -178,4 +254,4 @@ def test_rate_limit_endpoint_reset(client):
             json={"token": "ngasal", "new_password": "password123"},
         )
         assert blocked.status_code == 429
-    reset_all_limiters()
+    _reset_limiters(client)

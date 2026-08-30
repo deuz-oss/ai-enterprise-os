@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import ESIGN_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.esign import service
 from app.modules.esign.schemas import (
@@ -16,7 +17,7 @@ from app.modules.esign.schemas import (
 router = APIRouter(
     prefix="/esign",
     tags=["esign"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("hr", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*ESIGN_ROLES))],
 )
 
 # Webhook dipanggil penyedia TTE tanpa JWT → router terpisah tanpa guard auth.
@@ -35,8 +36,12 @@ def send_contract(contract_id: UUID, payload: EsignSendIn, db: Session = Depends
 
 
 @router.get("/requests", response_model=list[EsignRequestOut])
-def list_requests(contract_id: UUID | None = None, db: Session = Depends(get_db)):
-    return service.list_requests(db, contract_id)
+def list_requests(
+    contract_id: UUID | None = None,
+    placement_id: UUID | None = None,
+    db: Session = Depends(get_db),
+):
+    return service.list_requests(db, contract_id, placement_id)
 
 
 @router.post("/requests/{request_id}/refresh", response_model=EsignRequestOut)

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Enterprise OS — Masuk</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>*{font-family:'Inter',system-ui,sans-serif}</style>
+</head>
+<body class="min-h-screen bg-slate-50 antialiased text-slate-900">
+<!-- Top bar tipis selaras dashboard -->
+<div class="h-1 w-full" style="background:linear-gradient(90deg,#0f172a 0%,#1e3a5f 40%,#a16207 100%)"></div>
+
+<div class="min-h-[calc(100vh-4px)] flex">
+  <!-- LEFT: Brand panel (hidden di mobile) -->
+  <div class="hidden lg:flex lg:w-[52%] relative overflow-hidden text-white" style="background:linear-gradient(135deg,#020617 0%,#0f172a 55%,#1e3a5f 100%)">
+    <div class="absolute inset-0 opacity-[0.08]" style="background-image:radial-gradient(circle at 30% 20%,white 1px,transparent 1px),radial-gradient(circle at 70% 80%,white 1px,transparent 1px);background-size:48px 48px"></div>
+    <div class="absolute -right-24 -bottom-24 w-[520px] h-[520px] rounded-full border border-white/10"></div>
+    <div class="absolute -right-10 -bottom-10 w-[380px] h-[380px] rounded-full border border-white/10"></div>
+    <div class="relative z-10 flex flex-col w-full p-10 xl:p-12">
+      <!-- Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-white text-slate-900 grid place-items-center font-bold text-sm">AE</div>
+        <div>
+          <div class="text-sm font-semibold leading-none tracking-tight">AI Enterprise OS v3.0</div>
+          <div class="text-xs text-white/60">PRD v3.0 · Internal-first · Metered 4-SKU</div>
+        </div>
+        <span class="ml-2 hidden xl:inline-flex text-[11px] tracking-widest uppercase font-semibold px-2 py-1 rounded-full bg-white/10 border border-white/15 text-white/80">Internal</span>
+      </div>
+
+      <div class="mt-16 xl:mt-20 max-w-[520px]">
+        <div class="inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-white/90">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Commercial Mode tersedia per-tenant
+        </div>
+        <h1 class="text-[34px] xl:text-[40px] font-semibold leading-[1.05] tracking-tight mt-5">
+          Operasional enterprise,<br>
+          <span class="text-white/60">satu pintu.</span>
+        </h1>
+        <p class="text-sm leading-relaxed text-white/65 mt-4">
+          Talent Cloud · Workforce Cloud · Revenue Cloud · Govern Cloud. Metered per pemakaian, audit-ready, DJP e-Faktur terintegrasi.
+        </p>
+        <div class="mt-8 inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full bg-white text-slate-900 border border-white/20"><i data-lucide="sparkles" class="w-3.5 h-3.5 text-violet-600"></i> AI Native</div>
+
+        <!-- Mini preview cards -->
+        <div class="mt-4 grid grid-cols-3 gap-3">
+          <div class="rounded-xl bg-white/10 backdrop-blur border border-white/15 p-3">
+            <div class="text-xs text-white/60">Talent Pool</div>
+            <div class="text-lg font-semibold mt-1">80</div>
+            <div class="text-xs text-emerald-300 flex items-center gap-1"><i data-lucide="trending-up" class="w-3 h-3"></i> +5 minggu ini</div>
+          </div>
+          <div class="rounded-xl bg-white/10 backdrop-blur border border-white/15 p-3">
+            <div class="text-xs text-white/60">Revenue MTD</div>
+            <div class="text-lg font-semibold mt-1">Rp 124,5M</div>
+            <div class="text-xs text-white/60">+12,4% vs lalu</div>
+          </div>
+          <div class="rounded-xl bg-white/10 backdrop-blur border border-white/15 p-3">
+            <div class="text-xs text-white/60">e-Faktur DJP</div>
+            <div class="text-lg font-semibold mt-1">2 pending</div>
+            <div class="text-xs text-amber-300">Butuh approval</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-auto pt-10 flex items-center gap-3 text-xs text-white/50">
+        <span>© 2026 PT Techno Talent Solutions</span>
+        <span class="w-1 h-1 rounded-full bg-white/30"></span>
+        <a href="#" class="hover:text-white underline decoration-white/20 underline-offset-4">Bantuan</a>
+        <a href="#" class="hover:text-white underline decoration-white/20 underline-offset-4">Kebijakan</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Form -->
+  <div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+    <!-- Mobile header -->
+    <div class="lg:hidden flex items-center gap-3 px-6 py-5 bg-white border-b border-slate-200">
+      <div class="w-9 h-9 rounded-xl bg-slate-900 text-white grid place-items-center font-bold text-sm">AE</div>
+      <div>
+        <div class="text-sm font-semibold leading-none">AI Enterprise OS v3.0</div>
+        <div class="text-xs text-slate-500">PRD v3.0 · Internal-first</div>
+      </div>
+      <span class="ml-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Commercial</span>
+    </div>
+
+    <div class="flex-1 flex items-center justify-center p-6 lg:p-10">
+      <div class="w-full max-w-[420px]">
+        <!-- Card -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 sm:p-7">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-[20px] font-semibold tracking-tight">Masuk ke workspace</h2>
+              <p class="text-sm text-slate-500 mt-1">Gunakan akun tenant Anda. Platform admin lewat jalur terpisah.</p>
+            </div>
+            <span class="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full bg-slate-900 text-white"><i data-lucide="shield-check" class="w-3.5 h-3.5"></i> SSO siap</span>
+          </div>
+
+          <!-- Tenant slug (penting multi-tenant) -->
+          <div class="mt-6">
+            <label class="text-xs font-semibold tracking-wide uppercase text-slate-600">Tenant</label>
+            <div class="mt-1.5 flex items-center gap-2">
+              <div class="flex-1 relative">
+                <i data-lucide="building-2" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="tenant" value="default" class="w-full h-10 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 placeholder:text-slate-400" placeholder="slug tenant (mis. default, acme)">
+              </div>
+              <span class="hidden sm:inline-flex text-xs px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-mono">.aeos.id</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1.5">Kosongkan untuk auto-deteksi via email domain.</p>
+          </div>
+
+          <form class="mt-5 space-y-4" onsubmit="return false">
+            <div>
+              <label class="text-xs font-semibold tracking-wide uppercase text-slate-600">Email</label>
+              <div class="mt-1.5 relative">
+                <i data-lucide="mail" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="email" placeholder="nama@perusahaan.co.id" class="w-full h-10 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 placeholder:text-slate-400">
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold tracking-wide uppercase text-slate-600">Kata sandi</label>
+                <a href="#" class="text-xs font-medium text-slate-700 hover:text-slate-900 underline decoration-slate-300 underline-offset-4">Lupa kata sandi?</a>
+              </div>
+              <div class="mt-1.5 relative">
+                <i data-lucide="lock" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="password" placeholder="••••••••" class="w-full h-10 pl-9 pr-9 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 placeholder:text-slate-400">
+                <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><i data-lucide="eye" class="w-4 h-4"></i></button>
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-slate-600 select-none">
+              <input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+              Ingat saya di perangkat ini
+              <span class="ml-auto hidden sm:inline text-xs text-slate-500">⌘ + Enter untuk masuk</span>
+            </label>
+
+            <button class="w-full h-11 rounded-xl bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm">
+              Masuk <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+
+            <div class="relative py-1">
+              <div class="absolute inset-0 flex items-center"><div class="w-full h-px bg-slate-200"></div></div>
+              <div class="relative flex justify-center"><span class="bg-white px-3 text-xs text-slate-500">atau</span></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button class="h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium flex items-center justify-center gap-2"><img src="https://www.google.com/favicon.ico" class="w-4 h-4"> Google SSO</button>
+              <button class="h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium flex items-center justify-center gap-2"><i data-lucide="key-round" class="w-4 h-4 text-slate-600"></i> Magic Link</button>
+            </div>
+          </form>
+
+          <!-- Metered note selaras PRD v3.0 -->
+          <div class="mt-6 rounded-xl bg-amber-50 border border-amber-200 p-3 flex gap-2.5">
+            <i data-lucide="info" class="w-4 h-4 text-amber-700 mt-0.5 shrink-0"></i>
+            <div class="text-xs leading-relaxed">
+              <div class="font-semibold text-amber-900">Akses mengikuti lisensi tenant</div>
+              <div class="text-amber-800">Jika modul terkunci (403 “belum aktif”), minta admin tenant mengaktifkan trial di <span class="font-mono bg-white border border-amber-200 px-1 py-0.5 rounded">/apps</span> atau hubungi platform admin.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer links -->
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500">
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Semua sistem normal</span>
+          <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+          <a href="#" class="hover:text-slate-700 underline decoration-slate-300 underline-offset-4">Status</a>
+          <a href="#" class="hover:text-slate-700 underline decoration-slate-300 underline-offset-4">Dokumentasi API</a>
+          <a href="#" class="hover:text-slate-700 underline decoration-slate-300 underline-offset-4">Hubungi support</a>
+        </div>
+
+        <!-- Platform admin hint -->
+        <div class="mt-4 text-center text-xs text-slate-400">
+          Platform admin? <a href="#" class="font-medium text-slate-700 hover:text-slate-900 underline decoration-slate-300 underline-offset-4">Masuk via /platform</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>lucide.createIcons()</script>
+</body>
+</html>

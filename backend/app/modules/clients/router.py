@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import CLIENTS_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.clients import service
 from app.modules.clients.models import DocumentType
@@ -10,7 +11,7 @@ from app.modules.clients.schemas import ClientCreate, ClientOut, ClientUpdate, D
 router = APIRouter(
     prefix="/clients",
     tags=["clients"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("business_dev", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*CLIENTS_ROLES))],
 )
 
 

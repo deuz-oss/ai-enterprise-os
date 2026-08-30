@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { Calculator } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/notion";
 
 interface Pph21Row {
@@ -140,7 +141,7 @@ export default function Rates() {
 
   return (
     <div className="space-y-4">
-      <PageHeader emoji="🧮" title="Tarif & Rate" subtitle="Rate ber-versi per tanggal efektif — terpisah dari kode; laporan historis memakai snapshot" />
+      <PageHeader icon={Calculator} title="Tarif & Rate" subtitle="Rate ber-versi per tanggal efektif — terpisah dari kode; laporan historis memakai snapshot" />
 
       <div className="flex gap-2">
         {(
@@ -167,7 +168,7 @@ export default function Rates() {
         ))}
       </div>
 
-      {error && <CalloutBlock emoji="⚠️" tone="danger">{error}</CalloutBlock>}
+      {error && <CalloutBlock tone="danger">{error}</CalloutBlock>}
 
       {tab === "pph21" && (
         <>
@@ -324,7 +325,7 @@ export default function Rates() {
 
       {tab === "bank" && (
         <>
-          <CalloutBlock emoji="🏦" tone="info">
+          <CalloutBlock tone="info">
             Potongan admin otomatis di slip gaji. Bank Mandiri group = gratis.
           </CalloutBlock>
           <div className="card space-y-3">

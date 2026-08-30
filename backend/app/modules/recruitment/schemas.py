@@ -122,6 +122,31 @@ class PlacementOut(BaseModel):
     created_at: datetime
 
 
+class OfferingSendIn(BaseModel):
+    """PRD v3.0 §4 aksi "Offering": kirim surat penawaran ke kandidat via TTE."""
+
+    signer_name: str
+    signer_email: str
+    offered_salary: float | None = None
+    start_date: date | None = None
+
+
+class OfferingSummaryItem(BaseModel):
+    placement_id: UUID
+    candidate_name: str
+    job_order_title: str
+    client_name: str
+    offered_salary: float | None
+    esign_status: str | None
+    """None = surat sudah dibuat tapi belum sempat dikirim ke TTE."""
+
+
+class OfferingSummaryOut(BaseModel):
+    total_active: int
+    awaiting_signature: int
+    items: list[OfferingSummaryItem]
+
+
 class InterviewScheduleCreate(BaseModel):
     candidate_id: UUID
     job_order_id: UUID

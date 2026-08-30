@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import ACCOUNTING_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.accounting import service
 from app.modules.accounting.models import JournalEntryStatus
@@ -20,7 +21,7 @@ from app.modules.accounting.schemas import (
 router = APIRouter(
     prefix="/accounting",
     tags=["accounting"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("finance", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*ACCOUNTING_ROLES))],
 )
 
 

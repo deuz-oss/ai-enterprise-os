@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Enterprise OS — Revenue Cloud</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>*{font-family:'Inter',system-ui,sans-serif} .card-hover{transition:box-shadow .15s} .card-hover:hover{box-shadow:0 4px 12px rgba(15,23,42,.06)}</style>
+</head>
+<body class="bg-[#f8fafc] text-slate-900 antialiased">
+<header class="h-14 bg-white/90 backdrop-blur border-b border-slate-200 flex items-center gap-4 px-4 lg:px-6 sticky top-0 z-20">
+  <div class="flex items-center gap-3 shrink-0">
+    <div class="w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-bold text-xs shadow-sm">AE</div>
+    <div class="hidden sm:block"><div class="text-sm font-semibold leading-none tracking-tight">AI Enterprise OS v3.0</div><div class="text-xs text-slate-500">PRD v3.0 · Internal-first</div></div>
+  </div>
+  <div class="hidden md:flex items-center gap-2 border rounded-full bg-slate-50 px-3 py-1.5 text-sm">
+    <i data-lucide="building-2" class="w-4 h-4 text-slate-500"></i>
+    <span class="font-medium">PT Techno Talent Solutions</span>
+    <i data-lucide="chevrons-up-down" class="w-4 h-4 text-slate-400"></i>
+  </div>
+  <span class="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"><span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Commercial Mode</span>
+  <div class="flex-1 max-w-md hidden lg:flex items-center relative ml-2">
+    <i data-lucide="search" class="w-4 h-4 absolute left-3 text-slate-400"></i>
+    <input placeholder="Cari invoice, klien, NSFP..." class="w-full pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white">
+  </div>
+  <div class="flex items-center gap-2 ml-auto">
+    <button class="h-8 px-3 rounded-full border border-slate-200 bg-white text-sm font-medium hidden sm:flex items-center gap-1.5 hover:bg-slate-50"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Import Faktur</button>
+    <button class="h-8 px-4 rounded-full bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center gap-1.5 shadow-sm"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Buat Invoice</button>
+  </div>
+</header>
+
+<div class="flex min-h-[calc(100vh-56px)]">
+  <aside class="hidden lg:flex w-[264px] border-r bg-white flex-col shrink-0 sticky top-14 h-[calc(100vh-56px)]">
+    <div class="flex-1 overflow-auto p-4 space-y-6">
+      <div>
+        <div class="text-[11px] tracking-widest uppercase font-semibold text-slate-400 mb-2 px-2">Foundation</div>
+        <nav class="space-y-1">
+          <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Overview</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50"><i data-lucide="message-circle" class="w-4 h-4"></i> Chat Workspace</a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-50"><i data-lucide="file-text" class="w-4 h-4"></i> Pages</a>
+        </nav>
+      </div>
+      <div>
+        <div class="text-[11px] tracking-widest uppercase font-semibold text-slate-400 mb-2 px-2">Metered SKU Bundles</div>
+        <nav class="space-y-1">
+          <a href="talent-cloud.html" class="flex items-center justify-between px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200"><span class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="users" class="w-3.5 h-3.5 text-violet-600"></i></span> Talent Cloud</span><span class="text-xs font-mono bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full">15k</span></a>
+          <a href="workforce-cloud.html" class="flex items-center justify-between px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200"><span class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="id-card" class="w-3.5 h-3.5 text-emerald-600"></i></span> Workforce</span><span class="text-xs font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">10k</span></a>
+          <a class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium shadow-sm"><span class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-white/10 border border-white/10 grid place-items-center"><i data-lucide="receipt" class="w-3.5 h-3.5"></i></span> Revenue Cloud</span><span class="text-xs font-mono bg-white text-slate-900 px-2 py-0.5 rounded-full font-semibold">Base</span></a>
+          <a class="flex items-center justify-between px-3 py-2 rounded-xl text-sm hover:bg-slate-50 border border-transparent hover:border-slate-200"><span class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 grid place-items-center"><i data-lucide="scale" class="w-3.5 h-3.5 text-slate-700"></i></span> Govern</span><span class="text-xs font-mono bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full">Flat</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="p-3 border-t bg-slate-50/50">
+      <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <img src="https://i.pravatar.cc/100?img=15" class="w-9 h-9 rounded-full object-cover">
+        <div class="min-w-0"><div class="text-sm font-semibold truncate">Brian</div><div class="text-xs text-slate-500 truncate">Head of Ops</div></div>
+        <span class="ml-auto w-2 h-2 bg-emerald-500 rounded-full"></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="flex-1 min-w-0 p-4 lg:p-6 space-y-3 max-w-[1440px] mx-auto w-full">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-[22px] font-semibold tracking-tight flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="receipt" class="w-4 h-4"></i></span> Revenue Cloud</h1>
+          <span class="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600"><i data-lucide="sparkles" class="w-3 h-3"></i> AI Native</span>
+        </div>
+        <p class="text-sm text-slate-500 mt-1.5">5k/invoice + 8k/faktur · 13 kolom DJP · lawan NPWP validasi.</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <select class="h-8 px-3 pr-7 bg-white border border-slate-200 rounded-full text-xs font-medium"><option>Agustus 2026</option><option>Juli 2026</option></select>
+        <button class="h-8 px-3 rounded-full border border-slate-200 bg-white text-xs font-semibold hidden sm:flex items-center gap-1.5 hover:bg-slate-50"><i data-lucide="download" class="w-3.5 h-3.5"></i> Export</button>
+        <button class="h-8 px-4 rounded-full bg-slate-900 hover:bg-black text-white text-sm font-semibold flex items-center gap-1.5 shadow-sm"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Buat Invoice</button>
+        <div class="flex items-center gap-3 bg-white text-slate-900 border border-slate-200 rounded-2xl px-4 py-3 text-sm shadow-sm h-[56px] min-w-[300px]">
+          <div class="w-9 h-9 rounded-xl bg-slate-900 text-white grid place-items-center shrink-0"><i data-lucide="receipt" class="w-4 h-4"></i></div>
+          <div><div class="font-semibold leading-none">Metering</div><div class="text-slate-500 text-xs">Revenue Cloud</div></div>
+          <div class="w-px h-9 bg-slate-200 mx-1"></div>
+          <div class="text-right"><div class="font-mono font-bold leading-none text-sm">Rp 104.000</div><div class="text-slate-500 text-xs">8×5k +8×8k</div></div>
+          <span class="hidden sm:flex items-center gap-1 ml-1 text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-medium"><span class="w-2 h-2 bg-amber-500 rounded-full"></span> 2 DJP pending</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Revenue MTD</span><span class="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="trending-up" class="w-3.5 h-3.5 text-emerald-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">Rp 124,5M <span class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">+12,4%</span></div>
+        <div class="text-xs text-slate-500 mt-1">vs Rp 110,8M lalu · audited</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width:72%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Outstanding</span><span class="w-7 h-7 rounded-full bg-amber-50 border border-amber-200 grid place-items-center"><i data-lucide="clock-3" class="w-3.5 h-3.5 text-amber-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">Rp 32,0M</div>
+        <div class="text-xs text-slate-500 mt-1">3 invoices · 2 menunggu DJP</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500 rounded-full" style="width:38%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">Profit Margin</span><span class="w-7 h-7 rounded-full bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="percent" class="w-3.5 h-3.5 text-violet-600"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">18,2%</div>
+        <div class="text-xs text-slate-500 mt-1">avg · tertinggi 22% BDJ</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-violet-600 rounded-full" style="width:62%"></div></div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 card-hover">
+        <div class="flex items-center justify-between"><span class="text-xs font-semibold tracking-wide uppercase text-slate-500">e-Faktur DJP</span><span class="w-7 h-7 rounded-full bg-slate-900 text-white grid place-items-center"><i data-lucide="file-check" class="w-3.5 h-3.5"></i></span></div>
+        <div class="text-[22px] font-semibold mt-2 tracking-tight">6 <span class="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">2 pending</span></div>
+        <div class="text-xs text-slate-500 mt-1">13 kolom · retry max 3</div>
+        <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width:75%"></div></div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 rounded-2xl p-4 text-white relative overflow-hidden flex flex-col justify-center h-fit" style="background:linear-gradient(135deg,#020617 0%,#1e3a5f 100%)">
+        <div class="absolute -right-8 -bottom-8 w-28 h-28 rounded-full border border-white/10"></div>
+        <div class="relative">
+          <div class="text-xs font-semibold tracking-widest uppercase flex items-center gap-1.5 text-white/80"><i data-lucide="sparkles" class="w-3 h-3"></i> AI Insight</div>
+          <p class="text-sm leading-snug mt-1.5">2 faktur menunggu DJP — prioritaskan <span class="font-semibold text-white">Retail Makmur</span> (overdue 3 hari). Revenue +12,4% didorong Bank Daerah Jaya.</p>
+          <div class="mt-2 flex gap-1.5 flex-wrap"><span class="text-xs bg-white/10 border border-white/15 px-2 py-0.5 rounded-full">fallback</span><span class="text-xs bg-white/10 border border-white/15 px-2 py-0.5 rounded-full">tanpa LLM</span></div>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 grid place-items-center"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i></span><div><div class="text-sm font-semibold">Overdue & Retry</div><div class="text-xs text-slate-500">e-Faktur DJP · 2 menunggu</div></div></div>
+        <div class="mt-4 space-y-2.5">
+          <div class="p-3 rounded-xl border border-amber-200 bg-amber-50/70 flex justify-between items-center"><div><div class="text-sm font-medium">INV-2026-08-041</div><div class="text-xs text-slate-600">Retail Makmur · retry 2/3</div></div><span class="text-xs bg-amber-500 text-white px-2.5 py-1 rounded-full">Menunggu</span></div>
+          <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center"><div><div class="text-sm font-medium">INV-2026-08-039</div><div class="text-xs text-slate-500">Logistik · draft</div></div><span class="text-xs bg-slate-100 border px-2.5 py-1 rounded-full">Draft</span></div>
+        </div>
+        <span class="mt-3 inline-flex text-xs font-medium px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">retry 2/3</span>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-3">
+      <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl overflow-hidden card-hover">
+        <div class="p-4 border-b flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="receipt" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Finance & DJP e-Faktur</div><div class="text-xs text-slate-500">5k/invoice + 8k/faktur · lawan NPWP validasi · 13 kolom</div></div></div>
+          <button class="h-8 px-3 rounded-full border border-slate-200 bg-white text-xs font-medium hover:bg-slate-50 hidden sm:flex items-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i> Export</button>
+        </div>
+        <div class="overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="text-left p-3 font-medium">Invoice No</th><th class="text-left p-3 font-medium">Klien</th><th class="text-right p-3 font-medium">Amount</th><th class="text-left p-3 font-medium">NSFP</th><th class="p-3 font-medium">DJP Status</th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr class="hover:bg-slate-50/70"><td class="p-3 font-mono text-xs">INV-2026-08-042</td><td class="p-3">Bank Daerah Jaya</td><td class="p-3 text-right font-mono">Rp 18.500.000</td><td class="p-3 font-mono text-xs">010.001-24.12345678</td><td class="p-3"><span class="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full"><i data-lucide="check-circle-2" class="w-3 h-3"></i> Approved DJP</span></td></tr>
+              <tr class="hover:bg-slate-50/70"><td class="p-3 font-mono text-xs">INV-2026-08-041</td><td class="p-3">Retail Makmur</td><td class="p-3 text-right font-mono">Rp 9.800.000</td><td class="p-3 font-mono text-xs text-slate-400">—</td><td class="p-3"><span class="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full"><i data-lucide="clock-3" class="w-3 h-3"></i> Menunggu</span></td></tr>
+              <tr class="hover:bg-slate-50/70"><td class="p-3 font-mono text-xs">INV-2026-08-039</td><td class="p-3">Logistik Nusantara</td><td class="p-3 text-right font-mono">Rp 4.200.000</td><td class="p-3 font-mono text-xs text-slate-400">—</td><td class="p-3"><span class="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full"><i data-lucide="file" class="w-3 h-3"></i> Draft</span></td></tr>
+              <tr class="hover:bg-slate-50/70"><td class="p-3 font-mono text-xs">INV-2026-08-038</td><td class="p-3">PT Maju Jaya</td><td class="p-3 text-right font-mono">Rp 12.000.000</td><td class="p-3 font-mono text-xs">010.001-24.12345679</td><td class="p-3"><span class="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full"><i data-lucide="check-circle-2" class="w-3 h-3"></i> Approved</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 flex items-center justify-between border-t bg-slate-50/70 text-xs">
+          <span class="text-slate-500">Menampilkan 4 dari 24</span>
+          <div class="flex items-center gap-1"><button class="w-7 h-7 grid place-items-center rounded-full border bg-white"><i data-lucide="chevron-left" class="w-3.5 h-3.5"></i></button><span class="px-2.5 font-medium">1 / 6</span><button class="w-7 h-7 grid place-items-center rounded-full border bg-white"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+        </div>
+      </div>
+
+      <div class="space-y-5">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+          <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="trending-up" class="w-4 h-4 text-violet-600"></i></span><div><div class="text-sm font-semibold">Client Profit Margin</div><div class="text-xs text-slate-500">profit-by-client</div></div></div>
+          <div class="mt-4 space-y-3">
+            <div class="flex items-center justify-between"><div><div class="text-sm font-semibold">Bank Daerah Jaya</div><div class="text-xs text-slate-500">12 kry · fee 8% · 5 JO</div></div><div class="text-right"><div class="text-sm font-bold">Rp 18,2M</div><span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">22%</span></div></div>
+            <div class="flex items-center justify-between"><div><div class="text-sm font-semibold">Retail Makmur</div><div class="text-xs text-slate-500">5 kry · fee 10%</div></div><div class="text-right"><div class="text-sm font-bold">Rp 6,1M</div><span class="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">14%</span></div></div>
+            <div class="flex items-center justify-between"><div><div class="text-sm font-semibold">Logistik Nusantara</div><div class="text-xs text-slate-500">8 kry · fee 7%</div></div><div class="text-right"><div class="text-sm font-bold">Rp 4,8M</div><span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full">9%</span></div></div>
+          </div>
+          <button class="w-full mt-3 h-9 rounded-full border border-slate-200 bg-white text-xs font-semibold hover:bg-slate-50">Lihat profit →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-slate-900 text-white grid place-items-center"><i data-lucide="wallet" class="w-4 h-4"></i></span><div><div class="text-sm font-semibold">Cashflow MTD</div><div class="text-xs text-slate-500">penerimaan vs pengeluaran</div></div></div>
+        <div class="mt-4 space-y-2">
+          <div class="flex justify-between text-sm"><span class="text-slate-600">Masuk</span><span class="font-mono font-semibold text-emerald-700">+Rp 124,5M</span></div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:72%"></div></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-600">Keluar (payroll dll)</span><span class="font-mono font-semibold">-Rp 98,2M</span></div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-slate-900 rounded-full" style="width:55%"></div></div>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 grid place-items-center"><i data-lucide="activity" class="w-4 h-4 text-emerald-600"></i></span><div><div class="text-sm font-semibold">Aktivitas Terbaru</div><div class="text-xs text-slate-500">real-time</div></div></div>
+        <div class="mt-4 space-y-3">
+          <div class="flex gap-3"><span class="w-2 h-2 bg-emerald-500 rounded-full mt-2 shrink-0"></span><div class="flex-1"><div class="text-xs leading-relaxed">Invoice <span class="font-semibold">INV-042</span> approved DJP — NSFP 010.001-24.12345678</div><div class="text-xs text-slate-500">sistem · 1 jam lalu</div></div></div>
+          <div class="flex gap-3"><span class="w-2 h-2 bg-amber-500 rounded-full mt-2 shrink-0"></span><div class="flex-1"><div class="text-xs leading-relaxed">Faktur <span class="font-semibold">INV-041</span> menunggu 2 hari — retry 2/3</div><div class="text-xs text-slate-500">sistem · 5 jam lalu</div></div></div>
+          <div class="flex gap-3"><span class="w-2 h-2 bg-violet-500 rounded-full mt-2 shrink-0"></span><div class="flex-1"><div class="text-xs leading-relaxed">Profit Retail Makmur naik 14% — fee 10%</div><div class="text-xs text-slate-500">sistem · kemarin</div></div></div>
+        </div>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 card-hover">
+        <div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-xl bg-violet-50 border border-violet-200 grid place-items-center"><i data-lucide="scan-text" class="w-4 h-4 text-violet-600"></i></span><div><div class="text-sm font-semibold">OCR Faktur</div><div class="text-xs text-slate-500">AI Native · 503 jika belum config</div></div></div>
+        <div class="mt-4 p-3 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-center">
+          <i data-lucide="upload" class="w-6 h-6 text-slate-400 mx-auto"></i>
+          <div class="text-sm font-medium mt-2">Tarik faktur ke sini</div>
+          <div class="text-xs text-slate-500">PNG/JPG · max 5MB → draft invoice</div>
+          <button class="mt-3 h-8 px-4 rounded-full bg-slate-900 text-white text-xs font-semibold">Pilih file</button>
+        </div>
+        <div class="mt-3 text-xs text-center text-slate-500">Tanpa <span class="font-mono">AI_BASE_URL</span> → 503</div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>lucide.createIcons()</script>
+</body>
+</html>

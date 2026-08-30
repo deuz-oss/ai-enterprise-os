@@ -1,4 +1,5 @@
 import AppLauncherGrid, { useApps } from "../components/AppLauncherGrid";
+import { Rocket } from "lucide-react";
 import { PageHeader } from "../components/notion";
 
 /// Rute /apps: halaman penuh launcher (grid sama dengan modal workspace).
@@ -13,7 +14,7 @@ export default function Apps() {
   return (
     <div className="space-y-4">
       <div>
-        <PageHeader emoji="🚀" title="Aplikasi" />
+        <PageHeader icon={Rocket} title="Aplikasi" />
         <p className="mt-1 text-sm text-[var(--n-text-muted)]">
           {licensedCount} dari {apps?.length ?? 0} aplikasi aktif untuk
           perusahaan Anda. Mulai trial 14 hari langsung dari sini — tanpa

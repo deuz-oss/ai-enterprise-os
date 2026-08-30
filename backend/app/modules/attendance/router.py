@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import ATTENDANCE_SELFIE_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.attendance import service
 from app.modules.attendance.schemas import AttendanceRecordIn, AttendanceRecordOut
@@ -84,7 +85,7 @@ def selfie_download_url(
     which: str,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
-    _role=Depends(require_roles("admin", "hr", "operations", "management")),
+    _role=Depends(require_roles(*ATTENDANCE_SELFIE_ROLES)),
 ):
     """URL unduh selfie absensi — khusus HR/Ops/Management (data pribadi)."""
     from app.core import storage

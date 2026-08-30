@@ -472,6 +472,7 @@ def saltab_view(db: Session, run_id: str, tenant_id=None) -> list[dict]:
         rows.append(
             {
                 "payslip_id": str(slip.id),
+                "employee_id": str(slip.employee_id),
                 "employee_name": slip.employee.full_name,
                 "status_run": run.status.value,
                 "components": comps,
@@ -729,6 +730,136 @@ def saltab_export_pdf(db: Session, run_id: str) -> tuple[bytes, str]:
 
     doc.build(story)
     filename = f"saltab-{run.year}{run.month:02d}-{str(run.id)[:8]}.pdf"
+    return buf.getvalue(), filename
+
+
+def bukti_potong_pdf(db: Session, run_id: str, employee_id: str) -> tuple[bytes, str]:
+    """PRD v3.0 §6 — Bukti Pemotongan PPh 21 per karyawan per run payrol.
+
+    Nomor bukti `1.1-YYYYMM-SEQ`: SEQ berurutan per run diambil dari urutan
+    nama karyawan (deterministik, tidak tergantung urutan insert slip).
+    """
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    from app.modules.payroll.tax import TaxProfile, ter_category
+    from app.modules.platform.models import Tenant
+
+    run = _get_run(db, run_id)
+    emp_uuid = parse_uuid(employee_id)
+    ordered_slips = sorted(
+        run.slips, key=lambda s: (s.employee.full_name or "", str(s.employee_id))
+    )
+    seq = None
+    slip = None
+    for idx, s in enumerate(ordered_slips, start=1):
+        if s.employee_id == emp_uuid:
+            slip = s
+            seq = idx
+            break
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip karyawan tidak ditemukan pada run ini")
+
+    employee = slip.employee
+    tenant = db.get(Tenant, run.tenant_id)
+    no_bukti = f"1.1-{run.year}{run.month:02d}-{seq:04d}"
+
+    period_date = date(run.year, run.month, 1)
+    profile = TaxProfile.from_db(
+        db,
+        period_date,
+        marital_status=(employee.marital_status.value if employee.marital_status else "tk"),
+        dependents=employee.dependents or 0,
+    )
+    ptkp_label = f"{profile.marital_status.upper()}/{min(employee.dependents or 0, 3)}"
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=f"Bukti Potong PPh21 {no_bukti}",
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Heading2"]
+    title_style.alignment = 1
+    normal = styles["Normal"]
+    bold = styles["Normal"].clone("bold")
+    bold.fontName = "Helvetica-Bold"
+
+    story = [
+        Paragraph("BUKTI PEMOTONGAN PAJAK PENGHASILAN PASAL 21", title_style),
+        Paragraph("(Pegawai Tetap &mdash; Masa Bulanan)", styles["Italic"]),
+        Spacer(1, 4),
+        Paragraph(f"No. Bukti Potong: <b>{no_bukti}</b>", normal),
+        Paragraph(f"Masa Pajak: {run.month:02d}/{run.year}", normal),
+        Spacer(1, 10),
+        Paragraph("A. Identitas Pemotong Pajak", bold),
+        Table(
+            [
+                ["Nama", ": " + (tenant.name if tenant else "-")],
+                ["NPWP", ": -"],
+            ],
+            colWidths=[35 * mm, 120 * mm],
+        ),
+        Spacer(1, 8),
+        Paragraph("B. Identitas Penerima Penghasilan", bold),
+        Table(
+            [
+                ["Nama", ": " + employee.full_name],
+                ["No. Induk Karyawan", ": " + employee.employee_no],
+                ["NPWP", ": " + (employee.npwp_no or "-")],
+                ["Status PTKP", ": " + ptkp_label],
+            ],
+            colWidths=[35 * mm, 120 * mm],
+        ),
+        Spacer(1, 8),
+        Paragraph("C. Rincian Penghasilan &amp; Pemotongan Pajak", bold),
+    ]
+
+    rincian = [
+        ["Uraian", "Jumlah (Rp)"],
+        ["Penghasilan Bruto Sebulan", f"{float(slip.gross):,.0f}"],
+        ["PTKP Setahun", f"{profile.ptkp_annual:,.0f}"],
+        ["Metode Perhitungan", f"TER Kategori {ter_category(profile)}"],
+        ["PPh 21 Dipotong Bulan Ini", f"{float(slip.tax_pph21):,.0f}"],
+    ]
+    tbl = Table(rincian, colWidths=[100 * mm, 55 * mm])
+    tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3864")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9D9D9")),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFF2CC")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(tbl)
+    story.append(Spacer(1, 24))
+    story.append(
+        Paragraph(
+            f"Dicetak sistem pada {datetime.now(UTC).strftime('%d %B %Y')}. "
+            "Dokumen ini sah tanpa tanda tangan basah sesuai kebijakan internal pemotong pajak.",
+            styles["Italic"],
+        )
+    )
+
+    doc.build(story)
+    filename = f"bukti-potong-{no_bukti}-{employee.employee_no}.pdf"
     return buf.getvalue(), filename
 
 

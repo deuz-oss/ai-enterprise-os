@@ -16,7 +16,7 @@ export default {
           "sans-serif",
         ],
       },
-      // Token Notion-style (nilai nyata di index.css via CSS variables).
+      // Token shell (nilai nyata di index.css via CSS variables).
       colors: {
         notion: {
           bg: "var(--n-bg)",

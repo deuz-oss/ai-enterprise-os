@@ -3,35 +3,38 @@
 @tailwind utilities;
 
 /* ============================================================
-   Token desain Notion-style (Fase 7 + parity B5).
-   Sumber kebenaran hex: docs/design/mockup-notion-ui.html
-   Light: teks hangat #37352F, sidebar #F7F7F5, border halus.
-   Dark : bg #191919, sidebar/card #202020/#1F1F1F, accent TETAP biru.
+   Token desain SaaS-admin bersih (arah baru menggantikan Notion-parity).
+   Sumber kebenaran: docs/design/mockups/dashboard.html — Inter, palet
+   slate/putih, kartu rounded-xl berbatas tipis. --accent SELALU tema
+   global (slate-900 terang / biru gelap), TIDAK pernah di-override per
+   halaman — persis mockup: logo & highlight nav aktif selalu netral.
+   Warna kategori (biru=Sales, violet=Recruitment, emerald=People&Ops/
+   Payroll, amber=Finance, slate=Akunting) hanya menempel di ikon grup
+   sidebar lewat APP_ACCENT_TOKENS di Layout.tsx, bukan lewat token ini.
    ============================================================ */
 :root {
-  --n-bg: #ffffff;
+  --n-bg: #f8fafc;
   --n-bg-elevated: #ffffff;
-  --n-sidebar: #f7f7f5;
-  --n-hover: rgba(55, 53, 47, 0.05);
-  --n-border: rgba(55, 53, 47, 0.09);
-  --n-text: #37352f;
-  --n-text-muted: rgba(55, 53, 47, 0.65);
-  /* B3: aksen mengikuti aplikasi aktif (default global = biru Notion). */
-  --accent: #2383e2;
-  --accent-tint: rgba(35, 131, 226, 0.13);
+  --n-sidebar: #ffffff;
+  --n-hover: #f1f5f9;
+  --n-border: #e2e8f0;
+  --n-text: #0f172a;
+  --n-text-muted: #64748b;
+  /* Default aksen: slate-900 (tombol primer/nav aktif ala mockup). */
+  --accent: #0f172a;
+  --accent-tint: rgba(15, 23, 42, 0.08);
 }
 
 .dark {
-  --n-bg: #191919;
-  --n-bg-elevated: #1f1f1f;
-  --n-sidebar: #202020;
-  --n-hover: rgba(255, 255, 255, 0.055);
+  --n-bg: #0b1220;
+  --n-bg-elevated: #111827;
+  --n-sidebar: #0f172a;
+  --n-hover: rgba(255, 255, 255, 0.06);
   --n-border: rgba(255, 255, 255, 0.1);
-  --n-text: rgba(255, 255, 255, 0.82);
-  --n-text-muted: rgba(255, 255, 255, 0.46);
-  /* Parity B5: accent dark tetap #2383E2 seperti mockup (bukan #5b9bd5). */
-  --accent: #2383e2;
-  --accent-tint: rgba(35, 131, 226, 0.13);
+  --n-text: #e2e8f0;
+  --n-text-muted: #94a3b8;
+  --accent: #3b82f6;
+  --accent-tint: rgba(59, 130, 246, 0.16);
 }
 
 html,
@@ -47,26 +50,25 @@ body {
 
 @layer components {
   .btn {
-    @apply rounded px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
+    @apply rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
     background-color: var(--accent);
     transition: filter 0.15s ease;
   }
   .btn:hover {
-    filter: brightness(0.94);
+    filter: brightness(1.15);
   }
   .btn-secondary {
-    @apply rounded px-3 py-1.5 text-sm;
+    @apply rounded-lg px-3 py-1.5 text-sm font-medium;
     border: 1px solid var(--n-border);
     background-color: var(--n-bg-elevated);
     color: var(--n-text);
-    box-shadow: 0 1px 2px rgba(15, 15, 15, 0.06);
     transition: background-color 0.15s ease;
   }
   .btn-secondary:hover {
     background-color: var(--n-hover);
   }
   .input {
-    @apply w-full rounded px-3 py-2 text-sm focus:outline-none;
+    @apply w-full rounded-lg px-3 py-2 text-sm focus:outline-none;
     border: 1px solid var(--n-border);
     background-color: var(--n-bg-elevated);
     color: var(--n-text);
@@ -74,59 +76,60 @@ body {
   }
   .input:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
   }
-  /* Kartu ala halaman Notion: tanpa bayangan mencolok, border sangat halus. */
+  /* Kartu ala mockup dashboard.html: rounded-xl, border tipis, tanpa bayangan mencolok. */
   .card {
-    @apply rounded-md p-5;
+    @apply rounded-xl p-4;
     border: 1px solid var(--n-border);
     background-color: var(--n-bg-elevated);
   }
   .badge {
-    @apply inline-block rounded px-2 py-0.5 text-xs font-medium;
+    @apply inline-block rounded-md px-2 py-0.5 text-xs font-medium;
   }
-  /* B1: pill status persis hex mockup (7 warna Notion + 1 indigo lokal). */
+  /* Pill status ala mockup: rounded-full, latar lembut + border senada. */
   .pill {
     display: inline-flex;
     align-items: center;
-    height: 20px;
-    padding: 0 8px;
-    border-radius: 4px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 9999px;
     font-size: 12px;
     font-weight: 500;
     gap: 5px;
     white-space: nowrap;
+    border: 1px solid transparent;
   }
-  .p-gray   { background: rgba(127, 127, 127, 0.14); color: rgba(55, 53, 47, 0.65); }
-  .p-blue   { background: rgba(35, 131, 226, 0.14);  color: #2383e2; }
-  .p-violet { background: rgba(144, 101, 176, 0.16); color: #9065b0; }
-  .p-green  { background: rgba(15, 123, 109, 0.15);  color: #0f7b6d; }
-  .p-orange { background: rgba(217, 115, 13, 0.15);  color: #d9730d; }
-  .p-yellow { background: rgba(203, 145, 47, 0.18);  color: #cb912f; }
-  .p-red    { background: rgba(224, 62, 62, 0.14);   color: #e03e3e; }
-  .p-indigo { background: rgba(91, 91, 214, 0.14);   color: #5b5bd6; }
+  .p-gray   { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+  .p-blue   { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+  .p-violet { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+  .p-green  { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+  .p-orange { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+  .p-yellow { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+  .p-red    { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .p-indigo { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
 
-  .dark .p-gray  { color: rgba(255, 255, 255, 0.66); }
-  /* Dark: teks pill terang agar kontras; latar tint tetap. */
-  .dark .pill.p-blue,
-  .dark .pill.p-violet,
-  .dark .pill.p-green,
-  .dark .pill.p-orange,
-  .dark .pill.p-yellow,
-  .dark .pill.p-red,
-  .dark .pill.p-indigo {
-    filter: brightness(1.35) saturate(0.9);
-  }
+  .dark .p-gray   { background: rgba(148,163,184,0.14); color: #cbd5e1; border-color: rgba(148,163,184,0.3); }
+  .dark .p-blue   { background: rgba(59,130,246,0.16);  color: #93c5fd; border-color: rgba(59,130,246,0.35); }
+  .dark .p-violet { background: rgba(139,92,246,0.16);  color: #c4b5fd; border-color: rgba(139,92,246,0.35); }
+  .dark .p-green  { background: rgba(16,185,129,0.16);  color: #6ee7b7; border-color: rgba(16,185,129,0.35); }
+  .dark .p-orange { background: rgba(249,115,22,0.16);  color: #fdba74; border-color: rgba(249,115,22,0.35); }
+  .dark .p-yellow { background: rgba(245,158,11,0.16);  color: #fcd34d; border-color: rgba(245,158,11,0.35); }
+  .dark .p-red    { background: rgba(239,68,68,0.16);   color: #fca5a5; border-color: rgba(239,68,68,0.35); }
+  .dark .p-indigo { background: rgba(99,102,241,0.16);  color: #a5b4fc; border-color: rgba(99,102,241,0.35); }
+
   .th {
-    @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide;
+    @apply px-3 py-2.5 text-left text-xs font-medium;
+    background-color: var(--n-hover);
     color: var(--n-text-muted);
   }
   .td {
-    @apply px-4 py-2.5 text-sm;
+    @apply px-3 py-2.5 text-sm;
     color: var(--n-text);
   }
 }
 
-/* Scrollbar halus ala Notion */
+/* Scrollbar tipis */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--n-border) transparent;

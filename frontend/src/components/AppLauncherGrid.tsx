@@ -14,12 +14,17 @@ export interface AppEntitlement {
   expires_at: string | null;
 }
 
+// Key harus persis sama dengan APP_REGISTRY di backend (app/core/apps.py) —
+// regresi sebelumnya: "hr_payroll"/"operations_billing"/"finance_accounting"
+// tidak pernah cocok dengan key asli, jadi klik app di launcher tidak pernah
+// mendarat di halaman yang benar (fallback ke /apps).
 export const HOME_ROUTE: Record<string, string> = {
   sales_crm: "/leads",
   recruitment: "/job-orders",
-  hr_payroll: "/employees",
-  operations_billing: "/finance",
-  finance_accounting: "/accounting",
+  people_ops: "/employees",
+  payroll: "/payroll",
+  finance: "/finance",
+  accounting: "/accounting",
   esign: "/employees",
   ai_addon: "/employees",
 };

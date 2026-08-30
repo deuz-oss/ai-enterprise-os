@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { AiResultCard } from "../components/Ai";
 import type { Screening } from "../components/Ai";
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Paperclip, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/notion";
 import type { JobOrder } from "./JobOrders";
 
@@ -13,6 +14,29 @@ interface Candidate {
   expected_salary: number | null;
   status: string;
   cv_file_name: string | null;
+}
+
+interface Interview {
+  id: string;
+  candidate_id: string;
+  job_order_id: string;
+  interviewer_id: string | null;
+  scheduled_at: string;
+  location: string | null;
+  meeting_url: string | null;
+  status: string;
+}
+
+interface UserOption {
+  id: string;
+  full_name: string;
+}
+
+interface Placement {
+  id: string;
+  candidate_id: string;
+  job_order_id: string;
+  status: string;
 }
 
 const STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
@@ -43,6 +67,9 @@ export default function Candidates() {
   const [showForm, setShowForm] = useState(false);
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [aiCandidateId, setAiCandidateId] = useState<string | null>(null);
+  const [interviewCandidateId, setInterviewCandidateId] = useState<string | null>(null);
+  const [onboardCandidateId, setOnboardCandidateId] = useState<string | null>(null);
+  const [offeringCandidateId, setOfferingCandidateId] = useState<string | null>(null);
   const cvRef = useRef<HTMLInputElement>(null);
   const { data: candidates } = useQuery({
     queryKey: ["candidates"],
@@ -103,6 +130,50 @@ export default function Candidates() {
     },
   });
 
+  const interviews = useQuery({
+    queryKey: ["interviews"],
+    queryFn: () => api.get<Interview[]>("/recruitment/interviews"),
+    enabled: !!interviewCandidateId,
+  });
+
+  const users = useQuery({
+    queryKey: ["users-for-interview"],
+    queryFn: () => api.get<UserOption[]>("/auth/users"),
+    enabled: !!interviewCandidateId,
+  });
+
+  const scheduleInterview = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/recruitment/interviews", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["interviews"] });
+      qc.invalidateQueries({ queryKey: ["overview"] });
+    },
+  });
+
+  const placements = useQuery({
+    queryKey: ["placements"],
+    queryFn: () => api.get<Placement[]>("/recruitment/placements"),
+    enabled: !!onboardCandidateId || !!offeringCandidateId,
+  });
+
+  const onboardEmployee = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/employees/onboard", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["placements"] });
+      invalidate();
+    },
+  });
+
+  // PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF branded -> esign.
+  const sendOffering = useMutation({
+    mutationFn: ({ placementId, body }: { placementId: string; body: Record<string, unknown> }) =>
+      api.post(`/recruitment/placements/${placementId}/offering`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["placements"] });
+      invalidate();
+    },
+  });
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -122,7 +193,7 @@ export default function Candidates() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader emoji="🧲" title="Database Kandidat" />
+        <PageHeader icon={UsersIcon} title="Database Kandidat" />
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded text-sm" style={{ border: "1px solid var(--n-border)" }}>
             {(["tabel", "papan"] as const).map((v) => (
@@ -136,7 +207,7 @@ export default function Candidates() {
                   fontWeight: view === v ? 500 : 400,
                 }}
               >
-                {view === v ? "☰ " : "▦ "}
+                {v === "tabel" ? <List className="inline h-3.5 w-3.5" /> : <LayoutGrid className="inline h-3.5 w-3.5" />}{" "}
                 {v}
               </button>
             ))}
@@ -167,7 +238,7 @@ export default function Candidates() {
       )}
 
       {candidates?.length === 0 && view === "tabel" && (
-        <CalloutBlock emoji="🌱" tone="info">
+        <CalloutBlock tone="info">
           Belum ada kandidat. Klik <b>"+ Kandidat Baru"</b> untuk mulai.
         </CalloutBlock>
       )}
@@ -248,14 +319,280 @@ export default function Candidates() {
                   </form>
                 </td>
                 <td className="td">
-                  <button
-                    className={`py-1 text-xs ${aiCandidateId === c.id ? "btn" : "btn-secondary"}`}
-                    onClick={() => setAiCandidateId(aiCandidateId === c.id ? null : c.id)}
-                  >
-                    Screening
-                  </button>
+                  <div className="flex gap-1">
+                    <button
+                      className={`py-1 text-xs ${aiCandidateId === c.id ? "btn" : "btn-secondary"}`}
+                      onClick={() => setAiCandidateId(aiCandidateId === c.id ? null : c.id)}
+                    >
+                      Screening
+                    </button>
+                    <button
+                      className={`py-1 text-xs ${interviewCandidateId === c.id ? "btn" : "btn-secondary"}`}
+                      onClick={() =>
+                        setInterviewCandidateId(interviewCandidateId === c.id ? null : c.id)
+                      }
+                    >
+                      Interview
+                    </button>
+                    <button
+                      className={`py-1 text-xs ${offeringCandidateId === c.id ? "btn" : "btn-secondary"}`}
+                      onClick={() =>
+                        setOfferingCandidateId(offeringCandidateId === c.id ? null : c.id)
+                      }
+                    >
+                      Penawaran
+                    </button>
+                    <button
+                      className={`py-1 text-xs ${onboardCandidateId === c.id ? "btn" : "btn-secondary"}`}
+                      onClick={() =>
+                        setOnboardCandidateId(onboardCandidateId === c.id ? null : c.id)
+                      }
+                    >
+                      Onboard
+                    </button>
+                  </div>
                 </td>
               </tr>
+                {offeringCandidateId === c.id && (
+                  <tr>
+                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                      <div className="space-y-3">
+                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                          Kirim Surat Penawaran: {c.full_name}
+                        </span>
+                        {(placements.data ?? []).filter(
+                          (p) => p.candidate_id === c.id && p.status !== "dibatalkan"
+                        ).length === 0 && !placements.isLoading ? (
+                          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                            Kandidat ini belum diusulkan (placement) ke job order manapun. Gunakan
+                            "Usulkan" di atas dulu sebelum kirim penawaran.
+                          </p>
+                        ) : (
+                          <form
+                            className="grid grid-cols-1 gap-2 sm:grid-cols-5"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const form = new FormData(e.currentTarget);
+                              const placementId = form.get("placement_id");
+                              if (!placementId) return;
+                              sendOffering.mutate({
+                                placementId: String(placementId),
+                                body: {
+                                  signer_name: form.get("signer_name") || c.full_name,
+                                  signer_email: form.get("signer_email"),
+                                  offered_salary: Number(form.get("offered_salary")) || undefined,
+                                  start_date: form.get("start_date") || undefined,
+                                },
+                              });
+                            }}
+                          >
+                            <select name="placement_id" required className="input py-1 text-xs">
+                              <option value="">-- Placement (job order) --</option>
+                              {(placements.data ?? [])
+                                .filter((p) => p.candidate_id === c.id && p.status !== "dibatalkan")
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {(jobOrders ?? []).find((j) => j.id === p.job_order_id)?.title ??
+                                      p.job_order_id}{" "}
+                                    · {p.status}
+                                  </option>
+                                ))}
+                            </select>
+                            <input
+                              name="offered_salary"
+                              type="number"
+                              required
+                              placeholder="Gaji ditawarkan (Rp) *"
+                              className="input py-1 text-xs"
+                            />
+                            <input name="start_date" type="date" className="input py-1 text-xs" />
+                            <input
+                              name="signer_email"
+                              type="email"
+                              required
+                              placeholder="Email kandidat *"
+                              className="input py-1 text-xs"
+                            />
+                            <button
+                              type="submit"
+                              disabled={sendOffering.isPending}
+                              className="btn py-1 text-xs"
+                            >
+                              Kirim Penawaran
+                            </button>
+                          </form>
+                        )}
+                        {sendOffering.error && (
+                          <p className="text-sm text-red-600">
+                            {(sendOffering.error as Error).message}
+                          </p>
+                        )}
+                        {sendOffering.isSuccess && (
+                          <CalloutBlock tone="success">
+                            Surat penawaran terkirim untuk tanda tangan elektronik. Status kandidat
+                            otomatis menjadi <b>offered</b>.
+                          </CalloutBlock>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {onboardCandidateId === c.id && (
+                  <tr>
+                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                      <div className="space-y-3">
+                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                          Angkat jadi Karyawan: {c.full_name}
+                        </span>
+                        {(placements.data ?? []).filter(
+                          (p) => p.candidate_id === c.id && p.status !== "dibatalkan"
+                        ).length === 0 && !placements.isLoading ? (
+                          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                            Kandidat ini belum diusulkan (placement) ke job order manapun. Gunakan
+                            "Usulkan" di atas dulu sebelum onboard.
+                          </p>
+                        ) : (
+                          <form
+                            className="grid grid-cols-1 gap-2 sm:grid-cols-4"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const form = new FormData(e.currentTarget);
+                              const placementId = form.get("placement_id");
+                              if (!placementId) return;
+                              onboardEmployee.mutate({
+                                placement_id: placementId,
+                                employee_no: form.get("employee_no") || null,
+                                join_date: form.get("join_date") || null,
+                                phone: form.get("phone") || null,
+                              });
+                            }}
+                          >
+                            <select name="placement_id" required className="input py-1 text-xs">
+                              <option value="">-- Placement (job order) --</option>
+                              {(placements.data ?? [])
+                                .filter((p) => p.candidate_id === c.id && p.status !== "dibatalkan")
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {(jobOrders ?? []).find((j) => j.id === p.job_order_id)?.title ??
+                                      p.job_order_id}{" "}
+                                    · {p.status}
+                                  </option>
+                                ))}
+                            </select>
+                            <input
+                              name="employee_no"
+                              placeholder="No. Karyawan (auto jika kosong)"
+                              className="input py-1 text-xs"
+                            />
+                            <input name="join_date" type="date" className="input py-1 text-xs" />
+                            <button
+                              type="submit"
+                              disabled={onboardEmployee.isPending}
+                              className="btn py-1 text-xs"
+                            >
+                              Angkat jadi Karyawan
+                            </button>
+                          </form>
+                        )}
+                        {onboardEmployee.error && (
+                          <p className="text-sm text-red-600">
+                            {(onboardEmployee.error as Error).message}
+                          </p>
+                        )}
+                        {onboardEmployee.isSuccess && (
+                          <CalloutBlock tone="success">
+                            Berhasil diangkat jadi karyawan. Lihat di halaman{" "}
+                            <b>People & Ops</b> untuk lengkapi kontrak, BPJS, dan asuransi.
+                          </CalloutBlock>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {interviewCandidateId === c.id && (
+                  <tr>
+                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                      <div className="space-y-3">
+                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                          Jadwalkan Interview: {c.full_name}
+                        </span>
+                        <form
+                          className="grid grid-cols-1 gap-2 sm:grid-cols-5"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = new FormData(e.currentTarget);
+                            const joId = form.get("job_order_id");
+                            const scheduledAt = form.get("scheduled_at");
+                            if (!joId || !scheduledAt) return;
+                            scheduleInterview.mutate({
+                              candidate_id: c.id,
+                              job_order_id: joId,
+                              interviewer_id: form.get("interviewer_id") || null,
+                              scheduled_at: new Date(String(scheduledAt)).toISOString(),
+                              location: form.get("location") || null,
+                              meeting_url: form.get("meeting_url") || null,
+                            });
+                            e.currentTarget.reset();
+                          }}
+                        >
+                          <select name="job_order_id" required className="input py-1 text-xs">
+                            <option value="">-- Job Order --</option>
+                            {(jobOrders ?? []).map((j) => (
+                              <option key={j.id} value={j.id}>
+                                {j.title}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            name="scheduled_at"
+                            type="datetime-local"
+                            required
+                            className="input py-1 text-xs"
+                          />
+                          <select name="interviewer_id" className="input py-1 text-xs">
+                            <option value="">-- Interviewer (opsional) --</option>
+                            {(users.data ?? []).map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.full_name}
+                              </option>
+                            ))}
+                          </select>
+                          <input name="location" placeholder="Lokasi" className="input py-1 text-xs" />
+                          <button
+                            type="submit"
+                            disabled={scheduleInterview.isPending}
+                            className="btn py-1 text-xs"
+                          >
+                            Jadwalkan
+                          </button>
+                        </form>
+                        {scheduleInterview.error && (
+                          <p className="text-sm text-red-600">
+                            {(scheduleInterview.error as Error).message}
+                          </p>
+                        )}
+                        <div className="space-y-1">
+                          {(interviews.data ?? [])
+                            .filter((i) => i.candidate_id === c.id)
+                            .map((i) => (
+                              <div key={i.id} className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                                {new Date(i.scheduled_at).toLocaleString("id-ID")} ·{" "}
+                                {(jobOrders ?? []).find((j) => j.id === i.job_order_id)?.title ?? "-"}
+                                {i.location ? ` · ${i.location}` : ""} ·{" "}
+                                <span className="capitalize">{i.status}</span>
+                              </div>
+                            ))}
+                          {interviews.data &&
+                            interviews.data.filter((i) => i.candidate_id === c.id).length === 0 && (
+                              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                                Belum ada interview terjadwal.
+                              </p>
+                            )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {aiCandidateId === c.id && (
                   <tr>
                     <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
@@ -358,7 +695,11 @@ export default function Candidates() {
                       <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
                         {c.city ?? "—"} · {formatRupiah(c.expected_salary)}
                       </p>
-                      {c.cv_file_name && <p className="mt-1 text-xs text-[var(--accent)]">📎 {c.cv_file_name}</p>}
+                      {c.cv_file_name && (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-[var(--accent)]">
+                          <Paperclip className="h-3 w-3 shrink-0" /> {c.cv_file_name}
+                        </p>
+                      )}
                       <div className="mt-2 flex items-center justify-between text-xs" onClick={(e) => e.stopPropagation()}>
                         <button
                           disabled={STATUSES.indexOf(c.status) === 0}
@@ -366,7 +707,7 @@ export default function Candidates() {
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
                           style={{ border: "1px solid var(--n-border)" }}
                         >
-                          ←
+                          <ChevronLeft className="h-3.5 w-3.5" />
                         </button>
                         <select
                           value={c.status}
@@ -386,7 +727,7 @@ export default function Candidates() {
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
                           style={{ border: "1px solid var(--n-border)" }}
                         >
-                          →
+                          <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -400,7 +741,7 @@ export default function Candidates() {
       )}
 
       {candidates?.length === 0 && view === "papan" && (
-        <CalloutBlock emoji="🌱" tone="info">
+        <CalloutBlock tone="info">
           Belum ada kandidat untuk ditampilkan di papan.
         </CalloutBlock>
       )}

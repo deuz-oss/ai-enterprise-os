@@ -1,4 +1,5 @@
 import { Fragment, FormEvent, useState } from "react";
+import { Receipt } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
@@ -164,7 +165,13 @@ export default function Finance() {
       setFakturError(null);
       invalidate();
     },
-    onError: (err: Error) => setFakturError(err.message),
+    onError: (err: Error, id) => {
+      // Buka panel faktur supaya pesan error (mis. NPWP/no seri belum diisi)
+      // sungguhan terlihat — sebelumnya tersimpan di state tapi cuma
+      // dirender di dalam panel yang belum tentu terbuka.
+      setFakturError(err.message);
+      setFakturOpenId(id);
+    },
   });
   const cancelTaxInvoice = useMutation({
     mutationFn: (id: string) => api.post(`/finance/invoices/${id}/tax-invoice/cancel`),
@@ -212,7 +219,7 @@ export default function Finance() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageHeader emoji="🏗️" title="Finance" />
+        <PageHeader icon={Receipt} title="Finance" />
         <button className="btn" onClick={() => setShowGenerate(!showGenerate)}>
           {showGenerate ? "Tutup" : "+ Generate Invoice"}
         </button>

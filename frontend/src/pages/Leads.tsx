@@ -1,6 +1,18 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import {
+  Briefcase,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  LayoutGrid,
+  List,
+  MapPin,
+  User,
+  Users,
+} from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
 
 export interface Lead {
@@ -122,7 +134,7 @@ export default function Leads() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader emoji="🎯" title="Pipeline Calon Klien" />
+        <PageHeader icon={Briefcase} title="Pipeline Calon Klien" />
         <div className="flex items-center gap-2">
           <div
             className="flex overflow-hidden rounded text-sm"
@@ -139,7 +151,7 @@ export default function Leads() {
                   fontWeight: view === v ? 500 : 400,
                 }}
               >
-                {view === v ? "☰ " : "▦ "}
+                {v === "tabel" ? <List className="inline h-3.5 w-3.5" /> : <LayoutGrid className="inline h-3.5 w-3.5" />}{" "}
                 {v}
               </button>
             ))}
@@ -165,7 +177,7 @@ export default function Leads() {
       )}
 
       {leads?.length === 0 && (
-        <CalloutBlock emoji="🌱" tone="info">
+        <CalloutBlock tone="info">
           Belum ada lead. Klik <b>"+ Lead Baru"</b> untuk mulai mengisi pipeline.
         </CalloutBlock>
       )}
@@ -323,7 +335,7 @@ export default function Leads() {
                           style={{ border: "1px solid var(--n-border)" }}
                           title="Tahap sebelumnya"
                         >
-                          ←
+                          <ChevronLeft className="h-3.5 w-3.5" />
                         </button>
                         <select
                           value={lead.stage}
@@ -349,7 +361,7 @@ export default function Leads() {
                           style={{ border: "1px solid var(--n-border)" }}
                           title="Tahap berikutnya"
                         >
-                          →
+                          <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -373,18 +385,18 @@ export default function Leads() {
             if (!lead) return null;
             return (
               <>
-                <PageHeader emoji="🏢" title={lead.company_name} subtitle={lead.industry ?? undefined} />
+                <PageHeader icon={Building2} title={lead.company_name} subtitle={lead.industry ?? undefined} />
                 <PropertiesPanel className="mt-4 max-w-xl">
-                  <PropertyRow icon="👤" label="PIC">
+                  <PropertyRow icon={User} label="PIC">
                     {lead.contact_name ?? "—"}
                   </PropertyRow>
-                  <PropertyRow icon="🧑‍🤝‍🧑" label="Est. TKI">
+                  <PropertyRow icon={Users} label="Est. TKI">
                     {lead.estimated_headcount ?? "—"}
                   </PropertyRow>
-                  <PropertyRow icon="💰" label="Nilai Potensi">
+                  <PropertyRow icon={CircleDollarSign} label="Nilai Potensi">
                     {formatRupiah(lead.estimated_value)}
                   </PropertyRow>
-                  <PropertyRow icon="📍" label="Tahapan">
+                  <PropertyRow icon={MapPin} label="Tahapan">
                     <select
                       value={lead.stage}
                       onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}

@@ -1,6 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
+import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
 
 interface EmployeeRow {
@@ -134,9 +135,9 @@ export default function Attendance() {
 
   return (
     <div className="space-y-4">
-      <PageHeader emoji="📅" title="Absensi Harian" subtitle="Record harian clock-in/out, impor mesin fingerprint, dan validasi dua jalur" />
+      <PageHeader icon={Calendar} title="Absensi Harian" subtitle="Record harian clock-in/out, impor mesin fingerprint, dan validasi dua jalur" />
 
-      <CalloutBlock emoji="ℹ️" tone="info">
+      <CalloutBlock tone="info">
         Validasi dua jalur: karyawan <b>internal</b> divalidasi HR, karyawan <b>eksternal</b> divalidasi
         Operations/approval klien. Rekap bulanan adalah artefak agregasi otomatis dari record harian.
       </CalloutBlock>
@@ -378,10 +379,10 @@ export default function Attendance() {
         {importResult && (
           <div className="mt-3">
             <PropertiesPanel>
-              <PropertyRow icon="✅" label="Berhasil">
+              <PropertyRow icon={CheckCircle2} label="Berhasil">
                 {importResult.inserted} baru, {importResult.updated} diperbarui
               </PropertyRow>
-              <PropertyRow icon="⚠️" label="Gagal">
+              <PropertyRow icon={XCircle} label="Gagal">
                 {importResult.failed.length} baris
               </PropertyRow>
             </PropertiesPanel>

@@ -70,7 +70,7 @@ def overview(db: Session = Depends(get_db)):
                 or 0
             )
         except Exception:
-            pass
+            db.rollback()
         # BPJS & asuransi completeness (field baru PRD v2.0 — fallback 0 jika kolom belum migrasi)
         bpjs_complete = 0
         insurance_complete = 0
@@ -83,33 +83,53 @@ def overview(db: Session = Depends(get_db)):
                 ).scalar()
                 or 0
             )
+            # Employee.insurance_policy_no adalah kolom lama PRD v2.0 yang
+            # sudah tidak diisi UI (digantikan tabel one-to-many
+            # EmployeeInsurance PRD v3.0) — hitung dari situ, bukan kolom mati.
+            from app.modules.hrd.models import EmployeeInsurance
+
             insurance_complete = (
                 db.execute(
-                    select(func.count(Employee.id)).where(
-                        Employee.insurance_policy_no.is_not(None),
-                        Employee.insurance_policy_no != "",
+                    select(func.count(func.distinct(EmployeeInsurance.employee_id))).where(
+                        EmployeeInsurance.status == "aktif"
                     )
                 ).scalar()
                 or 0
             )
         except Exception:
-            pass
+            db.rollback()
     except Exception:
+        db.rollback()
         total_employees = active_employees = expiring_contracts = bpjs_complete = (
             insurance_complete
         ) = 0
 
     # --- Payroll ---
+    # PayrollRunStatus asli: draft/submitted_to_client/client_rejected/
+    # client_approved/finance_processing/final — dipetakan ke 4 bucket
+    # widget (draft/submitted/approved/finalized). Regresi: dict lama diisi
+    # pakai key salah ("submitted"/"approved"/"finalized") yang tidak pernah
+    # cocok dgn value enum sungguhan, jadi selalu 0 kecuali "draft".
     payroll_summary = {"draft": 0, "submitted": 0, "approved": 0, "finalized": 0}
+    _PAYROLL_STATUS_BUCKET = {
+        "draft": "draft",
+        "submitted_to_client": "submitted",
+        "client_rejected": "submitted",
+        "client_approved": "approved",
+        "finance_processing": "approved",
+        "final": "finalized",
+    }
     try:
         from app.modules.payroll.models import PayrollRun
 
         for st, cnt in db.execute(
             select(PayrollRun.status, func.count(PayrollRun.id)).group_by(PayrollRun.status)
         ).all():
-            payroll_summary[st.value if hasattr(st, "value") else str(st)] = cnt
+            key = st.value if hasattr(st, "value") else str(st)
+            bucket = _PAYROLL_STATUS_BUCKET.get(key, key)
+            payroll_summary[bucket] = payroll_summary.get(bucket, 0) + cnt
     except Exception:
-        pass
+        db.rollback()
 
     # --- Finance ---
     finance_summary: dict[str, float] = {
@@ -165,9 +185,10 @@ def overview(db: Session = Depends(get_db)):
             )
             finance_summary["faktur_belum"] = int(faktur_belum)
         except Exception:
+            db.rollback()
             finance_summary["faktur_belum"] = 0
     except Exception:
-        pass
+        db.rollback()
 
     # --- Accounting health ---
     accounting_health = {"period_closed": 0, "memorial_unposted": 0}
@@ -185,9 +206,9 @@ def overview(db: Session = Depends(get_db)):
                 or 0
             )
         except Exception:
-            pass
+            db.rollback()
     except Exception:
-        pass
+        db.rollback()
 
     # --- Recruitment & Talent (widget 3): JO progress bar + interview minggu ini ---
     job_orders_by_stage = {s.value: 0 for s in JobOrderStatus}
@@ -212,7 +233,7 @@ def overview(db: Session = Depends(get_db)):
             or 0
         )
     except Exception:
-        pass
+        db.rollback()
 
     # --- Operations & Projects (widget 5): placement aktif per klien + margin ---
     active_placements_by_client: list[dict] = []
@@ -231,7 +252,7 @@ def overview(db: Session = Depends(get_db)):
             {"client": name, "active_placements": int(cnt)} for name, cnt in rows
         ]
     except Exception:
-        pass
+        db.rollback()
     profit_by_client_rows: list[dict] = []
     try:
         from app.modules.accounting.service import profit_by_client as _profit_by_client
@@ -239,7 +260,7 @@ def overview(db: Session = Depends(get_db)):
         today = date.today()
         profit_by_client_rows = _profit_by_client(db, year=today.year, month=today.month)
     except Exception:
-        pass
+        db.rollback()
 
     return {
         "leads": {
@@ -314,7 +335,7 @@ def overview_personal(db: Session = Depends(get_db), user=Depends(get_current_us
             or 0
         )
     except Exception:
-        pass
+        db.rollback()
 
     # Slip terakhir
     payslip_count = 0
@@ -326,7 +347,7 @@ def overview_personal(db: Session = Depends(get_db), user=Depends(get_current_us
             or 0
         )
     except Exception:
-        pass
+        db.rollback()
 
     return {
         "employee": {

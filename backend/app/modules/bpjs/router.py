@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import BPJS_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.bpjs import service
 from app.modules.bpjs.schemas import BpjsRecapOut
@@ -12,7 +13,7 @@ router = APIRouter(
     tags=["bpjs"],
     dependencies=[
         Depends(get_current_user),
-        Depends(require_roles("operations", "hr", "finance", "management")),
+        Depends(require_roles(*BPJS_ROLES)),
     ],
 )
 

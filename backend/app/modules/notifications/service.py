@@ -52,6 +52,14 @@ def _smtp_send(msg: EmailMessage) -> None:
         logger.exception("Gagal mengirim email notifikasi ke %s", msg["To"])
 
 
+def send_raw_email(to: str, subject: str, body: str) -> None:
+    """Kirim email langsung ke alamat manapun (bukan user in-app) — dipakai
+    alur yang belum tentu punya konteks user login, mis. forgot-password.
+    No-op senyap bila SMTP tak dikonfigurasi (sama seperti `_smtp_send`).
+    """
+    _smtp_send(build_email_message(to, subject, body))
+
+
 def _queue_email(db: Session, user_id, title: str, body: str | None) -> None:
     """Antre email notifikasi bila SMTP diatur; pengiriman di thread terpisah."""
     settings = get_settings()

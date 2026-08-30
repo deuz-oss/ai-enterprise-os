@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile,
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import HRD_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.ess import service as ess_service
 from app.modules.ess.models import LeaveStatus
@@ -32,7 +33,7 @@ from app.modules.hrd.schemas import (
 router = APIRouter(
     prefix="/employees",
     tags=["hrd"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("hr", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*HRD_ROLES))],
 )
 
 

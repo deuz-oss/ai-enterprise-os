@@ -74,6 +74,31 @@ def _create_run(client, headers, year=2026, month=8) -> dict:
     return resp.json()
 
 
+def test_bukti_potong_pdf_per_karyawan(client):
+    """PRD v3.0 §6 — dokumen compliance yang sebelumnya belum ada sama sekali."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Bukti Potong Karyawan", salary=8_000_000)
+    run = _create_run(client, headers, year=2026, month=9)
+
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    pdf = client.get(
+        f"/api/v1/payroll/runs/{run['id']}/bukti-potong/{emp['id']}/pdf", headers=headers
+    )
+    assert pdf.status_code == 200, pdf.text
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content[:4] == b"%PDF"
+    assert "1.1-202609-0001" in pdf.headers["content-disposition"]
+
+    # Karyawan yang tidak punya slip di run ini -> 404, bukan PDF kosong.
+    other = _create_employee(client, headers, name="Bukan Peserta Run Ini")
+    missing = client.get(
+        f"/api/v1/payroll/runs/{run['id']}/bukti-potong/{other['id']}/pdf", headers=headers
+    )
+    assert missing.status_code == 404
+
+
 def test_attendance_upsert_and_client_approval(client):
     headers = _auth_header(client)
     emp = _create_employee(client, headers)

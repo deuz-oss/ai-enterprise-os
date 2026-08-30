@@ -66,9 +66,14 @@ def test_config_mengembalikan_status_provider(client):
 
 
 def test_send_tanpa_konfigurasi_mengembalikan_503(client):
+    """Patch eksplisit ke kosong -- jangan bergantung pada default ambient
+    ESIGN_PROVIDER di .env (fragile; nilainya bisa "sandbox" di lingkungan
+    dev/demo yang sudah mengaktifkan TTE)."""
     headers = _auth_header(client)
     contract_id = _employee_with_contract(client, headers)
-    resp = _send(client, headers, contract_id)
+    settings = get_settings()
+    with patch.object(settings, "esign_provider", None):
+        resp = _send(client, headers, contract_id)
     assert resp.status_code == 503
 
 

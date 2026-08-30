@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permissions import PRESALES_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.clients.schemas import ClientOut
 from app.modules.presales import service
@@ -18,7 +19,7 @@ from app.modules.presales.schemas import (
 router = APIRouter(
     prefix="/leads",
     tags=["presales"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("business_dev", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*PRESALES_ROLES))],
 )
 
 

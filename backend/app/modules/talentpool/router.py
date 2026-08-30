@@ -1,6 +1,7 @@
 """Router Talent Pool & CV Standardization (Fase 13, PRD §10)."""
 
 from app.core.database import get_db, parse_uuid
+from app.core.permissions import TALENTPOOL_BRANDING_ROLES, TALENTPOOL_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.talentpool import service
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
@@ -12,7 +13,7 @@ router = APIRouter(
     tags=["talentpool"],
     dependencies=[
         Depends(get_current_user),
-        Depends(require_roles("recruiter", "operations", "hr", "management")),
+        Depends(require_roles(*TALENTPOOL_ROLES)),
     ],
 )
 
@@ -172,7 +173,7 @@ def download_logo(db: Session = Depends(get_db)):
 branding_admin_router = APIRouter(
     prefix="/talentpool",
     tags=["talentpool"],
-    dependencies=[Depends(get_current_user), Depends(require_roles("admin", "management"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*TALENTPOOL_BRANDING_ROLES))],
 )
 
 

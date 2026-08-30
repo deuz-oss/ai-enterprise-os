@@ -120,11 +120,74 @@ def send_contract(
     return request
 
 
-def list_requests(db: Session, contract_id: UUID | None = None) -> list[EsignRequest]:
+def send_placement_offering(
+    db: Session,
+    placement_id: UUID,
+    *,
+    pdf_bytes: bytes,
+    file_name: str,
+    title: str,
+    signer_name: str,
+    signer_email: str,
+) -> EsignRequest:
+    """Kirim surat penawaran (offering letter) ke penyedia TTE — PRD v3.0 §4.
+
+    Sejajar `send_contract` tapi target dokumennya `Placement`, bukan
+    `EmploymentContract` (penawaran terjadi SEBELUM ada kontrak/karyawan).
+    """
+    pending = db.scalars(
+        select(EsignRequest)
+        .where(EsignRequest.placement_id == placement_id)
+        .where(EsignRequest.status.in_([EsignStatus.sent, EsignStatus.viewed]))
+        .limit(1)
+    ).first()
+    if pending:
+        raise HTTPException(
+            status_code=409,
+            detail="Masih ada permintaan TTE yang berjalan untuk penawaran ini",
+        )
+
+    result = get_adapter().send_document(
+        pdf_bytes=pdf_bytes,
+        file_name=file_name,
+        title=title,
+        signer_name=signer_name,
+        signer_email=signer_email,
+    )
+    request = EsignRequest(
+        placement_id=placement_id,
+        provider=get_settings().esign_provider,
+        provider_document_id=result.provider_document_id,
+        signer_name=signer_name,
+        signer_email=signer_email,
+        sign_url=result.sign_url,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    audit.log_event(
+        db,
+        action="esign.sent",
+        entity_type="placement",
+        entity_id=placement_id,
+        detail={
+            "esign_request_id": str(request.id),
+            "provider_document_id": result.provider_document_id,
+            "signer_email": signer_email,
+        },
+    )
+    return request
+
+
+def list_requests(
+    db: Session, contract_id: UUID | None = None, placement_id: UUID | None = None
+) -> list[EsignRequest]:
     stmt = select(EsignRequest).order_by(EsignRequest.created_at.desc())
     if contract_id:
         _get_contract(db, contract_id)
         stmt = stmt.where(EsignRequest.contract_id == contract_id)
+    if placement_id:
+        stmt = stmt.where(EsignRequest.placement_id == placement_id)
     return list(db.scalars(stmt).all())
 
 
@@ -199,20 +262,30 @@ def _apply_status(
     esign_request.detail_json = json.dumps(raw, ensure_ascii=False) if raw else None
     if status == EsignStatus.completed and not esign_request.signed_at:
         esign_request.signed_at = datetime.now(UTC)
-        # Efek samping: kontrak resmi tercatat ditandatangani.
-        contract = db.get(EmploymentContract, esign_request.contract_id)
-        if contract:
-            contract.sign_status = ContractSignStatus.signed
-            contract.signed_at = esign_request.signed_at
+        if esign_request.contract_id:
+            # Efek samping: kontrak resmi tercatat ditandatangani.
+            contract = db.get(EmploymentContract, esign_request.contract_id)
+            if contract:
+                contract.sign_status = ContractSignStatus.signed
+                contract.signed_at = esign_request.signed_at
+        elif esign_request.placement_id:
+            # Efek samping: kandidat resmi menandatangani surat penawaran.
+            from app.modules.recruitment.models import Placement
+
+            placement = db.get(Placement, esign_request.placement_id)
+            if placement:
+                placement.offering_signed_at = esign_request.signed_at
     elif status in (EsignStatus.declined, EsignStatus.expired):
         esign_request.error = f"Dokumen {status.value} oleh penandatangan"
     db.commit()
     db.refresh(esign_request)
+    entity_type = "employment_contract" if esign_request.contract_id else "placement"
+    entity_id = esign_request.contract_id or esign_request.placement_id
     audit.log_event(
         db,
         action=f"esign.{status.value}",
-        entity_type="employment_contract",
-        entity_id=esign_request.contract_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
         detail={"esign_request_id": str(esign_request.id), "status": status.value},
     )
     return esign_request

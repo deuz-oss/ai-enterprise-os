@@ -34,9 +34,11 @@ logger = logging.getLogger(__name__)
 def close_checklist(db: Session, year: int, month: int) -> dict:
     """Checklist otomatis sebelum tutup buku: temuan + status tiap item."""
     findings: list[dict] = []
-    start = f"{year}-{str(month).zfill(2)}-01"
-    end_day = _last_day(year, month)
-    end = f"{year}-{str(month).zfill(2)}-{end_day:02d}"
+    # date (bukan f-string): entry_date kolom Date -- Postgres menolak
+    # perbandingan date >= character varying (SQLite lolos, tidak
+    # menegakkan tipe kolom).
+    start = date(year, month, 1)
+    end = date(year, month, _last_day(year, month))
 
     # 1a) Jurnal memorial belum diposting
     memorials = (

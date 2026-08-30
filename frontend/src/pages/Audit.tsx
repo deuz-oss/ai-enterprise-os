@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Shield } from "lucide-react";
 import { PageHeader } from "../components/notion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -49,7 +50,7 @@ export default function Audit() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader emoji="🛡️" title="Jejak Audit" />
+        <PageHeader icon={Shield} title="Jejak Audit" />
         <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
           {data ? `${data.total} event` : "..."} · append-only
         </span>

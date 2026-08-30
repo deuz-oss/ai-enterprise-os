@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { UserCircle } from "lucide-react";
 import { PageHeader } from "../components/notion";
 
 const MONTHS = [
@@ -246,7 +247,7 @@ export default function MyPortal() {
 
   return (
     <div className="space-y-4">
-      <PageHeader emoji="🙋" title="Portal Saya" />
+      <PageHeader icon={UserCircle} title="Portal Saya" />
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">

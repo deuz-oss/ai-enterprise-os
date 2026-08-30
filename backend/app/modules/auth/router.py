@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db, parse_uuid
+from app.core.permissions import AUTH_ADMIN_ONLY_ROLES
 from app.core.ratelimit import get_limiter
 from app.core.security import (
     create_access_token,
@@ -16,6 +17,8 @@ from app.modules import audit
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     ChangePasswordIn,
+    ForgotPasswordAckOut,
+    ForgotPasswordIn,
     LoginRequest,
     PasswordResetIn,
     PasswordResetIssueOut,
@@ -31,8 +34,9 @@ from app.modules.auth.service import (
     create_user,
     issue_password_reset_token,
 )
+from app.modules.platform.models import Tenant
 
-admin_only = require_roles()
+admin_only = require_roles(*AUTH_ADMIN_ONLY_ROLES)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -61,7 +65,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     retry_after_max = 0
     for key in keys:
         allowed, retry_after = limiter.check(
-            key, max_attempts=settings.login_rate_limit_max, window_seconds=window_sec
+            db, key, max_attempts=settings.login_rate_limit_max, window_seconds=window_sec
         )
         if not allowed:
             retry_after_max = max(retry_after_max, retry_after)
@@ -88,7 +92,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate(db, payload.email.lower(), payload.password)
     if user is None:
         for key in keys:
-            limiter.hit(key, window_seconds=window_sec)
+            limiter.hit(db, key, window_seconds=window_sec)
         # Percobaan ke email yang terdaftar dicatat pada tenant pemilik akun
         # agar terlihat oleh admin tenant; email tak dikenal tetap anonim.
         known = get_by_email(db, payload.email.lower())
@@ -105,8 +109,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Email atau password salah"
         )
 
-    limiter.clear(keys[0])
-    limiter.clear(keys[1])
+    limiter.clear(db, keys[0])
+    limiter.clear(db, keys[1])
     # Tolak akun dari tenant yang ditangguhkan (cek langsung tanpa konteks).
     if user.tenant_id is not None:
         from app.modules.platform.models import Tenant, TenantStatus
@@ -135,8 +139,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user=Depends(get_current_user)):
-    return current_user
+def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    tenant_name = None
+    if current_user.tenant_id is not None:
+        tenant_name = db.execute(
+            select(Tenant.name).where(Tenant.id == current_user.tenant_id)
+        ).scalar_one_or_none()
+    return UserOut.model_validate(current_user).model_copy(update={"tenant_name": tenant_name})
 
 
 @router.post("/change-password", status_code=204)
@@ -189,6 +198,67 @@ def issue_reset_token(
     )
 
 
+@router.post("/forgot-password", response_model=ForgotPasswordAckOut, status_code=202)
+def forgot_password(payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+    """Endpoint publik: user minta link reset sendiri lewat email (tanpa login).
+
+    Selalu balas pesan generik yang sama terlepas email terdaftar atau
+    tidak — mencegah orang lain memakai endpoint ini untuk mengecek email
+    mana yang punya akun (anti user-enumeration). Bila SMTP tidak
+    dikonfigurasi (`ESIGN_PROVIDER`-style opt-in, lihat `.env`), token tetap
+    dibuat tapi tak ada kanal pengiriman — user belum login sehingga
+    notifikasi in-app tidak berlaku; minta admin tenant pakai
+    `/auth/users/{id}/password-reset-token` sebagai jalur cadangan.
+    """
+    from app.modules.auth.service import get_by_email
+    from app.modules.notifications.service import send_raw_email
+
+    settings = get_settings()
+    ip, _ = get_request_meta()
+    limiter = get_limiter("password_reset")
+    keys = [f"{ip}|{payload.email.lower()}", f"ip:{ip}"]
+    retry_after_max = 0
+    for key in keys:
+        allowed, retry_after = limiter.check(
+            db,
+            key,
+            max_attempts=settings.reset_rate_limit_max,
+            window_seconds=settings.login_rate_limit_window_sec,
+        )
+        if not allowed:
+            retry_after_max = max(retry_after_max, retry_after)
+    if retry_after_max:
+        raise HTTPException(
+            status_code=429,
+            detail="Terlalu banyak percobaan. Coba lagi nanti.",
+            headers={"Retry-After": str(retry_after_max)},
+        )
+    for key in keys:
+        limiter.hit(db, key, window_seconds=settings.login_rate_limit_window_sec)
+
+    user = get_by_email(db, payload.email.lower())
+    if user is not None and user.is_active:
+        raw_token = issue_password_reset_token(db, user)
+        audit.log_event(
+            db,
+            action="auth.password_reset_requested",
+            entity_type="user",
+            entity_id=user.id,
+            actor=user.id,
+            tenant_id=user.tenant_id,
+            detail={"self_service": True},
+        )
+        base_url = (settings.cors_origin_list[0] if settings.cors_origin_list else "").rstrip("/")
+        reset_link = f"{base_url}/reset-password?token={raw_token}"
+        send_raw_email(
+            user.email,
+            "Reset kata sandi",
+            f"Klik link berikut untuk atur ulang kata sandi (berlaku "
+            f"{settings.password_reset_ttl_min} menit, sekali pakai):\n{reset_link}",
+        )
+    return ForgotPasswordAckOut(detail="Jika email terdaftar, link reset telah dikirim.")
+
+
 @router.post("/reset-password", response_model=UserOut)
 def reset_password(payload: PasswordResetIn, db: Session = Depends(get_db)):
     """Endpoint publik: tukar token reset dengan password baru."""
@@ -197,6 +267,7 @@ def reset_password(payload: PasswordResetIn, db: Session = Depends(get_db)):
     limiter = get_limiter("password_reset")
     key = f"ip:{ip}"
     allowed, retry_after = limiter.check(
+        db,
         key,
         max_attempts=settings.reset_rate_limit_max,
         window_seconds=settings.login_rate_limit_window_sec,
@@ -207,7 +278,7 @@ def reset_password(payload: PasswordResetIn, db: Session = Depends(get_db)):
             detail="Terlalu banyak percobaan. Coba lagi nanti.",
             headers={"Retry-After": str(retry_after)},
         )
-    limiter.hit(key, window_seconds=settings.login_rate_limit_window_sec)
+    limiter.hit(db, key, window_seconds=settings.login_rate_limit_window_sec)
 
     user = consume_password_reset_token(db, payload.token, payload.new_password)
     audit.log_event(
@@ -224,9 +295,16 @@ def reset_password(payload: PasswordResetIn, db: Session = Depends(get_db)):
 @router.get("/users", response_model=list[UserOut])
 def list_users(
     db: Session = Depends(get_db),
-    _admin: User = Depends(admin_only),
+    admin: User = Depends(admin_only),
 ):
-    return list(db.execute(select(User).order_by(User.created_at)).scalars())
+    # User tidak pakai TenantMixin (platform_admin punya tenant_id NULL),
+    # jadi tidak ikut auto-scope with_loader_criteria — filter manual di sini
+    # wajib, kalau tidak admin tenant bisa lihat user tenant lain + platform_admin.
+    return list(
+        db.execute(
+            select(User).where(User.tenant_id == admin.tenant_id).order_by(User.created_at)
+        ).scalars()
+    )
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
