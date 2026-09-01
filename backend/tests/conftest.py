@@ -4,6 +4,13 @@ import os
 
 os.environ["APP_ENV"] = "test"
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only")
+# Settings reads the repo's real .env (env_file=(".env", REPO_ROOT/".env"))
+# regardless of APP_ENV -- force AI "not configured" for every test run so a
+# developer's real AI_BASE_URL/AI_API_KEY in .env can never make tests place
+# live, billed calls to a real provider. Tests that need AI configured
+# monkeypatch these on the Settings singleton explicitly (see test_ai_usage.py).
+os.environ["AI_BASE_URL"] = ""
+os.environ["AI_API_KEY"] = ""
 
 import pytest
 from app.core.database import Base, get_db

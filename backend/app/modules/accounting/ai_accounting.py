@@ -23,6 +23,7 @@ from app.modules.accounting.models import (
     PurchaseBill,
 )
 from app.modules.accounting.service import get_account_by_code
+from app.modules.accounting.transactions_service import _pending_depreciation_assets
 from app.modules.finance.models import Invoice, InvoiceStatus, PaymentRequest, PaymentRequestStatus
 from app.modules.payroll.models import PayrollRun, PayrollRunStatus
 
@@ -138,6 +139,20 @@ def close_checklist(db: Session, year: int, month: int) -> dict:
                 "severity": "warning",
                 "detail": f"{len(prs_this_month)} PR dieksekusi tanpa jurnal",
                 "items": [p.pr_number for p in prs_this_month],
+            }
+        )
+
+    # 1e) Aset tetap belum disusutkan periode ini. severity=warning (bukan
+    # error) -- ini pengingat, bukan blocker otomatis seperti memorial
+    # unposted; keputusan tetap di tangan finance.
+    pending_dep = _pending_depreciation_assets(db, year=year, month=month)
+    if pending_dep:
+        findings.append(
+            {
+                "code": "depreciation_pending",
+                "severity": "warning",
+                "detail": f"{len(pending_dep)} aset tetap belum disusutkan periode ini",
+                "items": [a.name for a in pending_dep],
             }
         )
 

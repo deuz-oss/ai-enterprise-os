@@ -83,3 +83,13 @@ class FixedAssetOut(BaseModel):
     book_value: float
     last_depreciated_ym: str | None
     disposed_at: date | None
+
+
+class APAgingRow(BaseModel):
+    bill_id: UUID
+    bill_number: str | None
+    vendor_name: str
+    total_due: float
+    due_date: date
+    days_overdue: int
+    bucket: str  # "1-30" | "31-60" | ">60"

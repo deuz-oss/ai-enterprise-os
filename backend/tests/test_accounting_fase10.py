@@ -275,3 +275,125 @@ def test_pr_executed_auto_journal_and_profit_by_client(client):
     ).json()
     pt_klien = next(r for r in report if r["client"] == "PT Klien Proyek")
     assert pt_klien["expense"] > 0  # HPP TK proyek tercatat dengan dimensi klien
+
+
+# ---------- Reversal jurnal posted ----------
+
+
+def test_reverse_posted_entry_swaps_debit_credit_and_stays_balanced(client):
+    admin = _auth_header(client)
+    posted = _entry(
+        admin,
+        client,
+        lines=[
+            {"account_code": "1-1100", "debit": 2_000_000, "credit": 0},
+            {"account_code": "4-1000", "debit": 0, "credit": 2_000_000},
+        ],
+    ).json()
+    assert posted["status"] == "posted"
+    assert posted["is_reversed"] is False
+
+    rev = client.post(
+        f"/api/v1/accounting/journal/{posted['id']}/reverse",
+        headers=admin,
+        json={"reason": "Salah input"},
+    )
+    assert rev.status_code == 201, rev.text
+    rev_body = rev.json()
+    assert rev_body["status"] == "posted"
+    assert rev_body["event_code"] == "journal_reversed"
+    rev_lines = {ln["account_code"]: ln for ln in rev_body["lines"]}
+    assert float(rev_lines["1-1100"]["credit"]) == 2_000_000
+    assert float(rev_lines["1-1100"]["debit"]) == 0
+    assert float(rev_lines["4-1000"]["debit"]) == 2_000_000
+    total_debit = sum(float(ln["debit"]) for ln in rev_body["lines"])
+    total_credit = sum(float(ln["credit"]) for ln in rev_body["lines"])
+    assert total_debit == total_credit  # tetap seimbang
+
+    # Original tetap posted, sekarang ditandai is_reversed
+    entries = client.get("/api/v1/accounting/journal", headers=admin, params={"year": 2026}).json()
+    original = next(e for e in entries if e["id"] == posted["id"])
+    assert original["status"] == "posted"
+    assert original["is_reversed"] is True
+    assert original["reversal_entry_id"] == rev_body["id"]
+
+    # Efek bersih di buku besar: saldo 1-1100 kembali nol setelah reversal
+    ledger = client.get(
+        "/api/v1/accounting/ledger/1-1100", headers=admin, params={"year": 2026}
+    ).json()
+    assert ledger["lines"][-1]["balance"] == 0
+
+
+def test_reverse_twice_conflicts_and_memorial_or_missing_rejected(client):
+    admin = _auth_header(client)
+    posted = _entry(admin, client).json()
+
+    first = client.post(
+        f"/api/v1/accounting/journal/{posted['id']}/reverse", headers=admin, json={}
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        f"/api/v1/accounting/journal/{posted['id']}/reverse", headers=admin, json={}
+    )
+    assert second.status_code == 409
+
+    memorial = _entry(admin, client, status="memorial").json()
+    memorial_rev = client.post(
+        f"/api/v1/accounting/journal/{memorial['id']}/reverse", headers=admin, json={}
+    )
+    assert memorial_rev.status_code == 422
+
+    missing = client.post(
+        "/api/v1/accounting/journal/00000000-0000-0000-0000-000000000000/reverse",
+        headers=admin,
+        json={},
+    )
+    assert missing.status_code == 404
+
+
+def test_reverse_into_closed_period_rejected(client):
+    from datetime import UTC, datetime, timedelta
+
+    admin = _auth_header(client)
+    today = datetime.now(UTC).date()
+    last_month = today.replace(day=1) - timedelta(days=1)
+
+    posted = _entry(
+        admin, client, date=f"{last_month.year}-{str(last_month.month).zfill(2)}-15"
+    ).json()
+    close = client.post(
+        f"/api/v1/accounting/periods/{last_month.year}/{last_month.month}/close", headers=admin
+    )
+    assert close.status_code == 200
+
+    blocked = client.post(
+        f"/api/v1/accounting/journal/{posted['id']}/reverse",
+        headers=admin,
+        json={"reversal_date": f"{last_month.year}-{str(last_month.month).zfill(2)}-20"},
+    )
+    assert blocked.status_code == 422
+    assert "ditutup" in blocked.json()["detail"]
+
+
+# ---------- Hapus jurnal memorial (draft) ----------
+
+
+def test_delete_memorial_entry_and_posted_journal_rejected(client):
+    admin = _auth_header(client)
+    memorial = _entry(admin, client, status="memorial").json()
+
+    deleted = client.delete(f"/api/v1/accounting/journal/{memorial['id']}", headers=admin)
+    assert deleted.status_code == 204
+
+    entries = client.get("/api/v1/accounting/journal", headers=admin, params={"year": 2026}).json()
+    assert all(e["id"] != memorial["id"] for e in entries)
+
+    posted = _entry(admin, client).json()
+    blocked = client.delete(f"/api/v1/accounting/journal/{posted['id']}", headers=admin)
+    assert blocked.status_code == 422
+
+    missing = client.delete(
+        "/api/v1/accounting/journal/00000000-0000-0000-0000-000000000000", headers=admin
+    )
+    assert missing.status_code == 404

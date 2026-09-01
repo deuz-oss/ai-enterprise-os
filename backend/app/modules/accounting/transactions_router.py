@@ -8,6 +8,7 @@ from app.core.permissions import ACCOUNTING_TRANSACTIONS_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.accounting import transactions_service as tx_service
 from app.modules.accounting.transactions_schemas import (
+    APAgingRow,
     BankTxCreate,
     FixedAssetCreate,
     FixedAssetOut,
@@ -171,6 +172,12 @@ def pay_purchase(bill_id: str, payload: dict, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/cashbank/bills/aging", response_model=list[APAgingRow])
+def ap_aging(db: Session = Depends(get_db)):
+    """Utang vendor jatuh tempo, dikelompokkan per bucket umur (1-30/31-60/>60)."""
+    return tx_service.ap_aging_report(db)
+
+
 # ---------- Aset tetap ----------
 
 
@@ -213,6 +220,19 @@ def depreciate_asset(
 
 def ym_label(year: int, month: int) -> str:
     return f"{year}-{str(month).zfill(2)}"
+
+
+@router.post("/assets/depreciate-period")
+def depreciate_period(payload: dict, db: Session = Depends(get_db)):
+    """Jalankan penyusutan bulanan untuk semua aset eligible sekaligus
+    (pelengkap `POST /assets/{id}/depreciate` yang per-aset)."""
+    year = int((payload or {}).get("year") or 0)
+    month = int((payload or {}).get("month") or 0)
+    if not year or not (1 <= month <= 12):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="year/month tidak valid")
+    return tx_service.depreciate_period(db, year=year, month=month)
 
 
 @router.post("/assets/{asset_id}/dispose")

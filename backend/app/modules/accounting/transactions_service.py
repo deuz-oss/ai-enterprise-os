@@ -22,6 +22,7 @@ from app.modules.accounting.models import (
     PurchaseBill,
 )
 from app.modules.accounting.service import income_statement, post_auto_event
+from app.modules.accounting.transactions_schemas import APAgingRow
 
 
 def _get_bank_account(db: Session, account_id) -> Account:
@@ -236,6 +237,46 @@ def list_purchase_bills(db: Session, status: BillStatus | None = None) -> list[P
     return list(db.execute(stmt).scalars())
 
 
+def _aging_bucket(days_overdue: int) -> str:
+    if days_overdue <= 30:
+        return "1-30"
+    if days_overdue <= 60:
+        return "31-60"
+    return ">60"
+
+
+def ap_aging_report(db: Session) -> list[APAgingRow]:
+    """Bill vendor belum dibayar yang melewati jatuh tempo, per bucket umur.
+
+    Cermin `finance/service.py::aging_report()` (sisi AR) — `_aging_bucket()`
+    sengaja diduplikasi (bukan di-share) karena 5 baris logic murni tidak
+    sepadan dengan coupling cross-module baru antara accounting<->finance.
+    """
+    stmt = (
+        select(PurchaseBill)
+        .where(PurchaseBill.status == BillStatus.unpaid)
+        .where(PurchaseBill.due_date.is_not(None))
+        .where(PurchaseBill.due_date < date.today())
+        .order_by(PurchaseBill.due_date)
+    )
+    today = date.today()
+    rows: list[APAgingRow] = []
+    for bill in db.execute(stmt).scalars():
+        days_overdue = (today - bill.due_date).days  # type: ignore[operator]
+        rows.append(
+            APAgingRow(
+                bill_id=bill.id,
+                bill_number=bill.bill_number,
+                vendor_name=bill.vendor_name,
+                total_due=float(bill.amount) + float(bill.ppn_amount),
+                due_date=bill.due_date,  # type: ignore[arg-type]
+                days_overdue=days_overdue,
+                bucket=_aging_bucket(days_overdue),
+            )
+        )
+    return rows
+
+
 # ---------- Aset tetap ----------
 
 
@@ -351,6 +392,43 @@ def depreciate_asset_monthly(db: Session, *, asset_id: str, year: int, month: in
         detail={"ym": ym, "amount": dep},
     )
     return asset, dep, entry.id if entry else None
+
+
+def _pending_depreciation_assets(db: Session, *, year: int, month: int) -> list[FixedAsset]:
+    """Aset tetap yang belum disusutkan periode ini dan masih punya nilai
+    buku tersisa (fully-depreciated tidak akan pernah punya jurnal baru,
+    nominalnya 0 — difilter supaya tidak selamanya muncul sebagai "pending")."""
+    ym = f"{year}-{str(month).zfill(2)}"
+    last_day = monthrange(year, month)[1]
+    return list(
+        db.execute(
+            select(FixedAsset).where(
+                FixedAsset.disposed_at.is_(None),
+                FixedAsset.acquisition_date <= date(year, month, last_day),
+                (FixedAsset.last_depreciated_ym.is_(None)) | (FixedAsset.last_depreciated_ym != ym),
+                FixedAsset.cost - FixedAsset.accumulated_depreciation > 0,
+            )
+        ).scalars()
+    )
+
+
+def depreciate_period(db: Session, *, year: int, month: int) -> dict:
+    """Jalankan penyusutan bulanan untuk semua aset eligible sekaligus.
+
+    Tiap aset diproses independen — kegagalan satu aset (409 aset sudah
+    disposisi, dsb, ditangkap per-iterasi) tidak menghentikan batch, pola
+    yang sama seperti `bank_statement.import_statement()`.
+    """
+    assets = _pending_depreciation_assets(db, year=year, month=month)
+    posted: list[str] = []
+    skipped: list[dict] = []
+    for asset in assets:
+        try:
+            depreciate_asset_monthly(db, asset_id=str(asset.id), year=year, month=month)
+            posted.append(asset.name)
+        except HTTPException as exc:
+            skipped.append({"asset": asset.name, "reason": exc.detail})
+    return {"posted": posted, "skipped": skipped}
 
 
 def dispose_fixed_asset(

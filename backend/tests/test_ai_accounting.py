@@ -38,6 +38,49 @@ def test_close_checklist_ready(client):
     assert isinstance(result["findings"], list)
 
 
+def test_close_checklist_flags_pending_depreciation(client):
+    admin = _auth_header(client)
+    accounts = client.get("/api/v1/accounting/accounts", headers=admin).json()
+    asset_acc = next(a["id"] for a in accounts if a["code"] == "1-2000")
+
+    asset = client.post(
+        "/api/v1/accounting/assets",
+        headers=admin,
+        json={
+            "name": "Server Checklist",
+            "asset_account_id": asset_acc,
+            "cost": 12_000_000,
+            "useful_life_months": 12,
+            "acquisition_date": "2026-07-01",
+        },
+    ).json()
+
+    before = client.get(
+        "/api/v1/accounting/ai/close-checklist",
+        headers=admin,
+        params={"year": 2026, "month": 7},
+    ).json()
+    dep_finding = next(f for f in before["findings"] if f["code"] == "depreciation_pending")
+    assert dep_finding["severity"] == "warning"
+    assert "Server Checklist" in dep_finding["items"]
+    # Warning tidak memblokir closing (beda dari memorial unposted yang error)
+    assert before["ready_to_close"] is True
+
+    dep = client.post(
+        f"/api/v1/accounting/assets/{asset['id']}/depreciate",
+        headers=admin,
+        json={"year": 2026, "month": 7},
+    )
+    assert dep.status_code == 200, dep.text
+
+    after = client.get(
+        "/api/v1/accounting/ai/close-checklist",
+        headers=admin,
+        params={"year": 2026, "month": 7},
+    ).json()
+    assert all(f["code"] != "depreciation_pending" for f in after["findings"])
+
+
 def test_anomaly_duplicate_bill(client):
     headers = _auth_header(client)
 

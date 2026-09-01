@@ -14,6 +14,7 @@ from app.modules.accounting.schemas import (
     IncomeStatement,
     JournalEntryIn,
     JournalEntryOut,
+    JournalReverseIn,
     PeriodOut,
     TrialBalanceRow,
 )
@@ -100,6 +101,30 @@ def create_entry(payload: JournalEntryIn, db: Session = Depends(get_db)):
 def post_entry(entry_id: str, db: Session = Depends(get_db)):
     """Posting jurnal memorial: validasi seimbang, periode open, akun aktif."""
     return service.post_entry(db, entry_id)
+
+
+@router.post(
+    "/journal/{entry_id}/reverse",
+    response_model=JournalEntryOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def reverse_entry(
+    entry_id: str,
+    payload: JournalReverseIn,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Balik jurnal posted dengan entri lawan; jurnal asli tetap posted
+    selamanya (jejak historis) — cuma efek bersihnya jadi nol."""
+    return service.reverse_entry(
+        db, user, entry_id, reversal_date=payload.reversal_date, reason=payload.reason
+    )
+
+
+@router.delete("/journal/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_memorial_entry(entry_id: str, db: Session = Depends(get_db)):
+    """Hapus jurnal draft (memorial). Jurnal posted tidak bisa dihapus — pakai /reverse."""
+    service.delete_memorial_entry(db, entry_id)
 
 
 # ---------- Laporan ----------

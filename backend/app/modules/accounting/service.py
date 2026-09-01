@@ -8,6 +8,7 @@ langsung — hanya melalui `post_auto_event`.
 from calendar import monthrange
 from datetime import UTC, date, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -32,6 +33,8 @@ from app.modules.accounting.schemas import (
     JournalEntryIn,
     TrialBalanceRow,
 )
+
+REVERSAL_EVENT_CODE = "journal_reversed"
 
 BALANCE_GROUPS = ("aset_lancar", "aset_tetap", "liabilitas_pendek", "liabilitas_panjang", "ekuitas")
 REVENUE_GROUPS = ("pendapatan", "pendapatan_lain")
@@ -330,7 +333,139 @@ def list_entries(
         stmt = stmt.where(JournalEntry.status == status)
     if event_code is not None:
         stmt = stmt.where(JournalEntry.event_code == event_code)
-    return list(db.execute(stmt).unique().scalars())
+    entries = list(db.execute(stmt).unique().scalars())
+    _attach_reversal_info(db, entries)
+    return entries
+
+
+def _attach_reversal_info(db: Session, entries: list[JournalEntry]) -> None:
+    """Tempel `is_reversed`/`reversal_entry_id` (turunan, bukan kolom fisik)
+    ke tiap entry — dihitung dari baris `event_code=journal_reversed` yang
+    `source_ref_id`-nya menunjuk balik ke entry itu."""
+    ids = [e.id for e in entries if e.status == JournalEntryStatus.posted]
+    reversal_map: dict[UUID, UUID] = {}
+    if ids:
+        rows = db.execute(
+            select(JournalEntry.source_ref_id, JournalEntry.id).where(
+                JournalEntry.event_code == REVERSAL_EVENT_CODE,
+                JournalEntry.source_ref_type == "journal_entry",
+                JournalEntry.source_ref_id.in_(ids),
+            )
+        ).all()
+        reversal_map = {src: rid for src, rid in rows}
+    for e in entries:
+        e.reversal_entry_id = reversal_map.get(e.id)  # type: ignore[attr-defined]
+        e.is_reversed = e.id in reversal_map  # type: ignore[attr-defined]
+
+
+def reverse_entry(
+    db: Session,
+    user,
+    entry_id: str,
+    *,
+    reversal_date: date | None = None,
+    reason: str | None = None,
+) -> JournalEntry:
+    """Balik jurnal posted dengan entri lawan (debit<->kredit tiap baris,
+    `client_dim_id` per baris dipertahankan apa adanya). Jurnal asli TIDAK
+    diedit/dihapus — tetap posted selamanya sebagai catatan historis; yang
+    berubah cuma efek bersihnya jadi nol sejak tanggal reversal.
+    """
+    original = db.get(JournalEntry, parse_uuid(entry_id))
+    if original is None:
+        raise HTTPException(status_code=404, detail="Jurnal tidak ditemukan")
+    if original.status != JournalEntryStatus.posted:
+        raise HTTPException(
+            status_code=422, detail="Hanya jurnal berstatus posted yang bisa dibalik"
+        )
+
+    existing = (
+        db.execute(
+            select(JournalEntry).where(
+                JournalEntry.event_code == REVERSAL_EVENT_CODE,
+                JournalEntry.source_ref_type == "journal_entry",
+                JournalEntry.source_ref_id == original.id,
+            )
+        )
+        .unique()
+        .scalar_one_or_none()
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Jurnal ini sudah pernah dibalik")
+
+    effective_date = reversal_date or date.today()
+    assert_period_open(db, effective_date)
+
+    entry = JournalEntry(
+        entry_date=effective_date,
+        description=(
+            f"Pembalik jurnal {original.reference or str(original.id)[:8]}: {original.description}"
+        )[:500],
+        reference=reason,
+        status=JournalEntryStatus.posted,
+        posted_at=datetime.now(UTC),
+        event_code=REVERSAL_EVENT_CODE,
+        source_ref_type="journal_entry",
+        source_ref_id=original.id,
+    )
+    for line in original.lines:
+        entry.lines.append(
+            JournalLine(
+                account_code=line.account_code,
+                account_id=line.account_id,
+                debit=line.credit,
+                credit=line.debit,
+                client_dim_id=line.client_dim_id,
+                memo=(f"Reversal: {line.memo}"[:200] if line.memo else None),
+            )
+        )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="accounting.journal_reversed",
+        entity_type="journal_entry",
+        entity_id=original.id,
+        detail={
+            "reversal_entry_id": str(entry.id),
+            "reason": reason,
+            "by": getattr(user, "email", "?"),
+        },
+    )
+    entry.is_reversed = False  # type: ignore[attr-defined]
+    entry.reversal_entry_id = None  # type: ignore[attr-defined]
+    return entry
+
+
+def delete_memorial_entry(db: Session, entry_id: str) -> None:
+    """Hapus jurnal draft (memorial) yang batal/salah. Jurnal posted TIDAK
+    bisa dihapus lewat sini — pakai `reverse_entry()` supaya jejak historis
+    tetap ada."""
+    entry = db.get(JournalEntry, parse_uuid(entry_id))
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Jurnal tidak ditemukan")
+    if entry.status != JournalEntryStatus.memorial:
+        raise HTTPException(
+            status_code=422,
+            detail="Hanya jurnal berstatus memorial (draft) yang bisa dihapus — "
+            "jurnal posted pakai reversal",
+        )
+
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="accounting.journal_memorial_deleted",
+        entity_type="journal_entry",
+        entity_id=entry.id,
+        detail={"description": entry.description, "line_count": len(entry.lines)},
+    )
+    db.delete(entry)
+    db.commit()
 
 
 # ---------- Mesin auto-journal (PRD §8.3) ----------
@@ -361,13 +496,17 @@ def post_auto_event(
     if rule is not None and not rule.is_active:
         return None
 
-    duplicate = db.execute(
-        select(JournalEntry).where(
-            JournalEntry.event_code == event_code,
-            JournalEntry.source_ref_type == source_ref_type,
-            JournalEntry.source_ref_id == parse_uuid(source_ref_id),
+    duplicate = (
+        db.execute(
+            select(JournalEntry).where(
+                JournalEntry.event_code == event_code,
+                JournalEntry.source_ref_type == source_ref_type,
+                JournalEntry.source_ref_id == parse_uuid(source_ref_id),
+            )
         )
-    ).scalar_one_or_none()
+        .unique()
+        .scalar_one_or_none()
+    )
     if duplicate is not None:
         return duplicate
 

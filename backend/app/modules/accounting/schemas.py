@@ -77,6 +77,16 @@ class JournalEntryOut(BaseModel):
     source_ref_type: str | None = None
     source_ref_id: UUID | None = None
     lines: list[JournalLineOut]
+    # Turunan (bukan kolom fisik) — dihitung dari baris `event_code=journal_reversed`
+    # yang menunjuk balik ke entry ini. Default aman untuk entry yang baru
+    # dibuat/diposting/dibalik (belum mungkin sudah punya reversal sendiri).
+    is_reversed: bool = False
+    reversal_entry_id: UUID | None = None
+
+
+class JournalReverseIn(BaseModel):
+    reversal_date: date | None = None
+    reason: str | None = None
 
 
 class TrialBalanceRow(BaseModel):

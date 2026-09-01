@@ -259,3 +259,117 @@ def test_cash_flow_indirect_structure(client):
     assert op["net_income"] == 8_000_000
     # Net change kas harus cocok dengan Δ saldo bank (50jt modal + 12jt fee - 4jt gaji = 58jt)
     assert cf["net_change_cash"] == 58_000_000
+
+
+# ---------- AP Aging (utang vendor jatuh tempo) ----------
+
+
+def test_ap_aging_report_buckets_unpaid_overdue_bills(client):
+    from datetime import date, timedelta
+
+    admin = _auth_header(client)
+    accounts = client.get("/api/v1/accounting/accounts", headers=admin).json()
+    exp_id = next(a["id"] for a in accounts if a["code"] == "5-9000")
+    today = date.today()
+
+    def _bill(vendor: str, days_overdue: int, amount: float) -> dict:
+        resp = client.post(
+            "/api/v1/accounting/purchases",
+            headers=admin,
+            json={
+                "vendor_name": vendor,
+                "expense_account_id": exp_id,
+                "amount": amount,
+                "entry_date": str(today - timedelta(days=days_overdue + 10)),
+                "due_date": str(today - timedelta(days=days_overdue)),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    bucket_1_30 = _bill("Vendor Muda", 10, 1_000_000)
+    bucket_31_60 = _bill("Vendor Sedang", 45, 2_000_000)
+    bucket_over_60 = _bill("Vendor Lama", 90, 3_000_000)
+    # Bill sudah dibayar tidak boleh muncul
+    paid = _bill("Vendor Lunas", 20, 500_000)
+    pay = client.post(
+        f"/api/v1/accounting/purchases/{paid['id']}/pay",
+        headers=admin,
+        json={"bank_account_id": next(a["id"] for a in accounts if a["code"] == "1-1100")},
+    )
+    assert pay.status_code == 200
+    # Bill belum jatuh tempo (due_date di masa depan) tidak boleh muncul
+    not_due = client.post(
+        "/api/v1/accounting/purchases",
+        headers=admin,
+        json={
+            "vendor_name": "Vendor Belum Jatuh Tempo",
+            "expense_account_id": exp_id,
+            "amount": 700_000,
+            "due_date": str(today + timedelta(days=10)),
+        },
+    )
+    assert not_due.status_code == 201
+
+    aging = client.get("/api/v1/accounting/cashbank/bills/aging", headers=admin).json()
+    by_vendor = {row["vendor_name"]: row for row in aging}
+
+    assert by_vendor["Vendor Muda"]["bucket"] == "1-30"
+    assert by_vendor["Vendor Sedang"]["bucket"] == "31-60"
+    assert by_vendor["Vendor Lama"]["bucket"] == ">60"
+    assert by_vendor["Vendor Lama"]["total_due"] == 3_000_000
+    assert "Vendor Lunas" not in by_vendor
+    assert "Vendor Belum Jatuh Tempo" not in by_vendor
+    del bucket_1_30, bucket_31_60, bucket_over_60
+
+
+# ---------- Batch penyusutan periode ----------
+
+
+def test_depreciate_period_runs_all_eligible_assets_and_skips_ineligible(client):
+    admin = _auth_header(client)
+    accounts = client.get("/api/v1/accounting/accounts", headers=admin).json()
+    asset_acc = next(a["id"] for a in accounts if a["code"] == "1-2000")
+
+    def _asset(name: str, cost: float, months: int, acq_date: str) -> dict:
+        resp = client.post(
+            "/api/v1/accounting/assets",
+            headers=admin,
+            json={
+                "name": name,
+                "asset_account_id": asset_acc,
+                "cost": cost,
+                "useful_life_months": months,
+                "acquisition_date": acq_date,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    _asset("Laptop Batch", 24_000_000, 24, "2026-01-05")
+    _asset("Printer Batch", 6_000_000, 12, "2026-01-05")
+    # Aset diperoleh SETELAH periode target — tidak boleh ikut disusutkan
+    _asset("Aset Masa Depan", 5_000_000, 12, "2026-05-01")
+
+    result = client.post(
+        "/api/v1/accounting/assets/depreciate-period",
+        headers=admin,
+        json={"year": 2026, "month": 1},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert set(body["posted"]) == {"Laptop Batch", "Printer Batch"}
+    assert body["skipped"] == []
+
+    # Jalankan lagi bulan yang sama → semua sudah tercatat, tidak ada yang eligible
+    again = client.post(
+        "/api/v1/accounting/assets/depreciate-period",
+        headers=admin,
+        json={"year": 2026, "month": 1},
+    ).json()
+    assert again["posted"] == []
+
+    listed = {a["name"]: a for a in client.get("/api/v1/accounting/assets", headers=admin).json()}
+    assert listed["Laptop Batch"]["last_depreciated_ym"] == "2026-01"
+    assert listed["Printer Batch"]["last_depreciated_ym"] == "2026-01"
+    assert listed["Aset Masa Depan"]["last_depreciated_ym"] is None
