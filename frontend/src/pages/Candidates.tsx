@@ -25,6 +25,7 @@ interface Interview {
   location: string | null;
   meeting_url: string | null;
   status: string;
+  interview_type: string;
 }
 
 interface UserOption {
@@ -517,7 +518,7 @@ export default function Candidates() {
                           Jadwalkan Interview: {c.full_name}
                         </span>
                         <form
-                          className="grid grid-cols-1 gap-2 sm:grid-cols-5"
+                          className="grid grid-cols-1 gap-2 sm:grid-cols-6"
                           onSubmit={(e) => {
                             e.preventDefault();
                             const form = new FormData(e.currentTarget);
@@ -531,6 +532,7 @@ export default function Candidates() {
                               scheduled_at: new Date(String(scheduledAt)).toISOString(),
                               location: form.get("location") || null,
                               meeting_url: form.get("meeting_url") || null,
+                              interview_type: form.get("interview_type") || "internal",
                             });
                             e.currentTarget.reset();
                           }}
@@ -542,6 +544,10 @@ export default function Candidates() {
                                 {j.title}
                               </option>
                             ))}
+                          </select>
+                          <select name="interview_type" className="input py-1 text-xs" defaultValue="internal">
+                            <option value="internal">Interview Rekruter (internal)</option>
+                            <option value="klien">Interview User (klien)</option>
                           </select>
                           <input
                             name="scheduled_at"
@@ -576,6 +582,11 @@ export default function Candidates() {
                             .filter((i) => i.candidate_id === c.id)
                             .map((i) => (
                               <div key={i.id} className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                                <span
+                                  className={`pill ${i.interview_type === "klien" ? "p-violet" : "p-blue"} mr-1 text-[10px]`}
+                                >
+                                  {i.interview_type === "klien" ? "Klien" : "Internal"}
+                                </span>
                                 {new Date(i.scheduled_at).toLocaleString("id-ID")} ·{" "}
                                 {(jobOrders ?? []).find((j) => j.id === i.job_order_id)?.title ?? "-"}
                                 {i.location ? ` · ${i.location}` : ""} ·{" "}

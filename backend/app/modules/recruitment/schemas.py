@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict
 
 from app.modules.recruitment.models import (
     CandidateStatus,
+    InterviewType,
+    JobOrderBusinessStatus,
     JobOrderStatus,
     PlacementStatus,
 )
@@ -19,6 +21,13 @@ class JobOrderCreate(BaseModel):
     salary_min: float | None = None
     salary_max: float | None = None
     due_date: date | None = None
+    request_id: str | None = None  # kosong -> auto-generate JO/{tahun}/{urutan}
+    request_date: date | None = None  # kosong -> default hari ini
+    area: str | None = None
+    contract_duration_months: int | None = None
+    gross_salary: float | None = None
+    business_status: JobOrderBusinessStatus = JobOrderBusinessStatus.open
+    requires_ojt: bool = False
 
 
 class JobOrderUpdate(BaseModel):
@@ -30,6 +39,13 @@ class JobOrderUpdate(BaseModel):
     salary_max: float | None = None
     due_date: date | None = None
     status: JobOrderStatus | None = None
+    request_id: str | None = None
+    request_date: date | None = None
+    area: str | None = None
+    contract_duration_months: int | None = None
+    gross_salary: float | None = None
+    business_status: JobOrderBusinessStatus | None = None
+    requires_ojt: bool | None = None
 
 
 class JobOrderOut(BaseModel):
@@ -45,6 +61,14 @@ class JobOrderOut(BaseModel):
     salary_max: float | None
     due_date: date | None
     status: JobOrderStatus
+    request_id: str | None
+    request_date: date
+    area: str | None
+    contract_duration_months: int | None
+    gross_salary: float | None
+    business_status: JobOrderBusinessStatus
+    requires_ojt: bool
+    is_stale: bool
     created_at: datetime
 
 
@@ -108,6 +132,8 @@ class PlacementUpdate(BaseModel):
     status: PlacementStatus
     offered_salary: float | None = None
     start_date: date | None = None
+    ojt_start_date: date | None = None
+    ojt_end_date: date | None = None
 
 
 class PlacementOut(BaseModel):
@@ -119,6 +145,8 @@ class PlacementOut(BaseModel):
     offered_salary: float | None
     start_date: date | None
     status: PlacementStatus
+    ojt_start_date: date | None
+    ojt_end_date: date | None
     created_at: datetime
 
 
@@ -154,6 +182,7 @@ class InterviewScheduleCreate(BaseModel):
     scheduled_at: datetime
     location: str | None = None
     meeting_url: str | None = None
+    interview_type: InterviewType = InterviewType.internal
 
 
 class InterviewScheduleUpdate(BaseModel):
@@ -163,6 +192,7 @@ class InterviewScheduleUpdate(BaseModel):
     status: str | None = None
     feedback: str | None = None
     score: int | None = None
+    interview_type: InterviewType | None = None
 
 
 class InterviewScheduleOut(BaseModel):
@@ -176,6 +206,7 @@ class InterviewScheduleOut(BaseModel):
     location: str | None
     meeting_url: str | None
     status: str
+    interview_type: InterviewType
     feedback: str | None
     score: int | None
     created_at: datetime

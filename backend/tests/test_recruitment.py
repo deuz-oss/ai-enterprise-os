@@ -95,9 +95,10 @@ def test_placement_flow_updates_statuses(client):
     assert placement.status_code == 201
     pid = placement.json()["id"]
 
-    # kandidat otomatis masuk proses interview
+    # kandidat otomatis masuk screening (PRD v3.1 Patch 2: placement dibuat
+    # sejak sourcing, bukan lagi langsung "diusulkan"/interview)
     cand = client.get(f"/api/v1/recruitment/candidates/{cand_id}", headers=headers).json()
-    assert cand["status"] == "interview"
+    assert cand["status"] == "screening"
 
     # onboard → job order filled karena headcount tercapai (headcount=2, tapi 1 onboard dulu)
     onboarded = client.patch(

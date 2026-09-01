@@ -3,7 +3,7 @@ import math
 from datetime import UTC, date, timedelta, timezone
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import storage
@@ -16,6 +16,7 @@ from app.modules.recruitment.models import (
     CandidateStatus,
     InterviewSchedule,
     JobOrder,
+    JobOrderBusinessStatus,
     JobOrderStatus,
     Placement,
     PlacementStatus,
@@ -42,10 +43,21 @@ def _get_job_order(db: Session, jo_id: str) -> JobOrder:
     return jo
 
 
+def _generate_request_id(db: Session) -> str:
+    """JO/{tahun}/{urutan berjalan} — ikut pola EMP-0001/INV/{tahun}/0001 yang sudah ada."""
+    count = db.scalar(select(func.count(JobOrder.id))) or 0
+    return f"JO/{date.today().year}/{count + 1:04d}"
+
+
 def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
     if db.get(Client, parse_uuid(payload.client_id)) is None:
         raise HTTPException(status_code=404, detail="Klien tidak ditemukan")
-    jo = JobOrder(**payload.model_dump())
+    data = payload.model_dump()
+    if not data.get("request_id"):
+        data["request_id"] = _generate_request_id(db)
+    if not data.get("request_date"):
+        data["request_date"] = date.today()
+    jo = JobOrder(**data)
     db.add(jo)
     db.commit()
     db.refresh(jo)
@@ -68,6 +80,16 @@ def list_job_orders(
     if status is not None:
         stmt = stmt.where(JobOrder.status == status)
     return list(db.execute(stmt).scalars())
+
+
+def list_stale_job_orders(db: Session) -> list[JobOrder]:
+    """JO business_status=dibuka dan request_date >= 30 hari lalu (PRD v3.1 Patch 3)."""
+    stmt = (
+        select(JobOrder)
+        .where(JobOrder.business_status == JobOrderBusinessStatus.open)
+        .order_by(JobOrder.request_date)
+    )
+    return [jo for jo in db.execute(stmt).scalars() if jo.is_stale]
 
 
 def get_job_order(db: Session, jo_id: str) -> JobOrder:
@@ -193,7 +215,10 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
         raise HTTPException(status_code=409, detail="Kandidat sudah diusulkan ke job order ini")
     placement = Placement(**payload.model_dump())
     db.add(placement)
-    candidate.status = CandidateStatus.interview
+    # PRD v3.1 Patch 2: Placement sekarang dibuat sejak sourcing (status default
+    # `sourced`), bukan lagi saat siap ditawari — kandidat baru masuk tahap
+    # screening, belum interview.
+    candidate.status = CandidateStatus.screening
     if jo.status == JobOrderStatus.open:
         jo.status = JobOrderStatus.screening
     db.commit()
@@ -263,16 +288,31 @@ def list_placements(
 
 
 def update_placement_status(
-    db: Session, placement_id: str, new_status: PlacementStatus
+    db: Session,
+    placement_id: str,
+    new_status: PlacementStatus,
+    ojt_start_date: date | None = None,
+    ojt_end_date: date | None = None,
 ) -> Placement:
     placement = db.get(Placement, parse_uuid(placement_id))
     if placement is None:
         raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
     placement.status = new_status
+    if ojt_start_date is not None:
+        placement.ojt_start_date = ojt_start_date
+    if ojt_end_date is not None:
+        placement.ojt_end_date = ojt_end_date
     candidate = db.get(Candidate, placement.candidate_id)
     jo = db.get(JobOrder, placement.job_order_id)
     if candidate and jo:
-        if new_status == PlacementStatus.onboarded:
+        if new_status in (
+            PlacementStatus.interview_internal,
+            PlacementStatus.interview_client,
+        ):
+            candidate.status = CandidateStatus.interview
+        elif new_status == PlacementStatus.proposed:
+            candidate.status = CandidateStatus.offered
+        elif new_status == PlacementStatus.onboarded:
             candidate.status = CandidateStatus.placed
             active = db.execute(
                 select(Placement).where(
@@ -282,7 +322,11 @@ def update_placement_status(
             ).scalars()
             if len(list(active)) >= jo.headcount:
                 jo.status = JobOrderStatus.filled
-        elif new_status == PlacementStatus.cancelled and candidate.status in (
+        elif new_status in (
+            PlacementStatus.cancelled,
+            PlacementStatus.rejected,
+        ) and candidate.status in (
+            CandidateStatus.screening,
             CandidateStatus.interview,
             CandidateStatus.offered,
         ):
@@ -418,6 +462,11 @@ def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn
     )
 
     candidate.status = CandidateStatus.offered
+    # PRD v3.1 Patch 2: sebelum ini Placement dibuat langsung dgn status
+    # default `proposed`, jadi tidak perlu transisi eksplisit di sini. Sekarang
+    # default-nya `sourced` -> wajib set eksplisit, kalau tidak placement tidak
+    # akan pernah maju ke `proposed` meski surat penawaran sudah terkirim.
+    placement.status = PlacementStatus.proposed
     if jo.status in (JobOrderStatus.open, JobOrderStatus.screening, JobOrderStatus.interview):
         jo.status = JobOrderStatus.offering
     db.commit()
@@ -496,6 +545,7 @@ def create_interview(
         scheduled_at=payload.scheduled_at,
         location=payload.location,
         meeting_url=payload.meeting_url,
+        interview_type=payload.interview_type,
         created_by=created_by,
     )
     db.add(sched)

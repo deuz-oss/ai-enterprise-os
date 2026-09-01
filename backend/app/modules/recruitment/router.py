@@ -52,6 +52,12 @@ def create_job_order(payload: JobOrderCreate, db: Session = Depends(get_db)):
     return service.create_job_order(db, payload)
 
 
+@router.get("/job-orders/stale", response_model=list[JobOrderOut])
+def list_stale_job_orders(db: Session = Depends(get_db)):
+    """JO yang belum filled dan sudah >=30 hari sejak request_date (PRD v3.1 Patch 3)."""
+    return service.list_stale_job_orders(db)
+
+
 @router.get("/job-orders/{jo_id}", response_model=JobOrderOut)
 def get_job_order(jo_id: str, db: Session = Depends(get_db)):
     return service.get_job_order(db, jo_id)
@@ -134,7 +140,13 @@ def get_offering_summary(db: Session = Depends(get_db)):
 
 @router.patch("/placements/{placement_id}", response_model=PlacementOut)
 def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = Depends(get_db)):
-    return service.update_placement_status(db, placement_id, payload.status)
+    return service.update_placement_status(
+        db,
+        placement_id,
+        payload.status,
+        ojt_start_date=payload.ojt_start_date,
+        ojt_end_date=payload.ojt_end_date,
+    )
 
 
 @router.post("/placements/{placement_id}/offering")

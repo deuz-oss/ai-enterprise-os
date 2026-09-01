@@ -15,6 +15,14 @@ export interface JobOrder {
   salary_max: number | null;
   due_date: string | null;
   status: string;
+  request_id: string | null;
+  request_date: string;
+  area: string | null;
+  contract_duration_months: number | null;
+  gross_salary: number | null;
+  business_status: string;
+  requires_ojt: boolean;
+  is_stale: boolean;
 }
 
 interface MatchCandidateRow {
@@ -41,6 +49,15 @@ const BADGE_COLORS: Record<string, string> = {
   offering: "pill p-yellow",
   filled: "pill p-green",
   closed: "pill p-gray",
+};
+
+const BUSINESS_STATUSES = ["dibuka", "ditahan", "dibatalkan", "terisi"];
+
+const BUSINESS_STATUS_COLORS: Record<string, string> = {
+  dibuka: "pill p-blue",
+  ditahan: "pill p-yellow",
+  dibatalkan: "pill p-red",
+  terisi: "pill p-green",
 };
 
 export default function JobOrders() {
@@ -80,6 +97,12 @@ export default function JobOrders() {
     onSuccess: invalidate,
   });
 
+  const changeBusinessStatus = useMutation({
+    mutationFn: ({ id, business_status }: { id: string; business_status: string }) =>
+      api.patch(`/recruitment/job-orders/${id}`, { business_status }),
+    onSuccess: invalidate,
+  });
+
   const match = useMutation({
     mutationFn: (id: string) =>
       api.post<MatchItem[]>(`/recruitment/job-orders/${id}/match`, { top_k: 20 }),
@@ -97,6 +120,12 @@ export default function JobOrders() {
       salary_min: Number(form.get("salary_min")) || null,
       salary_max: Number(form.get("salary_max")) || null,
       due_date: form.get("due_date") || null,
+      request_id: form.get("request_id") || null,
+      request_date: form.get("request_date") || null,
+      area: form.get("area") || null,
+      contract_duration_months: Number(form.get("contract_duration_months")) || null,
+      gross_salary: Number(form.get("gross_salary")) || null,
+      requires_ojt: form.get("requires_ojt") === "on",
     });
   }
 
@@ -130,6 +159,31 @@ export default function JobOrders() {
           <input name="salary_min" type="number" placeholder="Gaji min (Rp)" className="input" />
           <input name="salary_max" type="number" placeholder="Gaji max (Rp)" className="input" />
           <input name="due_date" type="date" placeholder="Target tanggal" className="input" />
+          <input
+            name="request_id"
+            placeholder="Request ID (kosongkan untuk auto-generate)"
+            className="input"
+          />
+          <input
+            name="request_date"
+            type="date"
+            defaultValue={new Date().toISOString().slice(0, 10)}
+            title="Request Date"
+            className="input"
+          />
+          <input name="area" placeholder="Area" className="input" />
+          <input
+            name="contract_duration_months"
+            type="number"
+            min={1}
+            placeholder="Durasi kontrak (bulan)"
+            className="input"
+          />
+          <input name="gross_salary" type="number" placeholder="Gross Salary (Rp)" className="input" />
+          <label className="input flex items-center gap-2 text-sm">
+            <input name="requires_ojt" type="checkbox" className="h-4 w-4" />
+            Butuh OJT (On Job Training)
+          </label>
           <input name="requirements" placeholder="Kualifikasi" className="input sm:col-span-3" />
           <button type="submit" disabled={createJO.isPending} className="btn sm:col-span-3">
             Simpan Job Order
@@ -141,19 +195,34 @@ export default function JobOrders() {
         <table className="w-full">
           <thead className="border-b border-[var(--n-border)] bg-[var(--n-hover)]">
             <tr>
+              <th className="th">Request ID</th>
               <th className="th">Posisi</th>
               <th className="th">Klien</th>
+              <th className="th">Area</th>
               <th className="th">Kebutuhan</th>
               <th className="th">Range Gaji</th>
               <th className="th">Status</th>
+              <th className="th">Status Bisnis</th>
               <th className="th">AI Matching</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--n-border)]">
             {(jobOrders ?? []).map((jo) => (
               <tr key={jo.id} className="hover:bg-[var(--n-hover)]">
+                <td className="td">
+                  {jo.request_id ?? "-"}
+                  {jo.is_stale && (
+                    <span
+                      className="pill p-red ml-1 text-[10px]"
+                      title={`Request Date: ${jo.request_date} — belum filled >=30 hari`}
+                    >
+                      &gt;30 hari
+                    </span>
+                  )}
+                </td>
                 <td className="td font-medium">{jo.title}</td>
                 <td className="td">{clientName(jo.client_id)}</td>
+                <td className="td">{jo.area ?? "-"}</td>
                 <td className="td">{jo.headcount} orang</td>
                 <td className="td">
                   {formatRupiah(jo.salary_min)} – {formatRupiah(jo.salary_max)}
@@ -165,6 +234,21 @@ export default function JobOrders() {
                     className={`cursor-pointer border-0 ${BADGE_COLORS[jo.status]}`}
                   >
                     {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="td">
+                  <select
+                    value={jo.business_status}
+                    onChange={(e) =>
+                      changeBusinessStatus.mutate({ id: jo.id, business_status: e.target.value })
+                    }
+                    className={`cursor-pointer border-0 ${BUSINESS_STATUS_COLORS[jo.business_status]}`}
+                  >
+                    {BUSINESS_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -187,7 +271,7 @@ export default function JobOrders() {
             ))}
             {jobOrders?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center text-[var(--n-text-muted)]">
+                <td colSpan={9} className="td py-8 text-center text-[var(--n-text-muted)]">
                   Belum ada job order.
                 </td>
               </tr>

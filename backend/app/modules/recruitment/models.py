@@ -3,6 +3,7 @@ from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -29,6 +30,16 @@ class JobOrderStatus(str, enum.Enum):
     closed = "closed"
 
 
+class JobOrderBusinessStatus(str, enum.Enum):
+    """Status bisnis JO level tinggi (PRD v3.1 Patch 3) — berbeda dari
+    JobOrderStatus di atas yang melacak tahap pipeline rekrutmen internal."""
+
+    open = "dibuka"
+    on_hold = "ditahan"
+    cancelled = "dibatalkan"
+    filled = "terisi"
+
+
 class CandidateStatus(str, enum.Enum):
     new = "baru"
     screening = "screening"
@@ -40,9 +51,27 @@ class CandidateStatus(str, enum.Enum):
 
 
 class PlacementStatus(str, enum.Enum):
+    """Pipeline sourcing->onboarding per pasangan kandidat-JO (PRD v3.1 Patch 2).
+
+    8 tahap baru ditambah SEBELUM `proposed` — makna proposed/accepted/
+    onboarded/cancelled TIDAK berubah (tetap dipakai alur offering/esign
+    yang sudah ada). `sourced` jadi status default baru saat Placement
+    dibuat (sebelumnya `proposed`) — Placement sekarang dibuat sejak momen
+    kandidat ditautkan ke JO (sourcing), bukan baru saat siap ditawari.
+    """
+
+    sourced = "disourcing"
+    screening = "screening"
+    interview_internal = "interview_rekruter"
+    submitted = "disubmit"
+    sent_to_client = "dikirim_ke_klien"
+    client_screening = "screening_klien"
+    interview_client = "interview_klien"
+    ojt = "ojt"
     proposed = "diusulkan"
     accepted = "disetujui_klien"
     onboarded = "onboarded"
+    rejected = "gagal"
     cancelled = "dibatalkan"
 
 
@@ -51,6 +80,13 @@ class InterviewStatus(str, enum.Enum):
     done = "selesai"
     no_show = "tidak_hadir"
     cancelled = "dibatalkan"
+
+
+class InterviewType(str, enum.Enum):
+    """Interview rekruter internal vs interview user oleh klien (PRD v3.1 Patch 2)."""
+
+    internal = "internal"
+    klien = "klien"
 
 
 class InterviewSchedule(TenantMixin, Base):
@@ -68,6 +104,11 @@ class InterviewSchedule(TenantMixin, Base):
     status: Mapped[InterviewStatus] = mapped_column(
         Enum(InterviewStatus, native_enum=False, length=50),
         default=InterviewStatus.scheduled,
+        index=True,
+    )
+    interview_type: Mapped[InterviewType] = mapped_column(
+        Enum(InterviewType, native_enum=False, length=20),
+        default=InterviewType.internal,
         index=True,
     )
     feedback: Mapped[str | None] = mapped_column(Text, default=None)
@@ -93,6 +134,19 @@ class JobOrder(TenantMixin, Base):
         default=JobOrderStatus.open,
         index=True,
     )
+    # PRD v3.1 Patch 3 — field operasional tambahan
+    request_id: Mapped[str | None] = mapped_column(String(50), index=True)
+    request_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    area: Mapped[str | None] = mapped_column(String(120))
+    contract_duration_months: Mapped[int | None] = mapped_column(Integer)
+    gross_salary: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
+    business_status: Mapped[JobOrderBusinessStatus] = mapped_column(
+        Enum(JobOrderBusinessStatus, native_enum=False, length=20),
+        default=JobOrderBusinessStatus.open,
+        index=True,
+    )
+    # PRD v3.1 Patch 2 — kondisional per JO, bukan per Client
+    requires_ojt: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -100,6 +154,13 @@ class JobOrder(TenantMixin, Base):
 
     client = relationship("Client", lazy="joined")
     placements: Mapped[list["Placement"]] = relationship(back_populates="job_order")
+
+    @property
+    def is_stale(self) -> bool:
+        """Alert: JO masih dibuka DAN request_date >= 30 hari lalu (PRD v3.1 Patch 3)."""
+        if self.business_status != JobOrderBusinessStatus.open:
+            return False
+        return (date.today() - self.request_date).days >= 30
 
 
 class Candidate(TenantMixin, Base):
@@ -142,8 +203,14 @@ class Placement(TenantMixin, Base):
     offered_salary: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
     start_date: Mapped[date | None] = mapped_column(Date, default=None)
     status: Mapped[PlacementStatus] = mapped_column(
-        Enum(PlacementStatus, native_enum=False, length=50), default=PlacementStatus.proposed
+        # PRD v3.1 Patch 2: default sekarang `sourced` (bukan `proposed`) —
+        # Placement dibuat sejak momen sourcing, bukan cuma saat siap ditawari.
+        Enum(PlacementStatus, native_enum=False, length=50),
+        default=PlacementStatus.sourced,
     )
+    # PRD v3.1 Patch 2 — OJT kondisional, dilewati kalau JobOrder.requires_ojt=False
+    ojt_start_date: Mapped[date | None] = mapped_column(Date, default=None)
+    ojt_end_date: Mapped[date | None] = mapped_column(Date, default=None)
     # PRD v3.0 §4 aksi "Offering": surat penawaran PDF dibrandingi + esign.
     offering_letter_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
     offering_signed_at: Mapped[datetime | None] = mapped_column(
