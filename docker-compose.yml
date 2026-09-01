@@ -57,6 +57,85 @@ services:
     ports:
       - "3000:80"
 
+  # ---- AI Interview Fase 2: percakapan suara real-time, self-hosted ----
+  # (PRD "Berikutnya" §5) -- TIDAK start dengan `docker compose up` biasa,
+  # butuh eksplisit `docker compose --profile voice up`. GPU direkomendasikan
+  # untuk stt-server/tts-server (latensi rendah); tanpa GPU tetap jalan di
+  # CPU untuk verifikasi wiring, jauh lebih lambat dari real-time.
+
+  livekit:
+    image: livekit/livekit-server:v1.10.0
+    profiles: ["voice"]
+    command: ["--dev", "--bind", "0.0.0.0"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_RTC_PORT_RANGE_START: "51000"
+      LIVEKIT_RTC_PORT_RANGE_END: "51020"
+    ports:
+      - "7880:7880" # HTTP/WebSocket (client & server API)
+      - "7881:7881" # WebRTC TCP fallback
+      - "51000-51020:51000-51020/udp" # media WebRTC (range kecil, hindari bentrok port dinamis app lain spt Teams; sesuaikan di mesin lain kalau masih bentrok)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7880"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  stt-server:
+    image: fedirz/faster-whisper-server:latest-cpu
+    profiles: ["voice"]
+    environment:
+      WHISPER__MODEL: "${STT_MODEL:-Systran/faster-whisper-small}"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - stt_model_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+
+  tts-server:
+    build: ./agent/tts-server
+    profiles: ["voice"]
+    ports:
+      - "127.0.0.1:8002:8000"
+    volumes:
+      - tts_model_cache:/srv/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+
+  ai-interview-agent:
+    build: ./agent
+    profiles: ["voice"]
+    environment:
+      BACKEND_API_URL: http://backend:8000/api/v1
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      STT_BASE_URL: http://stt-server:8000/v1
+      TTS_BASE_URL: http://tts-server:8000/v1
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+    depends_on:
+      livekit:
+        condition: service_healthy
+      stt-server:
+        condition: service_healthy
+      tts-server:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
 volumes:
   pgdata:
   minio:
+  stt_model_cache:
+  tts_model_cache:

@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     ai_model: str = "gpt-4o-mini"
     ai_embedding_model: str = "text-embedding-3-small"
 
+    # AI Interview Fase 2 — percakapan suara real-time, self-hosted (PRD
+    # "Berikutnya" §5). LIVEKIT_URL kosong => fitur voice interview nonaktif
+    # (endpoint /voice/start memberi 503), sama pola dengan AI_BASE_URL.
+    # LLM tetap lewat ai_base_url di atas -- SENGAJA tidak ada model/key
+    # terpisah di sini, cuma suara (STT lewat stt_base_url, TTS lewat
+    # tts_base_url) yang self-hosted.
+    livekit_url: str | None = None
+    livekit_api_key: str | None = None
+    livekit_api_secret: str | None = None
+    stt_base_url: str | None = None
+    tts_base_url: str | None = None
+
     # Integrasi tanda tangan elektronik. Nilai ESIGN_PROVIDER:
     # "" (nonaktif) | "sandbox" (simulasi lokal) | "privy" (PrivyID produksi)
     esign_provider: str = ""
@@ -88,6 +100,11 @@ class Settings(BaseSettings):
         "storage_secret_key",
         "ai_base_url",
         "ai_api_key",
+        "livekit_url",
+        "livekit_api_key",
+        "livekit_api_secret",
+        "stt_base_url",
+        "tts_base_url",
         "privy_api_url",
         "privy_merchant_key",
         "privy_username",
@@ -136,6 +153,16 @@ class Settings(BaseSettings):
     @property
     def ai_configured(self) -> bool:
         return bool(self.ai_base_url)
+
+    @property
+    def voice_interview_configured(self) -> bool:
+        return bool(
+            self.livekit_url
+            and self.livekit_api_key
+            and self.livekit_api_secret
+            and self.stt_base_url
+            and self.tts_base_url
+        )
 
     @property
     def esign_configured(self) -> bool:

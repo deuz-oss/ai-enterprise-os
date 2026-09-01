@@ -54,6 +54,8 @@ def create_app() -> FastAPI:
     from app.modules.ai.router import (
         recruitment_router as ai_recruitment_router,
     )
+    from app.modules.ai_interview.router import public_router as ai_interview_public_router
+    from app.modules.ai_interview.router import router as ai_interview_router
     from app.modules.apps.router import router as apps_router
     from app.modules.attendance.router import router as attendance_router
     from app.modules.audit.router import router as audit_router
@@ -112,6 +114,13 @@ def create_app() -> FastAPI:
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("recruitment"))],
     )
+    app.include_router(
+        ai_interview_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("recruitment"))],
+    )
+    # Sesi kandidat via invite_token: publik, tanpa guard lisensi/JWT (pola sama job_portal).
+    app.include_router(ai_interview_public_router, prefix="/api/v1")
     app.include_router(
         ai_recruitment_router,
         prefix="/api/v1",

@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-01
+**Terakhir diperbarui:** 2026-09-02
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -14,6 +14,16 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 > yang jadi rujukan status implementasi terkini.
 
 > **Changelog**
+> - **2026-09-02** — **AI Interview mode async teks selesai** (Fase 19,
+>   lihat §5) — template+kriteria, undang kandidat, sesi publik via token,
+>   skor AI + gate review manusia wajib. **Keputusan baru untuk Fase 2**
+>   (percakapan suara real-time): setelah dievaluasi ulang terhadap 3 vendor
+>   voice-AI (Vapi/Retell/Tavus — semua punya biaya per-menit + risiko
+>   dukungan Bahasa Indonesia), diputuskan **bangun sendiri self-hosted**
+>   (LiveKit+Whisper+Kokoro) — membalik rekomendasi "beli" di riset
+>   arsitektur awal Fase 19, khusus untuk kapabilitas voice, bukan reversal
+>   strategi AI tenant secara umum (Fase 17 tetap berlaku untuk fitur AI
+>   berbasis teks). Implementasi belum dimulai.
 > - **v3.1 (2026-09-01)** — **5 patch atas v3.0** (audit gap + riset arsitektur
 >   pembanding, detail keputusan di `PRD-v3.1-Revisi.md`): **AI Usage
 >   Metering** (`ai_usage_events`, instrumentasi sentral di `core/llm.py`,
@@ -409,24 +419,117 @@ melengkapinya):
   (severity warning, tidak memblokir closing); plus endpoint batch
   `POST /assets/depreciate-period` supaya tidak perlu klik aset satu-satu.
 
-### Berikutnya — AI Interview *(v3.1 Patch 4 — riset & desain selesai, KODE BELUM ADA)*
+### Fase 19 — AI Interview, Mode Async Teks — ✅ Selesai (2026-09-02)
 
 Kapabilitas penilaian kandidat berbasis AI di bawah Talent Cloud, pelengkap
-`InterviewSchedule` manual yang sudah ada. Riset arsitektur (5 repo
-open-source pembanding) dan desain skema tabel/endpoint penuh sudah
-selesai dan tersimpan di plan file kerja — **belum ada satu baris kode pun**
-(`backend/app/modules/ai_interview/` belum eksis). Ringkasan arah:
+`InterviewSchedule` manual yang sudah ada. Detail keputusan di
+`PRD-v3.1-Revisi.md` Patch 4.
 
-- 2 entitas baru: `AIInterviewTemplate` (definisi: pertanyaan bertipe +
-  kriteria penilaian) terpisah dari `AIInterviewResponse` (instance per
-  kandidat, akses via token tanpa akun — pola sama seperti Job Portal).
-- **MVP mode async** (kandidat jawab teks/rekaman, dinilai belakangan) —
-  BUKAN voice real-time (kompleksitas infra jauh lebih tinggi; kalau nanti
-  dibutuhkan, rekomendasi riset adalah "beli" kapabilitas voice dari vendor
-  pihak ketiga, bukan bangun sendiri).
+- 2 entitas: `AIInterviewTemplate` (definisi: pertanyaan bertipe + kriteria
+  penilaian) terpisah dari `AIInterviewResponse` (instance per kandidat,
+  akses via token tanpa akun — pola sama seperti Job Portal).
+- **Mode async teks**: kandidat baca pertanyaan → ketik jawaban di halaman
+  publik tanpa login (`/ai-interview/session/{token}`) → submit → AI menilai
+  otomatis begitu submit (skor per-kriteria + narasi), tercatat di
+  `ai_usage_events` (Fase 17) seperti fitur AI lain.
 - Skor AI **wajib** direview manusia (`review_status`) sebelum final —
   tidak pernah otomatis jadi keputusan hire/reject, mengikuti prinsip
   `CONFIDENCE_THRESHOLD` yang sudah dipakai di CV Intake.
+- Sisi staf (`/ai-interview`): CRUD template, builder pertanyaan/kriteria,
+  undang kandidat (email otomatis), panel review skor.
+
+**Belum termasuk** (lihat "Berikutnya" di bawah): mode rekaman
+audio/video dan percakapan suara real-time — keduanya cuma nilai enum
+`mode` yang disiapkan, belum ada implementasi.
+
+### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time, Self-Hosted *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
+
+**Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
+voice real-time) — setelah didiskusikan ulang (termasuk pertanyaan
+eksplisit "suara saja atau harus ada wajah AI?" — dijawab **suara saja,
+TANPA video avatar**, karena tidak ada satu pun dari 5 repo pembanding
+yang pernah membangun video avatar self-hosted), Brian memutuskan
+**bangun sendiri** (self-hosted), bukan pakai vendor voice-AI pihak
+ketiga (Vapi/Retell/Tavus dievaluasi, semua punya biaya per-menit +
+risiko dukungan Bahasa Indonesia yang tidak sejelas dijanjikan). Alasan:
+hindari biaya per-menit & lock-in vendor pihak ketiga untuk kapabilitas
+yang akan dipakai berulang kali oleh volume interview yang berpotensi
+besar — **berbeda** dari keputusan "bayar untuk performa" di Fase 17 (AI
+Usage Metering) yang tetap berlaku untuk fitur AI berbasis teks
+(screening, matching, narasi akuntansi, dst.) — pembalikan ini spesifik
+untuk kapabilitas voice real-time saja, bukan reversal strategi AI
+tenant secara umum. **LLM/reasoning TETAP OpenAI** (`core/llm.py`,
+`AI_BASE_URL` yang sama) — cuma STT+TTS yang self-hosted, GPU yang
+dibutuhkan jauh lebih kecil daripada self-host LLM juga.
+
+**Stack** (direplikasi dari pola `OpenInterview`, salah satu dari 5 repo
+pembanding yang diriset Fase 19 — **satu penyesuaian** dari riset awal):
+
+| Lapisan | Komponen | Catatan |
+|---|---|---|
+| Transport real-time | LiveKit (self-hosted, `docker-compose.yml` service `livekit`) | WebRTC audio browser kandidat ↔ server, dispatch eksplisit per-sesi |
+| Speech-to-Text | `faster-whisper-server` (image siap pakai, service `stt-server`) | CPU-mode default di dev; GPU direkomendasikan produksi |
+| Reasoning/jawaban | LLM yang sudah ada (`core/llm.py`) | Reuse penuh via `livekit-plugins-openai` custom `base_url`, tidak ada komponen baru |
+| Text-to-Speech | **`facebook/mms-tts-ind`** (BUKAN Kokoro — service `tts-server`, `agent/tts-server/`) | **Penyesuaian dari riset awal**: Kokoro TIDAK dukung Bahasa Indonesia sama sekali (issue GitHub terbuka sejak Jan 2025, belum dijawab) — ditemukan lewat riset langsung, bukan asumsi |
+
+**Kode sudah ditulis** (backend: `ai_interview/service.py`
+`start_voice_session`/`get_voice_context`/`complete_voice_session` +
+endpoint `POST/GET .../voice/*`; worker baru `agent/main.py` — LiveKit
+Agents, proses long-running pertama di codebase ini; `agent/tts-server/`;
+frontend `AIInterviewVoiceCall.tsx` — `livekit-client`) — API livekit-agents
+diverifikasi LANGSUNG terhadap versi ter-install (module benar-benar
+di-import + `AgentServer`/tool registration dites jalan), bukan tebakan
+dari dokumentasi.
+
+**Verifikasi Docker penuh sudah dijalankan** (`docker compose --profile
+voice up`, 2026-09-02) — bukan cuma build image, tapi end-to-end nyata:
+login staf → buat template `realtime_voice` → undang kandidat → panggil
+`POST .../voice/start` (kode publik, tanpa auth) sungguhan → LiveKit
+benar-benar mint access token & dispatch agent → `ai-interview-agent`
+worker menerima job, join room yang benar, membuka sesi WebRTC nyata
+(ICE candidate bertukar, connection quality "EXCELLENT" di log LiveKit)
+→ TTS (`facebook/mms-tts-ind`) mensintesis audio Bahasa Indonesia
+sungguhan tanpa error. **3 bug nyata ditemukan & diperbaiki** lewat
+proses ini (bukan cuma dugaan dari baca kode):
+1. Port UDP media LiveKit (`50000-50100`) bentrok dengan proses lain di
+   host (MS Teams memegang port dinamis di rentang itu) — dipersempit ke
+   `51000-51020` (adjustable per mesin, dicatat di komentar
+   `docker-compose.yml`).
+2. Healthcheck `stt-server` pakai `wget` — image `faster-whisper-server`
+   (basis Ubuntu) tidak punya `wget` maupun `python`, cuma `python3`.
+   Diperbaiki, service sekarang benar-benar healthy (bukan cuma "jalan
+   tapi ditandai unhealthy").
+3. **Bug fungsional nyata**: `tts-server` (`agent/tts-server/main.py`)
+   menulis WAV 32-bit float (`scipy.io.wavfile.write` dari array
+   `float32` mentah) — `livekit-agents`' WAV decoder cuma dukung PCM
+   16-bit, jadi SETIAP kalimat yang coba disintesis gagal dengan
+   `ValueError: Unsupported WAV bits per sample: 32`. Ini baru ketahuan
+   dari log agent worker sungguhan saat live-dispatch — tidak akan pernah
+   ketahuan dari review kode atau test unit tanpa pipeline nyata jalan.
+   Diperbaiki (konversi eksplisit ke `int16` PCM sebelum ditulis) — setelah
+   fix, agent berhasil mensintesis audio tanpa error decode.
+
+**Contoh audio nyata pertama** dari `facebook/mms-tts-ind` (CPU, bukan
+GPU) sudah dikirim ke Brian untuk didengar langsung — bukti kualitas
+suara sekarang bisa mulai dinilai manusia, meskipun performa/latensi
+CPU jauh dari representatif produksi.
+
+**Yang BELUM divalidasi** (mesin dev tanpa GPU NVIDIA — dikonfirmasi via
+`Get-CimInstance Win32_VideoController`, cuma Intel iGPU): latensi
+percakapan real (target <500ms — sintesis satu kalimat pendek di CPU
+teramati perlu beberapa detik, jauh dari real-time), turn-taking/voice-
+activity-detection terasa natural atau tidak dengan latensi asli, dan
+sesi voice utuh dengan kandidat sungguhan berbicara lewat mikrofon
+browser (verifikasi sejauh ini pakai dispatch via curl, bukan browser
+dengan audio nyata dari manusia) — semua butuh server ber-GPU + pengujian
+manusia sungguhan. Fitur ini **jangan dianggap siap dipakai kandidat
+sungguhan** sampai hal-hal ini divalidasi ulang.
+
+**Status**: kode ditulis, wiring end-to-end TERBUKTI benar via Docker
+sungguhan (bukan cuma correctness statis) — token mint, agent dispatch,
+room join, sesi WebRTC nyata, dan sintesis TTS semuanya dikonfirmasi
+jalan. Performa/kualitas real menunggu akses server ber-GPU + uji
+manusia. Belum di-commit (menunggu instruksi eksplisit).
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
@@ -794,17 +897,28 @@ Publik (tanpa login, per-tenant white-label):
 - Chat adalah kanal operasional harian, bukan pengganti dokumen legal; retensi
   pesan mengikuti kebijakan tenant. Moderasi menjadi tanggung jawab admin
   tenant — sistem menyediakan alatnya (hapus pesan, lapor, audit log).
-- **Strategi model AI (v3.1)**: AEOS memakai model berbayar/frontier untuk
-  performa terbaik, bukan wajib self-hosted gratis — biaya ditagih ke klien
-  + margin (via SKU AI Add-on, §4.3), diukur nyata lewat `ai_usage_events`
-  (Fase 17). Self-hosted (Ollama/vLLM) tetap opsi arsitektur terbuka untuk
-  klien yang mensyaratkan data tidak keluar infrastruktur sendiri (`core/
-  llm.py` sudah provider-agnostic, kompatibel skema OpenAI apa pun) — belum
-  jadi prioritas eksekusi.
+- **Strategi model AI (v3.1) — fitur berbasis teks**: AEOS memakai model
+  berbayar/frontier untuk performa terbaik, bukan wajib self-hosted gratis —
+  biaya ditagih ke klien + margin (via SKU AI Add-on, §4.3), diukur nyata
+  lewat `ai_usage_events` (Fase 17). Ini tetap berlaku untuk screening,
+  matching, ekstraksi dokumen, narasi akuntansi, dan penilaian AI Interview
+  mode teks (Fase 19). Self-hosted (Ollama/vLLM) tetap opsi arsitektur
+  terbuka untuk klien yang mensyaratkan data tidak keluar infrastruktur
+  sendiri (`core/llm.py` sudah provider-agnostic) — belum jadi prioritas
+  eksekusi untuk fitur teks.
+- **Pengecualian khusus voice real-time (2026-09-02)**: AI Interview Fase 2
+  (percakapan suara, lihat penutup §5) **dibangun self-hosted**
+  (LiveKit+Whisper+Kokoro), BUKAN beli dari vendor voice-AI pihak ketiga —
+  kebalikan dari prinsip di atas, sengaja, khusus kapabilitas ini saja
+  (alasan bisnis: hindari biaya per-menit + lock-in vendor untuk kapasitas
+  yang berpotensi dipakai volume tinggi). Jangan generalisasi keputusan ini
+  ke fitur AI lain tanpa instruksi eksplisit — default tetap "bayar untuk
+  performa" di atas.
 - **Job Order tanpa cascade guard (gap diketahui, belum diperbaiki)**:
   `DELETE /job-orders/{id}` mengembalikan 500 kalau JO masih punya
   `Placement`/`InterviewSchedule` terkait. Dicatat sebagai temuan, bukan
   disengaja — perlu guard/cascade eksplisit sebelum jadi masalah produksi.
-- **AI Interview (Fase berikutnya) belum punya kode** — desain skema/endpoint
-  sudah final (lihat penutup §5), tapi jangan diasumsikan tersedia sampai
-  benar-benar diimplementasikan.
+- **AI Interview Fase 2 (voice real-time) belum punya kode** — keputusan
+  stack sudah diambil (lihat penutup §5), implementasi belum dimulai;
+  jangan diasumsikan tersedia sampai benar-benar diimplementasikan. Mode
+  teks (Fase 19) sudah live dan bisa dipakai.

@@ -9,6 +9,7 @@ import app.core.ai_usage  # noqa: F401
 import app.core.ratelimit  # noqa: F401
 import app.modules.accounting.models  # noqa: F401
 import app.modules.ai.models  # noqa: F401
+import app.modules.ai_interview.models  # noqa: F401
 import app.modules.attendance.models  # noqa: F401
 import app.modules.audit.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401

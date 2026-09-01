@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Accounting from "./pages/Accounting";
+import AIInterview from "./pages/AIInterview";
+import AIInterviewSession from "./pages/AIInterviewSession";
 import Apps from "./pages/Apps";
 import Audit from "./pages/Audit";
 import Candidates from "./pages/Candidates";
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/careers/track/:token" element={<CareerTrack />} />
           <Route path="/careers/:tenantSlug/:jobId" element={<CareerDetail />} />
           <Route path="/careers/:tenantSlug" element={<CareerListing />} />
+          <Route path="/ai-interview/session/:token" element={<AIInterviewSession />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/apps" element={<Apps />} />
@@ -55,6 +58,7 @@ export default function App() {
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/talent-pool" element={<TalentPool />} />
+            <Route path="/ai-interview" element={<AIInterview />} />
             <Route path="/pages" element={<Pages />} />
             <Route path="/pages/:id" element={<Pages />} />
             <Route path="/workforce-cloud" element={<WorkforceCloudOverview />} />

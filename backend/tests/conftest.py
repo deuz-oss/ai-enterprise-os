@@ -11,6 +11,14 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only")
 # monkeypatch these on the Settings singleton explicitly (see test_ai_usage.py).
 os.environ["AI_BASE_URL"] = ""
 os.environ["AI_API_KEY"] = ""
+# Same reasoning for AI Interview Fase 2 voice infra -- force "not configured"
+# so tests never attempt a real LiveKit dispatch call even if a developer's
+# .env has real LIVEKIT_*/STT_BASE_URL/TTS_BASE_URL set.
+os.environ["LIVEKIT_URL"] = ""
+os.environ["LIVEKIT_API_KEY"] = ""
+os.environ["LIVEKIT_API_SECRET"] = ""
+os.environ["STT_BASE_URL"] = ""
+os.environ["TTS_BASE_URL"] = ""
 
 import pytest
 from app.core.database import Base, get_db
