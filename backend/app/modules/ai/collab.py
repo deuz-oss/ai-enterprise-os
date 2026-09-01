@@ -285,7 +285,10 @@ def _narrate(question: str, context: str, is_worker: bool) -> str:
     )
     try:
         reply = chat_completion(
-            system, f"DATA:\n{context}\n\nPERTANYAAN: {question}", json_mode=False
+            system,
+            f"DATA:\n{context}\n\nPERTANYAAN: {question}",
+            json_mode=False,
+            feature="ai.collab.assistant",
         )
         return str(reply).strip()[:2000]
     except Exception:  # noqa: BLE001 - fallback tanpa LLM
@@ -316,7 +319,12 @@ def summarize_messages(db: Session, user, contents: list[str]) -> dict:
         "beserta pemiliknya bila disebut. Abaikan basa-basi."
     )
     try:
-        summary = chat_completion(system, f"PESAN THREAD:\n{joined}", json_mode=False)
+        summary = chat_completion(
+            system,
+            f"PESAN THREAD:\n{joined}",
+            json_mode=False,
+            feature="ai.collab.summarize_thread",
+        )
         summary = str(summary).strip()[:2000]
         llm = True
     except Exception:  # noqa: BLE001

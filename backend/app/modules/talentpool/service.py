@@ -138,10 +138,13 @@ def extract_profile(db: Session, data: bytes, kind: CvDocKind) -> dict:
             "Ekstrak data CV dari dokumen hasil scan ini.",
             image_b64=base64.b64encode(data).decode(),
             mime_type=mime,
+            feature="talentpool.cv_intake",
         )
     else:
         text = _docx_text(data) if kind == CvDocKind.docx else _pdf_text(data)
-        raw = chat_completion(_EXTRACTION_PROMPT, f"CV:\n{text[:24000]}")
+        raw = chat_completion(
+            _EXTRACTION_PROMPT, f"CV:\n{text[:24000]}", feature="talentpool.cv_intake"
+        )
     return raw if isinstance(raw, dict) else {}
 
 

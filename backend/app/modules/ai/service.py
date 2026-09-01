@@ -142,7 +142,7 @@ def screen_candidate(
         f"{target}\n\nPROFIL KANDIDAT:\n{_candidate_block(candidate)}\n\nISI CV:\n{cv_text}"
     )
 
-    result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True)
+    result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True, feature="ai.screening")
     data = result if isinstance(result, dict) else {}
 
     try:

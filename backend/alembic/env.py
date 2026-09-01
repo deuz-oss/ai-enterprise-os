@@ -1,8 +1,11 @@
 import os
 from logging.config import fileConfig
 
-# Satu-satunya model di luar app.modules.* — rate-limit itu concern
-# cross-cutting core/, bukan modul bisnis (lihat core/ratelimit.py).
+# Model lintas core/ (dipanggil langsung dari core/llm.py, titik sentral
+# semua panggilan AI — tidak ada satu modul bisnis yang jadi pemilik alami
+# karena dipanggil dari 8 modul berbeda). Exception kedua setelah
+# app.core.ratelimit ke konvensi "hanya import app.modules.*".
+import app.core.ai_usage  # noqa: F401
 import app.core.ratelimit  # noqa: F401
 import app.modules.accounting.models  # noqa: F401
 import app.modules.ai.models  # noqa: F401

@@ -327,6 +327,7 @@ def _try_llm_narration(metrics_text: str, period_label: str) -> str:
             "Gunakan angka dari data, jangan mengarang.",
             metrics_text,
             json_mode=False,
+            feature="accounting.narration",
         )
         return str(result).strip()[:2000]
     except Exception:
@@ -471,6 +472,7 @@ def _try_llm_report_answer(question: str, context: str) -> str:
             "data yang diberikan, jangan mengarang.",
             f"DATA:\n{context}\n\nPERTANYAAN: {question}",
             json_mode=False,
+            feature="accounting.report_qna",
         )
         return str(result).strip()[:2000]
     except Exception:
@@ -510,6 +512,7 @@ def ocr_extract_bill(db: Session, *, image_b64: str, mime_type: str) -> dict:
         user="Ekstrak data faktur dari gambar ini.",
         image_b64=image_b64,
         mime_type=mime_type,
+        feature="accounting.ocr_invoice",
     )
     data: dict = result if isinstance(result, dict) else {}
 

@@ -29,7 +29,7 @@ def db_engine():
 
 
 @pytest.fixture()
-def client(db_engine):
+def client(db_engine, monkeypatch):
     TestingSession = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
 
     def override_get_db():
@@ -38,6 +38,14 @@ def client(db_engine):
             yield db
         finally:
             db.close()
+
+    # `record_usage()` (core/ai_usage.py) buka `SessionLocal()` sendiri
+    # (ad-hoc, di luar DI FastAPI — lihat alasannya di modul itu) — tanpa
+    # ini, ia menulis ke engine global yang skemanya sengaja tidak dibuat
+    # saat app_env=test, bukan ke database in-memory per-test ini.
+    import app.core.ai_usage as ai_usage_module
+
+    monkeypatch.setattr(ai_usage_module, "SessionLocal", TestingSession)
 
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db

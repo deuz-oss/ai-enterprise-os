@@ -200,12 +200,17 @@ async def extract_job_order_document(db: Session, file: UploadFile) -> dict:
             "Ekstrak data Job Order dari dokumen hasil scan ini.",
             image_b64=base64.b64encode(data).decode(),
             mime_type=img_mime,
+            feature="recruitment.jo_intake",
         )
     else:
         from app.modules.talentpool.service import _docx_text, _pdf_text
 
         text = _docx_text(data) if kind == "docx" else _pdf_text(data)
-        raw = chat_completion(_JO_EXTRACTION_PROMPT, f"DOKUMEN JOB ORDER:\n{text[:24000]}")
+        raw = chat_completion(
+            _JO_EXTRACTION_PROMPT,
+            f"DOKUMEN JOB ORDER:\n{text[:24000]}",
+            feature="recruitment.jo_intake",
+        )
     parsed = raw if isinstance(raw, dict) else {}
 
     contract_start = _safe_date_str(parsed.get("contract_start_date"))
@@ -909,7 +914,11 @@ def _llm_rerank_explain(jo: JobOrder, entries: list[tuple[Candidate, dict]]) -> 
         ],
     }
     try:
-        result = chat_completion(system, json.dumps(user_payload, ensure_ascii=False))
+        result = chat_completion(
+            system,
+            json.dumps(user_payload, ensure_ascii=False),
+            feature="recruitment.match_explain",
+        )
         explanations = result.get("explanations", {}) if isinstance(result, dict) else {}
         return {str(k): str(v) for k, v in explanations.items()}
     except Exception:  # noqa: BLE001 - AI rerank tidak boleh mematahkan matching
@@ -946,7 +955,9 @@ def match_candidates(
     cand_vecs: list[list[float]] | None = None
     if ai_configured() and jo_text.strip():
         try:
-            vectors = embed_texts([jo_text] + [p["text"] for p in profiles])
+            vectors = embed_texts(
+                [jo_text] + [p["text"] for p in profiles], feature="recruitment.match_embedding"
+            )
             jo_vec, cand_vecs = vectors[0], vectors[1:]
         except Exception:  # noqa: BLE001 - AI gagal → fallback heuristik, jangan putus matching
             jo_vec, cand_vecs = None, None

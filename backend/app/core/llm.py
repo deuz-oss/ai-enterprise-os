@@ -20,6 +20,7 @@ import re
 import httpx
 from fastapi import HTTPException
 
+from app.core.ai_usage import record_usage
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,17 @@ def ai_configured() -> bool:
     return get_settings().ai_configured
 
 
-def chat_completion(system: str, user: str, *, json_mode: bool = True) -> dict | str:
+def chat_completion(
+    system: str, user: str, *, json_mode: bool = True, feature: str | None = None
+) -> dict | str:
     """Panggil endpoint /chat/completions dan kembalikan isinya.
 
     json_mode=True memaksa keluaran JSON object dan hasil dikembalikan
     sebagai dict yang sudah di-parse. Gagal apapun dilempar sebagai
     HTTPException (503 belum dikonfigurasi, 502 provider bermasalah).
+
+    `feature` melabeli panggilan ini untuk `ai_usage_events` (mis.
+    "recruitment.match_explain") — dipakai breakdown biaya per fitur.
     """
     settings = get_settings()
     if not settings.ai_configured:
@@ -55,11 +61,16 @@ def chat_completion(system: str, user: str, *, json_mode: bool = True) -> dict |
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
-    return _post_chat(payload, json_mode=json_mode)
+    return _post_chat(payload, json_mode=json_mode, call_type="chat", feature=feature)
 
 
 def vision_completion(
-    system: str, user: str, *, image_b64: str, mime_type: str = "image/png"
+    system: str,
+    user: str,
+    *,
+    image_b64: str,
+    mime_type: str = "image/png",
+    feature: str | None = None,
 ) -> dict | str:
     """Chat completion multimodal (satu panggilan OCR + ekstraksi, PRD §10.4).
 
@@ -89,10 +100,12 @@ def vision_completion(
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
     }
-    return _post_chat(payload, json_mode=True)
+    return _post_chat(payload, json_mode=True, call_type="vision", feature=feature)
 
 
-def _post_chat(payload: dict, *, json_mode: bool) -> dict | str:
+def _post_chat(
+    payload: dict, *, json_mode: bool, call_type: str, feature: str | None
+) -> dict | str:
     settings = get_settings()
     headers = {"Content-Type": "application/json"}
     if settings.ai_api_key:
@@ -102,13 +115,42 @@ def _post_chat(payload: dict, *, json_mode: bool) -> dict | str:
     try:
         resp = httpx.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        usage = data.get("usage")
+        content = data["choices"][0]["message"]["content"]
     except httpx.HTTPStatusError as exc:
         logger.error("LLM HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        record_usage(
+            call_type=call_type,
+            feature=feature,
+            model=payload["model"],
+            usage=None,
+            status="error",
+            http_status=exc.response.status_code,
+            error_detail=exc.response.text,
+        )
         raise HTTPException(status_code=502, detail="Provider AI mengembalikan error") from exc
     except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         logger.error("LLM request gagal: %s", exc)
+        record_usage(
+            call_type=call_type,
+            feature=feature,
+            model=payload["model"],
+            usage=None,
+            status="error",
+            http_status=None,
+            error_detail=str(exc),
+        )
         raise HTTPException(status_code=502, detail="Gagal menghubungi provider AI") from exc
+
+    record_usage(
+        call_type=call_type,
+        feature=feature,
+        model=payload["model"],
+        usage=usage,
+        status="success",
+        http_status=resp.status_code,
+    )
 
     if not json_mode:
         return str(content)
@@ -124,7 +166,7 @@ def _post_chat(payload: dict, *, json_mode: bool) -> dict | str:
     return parsed
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
+def embed_texts(texts: list[str], *, feature: str | None = None) -> list[list[float]]:
     """Hitung vektor embedding via endpoint /embeddings (skema OpenAI)."""
     settings = get_settings()
     if not settings.ai_configured:
@@ -144,14 +186,51 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
             timeout=_TIMEOUT,
         )
         resp.raise_for_status()
-        data = sorted(resp.json()["data"], key=lambda item: item["index"])
+        body = resp.json()
+        usage = body.get("usage")
+        data = sorted(body["data"], key=lambda item: item["index"])
         vectors: list[list[float]] = [item["embedding"] for item in data]
     except httpx.HTTPStatusError as exc:
         logger.error("Embedding HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        record_usage(
+            call_type="embedding",
+            feature=feature,
+            model=settings.ai_embedding_model,
+            usage=None,
+            status="error",
+            http_status=exc.response.status_code,
+            error_detail=exc.response.text,
+        )
         raise HTTPException(status_code=502, detail="Provider AI mengembalikan error") from exc
     except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         logger.error("Permintaan embedding gagal: %s", exc)
+        record_usage(
+            call_type="embedding",
+            feature=feature,
+            model=settings.ai_embedding_model,
+            usage=None,
+            status="error",
+            http_status=None,
+            error_detail=str(exc),
+        )
         raise HTTPException(status_code=502, detail="Gagal menghitung embedding") from exc
     if len(vectors) != len(texts):
+        record_usage(
+            call_type="embedding",
+            feature=feature,
+            model=settings.ai_embedding_model,
+            usage=usage,
+            status="error",
+            http_status=resp.status_code,
+            error_detail="Jumlah embedding tidak sesuai",
+        )
         raise HTTPException(status_code=502, detail="Jumlah embedding tidak sesuai")
+    record_usage(
+        call_type="embedding",
+        feature=feature,
+        model=settings.ai_embedding_model,
+        usage=usage,
+        status="success",
+        http_status=resp.status_code,
+    )
     return vectors

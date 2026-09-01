@@ -82,7 +82,7 @@ def index_contract(db: Session, contract_id: UUID) -> ContractIndexOut:
         )
     text = extract_document_text(get_object(contract.object_key), contract.file_name or "")
     chunks = _chunk_text(text)
-    vectors = embed_texts(chunks)
+    vectors = embed_texts(chunks, feature="ai.rag.index_contract")
 
     db.execute(delete(AIDocumentChunk).where(AIDocumentChunk.source_id == contract.id))
     for idx, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
@@ -139,7 +139,7 @@ def ask(db: Session, question: str, employee_id: UUID | None = None) -> AskResul
             detail="Belum ada kontrak ter-indeks. Indekskan kontrak terlebih dahulu.",
         )
 
-    query_vector = embed_texts([question])[0]
+    query_vector = embed_texts([question], feature="ai.rag.ask_query")[0]
     scored = sorted(
         ((_cosine(query_vector, json.loads(c.embedding_json)), c) for c in all_chunks),
         key=lambda pair: pair[0],
@@ -182,7 +182,9 @@ def ask(db: Session, question: str, employee_id: UUID | None = None) -> AskResul
     user_prompt = (
         "KONTEKS DOKUMEN KONTRAK:\n\n" + "\n\n".join(context_parts) + f"\n\nPERTANYAAN: {question}"
     )
-    result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True)
+    result = chat_completion(
+        _SYSTEM_PROMPT, user_prompt, json_mode=True, feature="ai.rag.ask_answer"
+    )
     answer = str(result.get("answer") or "").strip() if isinstance(result, dict) else ""
     if not answer:
         answer = "Tidak ada jawaban yang dapat dibuat dari dokumen."

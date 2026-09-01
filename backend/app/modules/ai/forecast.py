@@ -138,7 +138,7 @@ def forecast_cash_flow(db: Session, months_ahead: int = 3) -> ForecastOut:
         f"Piutang belum tertagih (invoice terkirim): Rp{pending:,.0f}\n\n"
         "Berikan analisisnya."
     )
-    result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True)
+    result = chat_completion(_SYSTEM_PROMPT, user_prompt, json_mode=True, feature="ai.forecast")
     data = result if isinstance(result, dict) else {}
 
     outlook = str(data.get("outlook") or "netral").lower()
