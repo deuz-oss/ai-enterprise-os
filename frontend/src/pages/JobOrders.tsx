@@ -39,18 +39,6 @@ interface MatchItem {
   missing: string[];
 }
 
-const STATUSES = ["open", "screening", "interview_klien", "offering", "filled", "closed"];
-
-// B1: pill palet hex Notion (index.css).
-const BADGE_COLORS: Record<string, string> = {
-  open: "pill p-blue",
-  screening: "pill p-indigo",
-  interview_klien: "pill p-violet",
-  offering: "pill p-yellow",
-  filled: "pill p-green",
-  closed: "pill p-gray",
-};
-
 const BUSINESS_STATUSES = ["dibuka", "ditahan", "dibatalkan", "terisi"];
 
 const BUSINESS_STATUS_COLORS: Record<string, string> = {
@@ -89,12 +77,6 @@ export default function JobOrders() {
       setShowForm(false);
       invalidate();
     },
-  });
-
-  const changeStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/recruitment/job-orders/${id}`, { status }),
-    onSuccess: invalidate,
   });
 
   const changeBusinessStatus = useMutation({
@@ -202,7 +184,6 @@ export default function JobOrders() {
               <th className="th">Kebutuhan</th>
               <th className="th">Range Gaji</th>
               <th className="th">Status</th>
-              <th className="th">Status Bisnis</th>
               <th className="th">AI Matching</th>
             </tr>
           </thead>
@@ -226,19 +207,6 @@ export default function JobOrders() {
                 <td className="td">{jo.headcount} orang</td>
                 <td className="td">
                   {formatRupiah(jo.salary_min)} – {formatRupiah(jo.salary_max)}
-                </td>
-                <td className="td">
-                  <select
-                    value={jo.status}
-                    onChange={(e) => changeStatus.mutate({ id: jo.id, status: e.target.value })}
-                    className={`cursor-pointer border-0 ${BADGE_COLORS[jo.status]}`}
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
                 </td>
                 <td className="td">
                   <select
@@ -271,7 +239,7 @@ export default function JobOrders() {
             ))}
             {jobOrders?.length === 0 && (
               <tr>
-                <td colSpan={9} className="td py-8 text-center text-[var(--n-text-muted)]">
+                <td colSpan={8} className="td py-8 text-center text-[var(--n-text-muted)]">
                   Belum ada job order.
                 </td>
               </tr>

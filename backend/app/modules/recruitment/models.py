@@ -141,7 +141,18 @@ class JobOrder(TenantMixin, Base):
     contract_duration_months: Mapped[int | None] = mapped_column(Integer)
     gross_salary: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
     business_status: Mapped[JobOrderBusinessStatus] = mapped_column(
-        Enum(JobOrderBusinessStatus, native_enum=False, length=20),
+        # values_callable wajib: nama anggota enum ini beda dari nilai
+        # string-nya (open="dibuka", dst), dan create/update job order lewat
+        # payload.model_dump() yang "membuka" enum jadi nilai mentah sebelum
+        # disimpan -- tanpa ini SQLAlchemy simpan/cari berdasar NAMA anggota,
+        # bentrok dengan nilai yang sebenarnya ada di kolom -> LookupError
+        # saat baca baris manapun.
+        Enum(
+            JobOrderBusinessStatus,
+            native_enum=False,
+            length=20,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
         default=JobOrderBusinessStatus.open,
         index=True,
     )
