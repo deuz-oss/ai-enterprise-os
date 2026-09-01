@@ -1,3 +1,4 @@
+import base64
 import json
 import math
 from datetime import UTC, date, timedelta, timezone
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core import storage
 from app.core.database import parse_uuid
-from app.core.llm import ai_configured, chat_completion, embed_texts
+from app.core.llm import ai_configured, chat_completion, embed_texts, vision_completion
 from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.recruitment.models import (
@@ -109,6 +110,152 @@ def delete_job_order(db: Session, jo_id: str) -> None:
     jo = _get_job_order(db, jo_id)
     db.delete(jo)
     db.commit()
+
+
+def job_order_document_download_url(db: Session, jo_id: str) -> str:
+    jo = _get_job_order(db, jo_id)
+    if not jo.source_document_object_key:
+        raise HTTPException(status_code=404, detail="Job order ini tidak punya dokumen sumber")
+    audit.log_event(
+        db,
+        action="job_order_document.download_url",
+        entity_type="job_order",
+        entity_id=jo.id,
+        detail={"file_name": jo.source_document_file_name},
+    )
+    return storage.presigned_get_url(jo.source_document_object_key)
+
+
+# ---------- Ekstraksi dokumen Job Order / Manpower Requisition (PRD v3.1 Patch 3b) ----------
+
+_JO_ALLOWED_MIME = (
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+)
+_JO_MAX_BYTES = 10 * 1024 * 1024
+
+_JO_EXTRACTION_PROMPT = (
+    "Anda mesin ekstraksi dokumen Job Order / Manpower Requisition dari perusahaan "
+    "outsourcing Indonesia. Baca dokumen dan kembalikan HANYA JSON sesuai skema tetap "
+    "berikut:\n"
+    "{\n"
+    '  "requisition_code": string|null,\n'
+    '  "job_title": string|null,\n'
+    '  "client_name": string|null,\n'
+    '  "area_location": string|null,\n'
+    '  "headcount": number|null,\n'
+    '  "request_effective_date": "YYYY-MM-DD"|null,\n'
+    '  "contract_start_date": "YYYY-MM-DD"|null,\n'
+    '  "contract_end_date": "YYYY-MM-DD"|null,\n'
+    '  "gross_basic_salary": number|null,\n'
+    '  "mandatory_criteria": [string],\n'
+    '  "preferred_criteria": [string],\n'
+    '  "job_description_summary": string|null\n'
+    "}\n"
+    "Gunakan null/[] untuk data yang tidak ada. Jangan mengarang angka atau tanggal. "
+    "gross_basic_salary hanya angka gaji pokok bulanan (bukan total dengan tunjangan)."
+)
+
+
+def _jo_doc_kind(data: bytes, file_name: str, mime_type: str) -> str:
+    """Reuse deteksi jenis dokumen dari talentpool — bukan duplikasi logic."""
+    from app.modules.talentpool.models import CvDocKind
+    from app.modules.talentpool.service import detect_doc_kind
+
+    kind = detect_doc_kind(data, file_name, mime_type)
+    return kind.value if isinstance(kind, CvDocKind) else str(kind)
+
+
+async def extract_job_order_document(db: Session, file: UploadFile) -> dict:
+    """Upload dokumen JO -> ekstraksi AI one-shot -> saran field (BELUM buat JobOrder).
+
+    Beda dari CV Intake: dokumen ini bukan sumber yang butuh alur review
+    berjenjang — user me-review langsung di form create JO, jadi cukup
+    ekstraksi sekali pakai. Dokumen tetap disimpan (utk viewer di kolom
+    Request ID) via object_key yang dikembalikan.
+    """
+    mime = (file.content_type or "").lower()
+    if mime not in _JO_ALLOWED_MIME:
+        raise HTTPException(status_code=422, detail="Format dokumen harus PDF, DOCX, atau gambar")
+    data = await file.read()
+    if len(data) > _JO_MAX_BYTES:
+        raise HTTPException(status_code=422, detail="Ukuran dokumen maksimal 10 MB")
+
+    kind = _jo_doc_kind(data, file.filename or "job-order.pdf", mime)
+    if kind in ("pdf_scan", "image"):
+        img_mime = "image/png" if kind == "image" else "application/pdf"
+        raw = vision_completion(
+            _JO_EXTRACTION_PROMPT,
+            "Ekstrak data Job Order dari dokumen hasil scan ini.",
+            image_b64=base64.b64encode(data).decode(),
+            mime_type=img_mime,
+        )
+    else:
+        from app.modules.talentpool.service import _docx_text, _pdf_text
+
+        text = _docx_text(data) if kind == "docx" else _pdf_text(data)
+        raw = chat_completion(_JO_EXTRACTION_PROMPT, f"DOKUMEN JOB ORDER:\n{text[:24000]}")
+    parsed = raw if isinstance(raw, dict) else {}
+
+    contract_start = _safe_date_str(parsed.get("contract_start_date"))
+    contract_end = _safe_date_str(parsed.get("contract_end_date"))
+    duration_months = None
+    if contract_start and contract_end:
+        start_d, end_d = date.fromisoformat(contract_start), date.fromisoformat(contract_end)
+        if end_d > start_d:
+            duration_months = round((end_d - start_d).days / 30.44) or 1
+
+    object_key = storage.new_object_key("job-order-docs", file.filename or "job-order.pdf")
+    storage.put_object(object_key, data, mime)
+
+    return {
+        "object_key": object_key,
+        "file_name": (file.filename or "job-order.pdf")[:255],
+        "requisition_code": str(parsed.get("requisition_code") or "").strip()[:50] or None,
+        "job_title": str(parsed.get("job_title") or "").strip()[:255] or None,
+        "client_name": str(parsed.get("client_name") or "").strip()[:255] or None,
+        "area_location": str(parsed.get("area_location") or "").strip()[:120] or None,
+        "headcount": _safe_int(parsed.get("headcount")),
+        "request_effective_date": _safe_date_str(parsed.get("request_effective_date")),
+        "contract_start_date": contract_start,
+        "contract_end_date": contract_end,
+        "contract_duration_months": duration_months,
+        "gross_basic_salary": _safe_float(parsed.get("gross_basic_salary")),
+        "mandatory_criteria": _clean_str_list(parsed.get("mandatory_criteria")),
+        "preferred_criteria": _clean_str_list(parsed.get("preferred_criteria")),
+        "job_description_summary": str(parsed.get("job_description_summary") or "").strip()[:2000]
+        or None,
+    }
+
+
+def _clean_str_list(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(c).strip()[:300] for c in value if str(c).strip()]
+
+
+def _safe_date_str(value) -> str | None:
+    try:
+        return date.fromisoformat(str(value).strip()).isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(value) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value) -> float | None:
+    try:
+        return round(float(value), 2) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------- Candidates ----------

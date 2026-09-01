@@ -28,6 +28,8 @@ class JobOrderCreate(BaseModel):
     gross_salary: float | None = None
     business_status: JobOrderBusinessStatus = JobOrderBusinessStatus.open
     requires_ojt: bool = False
+    source_document_object_key: str | None = None
+    source_document_file_name: str | None = None
 
 
 class JobOrderUpdate(BaseModel):
@@ -69,7 +71,29 @@ class JobOrderOut(BaseModel):
     business_status: JobOrderBusinessStatus
     requires_ojt: bool
     is_stale: bool
+    source_document_file_name: str | None
+    has_source_document: bool
     created_at: datetime
+
+
+class JobOrderExtractOut(BaseModel):
+    """Hasil ekstraksi AI dari dokumen Job Order — saran field, belum jadi JobOrder."""
+
+    object_key: str
+    file_name: str
+    requisition_code: str | None = None
+    job_title: str | None = None
+    client_name: str | None = None
+    area_location: str | None = None
+    headcount: int | None = None
+    request_effective_date: date | None = None
+    contract_start_date: date | None = None
+    contract_end_date: date | None = None
+    contract_duration_months: int | None = None
+    gross_basic_salary: float | None = None
+    mandatory_criteria: list[str] = []
+    preferred_criteria: list[str] = []
+    job_description_summary: str | None = None
 
 
 class CandidateCreate(BaseModel):

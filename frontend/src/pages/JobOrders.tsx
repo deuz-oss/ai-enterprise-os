@@ -23,6 +23,26 @@ export interface JobOrder {
   business_status: string;
   requires_ojt: boolean;
   is_stale: boolean;
+  source_document_file_name: string | null;
+  has_source_document: boolean;
+}
+
+interface JobOrderExtract {
+  object_key: string;
+  file_name: string;
+  requisition_code: string | null;
+  job_title: string | null;
+  client_name: string | null;
+  area_location: string | null;
+  headcount: number | null;
+  request_effective_date: string | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  contract_duration_months: number | null;
+  gross_basic_salary: number | null;
+  mandatory_criteria: string[];
+  preferred_criteria: string[];
+  job_description_summary: string | null;
 }
 
 interface MatchCandidateRow {
@@ -53,6 +73,7 @@ export default function JobOrders() {
   const [showForm, setShowForm] = useState(false);
   const [matchJoId, setMatchJoId] = useState<string | null>(null);
   const [matchResults, setMatchResults] = useState<MatchItem[] | null>(null);
+  const [extracted, setExtracted] = useState<JobOrderExtract | null>(null);
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -75,7 +96,20 @@ export default function JobOrders() {
     mutationFn: (body: Record<string, unknown>) => api.post("/recruitment/job-orders", body),
     onSuccess: () => {
       setShowForm(false);
+      setExtracted(null);
       invalidate();
+    },
+  });
+
+  const extractDoc = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api.upload<JobOrderExtract>("/recruitment/job-orders/extract", fd);
+    },
+    onSuccess: (data) => {
+      setExtracted(data);
+      setShowForm(true);
     },
   });
 
@@ -108,6 +142,8 @@ export default function JobOrders() {
       contract_duration_months: Number(form.get("contract_duration_months")) || null,
       gross_salary: Number(form.get("gross_salary")) || null,
       requires_ojt: form.get("requires_ojt") === "on",
+      source_document_object_key: extracted?.object_key ?? null,
+      source_document_file_name: extracted?.file_name ?? null,
     });
   }
 
@@ -117,7 +153,14 @@ export default function JobOrders() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <PageHeader icon={Magnet} title="Job Orders" />
-        <button className="btn" onClick={() => setShowForm(!showForm)} disabled={!clients?.length}>
+        <button
+          className="btn"
+          onClick={() => {
+            setShowForm(!showForm);
+            setExtracted(null);
+          }}
+          disabled={!clients?.length}
+        >
           {showForm ? "Tutup" : "+ Job Order Baru"}
         </button>
       </div>
@@ -127,50 +170,113 @@ export default function JobOrders() {
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} className="card grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <select name="client_id" required className="input">
-            <option value="">-- Pilih klien --</option>
-            {(clients ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input name="title" required placeholder="Posisi *" className="input" />
-          <input name="headcount" type="number" min={1} defaultValue={1} placeholder="Jumlah" className="input" />
-          <input name="salary_min" type="number" placeholder="Gaji min (Rp)" className="input" />
-          <input name="salary_max" type="number" placeholder="Gaji max (Rp)" className="input" />
-          <input name="due_date" type="date" placeholder="Target tanggal" className="input" />
-          <input
-            name="request_id"
-            placeholder="Request ID (kosongkan untuk auto-generate)"
-            className="input"
-          />
-          <input
-            name="request_date"
-            type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
-            title="Request Date"
-            className="input"
-          />
-          <input name="area" placeholder="Area" className="input" />
-          <input
-            name="contract_duration_months"
-            type="number"
-            min={1}
-            placeholder="Durasi kontrak (bulan)"
-            className="input"
-          />
-          <input name="gross_salary" type="number" placeholder="Gross Salary (Rp)" className="input" />
-          <label className="input flex items-center gap-2 text-sm">
-            <input name="requires_ojt" type="checkbox" className="h-4 w-4" />
-            Butuh OJT (On Job Training)
-          </label>
-          <input name="requirements" placeholder="Kualifikasi" className="input sm:col-span-3" />
-          <button type="submit" disabled={createJO.isPending} className="btn sm:col-span-3">
-            Simpan Job Order
-          </button>
-        </form>
+        <div className="card space-y-3">
+          <div>
+            <label className="text-sm font-medium text-[var(--n-text)]">
+              Upload Dokumen Job Order (opsional) — field di bawah akan diisi otomatis dari AI
+            </label>
+            <input
+              type="file"
+              accept=".pdf,.docx,image/png,image/jpeg,image/webp"
+              disabled={extractDoc.isPending}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) extractDoc.mutate(file);
+              }}
+              className="input mt-1"
+            />
+            {extractDoc.isPending && (
+              <p className="mt-1 text-xs text-[var(--n-text-muted)]">AI membaca dokumen...</p>
+            )}
+            {extractDoc.error && (
+              <p className="mt-1 text-xs text-red-600">{(extractDoc.error as Error).message}</p>
+            )}
+            {extracted && !extractDoc.isPending && (
+              <p className="mt-1 text-xs text-emerald-700">
+                Diekstrak dari "{extracted.file_name}" — periksa & lengkapi field di bawah sebelum
+                simpan.
+                {extracted.client_name && (
+                  <> Saran klien dari dokumen: <b>{extracted.client_name}</b> — pilih klien yang sesuai di dropdown.</>
+                )}
+              </p>
+            )}
+          </div>
+
+          <form
+            key={extracted?.object_key ?? "blank"}
+            onSubmit={handleCreate}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          >
+            <select name="client_id" required className="input">
+              <option value="">-- Pilih klien --</option>
+              {(clients ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <input
+              name="title"
+              required
+              placeholder="Posisi *"
+              defaultValue={extracted?.job_title ?? ""}
+              className="input"
+            />
+            <input
+              name="headcount"
+              type="number"
+              min={1}
+              defaultValue={extracted?.headcount ?? 1}
+              placeholder="Jumlah"
+              className="input"
+            />
+            <input name="salary_min" type="number" placeholder="Gaji min (Rp)" className="input" />
+            <input name="salary_max" type="number" placeholder="Gaji max (Rp)" className="input" />
+            <input name="due_date" type="date" placeholder="Target tanggal" className="input" />
+            <input
+              name="request_id"
+              placeholder="Request ID (kosongkan untuk auto-generate)"
+              defaultValue={extracted?.requisition_code ?? ""}
+              className="input"
+            />
+            <input
+              name="request_date"
+              type="date"
+              defaultValue={extracted?.request_effective_date ?? new Date().toISOString().slice(0, 10)}
+              title="Request Date"
+              className="input"
+            />
+            <input name="area" placeholder="Area" defaultValue={extracted?.area_location ?? ""} className="input" />
+            <input
+              name="contract_duration_months"
+              type="number"
+              min={1}
+              defaultValue={extracted?.contract_duration_months ?? undefined}
+              placeholder="Durasi kontrak (bulan)"
+              className="input"
+            />
+            <input
+              name="gross_salary"
+              type="number"
+              defaultValue={extracted?.gross_basic_salary ?? undefined}
+              placeholder="Gross Salary (Rp)"
+              className="input"
+            />
+            <label className="input flex items-center gap-2 text-sm">
+              <input name="requires_ojt" type="checkbox" className="h-4 w-4" />
+              Butuh OJT (On Job Training)
+            </label>
+            <input
+              name="requirements"
+              placeholder="Kualifikasi"
+              defaultValue={extracted?.mandatory_criteria?.join("; ") ?? ""}
+              className="input sm:col-span-3"
+            />
+            <button type="submit" disabled={createJO.isPending} className="btn sm:col-span-3">
+              Simpan Job Order
+            </button>
+          </form>
+        </div>
       )}
 
       <div className="card overflow-x-auto p-0">
@@ -191,7 +297,24 @@ export default function JobOrders() {
             {(jobOrders ?? []).map((jo) => (
               <tr key={jo.id} className="hover:bg-[var(--n-hover)]">
                 <td className="td">
-                  {jo.request_id ?? "-"}
+                  {jo.has_source_document ? (
+                    <a
+                      href="#"
+                      title={jo.source_document_file_name ?? "Lihat dokumen sumber"}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        const { url } = await api.get<{ url: string }>(
+                          `/recruitment/job-orders/${jo.id}/document/download-url`
+                        );
+                        window.open(url, "_blank");
+                      }}
+                      className="font-medium text-[var(--accent)] hover:opacity-80"
+                    >
+                      {jo.request_id ?? "-"}
+                    </a>
+                  ) : (
+                    jo.request_id ?? "-"
+                  )}
                   {jo.is_stale && (
                     <span
                       className="pill p-red ml-1 text-[10px]"

@@ -158,6 +158,9 @@ class JobOrder(TenantMixin, Base):
     )
     # PRD v3.1 Patch 2 — kondisional per JO, bukan per Client
     requires_ojt: Mapped[bool] = mapped_column(Boolean, default=False)
+    # PRD v3.1 Patch 3b — dokumen Job Order/Manpower Requisition sumber (opsional)
+    source_document_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    source_document_file_name: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -172,6 +175,10 @@ class JobOrder(TenantMixin, Base):
         if self.business_status != JobOrderBusinessStatus.open:
             return False
         return (date.today() - self.request_date).days >= 30
+
+    @property
+    def has_source_document(self) -> bool:
+        return self.source_document_object_key is not None
 
 
 class Candidate(TenantMixin, Base):

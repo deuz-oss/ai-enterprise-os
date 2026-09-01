@@ -18,6 +18,7 @@ from app.modules.recruitment.schemas import (
     InterviewScheduleOut,
     InterviewScheduleUpdate,
     JobOrderCreate,
+    JobOrderExtractOut,
     JobOrderOut,
     JobOrderUpdate,
     MatchRequest,
@@ -56,6 +57,19 @@ def create_job_order(payload: JobOrderCreate, db: Session = Depends(get_db)):
 def list_stale_job_orders(db: Session = Depends(get_db)):
     """JO yang belum filled dan sudah >=30 hari sejak request_date (PRD v3.1 Patch 3)."""
     return service.list_stale_job_orders(db)
+
+
+@router.post("/job-orders/extract", response_model=JobOrderExtractOut)
+async def extract_job_order_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload dokumen Job Order/Manpower Requisition -> saran field via AI
+    (PRD v3.1 Patch 3b). Belum membuat JobOrder — hasilnya dipakai pre-fill
+    form create, object_key ikut dikirim balik ke POST /job-orders."""
+    return await service.extract_job_order_document(db, file)
+
+
+@router.get("/job-orders/{jo_id}/document/download-url")
+def job_order_document_download_url(jo_id: str, db: Session = Depends(get_db)):
+    return {"url": service.job_order_document_download_url(db, jo_id)}
 
 
 @router.get("/job-orders/{jo_id}", response_model=JobOrderOut)
