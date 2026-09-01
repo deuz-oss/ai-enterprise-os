@@ -78,7 +78,9 @@
 
 ## Status Implementasi
 
-Kelima patch di atas **belum satu pun dieksekusi ke kode** — semuanya masih draft rencana teknis (skema tabel, endpoint, migrasi) di plan file kerja sesi ini. Dokumen ini mencatat keputusan & alasan bisnisnya supaya tidak hilang; detail implementasi menyusul per-patch saat masing-masing mulai dikerjakan.
+**Diperbarui 2026-09-01 — 4 dari 5 patch sudah dieksekusi ke kode, diverifikasi (ruff/mypy/full test suite/Docker/curl), commit, dan push ke `origin/main`**: Patch 1 (AI Usage Metering), Patch 2 (Recruitment Pipeline), Patch 3 (Job Order field tambahan), Patch 5 (Job Portal). Hanya **Patch 4 (AI Interview) yang belum ada kode sama sekali** — riset arsitektur + desain skema/endpoint selesai, tapi belum diimplementasikan.
+
+**Dokumen ini sekarang bersifat arsip sejarah keputusan** (kenapa tiap patch dibuat) — status implementasi terkini dan detail per-Fase yang sudah tergabung ada di `PRD.md` §5 (Fase 14-18 + catatan "Berikutnya" untuk AI Interview), bukan di sini.
 
 ---
 

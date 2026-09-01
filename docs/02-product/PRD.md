@@ -1,12 +1,54 @@
 # Product Requirements Document (PRD)
 
-**Produk:** Outsourcing Operating System — portofolio aplikasi bisnis untuk
-industri *manpower services* (working title: AI Enterprise OS)
+**Produk:** AI Enterprise OS — operating system untuk perusahaan outsourcing &
+workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
-**Versi:** 1.4 · **Status:** Approved — Repositioning Multi-App SaaS
-**Terakhir diperbarui:** 2026-08-25
+**Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
+**Terakhir diperbarui:** 2026-09-01
+
+> **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
+> v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
+> (`PRD-v2.0-Internal-First.md`, `PRD-v2.1-Revisi.md`, `PRD-v3.0.md`,
+> `PRD-v3.1-Revisi.md`) dan tidak pernah digabung balik ke sini. File-file
+> patch itu tetap disimpan sebagai arsip sejarah keputusan, tapi PRD.md ini
+> yang jadi rujukan status implementasi terkini.
 
 > **Changelog**
+> - **v3.1 (2026-09-01)** — **5 patch atas v3.0** (audit gap + riset arsitektur
+>   pembanding, detail keputusan di `PRD-v3.1-Revisi.md`): **AI Usage
+>   Metering** (`ai_usage_events`, instrumentasi sentral di `core/llm.py`,
+>   16 titik panggil dilabeli `feature`) — ✅ selesai, AI sudah live pakai
+>   provider berbayar (keputusan bisnis: performa dulu, biaya ditagih ke
+>   klien + margin, bukan lagi self-hosted gratis). **Recruitment Pipeline
+>   13-tahap** (`PlacementStatus` sourced→...→onboarded, `requires_ojt`,
+>   `InterviewSchedule.interview_type`) — ✅ selesai. **Job Order field
+>   tambahan** (request_id, request_date+alert 30 hari, area,
+>   contract_duration, gross_salary, business_status, upload dokumen+AI
+>   auto-fill) — ✅ selesai. **Job Portal** (lamaran publik guest-apply per
+>   `{tenant_slug}`, `is_public`/`public_client_label` biar identitas klien
+>   tersamar) — ✅ selesai. **AI Interview** (template+kriteria terpisah dari
+>   instance, gate approval manusia wajib, mode async dulu bukan voice
+>   real-time) — ❌ **baru riset arsitektur + desain skema, belum ada
+>   kode sama sekali.** Juga (di luar 5 patch, ditemukan lewat audit
+>   terpisah): 4 perbaikan accounting — reversal/void jurnal posted, hapus
+>   jurnal memorial, AP aging, cek penyusutan otomatis di close checklist —
+>   semuanya ✅ selesai.
+> - **v3.0 (2026-08-30)** — **Restrukturisasi jadi 4 SKU metered + Foundation**
+>   (menggantikan model bundle 6-aplikasi v2.0/v2.1, lihat §4): **Talent
+>   Cloud** (Rp 15k/talent aktif + Rp 2k/match, AI Matching native 0-100+
+>   explain, bukan add-on lagi), **Workforce Cloud** (Rp 10k/employee,
+>   asuransi one-to-many `employee_insurances`, BPJS +status+kartu+valid_until),
+>   **Revenue Cloud** (Rp 5k/invoice + Rp 8k/faktur, e-Faktur DJP lengkap:
+>   NPWP lawan, DPP, kode transaksi, no seri unik/tenant/tahun, QR, flow
+>   batal/pengganti), **Govern Cloud** (flat Rp 5-7jt, accounting Accurate.id
+>   lokal — tetap §8, tidak berubah). Mode operasi per-tenant
+>   (`tenants.billing_mode inherit|internal|commercial`) supaya deployment
+>   yang sama bisa jalan internal & komersial berbarengan. Dashboard 9 widget
+>   cross-bundle. Sales CRM: klien `prospek→aktif` otomatis saat placement
+>   pertama. Mobile dapat tab Chat baru. Semua ✅ selesai & sinkron kode.
+> - **v2.1 & v2.0 (2026-08-27/28)** — draft transisi menuju struktur v3.0 di
+>   atas (bundle 6-aplikasi awal, lisensi per-app) — **digantikan penuh**
+>   oleh v3.0, tidak ada sisa konten yang perlu dipertahankan terpisah.
 > - **v1.4 (2026-08-25)** — **Talent Pool & CV Standardization**: setiap CV yang
 >   di-upload otomatis diproses (ekstraksi teks/OCR + LLM ke skema tetap)
 >   menghasilkan profil kandidat terstruktur dan **dokumen CV standar bertemplate**
@@ -89,32 +131,58 @@ dihitung oleh HR                     dihitung oleh Operations
 
 HR tidak otomatis melihat payrol proyek, dan sebaliknya (RBAC per jenis run).
 
-## 4. Portofolio Aplikasi & Packaging *(baru)*
+## 4. Portofolio Aplikasi & Packaging — 4 Cloud Metered *(v3.0, menggantikan bundle 6-aplikasi v1.4/v2.0/v2.1)* ✅
 
-| Aplikasi | Isi utama | Modul kode | Aksen |
-|----------|-----------|-----------|-------|
-| 🎯 Sales CRM | Lead/pipeline, aktivitas, konversi klien, dokumen legalitas | `presales`, `clients` | biru |
-| 🧲 Recruitment | Job order, kandidat, seleksi, placement | `recruitment` | ungu |
-| 💼 HR & Payroll | Karyawan internal, kontrak, dokumen HR, absensi internal, payrol internal, ESS portal | `hrd`, `ess`, `payroll` (internal) | hijau |
-| 🏗️ Operations & Billing | Monitoring penempatan, absensi outsourcing, Saltab digital/payrol proyek, approval klien, Payment Request, draft invoice | `payroll` (proyek), `finance` (invoice/PR) | oranye |
-| 📊 Finance & Accounting | Setara Accurate: bagan akun dinamis, jurnal & memorial, auto-journal, kas-bank, pembelian, aset tetap, periode & tutup buku, laporan lengkap + AI akuntansi | `accounting`, `finance`, `ai` | kuning-emas |
-| ✒️ E-Sign | TTE tersertifikasi kontrak kerja & PKS | `esign` | merah |
-| ✨ AI Add-on | Screening CV, matching, RAG kontrak, forecast, insight lintas app | `ai` | violet |
+Sejak v3.0 (2026-08-30), packaging direstrukturisasi dari 7 aplikasi berlisensi
+independen menjadi **Foundation gratis + 4 SKU metered ("Cloud") + AI Add-on**
+— lebih dekat ke model konsumsi (bayar sesuai pakai) daripada kursi/lisensi
+statis, dan lebih jujur secara bisnis: Talent Cloud menagih per record kandidat
+yang tenant SIMPAN + per klik Match yang tenant JALANKAN (bukan jualan
+kandidat — kandidat tetap milik tenant, di-upload sendiri via `POST
+/talentpool/intake`).
 
-**Dependensi antar aplikasi** (install otomatis menarik dependensinya):
-Recruitment & Operations membutuhkan master klien (Sales CRM); Operations
-membutuhkan placement (Recruitment); Accounting menerima jurnal dari semua;
-AI melintasi aplikasi sebagai add-on.
+### 4.1 Mode Operasi — Internal vs Komersial per Tenant
 
-**Model harga (prinsip; angka final oleh produk, benchmark: Mekari):**
+Satu deployment yang sama bisa melayani tenant internal (semua fitur aktif
+tanpa cek lisensi) dan tenant SaaS berbayar (lisensi per SKU) berbarengan:
 
-1. Langganan per aplikasi (bulanan/tahunan), skala per jumlah karyawan/user.
-2. **Trial 14 hari** per aplikasi, aktivasi mandiri dari dalam produk.
-3. Bundle hemat (contoh: *People Suite* = HR & Payroll + Operations & Billing).
-4. **Full Package** = semua aplikasi + AI Add-on dengan diskon signifikan.
-5. Upsell in-product: nav menyembunyikan app nonaktif, halaman menampilkan ajakan install/trial.
-6. **Chat Workspace termasuk gratis** di semua paket — platform capability untuk
-   engagement, kolaborasi, dan stickiness (bukan aplikasi berbayar).
+| Level | Config | Efek |
+|---|---|---|
+| Global default | `APP_MODE=internal\|commercial` (`.env`, `backend/app/core/config.py`) | Fallback kalau tenant tidak override |
+| Per-tenant override | `tenants.billing_mode: inherit\|internal\|commercial` (`PATCH /platform/tenants/{id}/billing-mode`, platform_admin saja) | `internal` → bypass guard lisensi walau `APP_MODE=commercial` global; `commercial` → tetap enforce walau global `internal` |
+
+Urutan guard (`core/security.py`): `billing_mode=internal` menang duluan →
+baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
+`default` (dev/demo) di-seed `internal` (full akses tanpa lisensi).
+
+### 4.2 Foundation — Gratis, Selalu Aktif (semua tenant)
+
+| Kapabilitas | Isi |
+|---|---|
+| Dashboard Umum | `GET /overview` (+ `/overview/personal` role-aware) — 9 widget lintas Cloud, lihat §8 |
+| Chat Workspace | Channel/DM/thread ala Slack (§9) — gratis di semua paket, platform capability untuk engagement |
+| Pages | Notion-style docs (`/pages`) |
+
+### 4.3 Empat SKU Metered
+
+| Cloud | Modul kode (`apps.py`) | Isi utama | Skema tagihan | Bergantung ke |
+|---|---|---|---|---|
+| 🎯🧲 **Talent Cloud** | `sales_crm` + `recruitment` | Pipeline lead, klien (auto `prospek→aktif` saat placement pertama), Job Order (pipeline 13-tahap §5), Talent Pool + CV standar, **AI Matching native 0-100+explain** (bukan add-on lagi), Job Portal publik, jadwal interview, offering (esign), onboard | Rp 15rb / talent aktif / bulan + Rp 2rb / eksekusi match | — (standalone) |
+| 💼 **Workforce Cloud** | `people_ops` | Karyawan, kontrak, dokumen legal, BPJS (no+status+kartu+`valid_until`), **asuransi one-to-many** (`employee_insurances`: provider/no polis/status/valid_until/kartu), absensi, ESS portal, TTE | Rp 10rb / employee aktif / bulan | — (standalone) |
+| 📊 **Revenue Cloud** | `payroll` + `finance` | Payrol dua jalur (saltab, BPJS dual-side, PPh21, bukti potong), invoice, **e-Faktur DJP lengkap** (NPWP lawan, DPP, kode transaksi, no seri unik/tenant/tahun, QR, flow kirim/batal/pengganti), aging, cash flow, Payment Request | Rp 5rb / invoice + Rp 8rb / faktur DJP + base Rp 1jt/bulan | `workforce` |
+| 🏛️ **Govern Cloud** | `accounting` | Setara Accurate.id: bagan akun dinamis, jurnal memorial→posted, mesin auto-journal, kas-bank, pembelian, aset tetap, periode & tutup buku, laporan lengkap + AI akuntansi (§8) | Flat Rp 5-7jt / bulan | `revenue` |
+| ✨ **AI Add-on** | `ai_addon` | `@AEOS` lintas app, RAG kontrak, forecast (matching sudah native di Talent, bukan di sini lagi) | Rp 300 / 1.000 token (diukur nyata via `ai_usage_events`, lihat Fase 17 §5) | — |
+
+**Contoh tagihan** (80 talent aktif, 80 employee, 5 invoice, 5 faktur/bulan):
+
+| Paket | SKU included | Estimasi/bulan |
+|---|---|---|
+| Starter | Foundation + Workforce | ~Rp 800rb |
+| Growth | Starter + Talent | ~Rp 2,02jt |
+| Scale | Growth + Revenue | ~Rp 3,09jt |
+| Enterprise | Scale + Govern | ~Rp 10,09jt |
+
+Trial 14 hari per SKU (base Rp 1jt untuk Revenue Cloud tetap berlaku saat trial). Upsell in-product: nav menyembunyikan Cloud nonaktif, halaman menampilkan ajakan install/trial.
 
 ## 5. Ruang Lingkup per Fase
 
@@ -236,6 +304,129 @@ Spesifikasi penuh di §10; ringkas:
   koreksi → finalize. File asli selalu tersimpan untuk audit.
 - Screening & matching AI yang sudah ada beralih memakai data terstruktur
   (lebih akurat dan lebih murah daripada mengirim teks CV mentah).
+
+### Fase 14 — Restrukturisasi 4-Cloud Metered (v3.0) — ✅ Selesai (2026-08-30)
+
+Detail bisnis penuh di §4. Highlight teknis:
+
+- **AI Matching native** 0-100+explain, native di Talent Cloud (bukan add-on
+  lagi): `POST /recruitment/job-orders/{jo_id}/match` — embedding cosine +
+  rules (domisili, readiness, expected salary) + LLM rerank, sumber dari
+  `CvIntake.extracted` terstruktur (bukan teks CV mentah).
+- **Asuransi one-to-many** (`employee_insurances`: provider, no polis,
+  status, `valid_until`, kartu+polis object key) menggantikan field asuransi
+  tunggal lama; BPJS tambah `status`+`card_key`+`valid_until` per jenis.
+- **e-Faktur DJP lengkap**: `tax_invoice_no`, status faktur (`belum_buat` →
+  `draft` → `menunggu_approval` → `terkirim_djp` → `approved`/`ditolak` →
+  `dibatalkan`/`pengganti`), NPWP+nama+alamat lawan transaksi, DPP, kode
+  transaksi, no seri unik per tenant per tahun, QR, payload TEXT tersimpan;
+  simulasi lokal tanpa hit DJP kalau `efaktur_provider` kosong.
+- **Dashboard Umum 9 widget** lintas Cloud + `GET /overview/personal`
+  role-aware; **Mode Operasi per-tenant** (§4.1); klien `prospek→aktif`
+  otomatis saat placement pertama (idempoten, audit).
+- **Mobile**: tab Chat baru di aplikasi Flutter (talent tetap desktop-only).
+
+### Fase 15 — Recruitment Pipeline 13-Tahap + Job Order Field Tambahan — ✅ Selesai (2026-09-01)
+
+Detail keputusan bisnis di `PRD-v3.1-Revisi.md` Patch 2+3 (patch v3.1
+sekarang tergabung di sini). Alasan: pipeline rekrutmen v3.0 ("3 action:
+interview/offering/onboard") terlalu kasar dibanding alur operasional nyata.
+
+- `PlacementStatus` (bukan `CandidateStatus` — satu kandidat bisa dikejar
+  untuk >1 JO sekaligus dengan tahap berbeda) diperluas 4→13 nilai:
+  `sourced → screening → interview_rekruter → disubmit → dikirim_ke_klien →
+  screening_klien → interview_klien → ojt → proposed → accepted → onboarded`
+  (+ `rejected`/`cancelled` terminal dari tahap manapun).
+- `JobOrder.requires_ojt` (per-JO, bukan per-klien — posisi klien yang sama
+  bisa beda kebijakan OJT); UI skip tahap OJT kalau `False`.
+- `InterviewSchedule.interview_type` (internal/klien) — 1 kandidat bisa
+  punya jadwal internal & klien yang jelas beda perannya.
+- **Job Order — field operasional tambahan**: `request_id` (auto-generate
+  `JO/{tahun}/{urutan}` kalau klien tidak kasih), `request_date` + alert
+  stale ≥30 hari masih `open`, `area`, `contract_duration_months`,
+  `gross_salary` (field baru, terpisah dari `salary_min/max` yang tetap
+  dipakai AI Matching), `business_status` (Open/OnHold/Cancel/Filled —
+  konsep terpisah dari status pipeline di atas, bukan pengganti).
+- **Upload dokumen Job Order** ("Manpower Requisition" fisik) → AI
+  auto-fill field JO (pola sama seperti CV Intake); dokumen sumber
+  tersimpan, bisa dilihat lagi lewat klik Request ID di tabel JO.
+
+### Fase 16 — Job Portal: Lamaran Publik — ✅ Selesai (2026-09-01)
+
+Detail di `PRD-v3.1-Revisi.md` Patch 5. Sumber sourcing kandidat baru selain
+Talent Pool internal: kandidat apply sendiri ke lowongan yang di-post publik.
+
+- Guest-apply tanpa akun (kandidat AEOS tidak pernah punya akun `User`) via
+  `invite_token`-style link, ke `JobOrder` yang ditandai `is_public=True`.
+- Portal per-tenant (`/careers/{tenant_slug}`) — sejalan sifat white-label
+  AEOS, bukan satu marketplace gabungan lintas-tenant.
+- `public_client_label` menyamarkan nama klien asli di lowongan publik
+  (kebutuhan nyata: dokumen Job Order internal SPC eksplisit mensyaratkan
+  identitas klien disembunyikan dari lowongan publik).
+- Screening question custom per JO mengurangi beban tahap `screening`
+  manual (Fase 15) untuk lamaran yang masuk lewat jalur ini.
+- Reuse penuh pipeline `CvIntake` (ekstraksi CV) yang sudah ada — tidak ada
+  duplikasi logic ekstraksi antara jalur staf dan jalur publik.
+
+### Fase 17 — AI Usage Metering — ✅ Selesai (2026-09-01)
+
+Detail di `PRD-v3.1-Revisi.md` Patch 1. Prasyarat wajib sebelum fitur AI
+apa pun ditambah lagi (termasuk Fase berikutnya, AI Interview) — SKU **AI
+Add-on** (§4.3) sudah dijanjikan harga per-token sejak v3.0, tapi sampai
+sebelum fase ini tidak ada satu pun mekanisme yang benar-benar menghitung
+pemakaian token per tenant.
+
+- Tabel `ai_usage_events` (tenant, feature, model, token in/out, status,
+  `cost_idr` best-effort/nullable) diinstrumentasi **sentral** di satu
+  titik pemanggilan AI (`core/llm.py`), bukan manual di tiap titik panggil
+  — 16 titik panggil AI di 8 modul otomatis ikut terinstrumen, tak satu
+  pun bisa lupa.
+- Token mentah jadi sumber kebenaran (harga vendor berubah-ubah; dihitung
+  ulang jadi Rupiah kapan saja tanpa migrasi data).
+- Konsekuensi langsung: AI sekarang genuinely aktif di lingkungan produksi
+  (pakai model berbayar/frontier — keputusan bisnis eksplisit: performa
+  dulu, biaya ditagih ke klien + margin, bukan lagi self-hosted gratis).
+
+### Fase 18 — Accounting: Reversal, Hapus Memorial, AP Aging, Cek Penyusutan — ✅ Selesai (2026-09-01)
+
+Bukan bagian dari patch v3.1 manapun — ditemukan lewat audit terpisah
+terhadap 8 area accounting, disatukan di sini karena masing-masing kecil.
+Detail teknis di §8 (accounting tetap §8 v1.4, keempat fixed ini
+melengkapinya):
+
+- **Reversal/void jurnal posted** (`POST /journal/{id}/reverse`) — gap
+  prioritas tertinggi: sebelumnya tidak ada cara membalik jurnal `posted`
+  selain koreksi manual tanpa jejak. Jurnal asli TIDAK pernah diedit/dihapus
+  (higiene akuntansi standar) — reversal selalu entri BARU dengan
+  debit/kredit tertukar per baris.
+- **Hapus jurnal memorial** (`DELETE /journal/{id}`) — draft yang batal
+  sekarang bisa dibersihkan; jurnal `posted` tetap ditolak (pakai reversal).
+- **AP aging** (`GET /cashbank/bills/aging`) — utang vendor jatuh tempo per
+  bucket 1-30/31-60/>60, mencerminkan aging piutang (§8.7) yang sudah lama
+  ada di sisi AR.
+- **Cek penyusutan otomatis** — checklist tutup buku (§8.8 #3) sekarang
+  memperingatkan aset tetap yang belum disusutkan periode berjalan
+  (severity warning, tidak memblokir closing); plus endpoint batch
+  `POST /assets/depreciate-period` supaya tidak perlu klik aset satu-satu.
+
+### Berikutnya — AI Interview *(v3.1 Patch 4 — riset & desain selesai, KODE BELUM ADA)*
+
+Kapabilitas penilaian kandidat berbasis AI di bawah Talent Cloud, pelengkap
+`InterviewSchedule` manual yang sudah ada. Riset arsitektur (5 repo
+open-source pembanding) dan desain skema tabel/endpoint penuh sudah
+selesai dan tersimpan di plan file kerja — **belum ada satu baris kode pun**
+(`backend/app/modules/ai_interview/` belum eksis). Ringkasan arah:
+
+- 2 entitas baru: `AIInterviewTemplate` (definisi: pertanyaan bertipe +
+  kriteria penilaian) terpisah dari `AIInterviewResponse` (instance per
+  kandidat, akses via token tanpa akun — pola sama seperti Job Portal).
+- **MVP mode async** (kandidat jawab teks/rekaman, dinilai belakangan) —
+  BUKAN voice real-time (kompleksitas infra jauh lebih tinggi; kalau nanti
+  dibutuhkan, rekomendasi riset adalah "beli" kapabilitas voice dari vendor
+  pihak ketiga, bukan bangun sendiri).
+- Skor AI **wajib** direview manusia (`review_status`) sebelum final —
+  tidak pernah otomatis jadi keputusan hire/reject, mengikuti prinsip
+  `CONFIDENCE_THRESHOLD` yang sudah dipakai di CV Intake.
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
@@ -543,25 +734,48 @@ Tambahan v1.1 (fokus Saltab & komersial):
 11. Pasca Fase 13: median waktu CV mentah → profil final < 5 menit; akurasi
     ekstraksi field inti ≥ 90% sebelum review.
 
+Tambahan v3.0/v3.1 (4-Cloud metered, AI Interview menyusul):
+
+12. Auto `prospek→aktif` ≥ 95% dari placement pertama tercatat via audit
+    `client.auto_activated` (Fase 14).
+13. Faktur DJP terbit ≤ 1 hari kerja setelah `Invoice.sent` (Fase 14).
+14. Median AI Matching talent→final <5 menit, akurasi field ekstraksi ≥90%,
+    match-click→hire conversion terlacak (Fase 14).
+15. Interview→onboard median ≤14 hari kerja (Fase 15).
+16. **100% panggilan AI tercatat** di `ai_usage_events` (nol panggilan tak
+    terlacak) — prasyarat langsung penagihan SKU AI Add-on akurat (Fase 17).
+17. Job Portal: ≥1 lamaran masuk lewat jalur publik per tenant aktif dalam
+    3 bulan pasca-aktivasi (Fase 16) — indikator kanal sourcing baru benar
+    dipakai, bukan cuma tersedia.
+
 ## 13. Halaman & Alur Utama
 
-Shell baru (lihat mockup): sidebar workspace → grup aplikasi → halaman; app
-launcher; ⌘K lintas app; tema terang/gelap.
+Shell baru (lihat mockup): sidebar workspace → grup Cloud → halaman; app
+launcher; ⌘K lintas app; tema terang/gelap. Pengelompokan halaman berikut
+mengikuti struktur 4-Cloud sejak v3.0 (§4) — nama modul kode di
+`apps.py` beda dari label produk (lihat tabel §4.3).
 
 ```
-Login ──► Beranda (ringkasan lintas app yang dilisensikan)
-  🎯 Sales CRM        : Pipeline (tabel/papan), Klien + dokumen legalitas
-  🧲 Recruitment      : Job Orders, Kandidat (upload CV → auto-profil + CV
-                        standar bertemplate, screening AI, placement)
-  💼 HR & Payroll     : Karyawan internal, Absensi internal, Payrol internal, Portal Saya (ESS)
-  🏗️ Ops & Billing    : Penempatan, Absensi outsourcing, Saltab proyek (grid),
-                        Approval klien (token), Payment Request, Draft Invoice
-  📊 Fin & Acc        : PR queue & eksekusi, Invoice, Kas & Bank, Pembelian,
-                        Aset Tetap, Tutup Buku, Jurnal & Bagan Akun,
-                        Laporan (termasuk per klien), Tanya-Laporan AI
-  💬 Chat             : Channel, DM, thread — tersambung entitas (job order,
+Login ──► Beranda (Dashboard Umum, 9 widget lintas Cloud yang dilisensikan)
+  🎯🧲 Talent Cloud    : Pipeline (tabel/papan), Klien + dokumen legalitas,
+                        Job Orders (pipeline 13-tahap), Talent Pool (upload
+                        CV → auto-profil + CV standar bertemplate, AI
+                        Matching 0-100+explain), placement, jadwal interview
+  💼 Workforce Cloud  : Karyawan, kontrak, dokumen legal, BPJS+asuransi,
+                        Absensi, Portal Saya (ESS), TTE
+  📊 Revenue Cloud    : Saltab proyek (grid), Approval klien (token),
+                        Payment Request, Invoice + faktur DJP, Kas & Bank,
+                        Pembelian, Aset Tetap
+  🏛️ Govern Cloud     : Tutup Buku, Jurnal & Bagan Akun, Laporan (termasuk
+                        per klien), Tanya-Laporan AI
+  💬 Chat (gratis)    : Channel, DM, thread — tersambung entitas (job order,
                         payrol, proyek); karyawan outsourcing ter-scope
-  ✒️ E-Sign · ✨ AI    : Dokumen TTE · Asisten & insight
+  ✨ AI Add-on        : Asisten @AEOS, RAG kontrak, forecast
+
+Publik (tanpa login, per-tenant white-label):
+  /careers/{tenant_slug}         : Listing lowongan publik (Job Portal, Fase 16)
+  /careers/{tenant_slug}/{jo_id} : Detail + form lamaran (guest-apply)
+  /careers/track                 : Cek status lamaran via token
 ```
 
 ## 14. Batasan & Asumsi
@@ -580,3 +794,17 @@ Login ──► Beranda (ringkasan lintas app yang dilisensikan)
 - Chat adalah kanal operasional harian, bukan pengganti dokumen legal; retensi
   pesan mengikuti kebijakan tenant. Moderasi menjadi tanggung jawab admin
   tenant — sistem menyediakan alatnya (hapus pesan, lapor, audit log).
+- **Strategi model AI (v3.1)**: AEOS memakai model berbayar/frontier untuk
+  performa terbaik, bukan wajib self-hosted gratis — biaya ditagih ke klien
+  + margin (via SKU AI Add-on, §4.3), diukur nyata lewat `ai_usage_events`
+  (Fase 17). Self-hosted (Ollama/vLLM) tetap opsi arsitektur terbuka untuk
+  klien yang mensyaratkan data tidak keluar infrastruktur sendiri (`core/
+  llm.py` sudah provider-agnostic, kompatibel skema OpenAI apa pun) — belum
+  jadi prioritas eksekusi.
+- **Job Order tanpa cascade guard (gap diketahui, belum diperbaiki)**:
+  `DELETE /job-orders/{id}` mengembalikan 500 kalau JO masih punya
+  `Placement`/`InterviewSchedule` terkait. Dicatat sebagai temuan, bukan
+  disengaja — perlu guard/cascade eksplisit sebelum jadi masalah produksi.
+- **AI Interview (Fase berikutnya) belum punya kode** — desain skema/endpoint
+  sudah final (lihat penutup §5), tapi jangan diasumsikan tersedia sampai
+  benar-benar diimplementasikan.
