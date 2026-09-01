@@ -12,6 +12,12 @@ from app.modules.recruitment.models import (
 )
 
 
+class ScreeningQuestion(BaseModel):
+    id: str
+    prompt: str
+    required: bool = True
+
+
 class JobOrderCreate(BaseModel):
     client_id: UUID
     title: str
@@ -30,6 +36,9 @@ class JobOrderCreate(BaseModel):
     requires_ojt: bool = False
     source_document_object_key: str | None = None
     source_document_file_name: str | None = None
+    is_public: bool = False
+    public_client_label: str | None = None
+    screening_questions: list[ScreeningQuestion] = []
 
 
 class JobOrderUpdate(BaseModel):
@@ -48,6 +57,9 @@ class JobOrderUpdate(BaseModel):
     gross_salary: float | None = None
     business_status: JobOrderBusinessStatus | None = None
     requires_ojt: bool | None = None
+    is_public: bool | None = None
+    public_client_label: str | None = None
+    screening_questions: list[ScreeningQuestion] | None = None
 
 
 class JobOrderOut(BaseModel):
@@ -73,6 +85,9 @@ class JobOrderOut(BaseModel):
     is_stale: bool
     source_document_file_name: str | None
     has_source_document: bool
+    is_public: bool
+    public_client_label: str | None
+    screening_questions: list[ScreeningQuestion]
     created_at: datetime
 
 

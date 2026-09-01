@@ -25,6 +25,15 @@ export interface JobOrder {
   is_stale: boolean;
   source_document_file_name: string | null;
   has_source_document: boolean;
+  is_public: boolean;
+  public_client_label: string | null;
+  screening_questions: ScreeningQuestion[];
+}
+
+interface ScreeningQuestion {
+  id: string;
+  prompt: string;
+  required: boolean;
 }
 
 interface JobOrderExtract {
@@ -74,6 +83,8 @@ export default function JobOrders() {
   const [matchJoId, setMatchJoId] = useState<string | null>(null);
   const [matchResults, setMatchResults] = useState<MatchItem[] | null>(null);
   const [extracted, setExtracted] = useState<JobOrderExtract | null>(null);
+  const [isPublic, setIsPublic] = useState(false);
+  const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -144,6 +155,9 @@ export default function JobOrders() {
       requires_ojt: form.get("requires_ojt") === "on",
       source_document_object_key: extracted?.object_key ?? null,
       source_document_file_name: extracted?.file_name ?? null,
+      is_public: form.get("is_public") === "on",
+      public_client_label: form.get("public_client_label") || null,
+      screening_questions: questions.filter((q) => q.prompt.trim()),
     });
   }
 
@@ -158,6 +172,8 @@ export default function JobOrders() {
           onClick={() => {
             setShowForm(!showForm);
             setExtracted(null);
+            setIsPublic(false);
+            setQuestions([]);
           }}
           disabled={!clients?.length}
         >
@@ -272,6 +288,76 @@ export default function JobOrders() {
               defaultValue={extracted?.mandatory_criteria?.join("; ") ?? ""}
               className="input sm:col-span-3"
             />
+
+            <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
+              <label className="flex items-center gap-2 text-sm font-medium text-[var(--n-text)]">
+                <input
+                  name="is_public"
+                  type="checkbox"
+                  checked={isPublic}
+                  onChange={(e) => setIsPublic(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Tampilkan di Portal Karir Publik
+              </label>
+              {isPublic && (
+                <div className="space-y-2">
+                  <input
+                    name="public_client_label"
+                    placeholder='Nama klien di iklan (kosongkan = "Klien Konfidensial")'
+                    className="input w-full"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-[var(--n-text-muted)]">
+                      Pertanyaan penyaring (opsional)
+                    </p>
+                    {questions.map((q, idx) => (
+                      <div key={q.id} className="flex items-center gap-2">
+                        <input
+                          value={q.prompt}
+                          onChange={(e) =>
+                            setQuestions((qs) =>
+                              qs.map((item, i) => (i === idx ? { ...item, prompt: e.target.value } : item))
+                            )
+                          }
+                          placeholder={`Pertanyaan ${idx + 1}`}
+                          className="input flex-1 py-1 text-xs"
+                        />
+                        <label className="flex items-center gap-1 text-xs text-[var(--n-text-muted)]">
+                          <input
+                            type="checkbox"
+                            checked={q.required}
+                            onChange={(e) =>
+                              setQuestions((qs) =>
+                                qs.map((item, i) => (i === idx ? { ...item, required: e.target.checked } : item))
+                              )
+                            }
+                          />
+                          Wajib
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-600"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuestions((qs) => [...qs, { id: `q${qs.length + 1}`, prompt: "", required: true }])
+                      }
+                      className="btn-secondary py-1 text-xs"
+                    >
+                      + Tambah Pertanyaan
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button type="submit" disabled={createJO.isPending} className="btn sm:col-span-3">
               Simpan Job Order
             </button>

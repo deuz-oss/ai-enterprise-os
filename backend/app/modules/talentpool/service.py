@@ -296,7 +296,7 @@ def _safe_date(value) -> str | None:
 async def intake_cv(
     db: Session,
     *,
-    user,
+    user=None,
     file: UploadFile,
     candidate_id: str | None = None,
     consent: bool = False,
@@ -305,6 +305,9 @@ async def intake_cv(
 
     Bila AI tidak tersedia/ekstraksi gagal: intake tetap tersimpan dengan
     status `gagal` dan bisa diproses ulang nanti (PRD §10.1 re-process).
+
+    `user=None` (PRD v3.1 Patch 5, Job Portal): kandidat apply publik tanpa
+    akun `User` sama sekali — `uploaded_by_id` NULL menandai upload mandiri.
     """
     from app.modules.recruitment.service import _get_candidate
 
@@ -334,7 +337,7 @@ async def intake_cv(
     intake = CvIntake(
         tenant_id=candidate.tenant_id,
         candidate_id=candidate.id,
-        uploaded_by_id=user.id,
+        uploaded_by_id=user.id if user else None,
         file_name=(file.filename or "cv.pdf")[:255],
         mime_type=mime,
         object_key=object_key,

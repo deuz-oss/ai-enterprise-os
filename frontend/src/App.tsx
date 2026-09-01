@@ -8,6 +8,7 @@ import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
+import { CareerDetail, CareerListing, CareerTrack } from "./pages/CareerPortal";
 import Chat from "./pages/Chat";
 import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
@@ -41,6 +42,10 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/careers/track" element={<CareerTrack />} />
+          <Route path="/careers/track/:token" element={<CareerTrack />} />
+          <Route path="/careers/:tenantSlug/:jobId" element={<CareerDetail />} />
+          <Route path="/careers/:tenantSlug" element={<CareerListing />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/apps" element={<Apps />} />

@@ -1,4 +1,5 @@
 import enum
+import json
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
@@ -161,6 +162,13 @@ class JobOrder(TenantMixin, Base):
     # PRD v3.1 Patch 3b — dokumen Job Order/Manpower Requisition sumber (opsional)
     source_document_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
     source_document_file_name: Mapped[str | None] = mapped_column(String(255), default=None)
+    # PRD v3.1 Patch 5 — Job Portal: opt-in publik per JO
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Nama klien tersamar utk lowongan publik — TIDAK PERNAH fallback ke
+    # client.name asli (temuan dari dokumen JO sungguhan: klien bisa minta
+    # identitasnya disembunyikan dari iklan lowongan publik).
+    public_client_label: Mapped[str | None] = mapped_column(String(255), default=None)
+    screening_questions_json: Mapped[str | None] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -179,6 +187,16 @@ class JobOrder(TenantMixin, Base):
     @property
     def has_source_document(self) -> bool:
         return self.source_document_object_key is not None
+
+    @property
+    def screening_questions(self) -> list[dict]:
+        if not self.screening_questions_json:
+            return []
+        try:
+            parsed = json.loads(self.screening_questions_json)
+        except (TypeError, ValueError):
+            return []
+        return parsed if isinstance(parsed, list) else []
 
 
 class Candidate(TenantMixin, Base):
@@ -234,6 +252,10 @@ class Placement(TenantMixin, Base):
     offering_signed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # PRD v3.1 Patch 5 — Job Portal: NULL kalau sourcing dari Talent Pool
+    # internal, terisi kalau kandidat apply sendiri lewat portal publik.
+    application_token: Mapped[str | None] = mapped_column(String(64), unique=True, default=None)
+    screening_answers: Mapped[str | None] = mapped_column(Text, default=None)  # JSON
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     candidate = relationship("Candidate", lazy="joined")

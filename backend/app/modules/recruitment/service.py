@@ -58,6 +58,10 @@ def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
         data["request_id"] = _generate_request_id(db)
     if not data.get("request_date"):
         data["request_date"] = date.today()
+    # `screening_questions` itu properti read-only (turunan JSON) di model —
+    # simpan ke kolom mentahnya, bukan lewat nama atribut yang sama.
+    questions = data.pop("screening_questions", None)
+    data["screening_questions_json"] = json.dumps(questions) if questions else None
     jo = JobOrder(**data)
     db.add(jo)
     db.commit()
@@ -99,7 +103,11 @@ def get_job_order(db: Session, jo_id: str) -> JobOrder:
 
 def update_job_order(db: Session, jo_id: str, payload: JobOrderUpdate) -> JobOrder:
     jo = _get_job_order(db, jo_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "screening_questions" in data:
+        questions = data.pop("screening_questions")
+        jo.screening_questions_json = json.dumps(questions) if questions else None
+    for field, value in data.items():
         setattr(jo, field, value)
     db.commit()
     db.refresh(jo)
