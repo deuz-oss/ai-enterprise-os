@@ -6,9 +6,12 @@ jalankan pipeline STT->LLM->TTS, kirim transkrip balik ke backend lewat
 REST begitu selesai.
 
 LLM/reasoning TETAP lewat endpoint OpenAI-compatible yang SAMA dipakai
-fitur teks lain (AI_BASE_URL/AI_API_KEY/AI_MODEL) — self-hosted di sini
-CUMA suara (STT via STT_BASE_URL ke faster-whisper-server, TTS via
-TTS_BASE_URL ke wrapper facebook/mms-tts-ind di service `tts-server/`).
+fitur teks lain (AI_BASE_URL/AI_API_KEY/AI_MODEL). STT self-hosted (via
+STT_BASE_URL ke faster-whisper-server). TTS **BUKAN** self-hosted --
+dicoba `facebook/mms-tts-ind` self-hosted (service `tts-server/`) lebih
+dulu, tapi kualitasnya dinilai jelek oleh Brian setelah didengar langsung
+(2026-09-02), jadi diganti ke TTS OpenAI (`AI_BASE_URL` yang sama dengan
+LLM) -- lihat `docs/02-product/PRD.md` §5 untuk riwayat keputusannya.
 
 Agent TIDAK akses database/tenant-context langsung — cuma REST client ke
 backend, pakai `invite_token` yang sama sebagai kredensial (diteruskan
@@ -16,11 +19,11 @@ lewat job/room dispatch metadata, lihat `backend/.../service.py::
 start_voice_session`). Ini sengaja, bukan keterbatasan: `_score()`/
 `set_tenant()` tetap satu-satunya sumber kebenaran di backend.
 
-CATATAN KEJUJURAN (lihat plan file): kode ini benar secara arsitektur dan
-API livekit-agents-nya sudah diverifikasi langsung terhadap versi yang
-ter-install (bukan tebakan), TAPI latensi percakapan sungguhan dan
-kualitas suara Bahasa Indonesia dari facebook/mms-tts-ind BELUM PERNAH
-diuji nyata (butuh GPU yang tidak tersedia saat pass ini ditulis).
+CATATAN KEJUJURAN (lihat plan file): wiring end-to-end (dispatch, room
+join, sesi WebRTC, sintesis TTS) sudah diverifikasi jalan lewat
+`docker compose --profile voice up` sungguhan. Latensi percakapan nyata
+dan turn-taking masih BELUM PERNAH diuji nyata (butuh GPU yang tidak
+tersedia saat pass ini ditulis) -- STT tetap self-hosted CPU-mode di dev.
 """
 
 from __future__ import annotations
@@ -43,12 +46,18 @@ AGENT_NAME = "ai-interview-agent"
 
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://backend:8000/api/v1").rstrip("/")
 STT_BASE_URL = os.environ["STT_BASE_URL"]
-TTS_BASE_URL = os.environ["TTS_BASE_URL"]
 # SENGAJA sama dengan backend's AI_BASE_URL/AI_API_KEY/AI_MODEL -- LLM
-# TIDAK self-hosted terpisah, lihat catatan strategi AI di PRD §14.
+# TIDAK self-hosted terpisah, lihat catatan strategi AI di PRD §14. TTS
+# JUGA lewat endpoint ini sekarang (lihat docstring di atas) -- bukan
+# base_url terpisah lagi.
 LLM_BASE_URL = os.environ["AI_BASE_URL"]
 LLM_API_KEY = os.environ.get("AI_API_KEY") or "not-needed"
 LLM_MODEL = os.environ.get("AI_MODEL", "gpt-4o-mini")
+TTS_MODEL = os.environ.get("AI_TTS_MODEL", "gpt-4o-mini-tts")
+TTS_VOICE = os.environ.get("AI_TTS_VOICE", "ash")
+TTS_INSTRUCTIONS = (
+    "Speak natural, professional Bahasa Indonesia with a warm interviewer tone."
+)
 
 
 class InterviewAgent(Agent):
@@ -131,7 +140,13 @@ async def entrypoint(ctx: JobContext) -> None:
     session = AgentSession(
         stt=lk_openai.STT(base_url=STT_BASE_URL, api_key="not-needed"),
         llm=lk_openai.LLM(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, model=LLM_MODEL),
-        tts=lk_openai.TTS(base_url=TTS_BASE_URL, api_key="not-needed"),
+        tts=lk_openai.TTS(
+            base_url=LLM_BASE_URL,
+            api_key=LLM_API_KEY,
+            model=TTS_MODEL,
+            voice=TTS_VOICE,
+            instructions=TTS_INSTRUCTIONS,
+        ),
         vad=silero.VAD.load(),
     )
 

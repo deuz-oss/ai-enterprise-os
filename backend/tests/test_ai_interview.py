@@ -316,7 +316,7 @@ def test_voice_start_mints_token_and_dispatches_agent(client, monkeypatch):
     monkeypatch.setattr(settings, "livekit_api_key", "test-key")
     monkeypatch.setattr(settings, "livekit_api_secret", "test-secret-32-bytes-minimum-ok")
     monkeypatch.setattr(settings, "stt_base_url", "http://stt.test")
-    monkeypatch.setattr(settings, "tts_base_url", "http://tts.test")
+    monkeypatch.setattr(settings, "ai_base_url", "https://api.test/v1")
 
     dispatched: dict = {}
 

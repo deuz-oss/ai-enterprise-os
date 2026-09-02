@@ -57,11 +57,13 @@ services:
     ports:
       - "3000:80"
 
-  # ---- AI Interview Fase 2: percakapan suara real-time, self-hosted ----
+  # ---- AI Interview Fase 2: percakapan suara real-time ----
   # (PRD "Berikutnya" §5) -- TIDAK start dengan `docker compose up` biasa,
   # butuh eksplisit `docker compose --profile voice up`. GPU direkomendasikan
-  # untuk stt-server/tts-server (latensi rendah); tanpa GPU tetap jalan di
-  # CPU untuk verifikasi wiring, jauh lebih lambat dari real-time.
+  # untuk stt-server (latensi rendah); tanpa GPU tetap jalan di CPU untuk
+  # verifikasi wiring, jauh lebih lambat dari real-time. TTS lewat OpenAI
+  # (AI_BASE_URL) -- facebook/mms-tts-ind self-hosted dicoba lebih dulu tapi
+  # kualitas suaranya jelek, lihat catatan di agent/main.py.
 
   livekit:
     image: livekit/livekit-server:v1.10.0
@@ -97,20 +99,6 @@ services:
       retries: 6
       start_period: 60s
 
-  tts-server:
-    build: ./agent/tts-server
-    profiles: ["voice"]
-    ports:
-      - "127.0.0.1:8002:8000"
-    volumes:
-      - tts_model_cache:/srv/.cache/huggingface
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 6
-      start_period: 60s
-
   ai-interview-agent:
     build: ./agent
     profiles: ["voice"]
@@ -120,16 +108,15 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       STT_BASE_URL: http://stt-server:8000/v1
-      TTS_BASE_URL: http://tts-server:8000/v1
       AI_BASE_URL: ${AI_BASE_URL}
       AI_API_KEY: ${AI_API_KEY}
       AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      AI_TTS_MODEL: ${AI_TTS_MODEL:-gpt-4o-mini-tts}
+      AI_TTS_VOICE: ${AI_TTS_VOICE:-ash}
     depends_on:
       livekit:
         condition: service_healthy
       stt-server:
-        condition: service_healthy
-      tts-server:
         condition: service_healthy
       backend:
         condition: service_started
@@ -138,4 +125,3 @@ volumes:
   pgdata:
   minio:
   stt_model_cache:
-  tts_model_cache:

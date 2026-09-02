@@ -442,7 +442,7 @@ Kapabilitas penilaian kandidat berbasis AI di bawah Talent Cloud, pelengkap
 audio/video dan percakapan suara real-time — keduanya cuma nilai enum
 `mode` yang disiapkan, belum ada implementasi.
 
-### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time, Self-Hosted *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
+### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
 voice real-time) — setelah didiskusikan ulang (termasuk pertanyaan
@@ -456,79 +456,94 @@ hindari biaya per-menit & lock-in vendor pihak ketiga untuk kapabilitas
 yang akan dipakai berulang kali oleh volume interview yang berpotensi
 besar — **berbeda** dari keputusan "bayar untuk performa" di Fase 17 (AI
 Usage Metering) yang tetap berlaku untuk fitur AI berbasis teks
-(screening, matching, narasi akuntansi, dst.) — pembalikan ini spesifik
-untuk kapabilitas voice real-time saja, bukan reversal strategi AI
-tenant secara umum. **LLM/reasoning TETAP OpenAI** (`core/llm.py`,
-`AI_BASE_URL` yang sama) — cuma STT+TTS yang self-hosted, GPU yang
-dibutuhkan jauh lebih kecil daripada self-host LLM juga.
+(screening, matching, narasi akuntansi, dst.). **LLM/reasoning TETAP
+OpenAI** (`core/llm.py`, `AI_BASE_URL` yang sama).
 
-**Stack** (direplikasi dari pola `OpenInterview`, salah satu dari 5 repo
-pembanding yang diriset Fase 19 — **satu penyesuaian** dari riset awal):
+**Stack, TTS sudah direvisi (2026-09-02)** — awalnya direncanakan
+self-hosted penuh (STT+TTS), ikut pola `OpenInterview` (salah satu dari
+5 repo pembanding yang diriset Fase 19). TTS self-hosted
+(`facebook/mms-tts-ind`) benar-benar ditulis, di-build, dan diverifikasi
+jalan lewat Docker — tapi begitu Brian mendengar sampel suaranya
+langsung, hasilnya dinilai **jelek** ("jelek ah"). Ini bukan masalah
+CPU-vs-GPU (GPU cuma pengaruhi kecepatan, bukan kealamian suara) — jadi
+genuinely sinyal kualitas model, bukan artefak infrastruktur dev. TTS
+diganti ke **OpenAI** (`gpt-4o-mini-tts`, lewat `AI_BASE_URL`/`AI_API_KEY`
+yang sama dengan LLM — bukan vendor baru). Service `tts-server` custom
+dan direktori `agent/tts-server/` **dihapus total**. STT tetap
+self-hosted (tidak ada masalah kualitas di sana — faster-whisper adalah
+model transcription yang matang, beda kelas masalah dari sintesis
+suara).
 
 | Lapisan | Komponen | Catatan |
 |---|---|---|
 | Transport real-time | LiveKit (self-hosted, `docker-compose.yml` service `livekit`) | WebRTC audio browser kandidat ↔ server, dispatch eksplisit per-sesi |
-| Speech-to-Text | `faster-whisper-server` (image siap pakai, service `stt-server`) | CPU-mode default di dev; GPU direkomendasikan produksi |
+| Speech-to-Text | `faster-whisper-server` (image siap pakai, service `stt-server`) | Self-hosted, CPU-mode default di dev; GPU direkomendasikan produksi |
 | Reasoning/jawaban | LLM yang sudah ada (`core/llm.py`) | Reuse penuh via `livekit-plugins-openai` custom `base_url`, tidak ada komponen baru |
-| Text-to-Speech | **`facebook/mms-tts-ind`** (BUKAN Kokoro — service `tts-server`, `agent/tts-server/`) | **Penyesuaian dari riset awal**: Kokoro TIDAK dukung Bahasa Indonesia sama sekali (issue GitHub terbuka sejak Jan 2025, belum dijawab) — ditemukan lewat riset langsung, bukan asumsi |
+| Text-to-Speech | **OpenAI `gpt-4o-mini-tts`** | **Bukan self-hosted lagi** — `facebook/mms-tts-ind` dicoba, kualitas suaranya dinilai jelek oleh manusia setelah didengar langsung. Reuse `AI_BASE_URL`/`AI_API_KEY`, bukan vendor/kredensial baru. Dukung parameter `instructions` untuk nada bicara, dipakai untuk minta nada Bahasa Indonesia yang natural |
 
 **Kode sudah ditulis** (backend: `ai_interview/service.py`
 `start_voice_session`/`get_voice_context`/`complete_voice_session` +
 endpoint `POST/GET .../voice/*`; worker baru `agent/main.py` — LiveKit
-Agents, proses long-running pertama di codebase ini; `agent/tts-server/`;
-frontend `AIInterviewVoiceCall.tsx` — `livekit-client`) — API livekit-agents
+Agents, proses long-running pertama di codebase ini; frontend
+`AIInterviewVoiceCall.tsx` — `livekit-client`) — API livekit-agents
 diverifikasi LANGSUNG terhadap versi ter-install (module benar-benar
 di-import + `AgentServer`/tool registration dites jalan), bukan tebakan
 dari dokumentasi.
 
-**Verifikasi Docker penuh sudah dijalankan** (`docker compose --profile
-voice up`, 2026-09-02) — bukan cuma build image, tapi end-to-end nyata:
-login staf → buat template `realtime_voice` → undang kandidat → panggil
-`POST .../voice/start` (kode publik, tanpa auth) sungguhan → LiveKit
-benar-benar mint access token & dispatch agent → `ai-interview-agent`
-worker menerima job, join room yang benar, membuka sesi WebRTC nyata
-(ICE candidate bertukar, connection quality "EXCELLENT" di log LiveKit)
-→ TTS (`facebook/mms-tts-ind`) mensintesis audio Bahasa Indonesia
-sungguhan tanpa error. **3 bug nyata ditemukan & diperbaiki** lewat
-proses ini (bukan cuma dugaan dari baca kode):
-1. Port UDP media LiveKit (`50000-50100`) bentrok dengan proses lain di
-   host (MS Teams memegang port dinamis di rentang itu) — dipersempit ke
-   `51000-51020` (adjustable per mesin, dicatat di komentar
-   `docker-compose.yml`).
-2. Healthcheck `stt-server` pakai `wget` — image `faster-whisper-server`
-   (basis Ubuntu) tidak punya `wget` maupun `python`, cuma `python3`.
-   Diperbaiki, service sekarang benar-benar healthy (bukan cuma "jalan
-   tapi ditandai unhealthy").
-3. **Bug fungsional nyata**: `tts-server` (`agent/tts-server/main.py`)
-   menulis WAV 32-bit float (`scipy.io.wavfile.write` dari array
-   `float32` mentah) — `livekit-agents`' WAV decoder cuma dukung PCM
-   16-bit, jadi SETIAP kalimat yang coba disintesis gagal dengan
-   `ValueError: Unsupported WAV bits per sample: 32`. Ini baru ketahuan
-   dari log agent worker sungguhan saat live-dispatch — tidak akan pernah
-   ketahuan dari review kode atau test unit tanpa pipeline nyata jalan.
-   Diperbaiki (konversi eksplisit ke `int16` PCM sebelum ditulis) — setelah
-   fix, agent berhasil mensintesis audio tanpa error decode.
+**Verifikasi Docker penuh sudah dijalankan DUA KALI** (`docker compose
+--profile voice up`, 2026-09-02) — bukan cuma build image, tapi
+end-to-end nyata: login staf → buat template `realtime_voice` → undang
+kandidat → panggil `POST .../voice/start` (kode publik, tanpa auth)
+sungguhan → LiveKit benar-benar mint access token & dispatch agent →
+`ai-interview-agent` worker menerima job, join room yang benar, membuka
+sesi WebRTC nyata (ICE candidate bertukar, connection quality
+"EXCELLENT" di log LiveKit) → TTS mensintesis audio Bahasa Indonesia
+sungguhan tanpa error.
 
-**Contoh audio nyata pertama** dari `facebook/mms-tts-ind` (CPU, bukan
-GPU) sudah dikirim ke Brian untuk didengar langsung — bukti kualitas
-suara sekarang bisa mulai dinilai manusia, meskipun performa/latensi
-CPU jauh dari representatif produksi.
+**Pass pertama (self-hosted TTS)** — 3 bug nyata ditemukan & diperbaiki
+(bukan cuma dugaan dari baca kode): (1) port UDP media LiveKit bentrok
+dengan MS Teams di host — dipersempit `50000-50100` → `51000-51020`; (2)
+healthcheck `stt-server` pakai `wget` yang tidak ada di image itu,
+diperbaiki ke `python3`; (3) **bug fungsional**: `tts-server` custom
+menulis WAV 32-bit float, padahal `livekit-agents`' decoder cuma dukung
+PCM 16-bit — SETIAP kalimat gagal disintesis (`ValueError: Unsupported
+WAV bits per sample: 32`), ketahuan dari log agent live-dispatch, bukan
+review kode. Diperbaiki (konversi ke `int16` PCM). Setelah fix, sampel
+audio nyata dikirim ke Brian untuk didengar langsung — **hasilnya
+dinilai jelek** ("jelek ah"), memicu keputusan ganti TTS ke OpenAI (lihat
+di atas).
+
+**Pass kedua (TTS OpenAI, setelah retrofit)** — `tts-server` custom +
+`agent/tts-server/` dihapus total, `agent/main.py` diubah pakai
+`lk_openai.TTS(base_url=AI_BASE_URL, model="gpt-4o-mini-tts", ...)`,
+`docker-compose.yml`/`.env.example`/`config.py` (`voice_interview_configured`
+sekarang cek `ai_configured` bukan `tts_base_url`) diupdate. Diverifikasi
+ulang penuh: `docker compose --profile voice up` (livekit+stt-server+agent,
+tanpa `tts-server` lagi) → dispatch ulang → **tidak ada error TTS di log
+agent** (dibanding pass pertama yang eksplisit error `ValueError`) → panggilan
+langsung ke `https://api.openai.com/v1/audio/speech` dengan parameter
+persis yang dipakai agent (`gpt-4o-mini-tts`, voice `ash`, `instructions`
+nada Bahasa Indonesia) mengembalikan 200 + file audio valid — dikirim ke
+Brian untuk perbandingan kualitas. Full test suite backend **280 passed**
+(nol regresi), ruff+mypy bersih. Data uji dibersihkan, stack
+dikembalikan ke baseline.
 
 **Yang BELUM divalidasi** (mesin dev tanpa GPU NVIDIA — dikonfirmasi via
 `Get-CimInstance Win32_VideoController`, cuma Intel iGPU): latensi
-percakapan real (target <500ms — sintesis satu kalimat pendek di CPU
-teramati perlu beberapa detik, jauh dari real-time), turn-taking/voice-
-activity-detection terasa natural atau tidak dengan latensi asli, dan
-sesi voice utuh dengan kandidat sungguhan berbicara lewat mikrofon
-browser (verifikasi sejauh ini pakai dispatch via curl, bukan browser
-dengan audio nyata dari manusia) — semua butuh server ber-GPU + pengujian
-manusia sungguhan. Fitur ini **jangan dianggap siap dipakai kandidat
-sungguhan** sampai hal-hal ini divalidasi ulang.
+percakapan real dengan STT self-hosted CPU-mode (target <500ms — belum
+representatif di CPU), turn-taking/voice-activity-detection terasa
+natural atau tidak dengan latensi asli, dan sesi voice utuh dengan
+kandidat sungguhan berbicara lewat mikrofon browser (verifikasi sejauh
+ini pakai dispatch via curl, bukan browser dengan audio manusia nyata) —
+semua butuh server ber-GPU + pengujian manusia sungguhan. **Kualitas
+suara TTS**, sebaliknya, sudah bisa dinilai manusia sekarang (tidak
+butuh GPU untuk didengar) — OpenAI dipilih persis karena ini.
 
 **Status**: kode ditulis, wiring end-to-end TERBUKTI benar via Docker
-sungguhan (bukan cuma correctness statis) — token mint, agent dispatch,
-room join, sesi WebRTC nyata, dan sintesis TTS semuanya dikonfirmasi
-jalan. Performa/kualitas real menunggu akses server ber-GPU + uji
+sungguhan DUA KALI (sebelum & sesudah ganti TTS) — token mint, agent
+dispatch, room join, sesi WebRTC nyata, dan sintesis TTS semuanya
+dikonfirmasi jalan dengan stack final (STT self-hosted + LLM & TTS
+OpenAI). Latensi/turn-taking real menunggu akses server ber-GPU + uji
 manusia. Belum di-commit (menunggu instruksi eksplisit).
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*

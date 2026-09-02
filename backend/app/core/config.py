@@ -56,17 +56,19 @@ class Settings(BaseSettings):
     ai_model: str = "gpt-4o-mini"
     ai_embedding_model: str = "text-embedding-3-small"
 
-    # AI Interview Fase 2 — percakapan suara real-time, self-hosted (PRD
-    # "Berikutnya" §5). LIVEKIT_URL kosong => fitur voice interview nonaktif
-    # (endpoint /voice/start memberi 503), sama pola dengan AI_BASE_URL.
-    # LLM tetap lewat ai_base_url di atas -- SENGAJA tidak ada model/key
-    # terpisah di sini, cuma suara (STT lewat stt_base_url, TTS lewat
-    # tts_base_url) yang self-hosted.
+    # AI Interview Fase 2 — percakapan suara real-time (PRD "Berikutnya" §5).
+    # LIVEKIT_URL kosong => fitur voice interview nonaktif (endpoint
+    # /voice/start memberi 503), sama pola dengan AI_BASE_URL. LLM tetap
+    # lewat ai_base_url di atas -- SENGAJA tidak ada model/key terpisah di
+    # sini. TTS JUGA lewat ai_base_url/ai_api_key (OpenAI) -- diuji coba
+    # self-hosted (facebook/mms-tts-ind) lebih dulu, tapi kualitas suaranya
+    # dinilai jelek oleh Brian setelah didengar langsung (2026-09-02), jadi
+    # diganti ke TTS OpenAI. Cuma STT (stt_base_url, faster-whisper) yang
+    # tetap self-hosted.
     livekit_url: str | None = None
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None
     stt_base_url: str | None = None
-    tts_base_url: str | None = None
 
     # Integrasi tanda tangan elektronik. Nilai ESIGN_PROVIDER:
     # "" (nonaktif) | "sandbox" (simulasi lokal) | "privy" (PrivyID produksi)
@@ -104,7 +106,6 @@ class Settings(BaseSettings):
         "livekit_api_key",
         "livekit_api_secret",
         "stt_base_url",
-        "tts_base_url",
         "privy_api_url",
         "privy_merchant_key",
         "privy_username",
@@ -156,12 +157,14 @@ class Settings(BaseSettings):
 
     @property
     def voice_interview_configured(self) -> bool:
+        # TTS lewat ai_base_url (OpenAI) sejak facebook/mms-tts-ind terbukti
+        # kualitas suaranya kurang -- lihat catatan di atas field livekit_url.
         return bool(
             self.livekit_url
             and self.livekit_api_key
             and self.livekit_api_secret
             and self.stt_base_url
-            and self.tts_base_url
+            and self.ai_configured
         )
 
     @property
