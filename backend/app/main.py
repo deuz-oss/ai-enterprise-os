@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     from app.modules.attendance.router import router as attendance_router
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
+    from app.modules.blacklist.router import router as blacklist_router
     from app.modules.bpjs.router import router as bpjs_router
     from app.modules.chat.router import ai_router as chat_ai_router
     from app.modules.chat.router import router as chat_router
@@ -101,6 +102,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         recruitment_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("recruitment"))],
+    )
+    app.include_router(
+        blacklist_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("recruitment"))],
     )

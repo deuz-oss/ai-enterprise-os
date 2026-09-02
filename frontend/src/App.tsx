@@ -6,6 +6,7 @@ import AIInterview from "./pages/AIInterview";
 import AIInterviewSession from "./pages/AIInterviewSession";
 import Apps from "./pages/Apps";
 import Audit from "./pages/Audit";
+import Blacklist from "./pages/Blacklist";
 import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/talent-pool" element={<TalentPool />} />
             <Route path="/ai-interview" element={<AIInterview />} />
+            <Route path="/blacklist" element={<Blacklist />} />
             <Route path="/pages" element={<Pages />} />
             <Route path="/pages/:id" element={<Pages />} />
             <Route path="/workforce-cloud" element={<WorkforceCloudOverview />} />

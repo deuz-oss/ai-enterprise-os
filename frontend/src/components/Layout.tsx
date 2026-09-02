@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  Ban,
   BarChart3,
   Bell,
   Briefcase,
@@ -130,6 +131,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["admin", "recruiter", "management"],
   },
   {
+    to: "/blacklist",
+    label: "Black Lists",
+    app: "recruitment",
+    bundle: "talent",
+    roles: ["admin", "recruiter", "management"],
+  },
+  {
     to: "/workforce-cloud",
     label: "Ringkasan",
     app: "people_ops",
@@ -208,6 +216,7 @@ const PAGE_EMOJI: Record<string, string> = {  "/": "🏠",
   "/candidates": "🧲",
   "/talent-pool": "🧬",
   "/ai-interview": "🎙️",
+  "/blacklist": "🚫",
   "/pages": "📄",
   "/workforce-cloud": "🪪",
   "/employees": "💼",
@@ -239,6 +248,7 @@ const PAGE_ICON: Record<string, LucideIcon> = {
   "/candidates": Users,
   "/talent-pool": Dna,
   "/ai-interview": MessagesSquare,
+  "/blacklist": Ban,
   "/pages": FileText,
   "/workforce-cloud": IdCard,
   "/employees": IdCard,
