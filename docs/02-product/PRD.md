@@ -89,8 +89,19 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 ## 1. Ringkasan Eksekutif
 
 Sistem operasional end-to-end untuk perusahaan outsourcing yang mencakup seluruh
-siklus bisnis: akuisisi klien → onboarding & dokumen legalitas → rekrutmen
-(job order, kandidat, placement) → HRD → payrol & PPh21 → finance & akunting.
+siklus bisnis: **presales (sourcing calon klien → quotation → agreement) →**
+akuisisi klien → onboarding & dokumen legalitas → rekrutmen (job order,
+kandidat, placement) → HRD → payrol & PPh21 → finance & akunting.
+
+**Arah v4.0 (multi-industri, direncanakan):** arsitektur modular monolith dan
+model data yang ada sejak awal dirancang generik per-domain (bukan hardcode
+ke industri outsourcing), sehingga produk berpotensi dipakai perusahaan di
+industri lain dengan alur bisnis serupa (presales → deal → operasional).
+Logika yang spesifik-industri (mis. kalkulasi PPh21/BPJS) sudah terisolasi di
+modul `rates` sebagai config bertahun, bukan tertanam di kode inti — ini
+memudahkan generalisasi di masa depan. Scope dokumen ini tetap fokus ke
+kebutuhan outsourcing dulu; perluasan lintas-industri adalah keputusan
+roadmap terpisah, bukan perubahan arsitektur mendadak.
 
 Mulai v1.1, produk diposisikan sebagai **portofolio aplikasi modular** (model ala
 Mekari):
@@ -114,13 +125,15 @@ Mekari):
 | 5 | Payrol manual di Excel **Saltab** (salary tabulasi): impor absensi, prorata manual, komponen gaji–potongan manual | Rawan salah rumus/salin-tempel, tidak ada jejak revisi |
 | 6 | Approval payrol proyek via email file Saltab ke klien; eksekusi via email Payment Request ke atasan (di PT Sinergi Performa Cipta: COO) | Lambat, status tidak terlacak, bukti approval tersebar |
 | 7 | Absensi hanya rekap bulanan manual | Selisih jam kerja/lembur baru ketahuan saat payrol |
+| 8 | *(baru)* Sourcing calon klien manual (cold call/email tanpa data kontak terstruktur per departemen); quotation & agreement dibuat manual di Word/Excel, dikirim via email tanpa jejak versi/approval | Waktu presales lama, tidak ada visibilitas siapa yang sudah di-approach, risiko quotation terkirim tanpa approval harga/term |
+| 9 | *(baru)* Detail Job Order (benefit, jam kerja) numpang di teks bebas `description`/`requirements`, tidak ada dokumen JO ter-generate dari sistem, jadwal interview tidak tersinkron ke kalender kandidat/rekruter | Detail JO gampang terlewat/salah kutip ke offering letter, double-booking jadwal interview, kandidat lupa jadwal karena tidak ada reminder kalender |
 
 ## 3. Pengguna & Peran
 
 | Peran | Deskripsi | Fitur utama |
 |-------|-----------|-------------|
 | Admin | Owner / IT | Semua modul + manajemen user + lisensi aplikasi |
-| Business Dev | Sales/presales | Pipeline, data klien, upload dokumen legalitas |
+| Business Dev | Sales/presales | Sourcing & kelola kontak lead (multi-kontak per perusahaan: procurement/HR/trade marketing), pipeline, data klien, generate & kirim quotation (approval wajib sebelum terkirim), generate agreement, upload dokumen legalitas |
 | Recruiter | Tim rekrutmen | Job order, kandidat, onboarding karyawan |
 | HR | Personalia | **Karyawan internal**: kontrak, dokumen pegawai, absensi internal, **payrol internal** |
 | Operations | Operasional proyek | **Karyawan outsourcing**: monitoring penempatan, absensi outsourcing, **Saltab/payrol proyek**, approval klien, **Payment Request proyek** |
@@ -177,7 +190,7 @@ baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
 
 | Cloud | Modul kode (`apps.py`) | Isi utama | Skema tagihan | Bergantung ke |
 |---|---|---|---|---|
-| 🎯🧲 **Talent Cloud** | `sales_crm` + `recruitment` | Pipeline lead, klien (auto `prospek→aktif` saat placement pertama), Job Order (pipeline 13-tahap §5), Talent Pool + CV standar, **AI Matching native 0-100+explain** (bukan add-on lagi), Job Portal publik, jadwal interview, offering (esign), onboard | Rp 15rb / talent aktif / bulan + Rp 2rb / eksekusi match | — (standalone) |
+| 🎯🧲 **Talent Cloud** | `sales_crm` + `recruitment` | Pipeline lead, klien (auto `prospek→aktif` saat placement pertama), Job Order (pipeline 13-tahap §5), Talent Pool + CV standar, **AI Matching native 0-100+explain** (bukan add-on lagi), Job Portal publik, jadwal interview, offering (esign), onboard, **Quotation generator (template visual, gratis)**, **Agreement generator (template visual, gratis)** | Rp 15rb / talent aktif / bulan + Rp 2rb / eksekusi match **+ Rp 8rb / e-signature request (Privy, khusus agreement klien — pass-through cost + margin)** | — (standalone) |
 | 💼 **Workforce Cloud** | `people_ops` | Karyawan, kontrak, dokumen legal, BPJS (no+status+kartu+`valid_until`), **asuransi one-to-many** (`employee_insurances`: provider/no polis/status/valid_until/kartu), absensi, ESS portal, TTE | Rp 10rb / employee aktif / bulan | — (standalone) |
 | 📊 **Revenue Cloud** | `payroll` + `finance` | Payrol dua jalur (saltab, BPJS dual-side, PPh21, bukti potong), invoice, **e-Faktur DJP lengkap** (NPWP lawan, DPP, kode transaksi, no seri unik/tenant/tahun, QR, flow kirim/batal/pengganti), aging, cash flow, Payment Request | Rp 5rb / invoice + Rp 8rb / faktur DJP + base Rp 1jt/bulan | `workforce` |
 | 🏛️ **Govern Cloud** | `accounting` | Setara Accurate.id: bagan akun dinamis, jurnal memorial→posted, mesin auto-journal, kas-bank, pembelian, aset tetap, periode & tutup buku, laporan lengkap + AI akuntansi (§8) | Flat Rp 5-7jt / bulan | `revenue` |
@@ -546,6 +559,164 @@ dikonfirmasi jalan dengan stack final (STT self-hosted + LLM & TTS
 OpenAI). Latensi/turn-taking real menunggu akses server ber-GPU + uji
 manusia. Belum di-commit (menunggu instruksi eksplisit).
 
+### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign *(direncanakan, belum dimulai)*
+
+Menutup gap di §2 baris 8 — memperdalam tahap presales sebelum `Lead`
+existing (§Fase 15 dst. asumsikan lead sudah ada). Urutan pembangunan
+sengaja mengikuti ketergantungan alur kerja (lihat catatan tiap butir),
+bukan cuma kemudahan teknis:
+
+1. **Refactor `Lead` → `Company` + `Contact` (multi-kontak)** — model
+   `Lead` saat ini (`presales/models.py`) cuma menyimpan satu kontak per
+   lead (`contact_name`/`contact_phone`/`contact_email` tunggal). Pecah
+   jadi `Company` (nama, industri, size, sumber data) dengan `Contact[]`
+   (banyak per company: nama, departemen/jabatan — procurement, HR, trade
+   marketing, dll — email, telp, `linkedin_url`). `Lead.company_id` jadi
+   FK, bukan field bebas lagi. Ini fondasi semua butir berikutnya dan
+   TIDAK menunggu scraper jadi — bisa diisi manual dulu.
+2. **Quotation generator** — entitas baru `QuotationTemplate`
+   (`field_schema` JSON, hasil **template builder visual/drag-drop** —
+   keputusan eksplisit, bukan template terkode) dan `Quotation`
+   (status: `draft` → `pending_approval` → `approved`/`rejected` → `sent`
+   → `accepted_by_client`/`expired`; **approval internal wajib** sebelum
+   `sent` — keputusan eksplisit, bukan langsung kirim). Render PDF pakai
+   `reportlab` (sudah jadi dependency backend, tidak perlu library baru).
+3. **Agreement generator (template engine)** — pola sama seperti
+   Quotation (template visual + JSON schema), tapi output `.docx`
+   (`python-docx`, sudah jadi dependency) dan/atau PDF, dengan status
+   tambahan `internal_review` (klausul legal butuh review manusia sebelum
+   dikirim — beda dari Quotation yang tidak butuh ini). **Dikerjakan
+   SEBELUM butir 4** — agreement harus ada wujudnya dulu sebelum
+   disambungkan ke e-signature, meski butir 4 secara teknis lebih murah
+   dikerjakan.
+4. **Perluasan Esign untuk Agreement klien** — modul `esign` sudah
+   punya `PrivyAdapter` lengkap (kirim dokumen, webhook status,
+   sent/viewed/completed/declined/expired) tapi `EsignRequest` saat ini
+   cuma terima `contract_id` (kontrak kerja karyawan) ATAU `placement_id`
+   (offering kandidat). Tambah kolom `agreement_id` (nullable, exclusive
+   terhadap 2 lainnya) — reuse penuh adapter, webhook, dan status
+   tracking yang sudah ada, tidak perlu dibangun ulang.
+5. **Lead sourcing via scraping (LinkedIn)** — sumber pertama yang
+   ditarget adalah LinkedIn (keputusan eksplisit, risiko tertinggi dari
+   opsi yang dipertimbangkan — dibanding scraping website resmi
+   perusahaan atau direktori bisnis publik yang lebih aman tapi datanya
+   lebih terbatas). Dikerjakan PALING TERAKHIR karena dua alasan
+   independen dari kesiapan teknis fitur lain: (a) **risiko teknis**
+   — LinkedIn aktif mendeteksi & memblokir scraping otomatis (rate
+   limit, CAPTCHA, ban akun/IP), perlu strategi headless browser +
+   delay manusiawi + akun scraping terpisah dari akun bisnis; (b)
+   **risiko hukum** — kontak individu (nama+jabatan+email/telp
+   spesifik orang) adalah data pribadi di bawah UU PDP, perlu
+   konsultasi tim legal SPC untuk dasar hukum pemrosesan sebelum
+   go-live, bukan asumsi "legitimate interest" otomatis aman. Butir
+   1-4 tidak bergantung ke ini — bisa dipakai dengan data lead manual
+   sambil scraper dan kepastian hukumnya disiapkan paralel.
+
+**Model bisnis (diputuskan)**: Quotation generator dan Agreement
+generator **gratis**, dibundel ke Talent Cloud (§4.3) — cost Aeos untuk
+keduanya cuma compute. E-signature via Privy **Rp 8rb/signature**
+(cost dasar Privy ke Aeos ~Rp 850–3.300/dokumen tergantung volume,
+sumber: blog.privy.id — Rp 8rb tetap sehat margin di semua tier, dan
+konsisten dengan skala harga Rp 8rb/faktur DJP yang sudah ada di Revenue
+Cloud). **Prinsip untuk keputusan pricing serupa ke depan**: fitur
+generate dokumen internal (compute-only) = gratis/bundled; fitur yang
+menyentuh API pihak ketiga berbayar = charge per-pakai (pass-through
+cost + margin) — termasuk kalau nanti lead sourcing beralih dari
+scraping ke API data B2B berbayar.
+
+### Fase 21 — Job Order: Field Terstruktur, Dokumen JO, Kalender, Offering Call *(direncanakan, belum dimulai)*
+
+Audit lintas modul `recruitment`/`job_portal`/`talentpool`/`ai_interview`/`esign`
+(2026-09-03) menunjukkan alur rekrutmen inti **sudah dibangun lengkap dan
+presisi** — `PlacementStatus` (sourced→screening→interview_internal→
+submitted→sent_to_client→client_screening→interview_client→ojt→proposed
+→accepted→onboarded, plus rejected/cancelled), sourcing dari Job Portal +
+Talent Pool, ekstraksi CV ATS-friendly, CV standar branded, AI Matching,
+offering letter+esign, konversi Placement→Employee (`onboard_from_placement`)
+— semua ini SUDAH ADA, tidak perlu dibangun ulang. Fase ini menutup 5 gap
+konkret yang ditemukan, diurutkan dari yang paling sederhana:
+
+1. **Field terstruktur benefit & jam kerja** — `JobOrder` baru punya
+   `description`/`requirements` (teks bebas). Tambah kolom: `benefits`
+   (JSON, list terstruktur — bukan teks bebas, supaya bisa di-auto-fill ke
+   dokumen JO/offering letter), `working_days` (JSON/enum hari), `working_
+   hours_start`/`working_hours_end` (Time). Fondasi untuk butir 2.
+2. **Offering call sebagai aksi terpisah** — tambah `offering_call_done`
+   (Boolean) + `offering_call_at` (DateTime) di `Placement`, supaya
+   tercatat sebagai aksi independen dari `offering_letter_object_key`
+   (klien bisa pilih call saja, letter saja, atau keduanya).
+3. **Interview manusia vs AI — unifikasi UI saja (keputusan eksplisit)**:
+   backend TETAP 2 sistem terpisah (`InterviewSchedule` dan
+   `AIInterviewResponse`) — pemisahan aslinya di Fase 19 (AI interview
+   reusable/re-scorable) tetap valid, tidak dipaksa digabung. Yang berubah
+   cuma di halaman Job Order: satu tombol "Jadwalkan Interview" yang
+   bercabang ke salah satu dari dua sistem berdasarkan pilihan mode,
+   `PlacementStatus.interview_internal` tetap satu status yang sama
+   terlepas mode yang dipakai.
+4. **Generate dokumen Job Order dari template** — pola identik dengan
+   Quotation/Agreement generator (Fase 20): `JobOrderTemplate` (`field_
+   schema` JSON, reuse template builder visual yang sama) + kolom baru
+   `JobOrder.generated_document_object_key`/`generated_at` (beda dari
+   `source_document_object_key` yang sudah ada, yang itu untuk *upload*
+   dokumen JO dari klien — bukan *generate* keluar dari sistem). Render
+   pakai `reportlab` (sudah dependency).
+5. **Sinkronisasi Google Calendar — invite .ics via email (keputusan
+   eksplisit, BUKAN OAuth)**: kandidat dan rekruter menerima file `.ics`
+   terlampir di email undangan interview, bisa ditambahkan ke Google
+   Calendar/Outlook/kalender apa pun tanpa perlu connect/login akun
+   Google. **Ini keputusan sadar menghindari kompleksitas OAuth 2.0 per-
+   user** (consent flow, token storage/refresh per kandidat yang notabene
+   pengguna sekali pakai) — konsisten dengan pola ATS lain di industri
+   yang umumnya juga pakai pendekatan invite `.ics`, bukan minta OAuth
+   kandidat. Ini juga berarti **tidak ada dependency Google Cloud/OAuth
+   client baru** di infrastruktur — cukup generate file `.ics` standar
+   (library minimal seperti `icalendar`, belum ada di `pyproject.toml`,
+   perlu ditambah) dan lampirkan ke email undangan yang sudah dikirim via
+   jalur email existing.
+
+**Urutan pembangunan**: 1 → 2 → 3 saling independen, bisa paralel/urutan
+bebas (masing-masing kecil, tidak saling bergantung). 4 sebaiknya
+menunggu 1 selesai (butuh field benefit/jam kerja sebagai sumber data
+template). 5 independen dari semua butir lain, bisa dikerjakan kapan pun.
+
+### Fase 22 — Component Library Frontend (Button, Badge, Card, ProgressStep) — ✅ Selesai (2026-09-03)
+
+Menutup temuan audit design-system (2026-09-03): 32/41 file frontend
+bypass token `var(--...)` dengan warna Tailwind mentah, dan folder
+`components/` tidak punya satu pun primitive UI (`Button`/`Card`/`Badge`)
+— tiap halaman menulis ulang markup-nya sendiri, sumber utama
+inkonsistensi visual. Fase ini bukan fitur produk baru, melainkan
+fondasi teknis yang dipakai Fase 20 & 21 di atas (Quotation approval
+badge, progress tracker Placement, tombol offering).
+
+- 4 komponen baru di `frontend/src/components/ui/`: `Button` (reuse
+  `.btn`/`.btn-secondary` existing + varian baru `ghost`/`danger`,
+  dukungan `loading` state), `Badge` (reuse `.pill`/`.p-*` existing lewat
+  API `tone` semantik — bukan className manual per halaman), `Card`
+  (reuse `.card` existing + header opsional), dan `ProgressStep` (BARU,
+  belum ada padanannya sebelumnya — dipakai untuk tracker
+  `PlacementStatus` di Fase 21).
+- **Prinsip pemisahan warna yang disengaja**: `ProgressStep` memakai
+  `var(--accent)` untuk state selesai/aktif (akan otomatis ikut berubah
+  begitu token warna brand final diputuskan — masih dalam eksplorasi,
+  kandidat arah teal `#0F6E56` dibandingkan terhadap identitas SPC induk
+  perusahaan). `Badge` SENGAJA TIDAK memakai `var(--accent)` — warna
+  status (hijau=sukses, merah=gagal, dst.) harus tetap konsisten secara
+  universal terlepas dari perubahan warna brand apa pun.
+- **3 halaman auth dimigrasi** sebagai contoh pemakaian nyata sekaligus
+  memperbaiki bug yang ditemukan saat audit: `Login.tsx`,
+  `ForgotPassword.tsx`, `ResetPassword.tsx` sebelumnya 100% hardcode
+  kelas Tailwind `slate-*` — TIDAK merespons dark mode sama sekali,
+  padahal halaman lain di app sudah. Ketiganya sekarang pakai
+  `var(--...)` + komponen `Button`/`Card`. Panel hero kiri di `Login.tsx`
+  (gradient gelap) SENGAJA dibiarkan hardcode dark — itu elemen brand
+  tetap, bukan bug.
+- Ditambah 2 token baru ke `index.css`: `.btn-ghost`, `.btn-danger`
+  (variant yang belum ada sebelumnya, dibutuhkan API `Button`).
+- **Migrasi belum menyeluruh** — 29 file frontend lain yang sama-sama
+  ditemukan bypass token di audit awal BELUM disentuh di fase ini;
+  migrasi lanjutan dilakukan bertahap, bukan sekaligus.
+
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa
@@ -827,7 +998,8 @@ Upload (PDF / DOCX / scan / foto)
 | Data | PostgreSQL; file di object storage MinIO/S3; SQLite+folder lokal untuk dev |
 | Multi-tenant | Shared schema + `tenant_id`; provisioning via `/platform/tenants`; lisensi per tenant |
 | Keamanan | JWT, RBAC per peran **dan per jenis payrol**; token approval klien berbatas waktu & cakupan; audit trail penuh |
-| Kepatuhan | Rate/config pajak-BPJS-bank **terpisah dari kode**; retensi dokumen; opsi self-host |
+| Kepatuhan | Rate/config pajak-BPJS-bank **terpisah dari kode**; retensi dokumen; opsi self-host; **kontak lead hasil scraping (Fase 20) = data pribadi UU PDP** — dasar hukum pemrosesan, consent, dan retensi mengikuti pola yang sama dengan CV kandidat (§14) |
+| Data sourcing *(baru, Fase 20)* | Scraping eksternal (LinkedIn dst.) berjalan out-of-band dari request path utama (worker terpisah, rate-limited, akun scraping terisolasi dari akun bisnis) — kegagalan/blokir sumber eksternal tidak boleh mengganggu ketersediaan modul lain |
 | Deployment | Docker Compose (Caddy TLS produksi); path Kubernetes terbuka |
 | Realtime | WebSocket native FastAPI untuk chat & notifikasi interaktif; Redis pub/sub saat scale-out multi-instance |
 
@@ -866,6 +1038,19 @@ Tambahan v3.0/v3.1 (4-Cloud metered, AI Interview menyusul):
     3 bulan pasca-aktivasi (Fase 16) — indikator kanal sourcing baru benar
     dipakai, bukan cuma tersedia.
 
+Tambahan Fase 20 (presales — lead sourcing s.d. esign, direncanakan):
+
+18. Median waktu draft → quotation terkirim (setelah approval) turun
+    signifikan vs proses Word/Excel manual saat ini (baseline diukur
+    sebelum go-live).
+19. **Nol quotation terkirim tanpa approval** tercatat (`approved_by`
+    wajib terisi sebelum status `sent`).
+20. Median time-to-signed untuk agreement klien (dari `sent` ke Privy
+    sampai `completed`) terukur dan dipublikasikan sebagai baseline.
+21. Tingkat keberhasilan scraping LinkedIn (request sukses vs
+    diblokir/rate-limited) dipantau sejak pilot volume kecil — bukan
+    metrik target angka tetap di awal, karena baseline belum ada.
+
 ## 13. Halaman & Alur Utama
 
 Shell baru (lihat mockup): sidebar workspace → grup Cloud → halaman; app
@@ -878,7 +1063,13 @@ Login ──► Beranda (Dashboard Umum, 9 widget lintas Cloud yang dilisensikan
   🎯🧲 Talent Cloud    : Pipeline (tabel/papan), Klien + dokumen legalitas,
                         Job Orders (pipeline 13-tahap), Talent Pool (upload
                         CV → auto-profil + CV standar bertemplate, AI
-                        Matching 0-100+explain), placement, jadwal interview
+                        Matching 0-100+explain), placement, jadwal interview,
+                        Lead Sourcing (Fase 20 — daftar company+contact hasil
+                        scraping/manual), Quotation (builder template visual,
+                        approval, kirim), Agreement (builder template visual,
+                        internal review, kirim untuk esign), Job Order
+                        (Fase 21 — field benefit/jam kerja, generate dokumen
+                        JO, pilih mode interview manusia/AI, offering call)
   💼 Workforce Cloud  : Karyawan, kontrak, dokumen legal, BPJS+asuransi,
                         Absensi, Portal Saya (ESS), TTE
   📊 Revenue Cloud    : Saltab proyek (grid), Approval klien (token),
@@ -937,3 +1128,18 @@ Publik (tanpa login, per-tenant white-label):
   stack sudah diambil (lihat penutup §5), implementasi belum dimulai;
   jangan diasumsikan tersedia sampai benar-benar diimplementasikan. Mode
   teks (Fase 19) sudah live dan bisa dipakai.
+- **Lead sourcing via scraping LinkedIn (Fase 20, keputusan sadar
+  2026-09-03)**: risiko diketahui dan diterima secara eksplisit, bukan
+  luput dari perhatian — (1) teknis: LinkedIn aktif mendeteksi/memblokir
+  scraping otomatis, mitigasi via headless browser + delay manusiawi +
+  akun scraping terpisah dari akun bisnis; (2) hukum: kontak individu
+  hasil scraping = data pribadi (UU PDP), konsultasi tim legal SPC
+  wajib dilakukan sebelum go-live, bukan asumsi default aman. Disarankan
+  mulai dari pilot volume kecil sebelum scale up (lihat metrik #21).
+- **Nama produk/brand belum final (per 2026-09-03)**: dokumen ini masih
+  memakai nama kerja "Aeos"/"AI Enterprise OS". Riset nama alternatif
+  sedang berjalan di luar dokumen ini (kandidat awal seperti
+  "Cadence"/"Cadens" sudah ditolak karena konflik trademark software
+  yang sudah ada). **Begitu nama final diputuskan, seluruh dokumen ini
+  — termasuk judul, referensi kode `apps.py`, dan nama tenant demo —
+  perlu di-pass ulang untuk konsistensi penamaan.**

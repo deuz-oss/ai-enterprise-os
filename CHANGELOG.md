@@ -6,6 +6,19 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 22: Component Library Frontend (Button, Badge, Card, ProgressStep)
+
+- 4 komponen dasar baru di `frontend/src/components/ui/`: `Button`,
+  `Badge`, `Card`, `ProgressStep` (yang terakhir benar-benar baru, 3
+  lainnya reuse token `.btn`/`.pill`/`.card` yang sudah ada di
+  `index.css`, sekarang lewat API komponen bukan className manual).
+- 2 varian baru `.btn-ghost`/`.btn-danger` ditambahkan ke `index.css`.
+- Migrasi 3 halaman auth (`Login.tsx`, `ForgotPassword.tsx`,
+  `ResetPassword.tsx`) dari hardcode Tailwind `slate-*` ke token
+  `var(--...)` + komponen baru — memperbaiki bug tidak merespons dark
+  mode yang ditemukan saat audit design-system 2026-09-03.
+- Detail keputusan di `PRD.md` Fase 22.
+
 ### Added — Polish: Foto Kandidat pada CV Standar & Page Tree Notion
 
 - **Foto kandidat (§10.3)**: unggah/hapus foto (`/talentpool/candidates/{id}/photo`,

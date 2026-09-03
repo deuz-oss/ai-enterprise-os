@@ -67,6 +67,26 @@ body {
   .btn-secondary:hover {
     background-color: var(--hover);
   }
+  /* Ditambah untuk Button component library (2026-09-03) — variant yang
+     belum ada sebelumnya. Sengaja lewat var(--...), bukan hex langsung,
+     supaya konsisten dengan aturan yang sama di seluruh file ini. */
+  .btn-ghost {
+    @apply rounded-lg px-3 py-1.5 text-sm font-medium;
+    background-color: transparent;
+    color: var(--text);
+    transition: background-color 0.15s ease;
+  }
+  .btn-ghost:hover {
+    background-color: var(--hover);
+  }
+  .btn-danger {
+    @apply rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
+    background-color: #dc2626;
+    transition: filter 0.15s ease;
+  }
+  .btn-danger:hover {
+    filter: brightness(1.1);
+  }
   .input {
     @apply w-full rounded-lg px-3 py-2 text-sm focus:outline-none;
     border: 1px solid var(--border);

@@ -2,12 +2,19 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Info, Lock, Mail, Sparkles, ArrowRight } from "lucide-react";
 import { api, setToken } from "../api/client";
+import { Button, Card } from "../components/ui";
 
 /** Login dua panel ala mockup login.html — hero brand (desktop) + form.
  * Elemen dekoratif tanpa dukungan backend nyata (SSO Google, Magic Link,
  * slug tenant manual, remember-me, KPI ringkasan palsu) sengaja tidak
  * diikutkan — email sudah unik global sehingga tenant otomatis terdeteksi
  * saat login, tanpa perlu input tambahan.
+ *
+ * Dimigrasi 2026-09-03 ke token var(--...) + component library (Button,
+ * Card) untuk PANEL KANAN (form) dan header mobile — sebelumnya 100%
+ * hardcode slate-*, tidak ikut dark mode (temuan audit design-system).
+ * PANEL KIRI (hero gradient gelap) SENGAJA TETAP hardcode dark — itu
+ * elemen brand tetap yang memang selalu gelap di kedua mode, bukan bug.
  */
 export default function Login() {
   const navigate = useNavigate();
@@ -54,13 +61,13 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-slate-50 antialiased">
+    <div className="flex min-h-screen antialiased" style={{ backgroundColor: "var(--bg)" }}>
       <div
         className="fixed inset-x-0 top-0 h-1"
-        style={{ background: "linear-gradient(90deg,#0f172a 0%,#1e3a5f 40%,#a16207 100%)" }}
+        style={{ background: "linear-gradient(90deg,var(--accent) 0%,#1e3a5f 40%,#a16207 100%)" }}
       />
 
-      {/* LEFT: brand hero (desktop only) */}
+      {/* LEFT: brand hero (desktop only) — sengaja tetap gelap di kedua mode */}
       <div
         className="relative hidden overflow-hidden text-white lg:flex lg:w-[52%]"
         style={{ background: "linear-gradient(135deg,#020617 0%,#0f172a 55%,#1e3a5f 100%)" }}
@@ -110,48 +117,62 @@ export default function Login() {
       </div>
 
       {/* RIGHT: form */}
-      <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
-        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-5 lg:hidden">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white">
+      <div className="flex min-w-0 flex-1 flex-col" style={{ backgroundColor: "var(--bg)" }}>
+        <div
+          className="flex items-center gap-3 px-6 py-5 lg:hidden"
+          style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
+        >
+          <div
+            className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-white"
+            style={{ backgroundColor: "var(--accent)" }}
+          >
             AE
           </div>
           <div>
-            <div className="text-sm font-semibold leading-none text-slate-900">
+            <div className="text-sm font-semibold leading-none" style={{ color: "var(--text)" }}>
               AI Enterprise OS
             </div>
-            <div className="text-xs text-slate-500">Outsourcing Operations</div>
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Outsourcing Operations
+            </div>
           </div>
         </div>
 
         <div className="flex flex-1 items-center justify-center p-6 lg:p-10">
           <div className="w-full max-w-[420px]">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
-              <h2 className="text-[20px] font-semibold tracking-tight text-slate-900">
+            <Card className="sm:p-7">
+              <h2 className="text-[20px] font-semibold tracking-tight" style={{ color: "var(--text)" }}>
                 Masuk ke workspace
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
                 Gunakan email &amp; kata sandi akun tenant Anda.
               </p>
 
               {error && (
-                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
                   {error}
                 </p>
               )}
 
               <form ref={formRef} onSubmit={handleSubmit} className="mt-5 space-y-4">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <label
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--text-muted)" }}
+                  >
                     Email
                   </label>
                   <div className="relative mt-1.5">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Mail
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                      style={{ color: "var(--text-muted)" }}
+                    />
                     <input
                       type="email"
                       required
                       autoFocus
                       placeholder="nama@perusahaan.co.id"
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="input h-10 pl-9"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
@@ -159,30 +180,38 @@ export default function Login() {
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <label
+                      className="text-xs font-semibold uppercase tracking-wide"
+                      style={{ color: "var(--text-muted)" }}
+                    >
                       Kata sandi
                     </label>
                     <Link
                       to="/forgot-password"
-                      className="text-xs font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
+                      className="text-xs font-medium underline underline-offset-4"
+                      style={{ color: "var(--text-muted)" }}
                     >
                       Lupa kata sandi?
                     </Link>
                   </div>
                   <div className="relative mt-1.5">
-                    <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Lock
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                      style={{ color: "var(--text-muted)" }}
+                    />
                     <input
                       type={showPassword ? "text" : "password"}
                       required
                       placeholder="••••••••"
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="input h-10 pl-9 pr-9"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 hover:opacity-70"
+                      style={{ color: "var(--text-muted)" }}
                       title={showPassword ? "Sembunyikan sandi" : "Tampilkan sandi"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -190,32 +219,34 @@ export default function Login() {
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="submit"
-                  disabled={loading}
-                  className="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                  loading={loading}
+                  className="w-full"
+                  icon={<ArrowRight className="h-4 w-4" />}
                 >
                   {loading ? "Memproses..." : "Masuk"}
-                  {!loading && <ArrowRight className="h-4 w-4" />}
-                </button>
-                <p className="hidden text-center text-xs text-slate-400 sm:block">
+                </Button>
+                <p className="hidden text-center text-xs sm:block" style={{ color: "var(--text-muted)" }}>
                   ⌘ + Enter untuk masuk
                 </p>
               </form>
 
-              <div className="mt-6 flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div className="mt-6 flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-900/20">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
                 <div className="text-xs leading-relaxed">
-                  <div className="font-semibold text-amber-900">Akses mengikuti lisensi tenant</div>
-                  <div className="text-amber-800">
+                  <div className="font-semibold text-amber-900 dark:text-amber-300">
+                    Akses mengikuti lisensi tenant
+                  </div>
+                  <div className="text-amber-800 dark:text-amber-400">
                     Jika modul terkunci, minta admin tenant mengaktifkan lewat halaman Aplikasi,
                     atau hubungi platform admin.
                   </div>
                 </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="mt-4 text-center text-xs text-slate-400">
+            <div className="mt-4 text-center text-xs" style={{ color: "var(--text-muted)" }}>
               © 2026 AI Enterprise OS
             </div>
           </div>
