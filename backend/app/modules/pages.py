@@ -1,4 +1,4 @@
-"""Modul Halaman (page tree ala Notion) — pelengkap shell Fase 7.
+"""Modul Halaman (page tree hierarkis untuk workspace) — pelengkap shell Fase 7.
 
 Halaman buatan pengguna: hierarki parent/child, emoji, konten teks.
 Gratis untuk seluruh staf tenant; karyawan outsourcing tidak mendapat akses.
@@ -16,14 +16,14 @@ from app.core.security import get_current_user
 from app.core.tenancy import TenantMixin
 
 
-class NotionPage(TenantMixin, Base):
+class WorkspacePage(TenantMixin, Base):
     """Satu halaman workspace; hierarki via parent_id."""
 
-    __tablename__ = "notion_pages"
+    __tablename__ = "workspace_pages"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     parent_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("notion_pages.id"), default=None, index=True
+        ForeignKey("workspace_pages.id"), default=None, index=True
     )
     title: Mapped[str] = mapped_column(Text, default="Tanpa judul")
     icon: Mapped[str] = mapped_column(Text, default="📄")
@@ -57,14 +57,14 @@ def _staff(user) -> bool:
     return getattr(user.role, "value", user.role) in STAFF_ROLES
 
 
-def _get_page(db: Session, page_id: str) -> NotionPage:
-    page = db.get(NotionPage, parse_uuid(page_id))
+def _get_page(db: Session, page_id: str) -> WorkspacePage:
+    page = db.get(WorkspacePage, parse_uuid(page_id))
     if page is None:
         raise HTTPException(status_code=404, detail="Halaman tidak ditemukan")
     return page
 
 
-def _serialize(page: NotionPage, *, with_content: bool = True) -> dict:
+def _serialize(page: WorkspacePage, *, with_content: bool = True) -> dict:
     data: dict = {
         "id": str(page.id),
         "parent_id": str(page.parent_id) if page.parent_id else None,
@@ -80,7 +80,9 @@ def _serialize(page: NotionPage, *, with_content: bool = True) -> dict:
 @router.get("")
 def list_pages(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Daftar halaman tenant untuk sidebar page tree."""
-    rows = db.execute(select(NotionPage).order_by(NotionPage.created_at.desc())).scalars().all()
+    rows = (
+        db.execute(select(WorkspacePage).order_by(WorkspacePage.created_at.desc())).scalars().all()
+    )
     return [_serialize(p, with_content=False) for p in rows]
 
 
@@ -90,7 +92,7 @@ def create_page(payload: dict, db: Session = Depends(get_db), user=Depends(get_c
     parent_id = payload.get("parent_id") or None
     if parent_id is not None:
         _get_page(db, str(parent_id))  # induk wajib ada
-    page = NotionPage(
+    page = WorkspacePage(
         parent_id=parse_uuid(str(parent_id)) if parent_id else None,
         title=str(payload.get("title") or "").strip()[:255] or "Tanpa judul",
         icon=str(payload.get("icon") or "📄")[:10],
@@ -129,7 +131,7 @@ def update_page(
                 )
             parent = _get_page(db, str(new_parent))
             # Cegah siklus: induk baru tidak boleh berada di sub-halaman ini.
-            cursor: NotionPage | None = parent
+            cursor: WorkspacePage | None = parent
             while cursor is not None:
                 if cursor.id == page.id:
                     raise HTTPException(
@@ -137,7 +139,9 @@ def update_page(
                         detail="Tidak bisa memindah ke dalam sub-halamannya sendiri",
                     )
                 cursor = (
-                    db.get(NotionPage, cursor.parent_id) if cursor.parent_id is not None else None
+                    db.get(WorkspacePage, cursor.parent_id)
+                    if cursor.parent_id is not None
+                    else None
                 )
             page.parent_id = parse_uuid(str(new_parent))
         else:
@@ -152,11 +156,13 @@ def delete_page(page_id: str, db: Session = Depends(get_db), user=Depends(get_cu
     """Hapus halaman beserta seluruh sub-halamannya."""
     _assert_staff(user)
     page = _get_page(db, page_id)
-    to_delete: list[NotionPage] = [page]
+    to_delete: list[WorkspacePage] = [page]
     frontier = [page.id]
     while frontier:
         children = (
-            db.execute(select(NotionPage).where(NotionPage.parent_id.in_(frontier))).scalars().all()
+            db.execute(select(WorkspacePage).where(WorkspacePage.parent_id.in_(frontier)))
+            .scalars()
+            .all()
         )
         frontier = [c.id for c in children]
         to_delete.extend(children)

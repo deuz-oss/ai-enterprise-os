@@ -212,7 +212,7 @@ def create_app() -> FastAPI:
     app.include_router(rates_router, prefix="/api/v1")
     # Chat Workspace (Fase 11): gratis di semua paket — tanpa guard lisensi.
     app.include_router(chat_router, prefix="/api/v1")
-    # Page tree ala Notion (Fase 7 polish): gratis untuk staf internal.
+    # Page tree hierarkis workspace (Fase 7 polish): gratis untuk staf internal.
     app.include_router(pages_router, prefix="/api/v1")
     # Fase 12: fitur AI kolaborasi ter-guard lisensi ai_addon (chat dasar tetap gratis).
     app.include_router(

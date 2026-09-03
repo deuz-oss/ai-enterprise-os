@@ -1,4 +1,4 @@
-"""Polish Fase 7 — Halaman workspace (page tree ala Notion)."""
+"""Polish Fase 7 — Halaman workspace (page tree hierarkis)."""
 
 from tests.conftest import _auth_header
 
