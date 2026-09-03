@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 import { Banknote, Calendar, IdCard, Phone, Tag, User } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
+import { Pagination } from "../components/Pagination";
 
 export interface EmployeeRow {
   id: string;
@@ -222,9 +223,21 @@ export default function Employees() {
   const bpjsKetenagakerjaanFileRef = useRef<HTMLInputElement>(null);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
 
-  const { data: employees } = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => api.get<EmployeeRow[]>("/employees"),
+  const [offset, setOffset] = useState(0);
+  const pageLimit = 50;
+  // Tabel utama (satu halaman) -- dipisah dari `employeesLookup` di bawah
+  // karena beberapa widget lain (reminder kontrak, cuti, koreksi absensi)
+  // mencari NAMA karyawan lintas SEMUA karyawan, bukan cuma yang sedang
+  // tampil di halaman tabel aktif.
+  const { data: employeesPage } = useQuery({
+    queryKey: ["employees", offset],
+    queryFn: () => api.getPaged<EmployeeRow>(`/employees?limit=${pageLimit}&offset=${offset}`),
+  });
+  const employees = employeesPage?.data;
+  const employeesTotal = employeesPage?.total ?? 0;
+  const { data: employeesLookup } = useQuery({
+    queryKey: ["employees-lookup"],
+    queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
   });
   const { data: contracts } = useQuery({
     queryKey: ["employee-contracts", selectedId],
@@ -283,6 +296,7 @@ export default function Employees() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees"] });
+    qc.invalidateQueries({ queryKey: ["employees-lookup"] });
     qc.invalidateQueries({ queryKey: ["contracts-expiring"] });
     qc.invalidateQueries({ queryKey: ["selfservice-accounts"] });
   };
@@ -436,7 +450,7 @@ export default function Employees() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-balance"] }),
   });
 
-  const selected = employees?.find((e) => e.id === selectedId);
+  const selected = employeesLookup?.find((e) => e.id === selectedId);
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -573,7 +587,7 @@ export default function Employees() {
             </thead>
             <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
               {(attendanceCorrections ?? []).map((c) => {
-                const emp = employees?.find((e) => e.id === c.employee_id);
+                const emp = employeesLookup?.find((e) => e.id === c.employee_id);
                 return (
                   <tr key={c.id}>
                     <td className="td font-medium">{emp?.full_name ?? "-"}</td>
@@ -684,7 +698,7 @@ export default function Employees() {
             </thead>
             <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
               {(leaveRequests ?? []).map((lv) => {
-                const emp = employees?.find((e) => e.id === lv.employee_id);
+                const emp = employeesLookup?.find((e) => e.id === lv.employee_id);
                 return (
                   <tr key={lv.id}>
                     <td className="td font-medium">{emp?.full_name ?? "-"}</td>
@@ -796,12 +810,14 @@ export default function Employees() {
         </table>
       </div>
 
+      <Pagination offset={offset} limit={pageLimit} total={employeesTotal} onOffsetChange={setOffset} />
+
       {selectedId && (
         <>
         {/* Header properti ala Notion untuk karyawan terpilih */}
         {selected && (
           <div className="card">
-            <h1 className="flex items-center gap-3 text-2xl font-bold text-notion">
+            <h1 className="flex items-center gap-3 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
               <User className="h-8 w-8 shrink-0" style={{ color: "var(--n-text-muted)" }} />
               {selected.full_name}
             </h1>
@@ -946,7 +962,7 @@ export default function Employees() {
                             setTteContract({
                               id: c.id,
                               name:
-                                employees?.find((e) => e.id === selectedId)?.full_name ?? "",
+                                employeesLookup?.find((e) => e.id === selectedId)?.full_name ?? "",
                             })
                           }
                           className="btn-secondary text-xs"

@@ -236,7 +236,7 @@ export default function MyPortal() {
   if (error || !profile) {
     return (
       <div className="card">
-        <h1 className="text-xl font-bold" style={{ color: "var(--n-text)" }}>Portal Saya</h1>
+        <h1 className="text-2xl font-semibold" style={{ color: "var(--n-text)" }}>Portal Saya</h1>
         <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>
           Akun ini belum tertaut ke data karyawan. Silakan hubungi HR untuk
           mengaktifkan portal Anda.

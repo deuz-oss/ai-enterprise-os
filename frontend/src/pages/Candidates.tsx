@@ -5,6 +5,7 @@ import { AiResultCard } from "../components/Ai";
 import type { Screening } from "../components/Ai";
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Paperclip, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/notion";
+import { Pagination } from "../components/Pagination";
 import type { JobOrder } from "./JobOrders";
 
 interface Candidate {
@@ -72,9 +73,20 @@ export default function Candidates() {
   const [onboardCandidateId, setOnboardCandidateId] = useState<string | null>(null);
   const [offeringCandidateId, setOfferingCandidateId] = useState<string | null>(null);
   const cvRef = useRef<HTMLInputElement>(null);
-  const { data: candidates } = useQuery({
-    queryKey: ["candidates"],
-    queryFn: () => api.get<Candidate[]>("/recruitment/candidates"),
+  const [offset, setOffset] = useState(0);
+  const pageLimit = 50;
+  const { data: candidatesPage } = useQuery({
+    queryKey: ["candidates", offset],
+    queryFn: () => api.getPaged<Candidate>(`/recruitment/candidates?limit=${pageLimit}&offset=${offset}`),
+  });
+  const candidates = candidatesPage?.data;
+  const candidatesTotal = candidatesPage?.total ?? 0;
+  // Papan Kanban butuh keseluruhan (dikelompokkan per status), bukan satu
+  // halaman — dimuat terpisah, cuma saat papan aktif (limit maksimum backend).
+  const { data: boardCandidates } = useQuery({
+    queryKey: ["candidates-board"],
+    queryFn: () => api.get<Candidate[]>("/recruitment/candidates?limit=1000"),
+    enabled: view === "papan",
   });
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
@@ -83,6 +95,7 @@ export default function Candidates() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["candidates"] });
+    qc.invalidateQueries({ queryKey: ["candidates-board"] });
     qc.invalidateQueries({ queryKey: ["overview"] });
   };
 
@@ -680,10 +693,14 @@ export default function Candidates() {
         </div>
       )}
 
+      {view === "tabel" && (
+        <Pagination offset={offset} limit={pageLimit} total={candidatesTotal} onOffsetChange={setOffset} />
+      )}
+
       {view === "papan" && (
         <div className="flex gap-3 overflow-x-auto pb-2">
           {STATUSES.map((stage) => {
-            const cards = (candidates ?? []).filter((c) => c.status === stage);
+            const cards = (boardCandidates ?? []).filter((c) => c.status === stage);
             return (
               <div key={stage} className="w-64 shrink-0 rounded-md" style={{ backgroundColor: "var(--n-hover)" }}>
                 <div className="flex items-center justify-between px-3 pt-3">
@@ -751,7 +768,7 @@ export default function Candidates() {
         </div>
       )}
 
-      {candidates?.length === 0 && view === "papan" && (
+      {boardCandidates?.length === 0 && view === "papan" && (
         <CalloutBlock tone="info">
           Belum ada kandidat untuk ditampilkan di papan.
         </CalloutBlock>

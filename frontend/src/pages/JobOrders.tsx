@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Magnet } from "lucide-react";
 import { PageHeader } from "../components/notion";
+import { Pagination } from "../components/Pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
@@ -85,10 +86,14 @@ export default function JobOrders() {
   const [extracted, setExtracted] = useState<JobOrderExtract | null>(null);
   const [isPublic, setIsPublic] = useState(false);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
-  const { data: jobOrders } = useQuery({
-    queryKey: ["job-orders"],
-    queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
+  const [offset, setOffset] = useState(0);
+  const pageLimit = 50;
+  const { data: jobOrdersPage } = useQuery({
+    queryKey: ["job-orders", offset],
+    queryFn: () => api.getPaged<JobOrder>(`/recruitment/job-orders?limit=${pageLimit}&offset=${offset}`),
   });
+  const jobOrders = jobOrdersPage?.data;
+  const jobOrdersTotal = jobOrdersPage?.total ?? 0;
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
@@ -456,6 +461,8 @@ export default function JobOrders() {
           </tbody>
         </table>
       </div>
+
+      <Pagination offset={offset} limit={pageLimit} total={jobOrdersTotal} onOffsetChange={setOffset} />
 
       {(match.isPending || match.error || matchResults) && (
         <div className="card space-y-3">

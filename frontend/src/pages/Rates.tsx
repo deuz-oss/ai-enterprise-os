@@ -195,7 +195,7 @@ export default function Rates() {
             </table>
           </div>
           <form onSubmit={handlePph21} className="card space-y-2">
-            <h2 className="font-semibold text-notion">Versi Baru PPh 21</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Versi Baru PPh 21</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
               <input name="effective_from" type="date" required className="input" />
               <input name="ptkp_diri" type="number" required placeholder="PTKP diri (Rp)" className="input" />
@@ -263,7 +263,7 @@ export default function Rates() {
             </table>
           </div>
           <form onSubmit={handleBpjs} className="card space-y-2">
-            <h2 className="font-semibold text-notion">Versi Baru BPJS</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Versi Baru BPJS</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               <input name="effective_from" type="date" required className="input" />
               <input name="kesehatan_employer" type="number" step="0.0001" placeholder="Kes psk (0.04)" className="input" />
@@ -329,7 +329,7 @@ export default function Rates() {
             Potongan admin otomatis di slip gaji. Bank Mandiri group = gratis.
           </CalloutBlock>
           <div className="card space-y-3">
-            <h2 className="font-semibold text-notion">Daftar Biaya Admin Bank</h2>
+            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Daftar Biaya Admin Bank</h2>
             {(bankFees.data ?? []).map((f) => (
               <form
                 key={f.id}

@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
+import { Pagination } from "../components/Pagination";
 
 export interface Lead {
   id: string;
@@ -62,9 +63,20 @@ export default function Leads() {
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<"tabel" | "papan">("tabel");
-  const { data: leads } = useQuery({
-    queryKey: ["leads"],
-    queryFn: () => api.get<Lead[]>("/leads"),
+  const [offset, setOffset] = useState(0);
+  const pageLimit = 50;
+  // Tabel (satu halaman) terpisah dari `leadsLookup` (semua lead) --
+  // papan Kanban, drag-and-drop, dan panel detail (bisa dipilih dari
+  // tabel MAUPUN papan) semuanya butuh dataset penuh, bukan satu halaman.
+  const { data: leadsPage } = useQuery({
+    queryKey: ["leads", offset],
+    queryFn: () => api.getPaged<Lead>(`/leads?limit=${pageLimit}&offset=${offset}`),
+  });
+  const leadsTable = leadsPage?.data;
+  const leadsTotal = leadsPage?.total ?? 0;
+  const { data: leadsLookup } = useQuery({
+    queryKey: ["leads-lookup"],
+    queryFn: () => api.get<Lead[]>("/leads?limit=1000"),
   });
   const { data: activities } = useQuery({
     queryKey: ["lead-activities", selectedId],
@@ -74,6 +86,7 @@ export default function Leads() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["leads"] });
+    qc.invalidateQueries({ queryKey: ["leads-lookup"] });
     qc.invalidateQueries({ queryKey: ["overview"] });
   };
 
@@ -102,9 +115,9 @@ export default function Leads() {
     setDragId(null);
     setDragOverStage(null);
     if (!id) return;
-    const lead = (leads ?? []).find((l) => l.id === id);
+    const lead = (leadsLookup ?? []).find((l) => l.id === id);
     if (!lead || lead.stage === stage) return;
-    qc.setQueryData<Lead[]>(["leads"], (prev) =>
+    qc.setQueryData<Lead[]>(["leads-lookup"], (prev) =>
       (prev ?? []).map((l) => (l.id === id ? { ...l, stage } : l))
     );
     changeStage.mutate({ id, stage });
@@ -176,7 +189,7 @@ export default function Leads() {
         </form>
       )}
 
-      {leads?.length === 0 && (
+      {leadsLookup?.length === 0 && (
         <CalloutBlock tone="info">
           Belum ada lead. Klik <b>"+ Lead Baru"</b> untuk mulai mengisi pipeline.
         </CalloutBlock>
@@ -203,7 +216,7 @@ export default function Leads() {
           <tbody
             style={{ borderTop: "1px solid var(--n-border)" }}
           >
-            {(leads ?? []).map((lead) => (
+            {(leadsTable ?? []).map((lead) => (
               <tr
                 key={lead.id}
                 onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
@@ -236,7 +249,7 @@ export default function Leads() {
                 </td>
               </tr>
             ))}
-            {leads?.length === 0 && (
+            {leadsTable?.length === 0 && (
               <tr>
                 <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada lead.
@@ -248,11 +261,15 @@ export default function Leads() {
         </div>
       )}
 
+      {view === "tabel" && (
+        <Pagination offset={offset} limit={pageLimit} total={leadsTotal} onOffsetChange={setOffset} />
+      )}
+
       {/* ===== View Papan (kanban ala Notion, drag-and-drop C3) ===== */}
       {view === "papan" && (
         <div className="flex gap-3 overflow-x-auto pb-2">
           {STAGES.map((stage) => {
-            const cards = (leads ?? []).filter((l) => l.stage === stage);
+            const cards = (leadsLookup ?? []).filter((l) => l.stage === stage);
             const total = cards.reduce((s, l) => s + Number(l.estimated_value ?? 0), 0);
             const isOver = dragOverStage === stage;
             return (
@@ -381,7 +398,7 @@ export default function Leads() {
       {selectedId && (
         <div className="card">
           {(() => {
-            const lead = leads?.find((l) => l.id === selectedId);
+            const lead = leadsLookup?.find((l) => l.id === selectedId);
             if (!lead) return null;
             return (
               <>

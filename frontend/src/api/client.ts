@@ -22,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function rawRequest(path: string, options: RequestInit = {}): Promise<{ resp: Response; data: unknown }> {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -30,8 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers["Content-Type"] = "application/json";
   }
   const resp = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (resp.status === 204) return undefined as T;
-  const data = await resp.json().catch(() => null);
+  const data = resp.status === 204 ? undefined : await resp.json().catch(() => null);
   if (!resp.ok) {
     if (resp.status === 401) clearToken();
     const detail =
@@ -40,11 +39,32 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         : resp.statusText;
     throw new ApiError(resp.status, detail);
   }
+  return { resp, data };
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await rawRequest(path, options);
   return data as T;
+}
+
+export interface PagedResult<T> {
+  data: T[];
+  total: number;
+}
+
+/** Untuk list endpoint yang kirim header `X-Total-Count` (lihat backend Batch 1c:
+ * `limit`/`offset` di /candidates dan /job-orders). Total fallback ke panjang
+ * array kalau header tidak ada (endpoint lama belum dipaginasi). */
+async function requestPaged<T>(path: string): Promise<PagedResult<T>> {
+  const { resp, data } = await rawRequest(path);
+  const totalHeader = resp.headers.get("x-total-count");
+  const rows = (data as T[]) ?? [];
+  return { data: rows, total: totalHeader ? parseInt(totalHeader, 10) : rows.length };
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  getPaged: <T>(path: string) => requestPaged<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body: unknown) =>

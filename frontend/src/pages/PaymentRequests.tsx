@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "../components/notion";
+import { Pagination } from "../components/Pagination";
 
 interface PrDecision {
   step_no: number;
@@ -198,14 +199,18 @@ function ApprovalChainPanel() {
 export default function PaymentRequests() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
+  const [offset, setOffset] = useState(0);
+  const pageLimit = 50;
 
   const prs = useQuery({
-    queryKey: ["payment-requests", statusFilter],
+    queryKey: ["payment-requests", statusFilter, offset],
     queryFn: () =>
-      api.get<PrRow[]>(
-        `/payment-requests${statusFilter ? `?status=${statusFilter}` : ""}`
+      api.getPaged<PrRow>(
+        `/payment-requests?limit=${pageLimit}&offset=${offset}${statusFilter ? `&status=${statusFilter}` : ""}`
       ),
   });
+  const prRows = prs.data?.data;
+  const prTotal = prs.data?.total ?? 0;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["payment-requests"] });
 
@@ -228,7 +233,7 @@ export default function PaymentRequests() {
         />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
           className="input w-auto"
         >
           <option value="">Semua status</option>
@@ -255,7 +260,7 @@ export default function PaymentRequests() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
-            {(prs.data ?? []).map((p) => (
+            {(prRows ?? []).map((p) => (
               <tr key={p.id}>
                 <td className="td font-mono text-xs font-medium">{p.pr_number}</td>
                 <td className="td capitalize">{p.pr_type}</td>
@@ -318,7 +323,7 @@ export default function PaymentRequests() {
                 </td>
               </tr>
             ))}
-            {prs.data?.length === 0 && (
+            {prRows?.length === 0 && (
               <tr>
                 <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi.
@@ -327,6 +332,7 @@ export default function PaymentRequests() {
             )}
           </tbody>
         </table>
+        <Pagination offset={offset} limit={pageLimit} total={prTotal} onOffsetChange={setOffset} />
         {act.error && (
           <p className="px-4 pb-3 text-sm text-red-600">{(act.error as Error).message}</p>
         )}
