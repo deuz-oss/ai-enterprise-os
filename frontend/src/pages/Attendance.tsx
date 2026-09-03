@@ -18,6 +18,10 @@ interface DailyRecord {
   status: string;
   clock_in: string | null;
   clock_out: string | null;
+  clock_in_geo: string | null;
+  clock_out_geo: string | null;
+  has_clock_in_selfie: boolean;
+  has_clock_out_selfie: boolean;
   overtime_hours: number;
   source: string;
   notes: string | null;
@@ -82,6 +86,13 @@ export default function Attendance() {
     queryFn: () =>
       api.get<DailyRecord[]>(`/attendance/records?year=${period.year}&month=${period.month}`),
   });
+
+  async function openSelfie(recordId: string, which: "in" | "out") {
+    const { url } = await api.get<{ url: string }>(
+      `/attendance/records/${recordId}/selfie/${which}/download-url`
+    );
+    window.open(url, "_blank");
+  }
 
   const { data: summaries } = useQuery({
     queryKey: ["attendance-summaries", period],
@@ -421,11 +432,14 @@ export default function Attendance() {
               <th className="th">Clock-in/out</th>
               <th className="th">Lembur</th>
               <th className="th">Sumber</th>
+              <th className="th">Verifikasi</th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
             {(records ?? []).map((r) => {
               const emp = empMap.get(r.employee_id);
+              const hasVerification =
+                r.clock_in_geo || r.clock_out_geo || r.has_clock_in_selfie || r.has_clock_out_selfie;
               return (
                 <tr key={r.id}>
                   <td className="td font-mono text-xs">{r.date}</td>
@@ -439,12 +453,64 @@ export default function Attendance() {
                   </td>
                   <td className="td">{r.overtime_hours}</td>
                   <td className="td text-xs">{r.source}</td>
+                  <td className="td text-xs">
+                    {hasVerification ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {r.clock_in_geo && (
+                          <a
+                            href={`https://www.google.com/maps?q=${r.clock_in_geo}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:underline"
+                            style={{ color: "var(--accent)" }}
+                            title={`Lokasi clock-in: ${r.clock_in_geo}`}
+                          >
+                            Lokasi masuk
+                          </a>
+                        )}
+                        {r.clock_out_geo && (
+                          <a
+                            href={`https://www.google.com/maps?q=${r.clock_out_geo}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:underline"
+                            style={{ color: "var(--accent)" }}
+                            title={`Lokasi clock-out: ${r.clock_out_geo}`}
+                          >
+                            Lokasi keluar
+                          </a>
+                        )}
+                        {r.has_clock_in_selfie && (
+                          <button
+                            type="button"
+                            onClick={() => void openSelfie(r.id, "in")}
+                            className="hover:underline"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            Selfie masuk
+                          </button>
+                        )}
+                        {r.has_clock_out_selfie && (
+                          <button
+                            type="button"
+                            onClick={() => void openSelfie(r.id, "out")}
+                            className="hover:underline"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            Selfie keluar
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: "var(--n-text-muted)" }}>—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {records?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
                   Belum ada record untuk periode ini.
                 </td>
               </tr>

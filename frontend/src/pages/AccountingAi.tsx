@@ -328,12 +328,403 @@ function PrediksiKlienCard() {
   );
 }
 
+interface ChecklistFinding {
+  code: string;
+  severity: string;
+  detail: string;
+  items: string[];
+}
+
+function CloseChecklistCard() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const checklist = useQuery({
+    queryKey: ["close-checklist", year, month],
+    queryFn: () =>
+      api.get<{
+        period: string;
+        ready_to_close: boolean;
+        errors: number;
+        warnings: number;
+        findings: ChecklistFinding[];
+      }>(`/accounting/ai/close-checklist?year=${year}&month=${month}`),
+  });
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">✅ Checklist Tutup Buku</h3>
+          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+            Deteksi deterministik (tanpa LLM) sebelum periode ditutup.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {checklist.data && (
+        <>
+          <span className={`badge ${checklist.data.ready_to_close ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+            {checklist.data.ready_to_close ? "Siap ditutup" : `${checklist.data.errors} error, ${checklist.data.warnings} warning`}
+          </span>
+          <ul className="space-y-1.5 text-xs">
+            {checklist.data.findings.map((f, i) => (
+              <li key={i} className={f.severity === "error" ? "text-red-600" : "text-amber-600"}>
+                <span className="font-medium">[{f.severity}]</span> {f.detail}
+              </li>
+            ))}
+            {checklist.data.findings.length === 0 && (
+              <li style={{ color: "var(--n-text-muted)" }}>Tidak ada temuan.</li>
+            )}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface Anomaly {
+  type: string;
+  severity: string;
+  detail: string;
+  vendor?: string;
+  amount?: number;
+}
+
+function AnomaliesCard() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const anomalies = useQuery({
+    queryKey: ["ai-anomalies", year, month],
+    queryFn: () =>
+      api.get<{ period: string; total_anomalies: number; high_severity: number; anomalies: Anomaly[] }>(
+        `/accounting/ai/anomalies?year=${year}&month=${month}`
+      ),
+  });
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">🚨 Deteksi Anomali</h3>
+          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+            Duplikasi bill, transaksi besar tak wajar, ketidaksesuaian PPN.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <ul className="space-y-1.5 text-xs">
+        {(anomalies.data?.anomalies ?? []).map((a, i) => (
+          <li key={i} className={a.severity === "high" ? "font-medium text-red-600" : "text-amber-600"}>
+            [{a.severity}] {a.detail}
+          </li>
+        ))}
+        {anomalies.data?.anomalies.length === 0 && (
+          <li style={{ color: "var(--n-text-muted)" }}>Tidak ada anomali terdeteksi.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function ExecutiveSummaryCard() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState<number | "">(now.getMonth() + 1);
+  const summary = useQuery({
+    queryKey: ["exec-summary", year, month],
+    queryFn: () =>
+      api.get<{
+        period: string;
+        metrics: { total_revenue: number; total_expense: number; net_income: number; active_clients: number };
+        narrative: string;
+      }>(`/accounting/ai/executive-summary?year=${year}${month ? `&month=${month}` : ""}`),
+    enabled: false,
+  });
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">📋 Ringkasan Eksekutif</h3>
+          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+            Narasi otomatis dari data terverifikasi (LLM opsional).
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value ? Number(e.target.value) : "")}
+            className="input w-auto text-xs"
+          >
+            <option value="">Setahun</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <button className="btn-secondary py-1 text-xs" disabled={summary.isFetching} onClick={() => summary.refetch()}>
+            {summary.isFetching ? "Memuat..." : "Buat Ringkasan"}
+          </button>
+        </div>
+      </div>
+      {summary.data && (
+        <>
+          <p className="whitespace-pre-line text-xs" style={{ color: "var(--n-text)" }}>{summary.data.narrative}</p>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div>
+              <p style={{ color: "var(--n-text-muted)" }}>Pendapatan</p>
+              <p className="font-semibold">{formatRupiah(summary.data.metrics.total_revenue)}</p>
+            </div>
+            <div>
+              <p style={{ color: "var(--n-text-muted)" }}>Beban</p>
+              <p className="font-semibold">{formatRupiah(summary.data.metrics.total_expense)}</p>
+            </div>
+            <div>
+              <p style={{ color: "var(--n-text-muted)" }}>Laba Bersih</p>
+              <p className="font-semibold">{formatRupiah(summary.data.metrics.net_income)}</p>
+            </div>
+            <div>
+              <p style={{ color: "var(--n-text-muted)" }}>Klien Aktif</p>
+              <p className="font-semibold">{summary.data.metrics.active_clients}</p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AskReportCard() {
+  const [question, setQuestion] = useState("");
+  const ask = useMutation({
+    mutationFn: () =>
+      api.post<{ question: string; answer: string; context: string[] }>("/accounting/ai/ask", {
+        question,
+        year: new Date().getFullYear(),
+      }),
+  });
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div>
+        <h3 className="text-sm font-semibold">💬 Tanya Laporan</h3>
+        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          Tanya soal laba rugi, neraca, margin klien, atau saldo -- kata kunci: "laba rugi",
+          "neraca", "klien", "saldo".
+        </p>
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (question.trim()) ask.mutate();
+        }}
+      >
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Contoh: bagaimana laba rugi tahun ini?"
+          className="input flex-1 text-xs"
+        />
+        <button type="submit" disabled={ask.isPending || !question.trim()} className="btn-secondary text-xs">
+          Tanya
+        </button>
+      </form>
+      {ask.error && <p className="text-xs text-red-600">{(ask.error as Error).message}</p>}
+      {ask.data && (
+        <p className="whitespace-pre-line rounded p-2 text-xs" style={{ backgroundColor: "var(--n-hover)" }}>
+          {ask.data.answer}
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface LedgerLine {
+  entry_id: string;
+  entry_date: string;
+  description: string;
+  reference: string | null;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+function LedgerCard() {
+  const [accountCode, setAccountCode] = useState("");
+  const [activeCode, setActiveCode] = useState("");
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const ledger = useQuery({
+    queryKey: ["ledger", activeCode, year],
+    queryFn: () =>
+      api.get<{ account: string; account_name: string; year: number; lines: LedgerLine[] }>(
+        `/accounting/ledger/${activeCode}?year=${year}`
+      ),
+    enabled: !!activeCode,
+  });
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div>
+        <h3 className="text-sm font-semibold">📖 Buku Besar per Akun</h3>
+        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          Mutasi jurnal posted + saldo berjalan untuk satu kode akun.
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={accountCode}
+          onChange={(e) => setAccountCode(e.target.value)}
+          placeholder="Kode akun (mis. 1-1100)"
+          className="input text-xs"
+        />
+        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+        <button
+          className="btn-secondary text-xs"
+          disabled={!accountCode}
+          onClick={() => setActiveCode(accountCode)}
+        >
+          Tampilkan
+        </button>
+      </div>
+      {ledger.error && <p className="text-xs text-red-600">{(ledger.error as Error).message}</p>}
+      {ledger.data && (
+        <table className="w-full text-xs">
+          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+            <tr>
+              <th className="th">Tanggal</th>
+              <th className="th">Keterangan</th>
+              <th className="th">Debit</th>
+              <th className="th">Kredit</th>
+              <th className="th">Saldo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+            {ledger.data.lines.map((l) => (
+              <tr key={l.entry_id}>
+                <td className="td whitespace-nowrap">{l.entry_date}</td>
+                <td className="td max-w-[220px] truncate">{l.description}</td>
+                <td className="td">{l.debit > 0 ? formatRupiah(l.debit) : "-"}</td>
+                <td className="td">{l.credit > 0 ? formatRupiah(l.credit) : "-"}</td>
+                <td className="td font-medium">{formatRupiah(l.balance)}</td>
+              </tr>
+            ))}
+            {ledger.data.lines.length === 0 && (
+              <tr>
+                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
+                  Tidak ada mutasi tahun ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+interface BalanceSheetRow {
+  account_code: string;
+  account_name: string;
+  amount: number;
+}
+
+function BalanceSheetCard() {
+  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10));
+  const [activeAsOf, setActiveAsOf] = useState("");
+  const bs = useQuery({
+    queryKey: ["balance-sheet", activeAsOf],
+    queryFn: () =>
+      api.get<{
+        as_of: string;
+        assets: { rows: BalanceSheetRow[]; total: number };
+        liabilities: { rows: BalanceSheetRow[]; total: number };
+        equity: { rows: BalanceSheetRow[]; total: number };
+        net_income: number;
+      }>(`/accounting/reports/balance-sheet?as_of=${activeAsOf}`),
+    enabled: !!activeAsOf,
+  });
+
+  function Section({ title, rows, total }: { title: string; rows: BalanceSheetRow[]; total: number }) {
+    return (
+      <div>
+        <h4 className="text-xs font-semibold" style={{ color: "var(--n-text)" }}>{title}</h4>
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {rows.map((r) => (
+            <li key={r.account_code} className="flex justify-between">
+              <span style={{ color: "var(--n-text-muted)" }}>{r.account_name}</span>
+              <span>{formatRupiah(r.amount)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-1 flex justify-between border-t pt-1 text-xs font-semibold" style={{ borderColor: "var(--n-border)" }}>
+          <span>Total {title}</span>
+          <span>{formatRupiah(total)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">⚖️ Neraca</h3>
+          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Posisi keuangan per tanggal.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="input text-xs" />
+          <button className="btn-secondary text-xs" onClick={() => setActiveAsOf(asOf)}>
+            Tampilkan
+          </button>
+        </div>
+      </div>
+      {bs.data && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Section title="Aset" rows={bs.data.assets.rows} total={bs.data.assets.total} />
+          <Section title="Liabilitas" rows={bs.data.liabilities.rows} total={bs.data.liabilities.total} />
+          <Section title="Ekuitas" rows={bs.data.equity.rows} total={bs.data.equity.total} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AccountingAi() {
   return (
     <div className="space-y-4">
       <ScanFakturCard />
       <RekonsiliasiCard />
       <PrediksiKlienCard />
+      <CloseChecklistCard />
+      <AnomaliesCard />
+      <ExecutiveSummaryCard />
+      <AskReportCard />
+      <BalanceSheetCard />
+      <LedgerCard />
     </div>
   );
 }

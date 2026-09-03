@@ -12,6 +12,7 @@ import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
 import { CareerDetail, CareerListing, CareerTrack } from "./pages/CareerPortal";
+import PayrollClientPortal from "./pages/PayrollClientPortal";
 import Chat from "./pages/Chat";
 import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/careers/track/:token" element={<CareerTrack />} />
           <Route path="/careers/:tenantSlug/:jobId" element={<CareerDetail />} />
           <Route path="/careers/:tenantSlug" element={<CareerListing />} />
+          <Route path="/payroll/client/:token" element={<PayrollClientPortal />} />
           <Route path="/ai-interview/session/:token" element={<AIInterviewSession />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />

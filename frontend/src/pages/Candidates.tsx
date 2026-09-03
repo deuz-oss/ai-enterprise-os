@@ -27,6 +27,8 @@ interface Interview {
   meeting_url: string | null;
   status: string;
   interview_type: string;
+  feedback: string | null;
+  score: number | null;
 }
 
 interface UserOption {
@@ -74,10 +76,17 @@ export default function Candidates() {
   const [offeringCandidateId, setOfferingCandidateId] = useState<string | null>(null);
   const cvRef = useRef<HTMLInputElement>(null);
   const [offset, setOffset] = useState(0);
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const pageLimit = 50;
   const { data: candidatesPage } = useQuery({
-    queryKey: ["candidates", offset],
-    queryFn: () => api.getPaged<Candidate>(`/recruitment/candidates?limit=${pageLimit}&offset=${offset}`),
+    queryKey: ["candidates", offset, q, statusFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: String(pageLimit), offset: String(offset) });
+      if (q) params.set("q", q);
+      if (statusFilter) params.set("candidate_status", statusFilter);
+      return api.getPaged<Candidate>(`/recruitment/candidates?${params}`);
+    },
   });
   const candidates = candidatesPage?.data;
   const candidatesTotal = candidatesPage?.total ?? 0;
@@ -161,6 +170,16 @@ export default function Candidates() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["interviews"] });
       qc.invalidateQueries({ queryKey: ["overview"] });
+    },
+  });
+
+  const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
+  const updateInterview = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/recruitment/interviews/${id}`, body),
+    onSuccess: () => {
+      setFeedbackOpenId(null);
+      qc.invalidateQueries({ queryKey: ["interviews"] });
     },
   });
 
@@ -251,9 +270,44 @@ export default function Candidates() {
         </form>
       )}
 
+      {view === "tabel" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setOffset(0);
+            }}
+            placeholder="Cari nama kandidat..."
+            className="input w-56"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="input w-auto"
+          >
+            <option value="">Semua status</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {candidates?.length === 0 && view === "tabel" && (
         <CalloutBlock tone="info">
-          Belum ada kandidat. Klik <b>"+ Kandidat Baru"</b> untuk mulai.
+          {q || statusFilter ? (
+            "Tidak ada kandidat yang cocok dengan pencarian/filter."
+          ) : (
+            <>
+              Belum ada kandidat. Klik <b>"+ Kandidat Baru"</b> untuk mulai.
+            </>
+          )}
         </CalloutBlock>
       )}
 
@@ -604,6 +658,64 @@ export default function Candidates() {
                                 {(jobOrders ?? []).find((j) => j.id === i.job_order_id)?.title ?? "-"}
                                 {i.location ? ` · ${i.location}` : ""} ·{" "}
                                 <span className="capitalize">{i.status}</span>
+                                {i.score !== null && (
+                                  <span className="ml-1 pill p-green text-[10px]">Skor {i.score}</span>
+                                )}
+                                {" · "}
+                                <button
+                                  type="button"
+                                  className="hover:underline"
+                                  style={{ color: "var(--accent)" }}
+                                  onClick={() => setFeedbackOpenId(feedbackOpenId === i.id ? null : i.id)}
+                                >
+                                  {i.feedback ? "Lihat/ubah feedback" : "Isi feedback"}
+                                </button>
+                                {i.feedback && feedbackOpenId !== i.id && (
+                                  <p className="mt-0.5 italic">"{i.feedback}"</p>
+                                )}
+                                {feedbackOpenId === i.id && (
+                                  <form
+                                    className="mt-1 flex flex-col gap-1.5 rounded p-2"
+                                    style={{ backgroundColor: "var(--n-hover)" }}
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      const form = new FormData(e.currentTarget);
+                                      updateInterview.mutate({
+                                        id: i.id,
+                                        body: {
+                                          feedback: form.get("feedback") || null,
+                                          score: form.get("score") ? Number(form.get("score")) : null,
+                                        },
+                                      });
+                                    }}
+                                  >
+                                    <textarea
+                                      name="feedback"
+                                      defaultValue={i.feedback ?? ""}
+                                      placeholder="Catatan hasil interview..."
+                                      className="input text-xs"
+                                      rows={2}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        name="score"
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        defaultValue={i.score ?? ""}
+                                        placeholder="Skor (0-100)"
+                                        className="input w-28 py-1 text-xs"
+                                      />
+                                      <button
+                                        type="submit"
+                                        disabled={updateInterview.isPending}
+                                        className="btn py-1 text-xs"
+                                      >
+                                        Simpan
+                                      </button>
+                                    </div>
+                                  </form>
+                                )}
                               </div>
                             ))}
                           {interviews.data &&

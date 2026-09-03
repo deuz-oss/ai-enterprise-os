@@ -21,17 +21,22 @@ interface InvoiceRow {
   pph23_amount: number;
   total_due: number;
   status: string;
+  issued_date: string | null;
   due_date: string | null;
+  paid_at: string | null;
   tax_invoice_no: string | null;
   tax_invoice_status: string | null;
+  tax_invoice_date: string | null;
   lawan_npwp: string | null;
   lawan_nama: string | null;
   lawan_alamat: string | null;
   dpp_amount: number | null;
   kode_transaksi: string | null;
   no_seri_faktur: string | null;
+  faktur_pengganti_ref: string | null;
   faktur_status_detail: string | null;
   efaktur_nsr: string | null;
+  efaktur_qr_url: string | null;
 }
 
 interface AgingRow {
@@ -103,13 +108,22 @@ export default function Finance() {
   const [fakturOpenId, setFakturOpenId] = useState<string | null>(null);
   const [fakturError, setFakturError] = useState<string | null>(null);
 
+  const [clientFilter, setClientFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
   const { data: invoices } = useQuery({
-    queryKey: ["invoices"],
-    queryFn: () => api.get<InvoiceRow[]>("/finance/invoices"),
+    queryKey: ["invoices", clientFilter, statusFilter],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (clientFilter) params.set("client_id", clientFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      const qs = params.toString();
+      return api.get<InvoiceRow[]>(`/finance/invoices${qs ? `?${qs}` : ""}`);
+    },
   });
   const { data: aging } = useQuery({
     queryKey: ["aging"],
@@ -243,6 +257,25 @@ export default function Finance() {
         </form>
       )}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="input w-auto">
+          <option value="">Semua klien</option>
+          {(clients ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-auto">
+          <option value="">Semua status</option>
+          {Object.keys(STATUS_LABELS).map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s].label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
@@ -271,7 +304,12 @@ export default function Finance() {
                     <td className="td">{formatRupiah(Number(i.payroll_total))}</td>
                     <td className="td">{formatRupiah(Number(i.ppn_amount))}</td>
                     <td className="td font-semibold">{formatRupiah(Number(i.total_due))}</td>
-                    <td className="td">{i.due_date ?? "-"}</td>
+                    <td className="td text-xs">
+                      {i.issued_date && (
+                        <div style={{ color: "var(--n-text-muted)" }}>Terbit: {i.issued_date}</div>
+                      )}
+                      {i.due_date ?? "-"}
+                    </td>
                     <td className="td">
                       {i.status === "terkirim" || i.status === "draft" ? (
                         <button
@@ -282,6 +320,11 @@ export default function Finance() {
                         </button>
                       ) : (
                         <span className={`badge ${st.cls}`}>{st.label}</span>
+                      )}
+                      {i.paid_at && (
+                        <div className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                          {new Date(i.paid_at).toLocaleDateString("id-ID")}
+                        </div>
                       )}
                     </td>
                     <td className="td">
@@ -313,6 +356,24 @@ export default function Finance() {
                           >
                             Unduh PDF
                           </button>
+                        )}
+                        {fakturStatus === "approved" && i.efaktur_qr_url && (
+                          <a
+                            href={i.efaktur_qr_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-secondary px-2 py-1 text-xs"
+                          >
+                            QR e-Faktur
+                          </a>
+                        )}
+                        {fakturStatus === "approved" && i.tax_invoice_date && (
+                          <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                            {i.tax_invoice_date}
+                          </span>
+                        )}
+                        {i.faktur_pengganti_ref && (
+                          <span className="pill p-yellow text-[10px]">Pengganti</span>
                         )}
                         {fakturStatus !== "belum_buat" &&
                           fakturStatus !== "dibatalkan" &&

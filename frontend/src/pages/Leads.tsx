@@ -64,13 +64,19 @@ export default function Leads() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [offset, setOffset] = useState(0);
+  const [stageFilter, setStageFilter] = useState("");
   const pageLimit = 50;
   // Tabel (satu halaman) terpisah dari `leadsLookup` (semua lead) --
   // papan Kanban, drag-and-drop, dan panel detail (bisa dipilih dari
   // tabel MAUPUN papan) semuanya butuh dataset penuh, bukan satu halaman.
+  // Filter tahap cuma berlaku di tabel -- papan sudah mengelompokkan
+  // per tahap secara visual, memfilternya di sana tidak masuk akal.
   const { data: leadsPage } = useQuery({
-    queryKey: ["leads", offset],
-    queryFn: () => api.getPaged<Lead>(`/leads?limit=${pageLimit}&offset=${offset}`),
+    queryKey: ["leads", offset, stageFilter],
+    queryFn: () =>
+      api.getPaged<Lead>(
+        `/leads?limit=${pageLimit}&offset=${offset}${stageFilter ? `&stage=${stageFilter}` : ""}`
+      ),
   });
   const leadsTable = leadsPage?.data;
   const leadsTotal = leadsPage?.total ?? 0;
@@ -104,6 +110,10 @@ export default function Leads() {
     onSuccess: invalidate,
     // C3: rollback bila server menolak perpindahan tahap
     onError: invalidate,
+  });
+
+  const convertLead = useMutation({
+    mutationFn: (id: string) => api.post<{ id: string; name: string }>(`/leads/${id}/convert`, {}),
   });
 
   // C3: drag-and-drop native (tanpa lib) — optimis update lalu mutasi.
@@ -193,6 +203,24 @@ export default function Leads() {
         <CalloutBlock tone="info">
           Belum ada lead. Klik <b>"+ Lead Baru"</b> untuk mulai mengisi pipeline.
         </CalloutBlock>
+      )}
+
+      {view === "tabel" && (
+        <select
+          value={stageFilter}
+          onChange={(e) => {
+            setStageFilter(e.target.value);
+            setOffset(0);
+          }}
+          className="input w-auto"
+        >
+          <option value="">Semua tahap</option>
+          {STAGES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       )}
 
       {/* ===== View Tabel ===== */}
@@ -402,7 +430,26 @@ export default function Leads() {
             if (!lead) return null;
             return (
               <>
-                <PageHeader icon={Building2} title={lead.company_name} subtitle={lead.industry ?? undefined} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <PageHeader icon={Building2} title={lead.company_name} subtitle={lead.industry ?? undefined} />
+                  {lead.stage === "deal" && !(convertLead.isSuccess && convertLead.variables === lead.id) && (
+                    <button
+                      className="btn-secondary"
+                      disabled={convertLead.isPending}
+                      onClick={() => convertLead.mutate(lead.id)}
+                    >
+                      {convertLead.isPending ? "Mengonversi..." : "Konversi ke Klien"}
+                    </button>
+                  )}
+                </div>
+                {convertLead.isSuccess && convertLead.variables === lead.id && (
+                  <p className="mt-2 text-sm text-emerald-700">
+                    Berhasil dikonversi menjadi klien "{convertLead.data.name}".
+                  </p>
+                )}
+                {convertLead.error && convertLead.variables === lead.id && (
+                  <p className="mt-2 text-sm text-red-600">{(convertLead.error as Error).message}</p>
+                )}
                 <PropertiesPanel className="mt-4 max-w-xl">
                   <PropertyRow icon={User} label="PIC">
                     {lead.contact_name ?? "—"}

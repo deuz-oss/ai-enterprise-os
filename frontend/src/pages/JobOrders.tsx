@@ -87,10 +87,18 @@ export default function JobOrders() {
   const [isPublic, setIsPublic] = useState(false);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const [offset, setOffset] = useState(0);
+  const [clientFilter, setClientFilter] = useState("");
   const pageLimit = 50;
+  // Sengaja cuma filter client_id -- jo_status (pipeline internal
+  // open/screening/interview_klien/dst) sudah dihapus dari UI ini
+  // sebelumnya atas permintaan eksplisit (dianggap membingungkan
+  // berdampingan dengan business_status), tidak dikembalikan di sini.
   const { data: jobOrdersPage } = useQuery({
-    queryKey: ["job-orders", offset],
-    queryFn: () => api.getPaged<JobOrder>(`/recruitment/job-orders?limit=${pageLimit}&offset=${offset}`),
+    queryKey: ["job-orders", offset, clientFilter],
+    queryFn: () =>
+      api.getPaged<JobOrder>(
+        `/recruitment/job-orders?limit=${pageLimit}&offset=${offset}${clientFilter ? `&client_id=${clientFilter}` : ""}`
+      ),
   });
   const jobOrders = jobOrdersPage?.data;
   const jobOrdersTotal = jobOrdersPage?.total ?? 0;
@@ -369,6 +377,22 @@ export default function JobOrders() {
           </form>
         </div>
       )}
+
+      <select
+        value={clientFilter}
+        onChange={(e) => {
+          setClientFilter(e.target.value);
+          setOffset(0);
+        }}
+        className="input w-auto"
+      >
+        <option value="">Semua klien</option>
+        {(clients ?? []).map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
