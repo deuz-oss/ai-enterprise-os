@@ -19,7 +19,7 @@ export function Pagination({
   const from = total === 0 ? 0 : offset + 1;
 
   return (
-    <div className="flex items-center justify-between px-1 py-2 text-sm" style={{ color: "var(--n-text-muted)" }}>
+    <div className="flex items-center justify-between px-1 py-2 text-sm" style={{ color: "var(--text-muted)" }}>
       <span>
         Menampilkan {from}–{shown} dari {total}
       </span>

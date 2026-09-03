@@ -48,7 +48,7 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
   });
 
   if (isLoading)
-    return <p className="px-5 py-4 text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat aplikasi…</p>;
+    return <p className="px-5 py-4 text-sm" style={{ color: "var(--text-muted)" }}>Memuat aplikasi…</p>;
   if (error)
     return <p className="px-5 py-4 text-sm text-red-600">{(error as Error).message}</p>;
 
@@ -61,24 +61,24 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
             key={app.key}
             className={`flex flex-col rounded-[10px] p-3.5 transition-colors ${off ? "opacity-75" : ""}`}
             style={{
-              border: `1px ${off ? "dashed" : "solid"} var(--n-border)`,
-              backgroundColor: "var(--n-bg-elevated)",
+              border: `1px ${off ? "dashed" : "solid"} var(--border)`,
+              backgroundColor: "var(--bg-elevated)",
             }}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <span
                   className="flex h-9 w-9 items-center justify-center rounded-[9px] text-xl"
-                  style={{ backgroundColor: "var(--n-hover)" }}
+                  style={{ backgroundColor: "var(--hover)" }}
                 >
                   {app.emoji}
                 </span>
-                <b className="text-[13.5px]" style={{ color: "var(--n-text)" }}>
+                <b className="text-[13.5px]" style={{ color: "var(--text)" }}>
                   {app.name}
                 </b>
               </div>
               {app.licensed ? (
-                <span className="text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                   ✓ Terpasang
                 </span>
               ) : (
@@ -100,7 +100,7 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
               )}
             </div>
 
-            <p className="mt-1.5 mb-2 flex-1 text-[11.5px] leading-relaxed" style={{ color: "var(--n-text-muted)" }}>
+            <p className="mt-1.5 mb-2 flex-1 text-[11.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
               {app.description}
             </p>
 
@@ -114,13 +114,13 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
                         ? "rgba(15,123,109,.15)"
                         : app.status === "trial"
                           ? "rgba(203,145,47,.18)"
-                          : "var(--n-hover)",
+                          : "var(--hover)",
                     color:
                       app.status === "aktif"
                         ? "#0F7B6D"
                         : app.status === "trial"
                           ? "#CB912F"
-                          : "var(--n-text-muted)",
+                          : "var(--text-muted)",
                   }}
                 >
                   {app.status}
@@ -140,7 +140,7 @@ export default function AppLauncherGrid({ compact = false }: { compact?: boolean
                   Buka →
                 </Link>
               ) : (
-                <span className="text-[10.5px]" style={{ color: "var(--n-text-muted)" }} title={`Butuh: ${app.depends_on.join(", ")}`}>
+                <span className="text-[10.5px]" style={{ color: "var(--text-muted)" }} title={`Butuh: ${app.depends_on.join(", ")}`}>
                   {app.depends_on.length > 0 ? `butuh ${app.depends_on.length} app` : ""}
                 </span>
               )}

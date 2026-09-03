@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Ban } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
 
@@ -103,7 +103,7 @@ export default function Blacklist() {
         <form onSubmit={handleCreate} className="card space-y-3">
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div>
-            <label className="text-xs font-medium text-[var(--n-text-muted)]">Kandidat *</label>
+            <label className="text-xs font-medium text-[var(--text-muted)]">Kandidat *</label>
             <select name="candidate_id" required className="input mt-1 w-full" defaultValue="">
               <option value="" disabled>
                 Pilih kandidat
@@ -128,16 +128,16 @@ export default function Blacklist() {
         </form>
       )}
 
-      <div className="flex gap-2 border-b" style={{ borderColor: "var(--n-border)" }}>
+      <div className="flex gap-2 border-b" style={{ borderColor: "var(--border)" }}>
         {TABS.map((t) => (
           <button
             key={t.key}
             className={`px-3 py-2 text-sm ${
               tab === t.key
-                ? "border-b-2 font-medium text-[var(--n-text)]"
-                : "text-[var(--n-text-muted)]"
+                ? "border-b-2 font-medium text-[var(--text)]"
+                : "text-[var(--text-muted)]"
             }`}
-            style={tab === t.key ? { borderColor: "var(--n-accent)" } : undefined}
+            style={tab === t.key ? { borderColor: "var(--accent)" } : undefined}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -147,30 +147,30 @@ export default function Blacklist() {
 
       <div className="card space-y-0 p-0">
         {(entries ?? []).length === 0 && (
-          <p className="p-3 text-sm text-[var(--n-text-muted)]">Tidak ada data.</p>
+          <p className="p-3 text-sm text-[var(--text-muted)]">Tidak ada data.</p>
         )}
         {(entries ?? []).map((entry) => (
-          <div key={entry.id} className="border-t p-3" style={{ borderColor: "var(--n-border)" }}>
+          <div key={entry.id} className="border-t p-3" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-[var(--n-text)]">{entry.candidate_name}</p>
-                <p className="mt-1 text-xs text-[var(--n-text-muted)]">{entry.reason}</p>
+                <p className="text-sm font-medium text-[var(--text)]">{entry.candidate_name}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{entry.reason}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`pill ${STATUS_PILL[entry.status]}`}>
                     {STATUS_LABEL[entry.status]}
                   </span>
-                  <span className="text-xs text-[var(--n-text-muted)]">
+                  <span className="text-xs text-[var(--text-muted)]">
                     Diajukan {entry.requested_by_name ?? "?"} ·{" "}
                     {new Date(entry.requested_at).toLocaleDateString("id-ID")}
                   </span>
                   {entry.reviewed_by_name && (
-                    <span className="text-xs text-[var(--n-text-muted)]">
+                    <span className="text-xs text-[var(--text-muted)]">
                       Direview {entry.reviewed_by_name}
                     </span>
                   )}
                 </div>
                 {entry.review_notes && (
-                  <p className="mt-1 text-xs italic text-[var(--n-text-muted)]">
+                  <p className="mt-1 text-xs italic text-[var(--text-muted)]">
                     Catatan: {entry.review_notes}
                   </p>
                 )}

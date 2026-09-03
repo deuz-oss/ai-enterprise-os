@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Calculator } from "lucide-react";
-import { CalloutBlock, PageHeader } from "../components/notion";
+import { CalloutBlock, PageHeader } from "../components/workspace";
 
 interface Pph21Row {
   id: string;
@@ -157,9 +157,9 @@ export default function Rates() {
             onClick={() => setTab(k)}
             className="rounded px-3 py-1.5 text-sm transition-colors"
             style={{
-              border: "1px solid var(--n-border)",
-              backgroundColor: tab === k ? "var(--n-hover)" : "transparent",
-              color: tab === k ? "var(--n-text)" : "var(--n-text-muted)",
+              border: "1px solid var(--border)",
+              backgroundColor: tab === k ? "var(--hover)" : "transparent",
+              color: tab === k ? "var(--text)" : "var(--text-muted)",
               fontWeight: tab === k ? 500 : 400,
             }}
           >
@@ -174,7 +174,7 @@ export default function Rates() {
         <>
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)" }}>
+              <thead style={{ backgroundColor: "var(--hover)" }}>
                 <tr>
                   <th className={th}>Efektif Sejak</th>
                   <th className={th}>PTKP Diri</th>
@@ -182,7 +182,7 @@ export default function Rates() {
                   <th className={th}>PTKP Tanggungan</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(pph21.data ?? []).map((r) => (
                   <tr key={r.id}>
                     <td className={`${td} font-medium`}>{r.effective_from}</td>
@@ -195,7 +195,7 @@ export default function Rates() {
             </table>
           </div>
           <form onSubmit={handlePph21} className="card space-y-2">
-            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Versi Baru PPh 21</h2>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru PPh 21</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
               <input name="effective_from" type="date" required className="input" />
               <input name="ptkp_diri" type="number" required placeholder="PTKP diri (Rp)" className="input" />
@@ -230,7 +230,7 @@ export default function Rates() {
         <>
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)" }}>
+              <thead style={{ backgroundColor: "var(--hover)" }}>
                 <tr>
                   <th className={th}>Efektif</th>
                   <th className={th}>Kes. Psk/Pyd</th>
@@ -241,7 +241,7 @@ export default function Rates() {
                   <th className={th}>JKM</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(bpjs.data ?? []).map((r) => (
                   <tr key={r.id}>
                     <td className={`${td} font-medium`}>{r.effective_from}</td>
@@ -263,7 +263,7 @@ export default function Rates() {
             </table>
           </div>
           <form onSubmit={handleBpjs} className="card space-y-2">
-            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Versi Baru BPJS</h2>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru BPJS</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               <input name="effective_from" type="date" required className="input" />
               <input name="kesehatan_employer" type="number" step="0.0001" placeholder="Kes psk (0.04)" className="input" />
@@ -291,7 +291,7 @@ export default function Rates() {
         <>
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)" }}>
+              <thead style={{ backgroundColor: "var(--hover)" }}>
                 <tr>
                   <th className={th}>Efektif Sejak</th>
                   <th className={th}>PPN</th>
@@ -299,7 +299,7 @@ export default function Rates() {
                   <th className={th}>Jatuh Tempo (hari)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(billing.data ?? []).map((r) => (
                   <tr key={r.id}>
                     <td className={`${td} font-medium`}>{r.effective_from}</td>
@@ -329,7 +329,7 @@ export default function Rates() {
             Potongan admin otomatis di slip gaji. Bank Mandiri group = gratis.
           </CalloutBlock>
           <div className="card space-y-3">
-            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Daftar Biaya Admin Bank</h2>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Daftar Biaya Admin Bank</h2>
             {(bankFees.data ?? []).map((f) => (
               <form
                 key={f.id}
@@ -351,7 +351,7 @@ export default function Rates() {
             ))}
             <form
               className="flex items-center gap-2 border-t pt-3"
-              style={{ borderColor: "var(--n-border)" }}
+              style={{ borderColor: "var(--border)" }}
               onSubmit={(e) => {
                 e.preventDefault();
                 const form = new FormData(e.currentTarget);

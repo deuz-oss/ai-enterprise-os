@@ -35,9 +35,9 @@ interface ClientViewData {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--n-bg)] px-4 py-10">
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-3xl space-y-6">
-        <h1 className="text-2xl font-bold text-[var(--n-text)]">Persetujuan Payroll</h1>
+        <h1 className="text-2xl font-bold text-[var(--text)]">Persetujuan Payroll</h1>
         {children}
       </div>
     </div>
@@ -70,7 +70,7 @@ export default function PayrollClientPortal() {
   if (view.isLoading) {
     return (
       <Shell>
-        <p className="text-sm text-[var(--n-text-muted)]">Memuat...</p>
+        <p className="text-sm text-[var(--text-muted)]">Memuat...</p>
       </Shell>
     );
   }
@@ -88,7 +88,7 @@ export default function PayrollClientPortal() {
     return (
       <Shell>
         <div className="card">
-          <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>{msg}</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>{msg}</p>
         </div>
       </Shell>
     );
@@ -99,17 +99,17 @@ export default function PayrollClientPortal() {
   return (
     <Shell>
       <div className="card space-y-1">
-        <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
           {data.client ?? "Klien"} &middot; Periode {data.month}/{data.year}
         </p>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Berlaku s.d. {new Date(data.expires_at).toLocaleString("id-ID")}
         </p>
       </div>
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Karyawan</th>
               <th className="th">Gaji Pokok</th>
@@ -120,7 +120,7 @@ export default function PayrollClientPortal() {
               <th className="th">Netto</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {data.lines.map((l, i) => (
               <tr key={i}>
                 <td className="td font-medium">{l.employee_name}</td>
@@ -134,7 +134,7 @@ export default function PayrollClientPortal() {
             ))}
           </tbody>
           <tfoot>
-            <tr style={{ borderTop: "1px solid var(--n-border)" }}>
+            <tr style={{ borderTop: "1px solid var(--border)" }}>
               <td className="td font-semibold" colSpan={5}>
                 Total
               </td>
@@ -148,7 +148,7 @@ export default function PayrollClientPortal() {
       {decide.isSuccess ? (
         <div className="card border-emerald-600">
           <p className="pill p-green">Keputusan tersimpan</p>
-          <p className="mt-2 text-sm" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-sm" style={{ color: "var(--text)" }}>
             {decide.data.status} -- oleh {decide.data.decided_by_name}
             {decide.data.decision_note && ` -- ${decide.data.decision_note}`}
           </p>
@@ -156,14 +156,14 @@ export default function PayrollClientPortal() {
       ) : data.decided ? (
         <div className="card">
           <p className="pill p-green">Sudah diputuskan</p>
-          <p className="mt-2 text-sm" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-sm" style={{ color: "var(--text)" }}>
             Oleh {data.decided_by_name}
             {data.decision_note && ` -- ${data.decision_note}`}
           </p>
         </div>
       ) : (
         <div className="card space-y-3">
-          <h3 className="font-semibold" style={{ color: "var(--n-text)" }}>
+          <h3 className="font-semibold" style={{ color: "var(--text)" }}>
             Keputusan Anda
           </h3>
           <input

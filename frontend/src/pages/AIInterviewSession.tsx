@@ -28,9 +28,9 @@ interface PublicSession {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--n-bg)] px-4 py-10">
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold text-[var(--n-text)]">Interview AI</h1>
+        <h1 className="text-2xl font-bold text-[var(--text)]">Interview AI</h1>
         {children}
       </div>
     </div>
@@ -77,7 +77,7 @@ export default function AIInterviewSession() {
   if (isLoading) {
     return (
       <Shell>
-        <p className="text-sm text-[var(--n-text-muted)]">Memuat...</p>
+        <p className="text-sm text-[var(--text-muted)]">Memuat...</p>
       </Shell>
     );
   }
@@ -106,10 +106,10 @@ export default function AIInterviewSession() {
   return (
     <Shell>
       <div className="card space-y-2">
-        <h2 className="text-lg font-semibold text-[var(--n-text)]">{data.title}</h2>
-        {data.objective && <p className="text-sm text-[var(--n-text-muted)]">{data.objective}</p>}
+        <h2 className="text-lg font-semibold text-[var(--text)]">{data.title}</h2>
+        {data.objective && <p className="text-sm text-[var(--text-muted)]">{data.objective}</p>}
         {data.expires_at && (
-          <p className="text-xs text-[var(--n-text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Berlaku sampai {new Date(data.expires_at).toLocaleString("id-ID")}
           </p>
         )}
@@ -134,7 +134,7 @@ export default function AIInterviewSession() {
         <form onSubmit={handleSubmit} className="card space-y-4">
           {data.questions.map((q, idx) => (
             <div key={q.id}>
-              <label className="text-sm font-medium text-[var(--n-text)]">
+              <label className="text-sm font-medium text-[var(--text)]">
                 {idx + 1}. {q.prompt}
               </label>
               <textarea

@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Building2 } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { api, formatRupiah } from "../api/client";
@@ -166,7 +166,7 @@ export default function PlatformTenants() {
     enabled: Boolean(usageExpandedId),
   });
 
-  if (me.isLoading) return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
+  if (me.isLoading) return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
   if (me.data?.role !== "platform_admin") return <Navigate to="/" replace />;
 
   function handleProvision(e: FormEvent<HTMLFormElement>) {
@@ -185,7 +185,7 @@ export default function PlatformTenants() {
     <div className="space-y-4">
       <div>
         <PageHeader icon={Building2} title="Manajemen Tenant" />
-        <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
           Platform SaaS — satu tenant = satu perusahaan outsourcing pelanggan.
         </p>
       </div>
@@ -231,7 +231,7 @@ export default function PlatformTenants() {
           <h2 className="font-semibold text-emerald-700">
             Tenant "{provisioned.name}" dibuat
           </h2>
-          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
             Kredensial admin pertama — tampilkan <b>sekali ini saja</b>, teruskan ke klien:
           </p>
           <div className="mt-2 flex flex-wrap gap-4 font-mono text-sm">
@@ -249,7 +249,7 @@ export default function PlatformTenants() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">Nama</th>
               <th className="th">Slug</th>
@@ -259,11 +259,11 @@ export default function PlatformTenants() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(tenants ?? []).map((t) => {
               const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
               return (
-              <tr key={t.id} className="hover:bg-[var(--n-hover)]">
+              <tr key={t.id} className="hover:bg-[var(--hover)]">
                 <td className="td font-medium">{t.name}</td>
                 <td className="td font-mono text-xs">{t.slug}</td>
                 <td className="td">
@@ -288,7 +288,7 @@ export default function PlatformTenants() {
                     ))}
                   </select>
                 </td>
-                <td className="td text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
                   {new Date(t.created_at).toLocaleDateString("id-ID")}
                 </td>
                 <td className="td">
@@ -331,8 +331,8 @@ export default function PlatformTenants() {
             })}
             {(expandedId !== null) && (
               <tr>
-                <td colSpan={6} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
-                  <p className="mb-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                  <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
                     Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
                     supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
                     aktif"), atau atur app satu-satu lewat dropdown bila perlu.
@@ -345,10 +345,10 @@ export default function PlatformTenants() {
                         <div
                           key={b.key}
                           className="rounded-lg border p-2.5"
-                          style={{ backgroundColor: "var(--n-bg-elevated)", borderColor: "var(--n-border)" }}
+                          style={{ backgroundColor: "var(--bg-elevated)", borderColor: "var(--border)" }}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold" style={{ color: "var(--n-text)" }}>
+                            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>
                               {b.name}
                             </span>
                             <div className="flex shrink-0 gap-1.5">
@@ -377,7 +377,7 @@ export default function PlatformTenants() {
                           <div className="mt-2 space-y-1.5">
                             {rows.map((lic) => (
                               <div key={lic.app_key} className="flex items-center justify-between gap-2">
-                                <span className="truncate text-xs" style={{ color: "var(--n-text-muted)" }}>
+                                <span className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
                                   {lic.name}
                                 </span>
                                 <select
@@ -408,9 +408,9 @@ export default function PlatformTenants() {
             )}
             {usageExpandedId !== null && (
               <tr>
-                <td colSpan={6} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
+                <td colSpan={6} className="td" style={{ backgroundColor: "var(--hover)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
                       Estimasi tagihan — belum menagih, hanya laporan pemakaian
                     </p>
                     <input
@@ -421,34 +421,34 @@ export default function PlatformTenants() {
                     />
                   </div>
                   {usageLoading && (
-                    <p className="mt-2 text-xs" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>
+                    <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Memuat...</p>
                   )}
                   {usage && (
                     <div className="mt-2 overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr style={{ color: "var(--n-text-muted)" }}>
+                          <tr style={{ color: "var(--text-muted)" }}>
                             <th className="py-1 text-left">SKU</th>
                             <th className="py-1 text-right">Jumlah</th>
                             <th className="py-1 text-right">Estimasi</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+                        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                           {usage.lines.map((line, idx) => (
                             <tr key={`${line.sku}-${line.metric}-${idx}`}>
-                              <td className="py-1.5" style={{ color: "var(--n-text)" }}>
+                              <td className="py-1.5" style={{ color: "var(--text)" }}>
                                 {line.label}
                               </td>
-                              <td className="py-1.5 text-right" style={{ color: "var(--n-text-muted)" }}>
+                              <td className="py-1.5 text-right" style={{ color: "var(--text-muted)" }}>
                                 {line.qty !== undefined
                                   ? line.qty
                                   : line.qty_invoice !== undefined
                                     ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
                                     : "—"}
                               </td>
-                              <td className="py-1.5 text-right font-medium" style={{ color: "var(--n-text)" }}>
+                              <td className="py-1.5 text-right font-medium" style={{ color: "var(--text)" }}>
                                 {line.amount !== null ? formatRupiah(line.amount) : (
-                                  <span title={line.note} style={{ color: "var(--n-text-muted)" }}>
+                                  <span title={line.note} style={{ color: "var(--text-muted)" }}>
                                     belum diketahui
                                   </span>
                                 )}
@@ -457,14 +457,14 @@ export default function PlatformTenants() {
                           ))}
                           {usage.lines.length === 0 && (
                             <tr>
-                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--n-text-muted)" }}>
+                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
                                 Tidak ada SKU berlisensi untuk periode ini.
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </table>
-                      <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+                      <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--text)" }}>
                         Total diketahui: {formatRupiah(usage.total_known)}
                       </p>
                     </div>
@@ -474,7 +474,7 @@ export default function PlatformTenants() {
             )}
             {isLoading === false && tenants?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada tenant.
                 </td>
               </tr>
@@ -483,7 +483,7 @@ export default function PlatformTenants() {
         </table>
       </div>
 
-      <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         Menangguhkan tenant langsung memblokir seluruh akun di dalamnya saat login.
       </p>
     </div>

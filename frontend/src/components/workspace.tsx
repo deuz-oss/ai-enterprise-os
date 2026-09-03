@@ -21,11 +21,11 @@ export function PageHeader({
         <Icon className="h-5 w-5" />
       </span>
       <div className="min-w-0">
-        <h1 className="truncate text-2xl font-semibold leading-tight" style={{ color: "var(--n-text)" }}>
+        <h1 className="truncate text-2xl font-semibold leading-tight" style={{ color: "var(--text)" }}>
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-0.5 text-sm" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-sm" style={{ color: "var(--text-muted)" }}>
             {subtitle}
           </p>
         )}
@@ -66,7 +66,7 @@ export function CalloutBlock({
       className={`flex items-start gap-3 rounded-lg border px-3.5 py-3 text-sm ${CALLOUT_TONES[tone]}`}
     >
       <Icon className="h-[18px] w-[18px] shrink-0" />
-      <div className="flex-1" style={{ color: "var(--n-text)" }}>
+      <div className="flex-1" style={{ color: "var(--text)" }}>
         {children}
       </div>
     </div>
@@ -85,14 +85,14 @@ export function PropertyRow({
 }) {
   return (
     <div className="flex min-h-[34px] items-center gap-3 py-1.5">
-      <Icon className="h-4 w-4 shrink-0" style={{ color: "var(--n-text-muted)" }} />
+      <Icon className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
       <span
         className="w-36 shrink-0 text-xs font-medium uppercase tracking-wide"
-        style={{ color: "var(--n-text-muted)" }}
+        style={{ color: "var(--text-muted)" }}
       >
         {label}
       </span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm" style={{ color: "var(--n-text)" }}>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm" style={{ color: "var(--text)" }}>
         {children}
       </span>
     </div>
@@ -108,7 +108,7 @@ export function PropertiesPanel({
   className?: string;
 }) {
   return (
-    <div className={`divide-y ${className}`} style={{ borderColor: "var(--n-border)" }}>
+    <div className={`divide-y ${className}`} style={{ borderColor: "var(--border)" }}>
       {children}
     </div>
   );
@@ -156,8 +156,8 @@ export function IconBadge({
 export function RowFrame({ children }: { children: ReactNode }) {
   return (
     <div
-      className="rounded-lg border p-2.5 transition-colors hover:bg-[var(--n-hover)]"
-      style={{ borderColor: "var(--n-border)" }}
+      className="rounded-lg border p-2.5 transition-colors hover:bg-[var(--hover)]"
+      style={{ borderColor: "var(--border)" }}
     >
       {children}
     </div>

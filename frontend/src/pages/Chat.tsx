@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { ClipboardList, CornerUpLeft, Hash, Lock, MessageCircle, Megaphone } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 
 interface ChannelRow {
   id: string;
@@ -182,20 +182,20 @@ export default function Chat() {
         {/* Channel list */}
         <div
           className="flex w-64 shrink-0 flex-col overflow-hidden rounded-md"
-          style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-sidebar)" }}
+          style={{ border: "1px solid var(--border)", backgroundColor: "var(--sidebar)" }}
         >
           <div
             className="flex items-center justify-between px-3 py-2"
-            style={{ borderBottom: "1px solid var(--n-border)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
-            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
               Channel
             </span>
           </div>
 
           <form
             className="flex gap-1 p-2"
-            style={{ borderBottom: "1px solid var(--n-border)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
             onSubmit={(e) => {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
@@ -217,10 +217,10 @@ export default function Chat() {
                   setActiveChannel(ch.id);
                   setThreadParent(null);
                 }}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--n-hover)]"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
                 style={{
-                  backgroundColor: activeChannel === ch.id ? "var(--n-hover)" : "transparent",
-                  color: activeChannel === ch.id ? "var(--n-text)" : "var(--n-text-muted)",
+                  backgroundColor: activeChannel === ch.id ? "var(--hover)" : "transparent",
+                  color: activeChannel === ch.id ? "var(--text)" : "var(--text-muted)",
                 }}
               >
                 <span className="flex min-w-0 items-center gap-1.5 truncate">
@@ -241,7 +241,7 @@ export default function Chat() {
               </button>
             ))}
             {channels?.length === 0 && (
-              <p className="px-3 py-6 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <p className="px-3 py-6 text-center text-xs" style={{ color: "var(--text-muted)" }}>
                 Belum ada channel.
               </p>
             )}
@@ -249,12 +249,12 @@ export default function Chat() {
         </div>
 
         {/* Message area */}
-        <div className="flex flex-1 flex-col overflow-hidden rounded-md" style={{ border: "1px solid var(--n-border)" }}>
+        <div className="flex flex-1 flex-col overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
           <div
             className="flex items-center justify-between gap-2 px-4 py-2"
-            style={{ borderBottom: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+            style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
           >
-            <span className="flex items-center gap-1.5 truncate font-medium" style={{ color: "var(--n-text)" }}>
+            <span className="flex items-center gap-1.5 truncate font-medium" style={{ color: "var(--text)" }}>
               {threadParent && <CornerUpLeft className="h-3.5 w-3.5 shrink-0" />}
               {threadParent ? "Thread Balasan" : channelName}
             </span>
@@ -296,20 +296,20 @@ export default function Chat() {
             </div>
           </div>
           {searchQuery.trim().length >= 2 && searchResults && (
-            <div className="max-h-40 overflow-y-auto border-b px-2 py-1" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
-              <p className="px-2 py-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+            <div className="max-h-40 overflow-y-auto border-b px-2 py-1" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
+              <p className="px-2 py-1 text-xs" style={{ color: "var(--text-muted)" }}>
                 Hasil cari "{searchQuery}" — {searchResults.length} pesan
                 <button onClick={() => setSearchQuery("")} className="ml-2" style={{ color: "var(--accent)" }}>
                   tutup
                 </button>
               </p>
               {searchResults.map((m: MessageRow) => (
-                <div key={m.id} className="truncate px-2 py-1 text-xs" style={{ color: "var(--n-text)" }}>
+                <div key={m.id} className="truncate px-2 py-1 text-xs" style={{ color: "var(--text)" }}>
                   {m.content.slice(0, 80)}
                 </div>
               ))}
               {searchResults.length === 0 && (
-                <p className="px-2 py-2 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <p className="px-2 py-2 text-center text-xs" style={{ color: "var(--text-muted)" }}>
                   Tidak ada hasil.
                 </p>
               )}
@@ -317,24 +317,24 @@ export default function Chat() {
           )}
 
           {showDigest && !threadParent && (
-            <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
-              <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--n-text)" }}>
+            <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
+              <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--text)" }}>
                 <span className="flex items-center gap-1.5">
                   <ClipboardList className="h-3.5 w-3.5" /> Digest harian {digest.data?.date ? `· ${digest.data.date}` : ""}
                 </span>
                 <button onClick={() => setShowDigest(false)} style={{ color: "var(--accent)" }}>tutup</button>
               </p>
-              {digest.isLoading && <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Menyusun…</p>}
+              {digest.isLoading && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Menyusun…</p>}
               {(digest.data?.items ?? []).map((it, i) => (
-                <div key={i} className="py-0.5 text-xs" style={{ color: "var(--n-text)" }}>
+                <div key={i} className="py-0.5 text-xs" style={{ color: "var(--text)" }}>
                   • {it.detail}
                   {it.refs.length > 0 && (
-                    <span style={{ color: "var(--n-text-muted)" }}> — {it.refs.join(", ")}</span>
+                    <span style={{ color: "var(--text-muted)" }}> — {it.refs.join(", ")}</span>
                   )}
                 </div>
               ))}
               {digest.data && digest.data.items.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada item penting hari ini.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada item penting hari ini.</p>
               )}
             </div>
           )}
@@ -343,10 +343,10 @@ export default function Chat() {
             {(messages ?? []).map((m) => (
               <div
                 key={m.id}
-                className="group rounded px-2 py-1.5 transition-colors hover:bg-[var(--n-hover)]"
+                className="group rounded px-2 py-1.5 transition-colors hover:bg-[var(--hover)]"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-xs font-medium" style={{ color: "var(--n-text-muted)" }}>
+                  <span className="truncate text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                     {m.sender_id.slice(0, 8)}… · {new Date(m.created_at).toLocaleString("id-ID")}
                     {m.edited_at && <span className="ml-1 italic">diedit</span>}
                   </span>
@@ -361,22 +361,22 @@ export default function Chat() {
                   )}
                 </div>
 
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--n-text)" }}>
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--text)" }}>
                   {m.content}
                 </p>
                 {m.message_type === "card" && m.card_data && (
                   <div
                     className="mt-2 rounded-md p-3"
                     style={{
-                      border: "1px solid var(--n-border)",
-                      backgroundColor: "var(--n-bg-elevated)",
+                      border: "1px solid var(--border)",
+                      backgroundColor: "var(--bg-elevated)",
                     }}
                   >
-                    <p className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                       {m.card_data.title}
                     </p>
                     {m.card_data.body && (
-                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         {m.card_data.body}
                       </p>
                     )}
@@ -388,9 +388,9 @@ export default function Chat() {
                             onClick={() => handleAction.mutate({ messageId: m.id, actionId: a.id })}
                             className="rounded px-2.5 py-1 text-xs font-medium"
                             style={{
-                              backgroundColor: a.style === "primary" ? "var(--n-accent)" : "var(--n-bg-elevated)",
-                              color: a.style === "primary" ? "white" : "var(--n-text)",
-                              border: "1px solid var(--n-border)",
+                              backgroundColor: a.style === "primary" ? "var(--accent)" : "var(--bg-elevated)",
+                              color: a.style === "primary" ? "white" : "var(--text)",
+                              border: "1px solid var(--border)",
                             }}
                           >
                             {a.label}
@@ -407,7 +407,7 @@ export default function Chat() {
                       key={emoji}
                       onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
                       className="rounded-full px-1.5 py-0.5 text-xs"
-                      style={{ border: "1px solid var(--n-border)" }}
+                      style={{ border: "1px solid var(--border)" }}
                     >
                       {emoji} {count}
                     </button>
@@ -416,7 +416,7 @@ export default function Chat() {
                     <button
                       key={emoji}
                       onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
-                      className="rounded px-1 py-0.5 text-xs hover:bg-[var(--n-hover)]"
+                      className="rounded px-1 py-0.5 text-xs hover:bg-[var(--hover)]"
                       title={`React ${emoji}`}
                     >
                       {emoji}
@@ -430,7 +430,7 @@ export default function Chat() {
                           if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
                         }}
                         className="ml-auto text-[11px] hover:opacity-80"
-                        style={{ color: "var(--n-text-muted)" }}
+                        style={{ color: "var(--text-muted)" }}
                       >
                         edit
                       </button>
@@ -446,7 +446,7 @@ export default function Chat() {
               </div>
             ))}
             {messages?.length === 0 && (
-              <p className="py-8 text-center text-sm" style={{ color: "var(--n-text-muted)" }}>
+              <p className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 Belum ada pesan. Mulai percakapan!
               </p>
             )}
@@ -458,7 +458,7 @@ export default function Chat() {
               setMentionQuery(null);
             }}
             className="relative flex gap-2 px-4 py-3"
-            style={{ borderTop: "1px solid var(--n-border)" }}
+            style={{ borderTop: "1px solid var(--border)" }}
           >
             <div className="relative flex-1">
               <input
@@ -481,7 +481,7 @@ export default function Chat() {
               {mentionQuery !== null && (mentionResults ?? []).length > 0 && (
                 <div
                   className="absolute bottom-full left-0 right-0 mb-1 max-h-36 overflow-y-auto rounded-md shadow-lg"
-                  style={{ backgroundColor: "var(--n-bg-elevated)", border: "1px solid var(--n-border)" }}
+                  style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                 >
                   {(mentionResults ?? []).map((u: { id: string; full_name: string; email: string }) => (
                     <button
@@ -495,10 +495,10 @@ export default function Chat() {
                         setMentionQuery(null);
                         inputRef.current?.focus();
                       }}
-                      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-[var(--n-hover)]"
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-[var(--hover)]"
                     >
                       <span>{u.full_name}</span>
-                      <span style={{ color: "var(--n-text-muted)" }}>{u.email}</span>
+                      <span style={{ color: "var(--text-muted)" }}>{u.email}</span>
                     </button>
                   ))}
                 </div>

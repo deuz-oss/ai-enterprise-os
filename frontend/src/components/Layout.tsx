@@ -437,11 +437,11 @@ export default function Layout() {
       {/* ===== Topbar (lebar penuh) ===== */}
       <header
         className="sticky top-0 z-20 flex h-14 items-center gap-3 px-4 lg:px-6"
-        style={{ backgroundColor: "var(--n-bg-elevated)", borderBottom: "1px solid var(--n-border)" }}
+        style={{ backgroundColor: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
       >
         <button
           onClick={() => setLauncherOpen(true)}
-          className="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--n-hover)]"
+          className="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--hover)]"
           title="Buka App Launcher"
         >
           <span
@@ -451,10 +451,10 @@ export default function Layout() {
             AE
           </span>
           <span className="hidden text-left sm:block">
-            <span className="block text-sm font-semibold leading-none" style={{ color: "var(--n-text)" }}>
+            <span className="block text-sm font-semibold leading-none" style={{ color: "var(--text)" }}>
               AI Enterprise OS
             </span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--n-text-muted)" }}>
+            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
               Outsourcing Operations
             </span>
           </span>
@@ -463,27 +463,27 @@ export default function Layout() {
         {me.data?.tenant_name && (
           <span
             className="hidden shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm md:flex"
-            style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg)" }}
+            style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)" }}
             title="Workspace aktif"
           >
-            <Building2 className="h-4 w-4 shrink-0" style={{ color: "var(--n-text-muted)" }} />
-            <span className="font-medium" style={{ color: "var(--n-text)" }}>
+            <Building2 className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
+            <span className="font-medium" style={{ color: "var(--text)" }}>
               {me.data.tenant_name}
             </span>
-            <ChevronsUpDown className="h-4 w-4 shrink-0" style={{ color: "var(--n-text-muted)" }} />
+            <ChevronsUpDown className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
           </span>
         )}
 
         <button
           onClick={() => setPaletteOpen(true)}
           className="ml-2 hidden max-w-md flex-1 cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm lg:flex"
-          style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg)", color: "var(--n-text-muted)" }}
+          style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)", color: "var(--text-muted)" }}
         >
           <Search className="h-4 w-4 shrink-0" />
           <span className="flex-1">Cari halaman, kandidat, invoice...</span>
           <span
             className="rounded px-1.5 py-0.5 text-[10px]"
-            style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+            style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
           >
             ⌘K
           </span>
@@ -492,33 +492,33 @@ export default function Layout() {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             onClick={() => setPaletteOpen(true)}
-            className="cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--n-hover)] lg:hidden"
-            style={{ color: "var(--n-text-muted)" }}
+            className="cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--hover)] lg:hidden"
+            style={{ color: "var(--text-muted)" }}
             title="Cari"
           >
             <Search className="h-[18px] w-[18px]" />
           </button>
           <button
             className="hidden cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm sm:flex"
-            style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)", color: "var(--n-text)" }}
+            style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)", color: "var(--text)" }}
             title="Periode tampilan (segera dapat difilter)"
           >
-            <Calendar className="h-4 w-4" style={{ color: "var(--n-text-muted)" }} />
+            <Calendar className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
             {periodLabel}
-            <ChevronDown className="h-4 w-4" style={{ color: "var(--n-text-muted)" }} />
+            <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
           </button>
           <div className="relative">
             <button
               onClick={() => setInboxOpen((v) => !v)}
-              className="relative cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--n-hover)]"
-              style={{ color: "var(--n-text-muted)" }}
+              className="relative cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--hover)]"
+              style={{ color: "var(--text-muted)" }}
               title="Kotak Masuk"
             >
               <Bell className="h-[18px] w-[18px]" />
               {unread.data && unread.data.count > 0 && (
                 <span
                   className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500"
-                  style={{ boxShadow: "0 0 0 2px var(--n-bg-elevated)" }}
+                  style={{ boxShadow: "0 0 0 2px var(--bg-elevated)" }}
                 />
               )}
             </button>
@@ -544,7 +544,7 @@ export default function Layout() {
         {/* ===== Sidebar ===== */}
         <aside
           className="flex w-64 shrink-0 flex-col sticky top-14 h-[calc(100vh-56px)]"
-          style={{ backgroundColor: "var(--n-sidebar)", borderRight: "1px solid var(--n-border)" }}
+          style={{ backgroundColor: "var(--sidebar)", borderRight: "1px solid var(--border)" }}
         >
           <nav className="flex-1 space-y-5 overflow-y-auto p-3">
             {showAppsMenu() && (
@@ -566,7 +566,7 @@ export default function Layout() {
                   {!landing && (
                     <p
                       className="px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-widest"
-                      style={{ color: "var(--n-text-muted)" }}
+                      style={{ color: "var(--text-muted)" }}
                     >
                       {g.label}
                     </p>
@@ -582,7 +582,7 @@ export default function Layout() {
                           className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
                           style={({ isActive }) => ({
                             backgroundColor: isActive ? "var(--accent)" : undefined,
-                            color: isActive ? "#ffffff" : "var(--n-text-muted)",
+                            color: isActive ? "#ffffff" : "var(--text-muted)",
                           })}
                         >
                           {({ isActive }) => (
@@ -593,7 +593,7 @@ export default function Layout() {
                                   dashboard.html; netral putih saat item aktif. */}
                               <Icon
                                 className="h-4 w-4 shrink-0"
-                                style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--n-text-muted)") }}
+                                style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--text-muted)") }}
                               />
                               {landing ? g.label : item.label}
                             </>
@@ -620,12 +620,12 @@ export default function Layout() {
             return (
               <div
                 className="mx-3 mb-3 rounded-xl p-3 text-xs"
-                style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
               >
-                <b style={{ color: "var(--n-text)" }}>
+                <b style={{ color: "var(--text)" }}>
                   {pick.emoji} Aktifkan {pick.name}?
                 </b>
-                <p className="mt-1 leading-relaxed" style={{ color: "var(--n-text-muted)" }}>
+                <p className="mt-1 leading-relaxed" style={{ color: "var(--text-muted)" }}>
                   {(pick.description ?? "").slice(0, 90)}
                   {(pick.description ?? "").length > 90 ? "…" : ""} Gratis 14 hari.
                 </p>
@@ -641,10 +641,10 @@ export default function Layout() {
             );
           })()}
 
-          <div className="relative border-t p-3" style={{ borderColor: "var(--n-border)" }}>
+          <div className="relative border-t p-3" style={{ borderColor: "var(--border)" }}>
             <div
               className="flex items-center gap-3 rounded-xl p-3"
-              style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg)" }}
+              style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)" }}
             >
               <span
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
@@ -653,17 +653,17 @@ export default function Layout() {
                 {initials}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+                <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
                   {me.data?.full_name ?? "..."}
                 </p>
-                <p className="truncate text-xs capitalize" style={{ color: "var(--n-text-muted)" }}>
+                <p className="truncate text-xs capitalize" style={{ color: "var(--text-muted)" }}>
                   {me.data?.role ?? ""}
                 </p>
               </div>
               <button
                 onClick={() => setProfileMenuOpen((v) => !v)}
-                className="ml-auto shrink-0 cursor-pointer rounded p-1 transition-colors hover:bg-[var(--n-hover)]"
-                style={{ color: "var(--n-text-muted)" }}
+                className="ml-auto shrink-0 cursor-pointer rounded p-1 transition-colors hover:bg-[var(--hover)]"
+                style={{ color: "var(--text-muted)" }}
                 title="Menu akun"
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -673,15 +673,15 @@ export default function Layout() {
             {profileMenuOpen && (
               <div
                 className="absolute bottom-full left-3 right-3 z-10 mb-1.5 overflow-hidden rounded-lg shadow-lg"
-                style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
               >
                 <button
                   onClick={() => {
                     toggle();
                     setProfileMenuOpen(false);
                   }}
-                  className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--n-hover)]"
-                  style={{ color: "var(--n-text)" }}
+                  className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
+                  style={{ color: "var(--text)" }}
                 >
                   {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                   {dark ? "Mode Terang" : "Mode Gelap"}
@@ -691,8 +691,8 @@ export default function Layout() {
                     clearToken();
                     navigate("/login");
                   }}
-                  className="flex w-full cursor-pointer items-center gap-2.5 border-t px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--n-hover)]"
-                  style={{ color: "var(--n-text)", borderColor: "var(--n-border)" }}
+                  className="flex w-full cursor-pointer items-center gap-2.5 border-t px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
+                  style={{ color: "var(--text)", borderColor: "var(--border)" }}
                 >
                   <X className="h-4 w-4" />
                   Keluar
@@ -718,20 +718,20 @@ export default function Layout() {
         >
           <div
             className="max-h-[80vh] w-[720px] max-w-[92vw] overflow-hidden rounded-xl shadow-2xl"
-            style={{ backgroundColor: "var(--n-bg-elevated)" }}
+            style={{ backgroundColor: "var(--bg-elevated)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-baseline gap-2.5 px-5 pt-4">
-              <h2 className="text-lg font-bold" style={{ color: "var(--n-text)" }}>
+              <h2 className="text-lg font-bold" style={{ color: "var(--text)" }}>
                 Aplikasi
               </h2>
-              <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {(apps.data ?? []).filter((a) => a.licensed).length} terpasang · trial 14 hari per app
               </span>
               <button
-                className="ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--n-hover)]"
+                className="ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--hover)]"
                 onClick={() => setLauncherOpen(false)}
-                style={{ color: "var(--n-text-muted)" }}
+                style={{ color: "var(--text-muted)" }}
               >
                 <X className="h-3.5 w-3.5" /> Esc
               </button>
@@ -741,10 +741,10 @@ export default function Layout() {
             </div>
             <div
               className="flex items-center gap-2 border-t px-5 py-3 text-[12.5px]"
-              style={{ borderColor: "var(--n-border)", color: "var(--n-text-muted)" }}
+              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
             >
               <Lightbulb className="h-4 w-4 shrink-0" /> Ambil{" "}
-              <b style={{ color: "var(--n-text)" }}>Full Package</b> (semua aplikasi + AI) dan
+              <b style={{ color: "var(--text)" }}>Full Package</b> (semua aplikasi + AI) dan
               hemat hingga 35% dibeli satuan.
             </div>
           </div>
@@ -758,16 +758,16 @@ export default function Layout() {
             <div
               className="fixed bottom-4 left-4 z-20 hidden items-center gap-2 rounded-lg px-3 py-2 text-[11.5px] md:flex"
               style={{
-                backgroundColor: "var(--n-bg-elevated)",
-                border: "1px solid var(--n-border)",
-                color: "var(--n-text-muted)",
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--border)",
+                color: "var(--text-muted)",
                 boxShadow: "0 2px 8px rgba(15,15,15,.08)",
               }}
             >
               <Lightbulb className="h-4 w-4 shrink-0" />
               <span>
                 Tekan <kbd className="font-mono">⌘K</kbd> untuk cari cepat · sebut{" "}
-                <b style={{ color: "var(--n-text)" }}>@AEOS</b> di chat untuk bertanya
+                <b style={{ color: "var(--text)" }}>@AEOS</b> di chat untuk bertanya
               </span>
               <button
                 className="ml-1 cursor-pointer text-xs hover:underline"
@@ -814,7 +814,7 @@ function SidebarLink({
       className="mb-2 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
       style={{
         backgroundColor: active ? "var(--accent)" : undefined,
-        color: active ? "#ffffff" : "var(--n-text-muted)",
+        color: active ? "#ffffff" : "var(--text-muted)",
       }}
     >
       <Icon className="h-4 w-4 shrink-0" />
@@ -851,7 +851,7 @@ function PageTreeSection({
   return (
     <div>
       <div className="flex items-center justify-between px-2.5 pb-1.5 pt-1">
-        <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--n-text-muted)" }}>
+        <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
           Workspace
         </span>
         <button
@@ -872,8 +872,8 @@ function PageTreeSection({
                 e.preventDefault();
                 navigate(`/pages/${p.id}`);
               }}
-              className="block truncate rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--n-hover)]"
-              style={{ color: pathname === `/pages/${p.id}` ? "var(--n-text)" : "var(--n-text-muted)" }}
+              className="block truncate rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-[var(--hover)]"
+              style={{ color: pathname === `/pages/${p.id}` ? "var(--text)" : "var(--text-muted)" }}
             >
               {p.icon} {p.title}
             </a>
@@ -887,8 +887,8 @@ function PageTreeSection({
                     e.preventDefault();
                     navigate(`/pages/${c.id}`);
                   }}
-                  className="block truncate rounded-lg py-1.5 pl-7 pr-2.5 text-xs transition-colors hover:bg-[var(--n-hover)]"
-                  style={{ color: pathname === `/pages/${c.id}` ? "var(--n-text)" : "var(--n-text-muted)" }}
+                  className="block truncate rounded-lg py-1.5 pl-7 pr-2.5 text-xs transition-colors hover:bg-[var(--hover)]"
+                  style={{ color: pathname === `/pages/${c.id}` ? "var(--text)" : "var(--text-muted)" }}
                 >
                   {c.icon} {c.title}
                 </a>
@@ -922,7 +922,7 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
   return (
     <div className="card shadow-lg">
       <div className="mb-1 flex items-center justify-between text-xs">
-        <b style={{ color: "var(--n-text)" }}>Belum dibaca</b>
+        <b style={{ color: "var(--text)" }}>Belum dibaca</b>
         <button
           onClick={() => readAll.mutate()}
           disabled={readAll.isPending || (items.data?.length ?? 0) === 0}
@@ -932,19 +932,19 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
         </button>
       </div>
       {(items.data ?? []).slice(0, 5).map((n) => (
-        <div key={n.id} className="border-t py-1.5 text-xs first:border-t-0" style={{ borderColor: "var(--n-border)" }}>
-          <p className="font-medium" style={{ color: "var(--n-text)" }}>
+        <div key={n.id} className="border-t py-1.5 text-xs first:border-t-0" style={{ borderColor: "var(--border)" }}>
+          <p className="font-medium" style={{ color: "var(--text)" }}>
             {n.title}
           </p>
           {n.body && (
-            <p className="truncate" style={{ color: "var(--n-text-muted)" }}>
+            <p className="truncate" style={{ color: "var(--text-muted)" }}>
               {n.body}
             </p>
           )}
         </div>
       ))}
       {(items.data?.length ?? 0) === 0 && (
-        <p className="flex items-center gap-1.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="flex items-center gap-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
           <PartyPopper className="h-3.5 w-3.5 shrink-0" /> Tidak ada notifikasi belum dibaca.
         </p>
       )}

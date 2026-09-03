@@ -10,7 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "../api/client";
-import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/notion";
+import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/workspace";
 
 interface Overview {
   ai_insight: { hint: string };
@@ -179,45 +179,45 @@ export default function GovernCloudOverview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Audit Logs</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Audit Logs</span>
             <IconBadge icon={FileText} tone="accent" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {auditLogs.data?.total ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>{todayCount} hari ini</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{todayCount} hari ini</p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Active Users</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Active Users</span>
             <IconBadge icon={Users} tone="green" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {canSeeUsers ? activeUsers.length : "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>{roleGroups.length} roles · RBAC</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{roleGroups.length} roles · RBAC</p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Login Issues</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Login Issues</span>
             <IconBadge icon={ShieldAlert} tone="orange" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {canSeeAudit ? loginIssues.length : "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {loginIssues.length > 0 ? "perlu review" : "aman"}
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Roles Aktif</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Roles Aktif</span>
             <IconBadge icon={Shield} tone="violet" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {canSeeUsers ? roleGroups.length : "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>dari 9 role tersedia</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>dari 9 role tersedia</p>
         </div>
       </div>
 
@@ -236,15 +236,15 @@ export default function GovernCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Shield} tone="accent" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>RBAC & Roles</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{roleGroups.length} roles terpakai</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>RBAC & Roles</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{roleGroups.length} roles terpakai</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {roleGroups.map(({ role, count }) => (
                 <RowFrame key={role}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>
                       {ROLE_LABELS[role] ?? role}
                     </span>
                     <span
@@ -252,13 +252,13 @@ export default function GovernCloudOverview() {
                       style={{ backgroundColor: ROLE_DOT[role] ?? "#9f9f9f" }}
                     />
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {count} user · {ROLE_CAPTIONS[role] ?? "-"}
                   </p>
                 </RowFrame>
               ))}
               {roleGroups.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada user.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada user.</p>
               )}
             </div>
             <SeeAllLink to="/users">Kelola role →</SeeAllLink>
@@ -273,28 +273,28 @@ export default function GovernCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={FileText} tone="accent" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Audit Trail</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Siapa, apa, kapan — immutable</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Audit Trail</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Siapa, apa, kapan — immutable</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {recentAudit.map((i) => (
                 <RowFrame key={i.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>
                       {actionLabel(i.action)}
                     </span>
-                    <span className="shrink-0 font-mono text-[10px]" style={{ color: "var(--n-text-muted)" }}>
+                    <span className="shrink-0 font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>
                       {new Date(i.created_at).toLocaleString("id-ID")}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {canSeeUsers ? actorName(i.user_id) : "Pengguna"} · {entityLabel(i)}
                   </p>
                 </RowFrame>
               ))}
               {recentAudit.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada aktivitas tercatat.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas tercatat.</p>
               )}
             </div>
             <SeeAllLink to="/audit">Lihat semua audit log →</SeeAllLink>
@@ -305,24 +305,24 @@ export default function GovernCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={ShieldAlert} tone="orange" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Compliance Issues</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{loginIssues.length} tercatat</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Compliance Issues</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{loginIssues.length} tercatat</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {recentIssues.map((i) => (
                 <RowFrame key={i.id}>
-                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                     {actionLabel(i.action)} — {canSeeUsers ? actorName(i.user_id) : "Pengguna"}
                   </p>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {new Date(i.created_at).toLocaleString("id-ID")}
                     {i.ip ? ` · ${i.ip}` : ""}
                   </p>
                 </RowFrame>
               ))}
               {recentIssues.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada isu login.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada isu login.</p>
               )}
             </div>
             <SeeAllLink to="/audit">Review →</SeeAllLink>
@@ -337,26 +337,26 @@ export default function GovernCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Users} tone="accent" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>User Management</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{users.data?.length ?? 0} users</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>User Management</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{users.data?.length ?? 0} users</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {recentUsers.map((u) => (
                 <RowFrame key={u.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>
                       {u.full_name} — {ROLE_LABELS[u.role] ?? u.role}
                     </span>
                     <span className={`shrink-0 pill ${u.is_active ? "p-green" : "p-red"}`}>
                       {u.is_active ? "Aktif" : "Nonaktif"}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs" style={{ color: "var(--n-text-muted)" }}>{u.email}</p>
+                  <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>{u.email}</p>
                 </RowFrame>
               ))}
               {recentUsers.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada user.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada user.</p>
               )}
             </div>
             <SeeAllLink to="/users">Kelola user →</SeeAllLink>
@@ -368,19 +368,19 @@ export default function GovernCloudOverview() {
           <div className="card space-y-2">
             <div className="flex items-center gap-2">
               <IconBadge icon={Activity} tone="green" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas Terbaru</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Aktivitas Terbaru</h2>
             </div>
             <div className="space-y-1.5">
               {recentActivity.map((a) => (
                 <RowFrame key={a.id}>
-                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{actionLabel(a.action)}</p>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{actionLabel(a.action)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     oleh {canSeeUsers ? actorName(a.user_id) : "Pengguna"} · {timeAgo(a.created_at)}
                   </p>
                 </RowFrame>
               ))}
               {recentActivity.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada aktivitas.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas.</p>
               )}
             </div>
           </div>

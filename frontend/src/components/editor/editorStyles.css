@@ -1,6 +1,6 @@
 /* ============================================================
    Fase D — gaya konten block editor (.aeos-prose)
-   Semua warna lewat token notion agar light/dark otomatis.
+   Semua warna lewat token desain (index.css) agar light/dark otomatis.
    ============================================================ */
 
 .aeos-prose .ProseMirror {
@@ -68,11 +68,11 @@
   height: 0.95em;
 }
 .aeos-prose ul[data-type="taskList"] li[data-checked="true"] > div {
-  color: var(--n-text-muted);
+  color: var(--text-muted);
   text-decoration: line-through;
 }
 
-/* Quote + Callout: satu gaya blok penekanan ala Notion */
+/* Quote + Callout: satu gaya blok penekanan */
 .aeos-prose blockquote {
   background: var(--accent-tint);
   border-left: 3px solid var(--accent);
@@ -86,7 +86,7 @@
 
 .aeos-prose hr {
   border: none;
-  border-top: 1px solid var(--n-border);
+  border-top: 1px solid var(--border);
   margin: 1.4em 0;
 }
 
@@ -96,7 +96,7 @@
   float: left;
   height: 0;
   pointer-events: none;
-  color: var(--n-text-muted);
+  color: var(--text-muted);
 }
 
 /* Pratinjau read-only sedikit lebih rapat */

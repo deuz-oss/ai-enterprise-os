@@ -33,9 +33,9 @@ interface PublicJobOrderDetail extends PublicJobOrder {
 
 function CareerShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--n-bg)] px-4 py-10">
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-3xl space-y-6">
-        <h1 className="text-2xl font-bold text-[var(--n-text)]">Karir</h1>
+        <h1 className="text-2xl font-bold text-[var(--text)]">Karir</h1>
         {children}
       </div>
     </div>
@@ -51,22 +51,22 @@ export function CareerListing() {
 
   return (
     <CareerShell>
-      <p className="text-sm text-[var(--n-text-muted)]">Lowongan yang sedang dibuka.</p>
-      {isLoading && <p className="text-sm text-[var(--n-text-muted)]">Memuat...</p>}
+      <p className="text-sm text-[var(--text-muted)]">Lowongan yang sedang dibuka.</p>
+      {isLoading && <p className="text-sm text-[var(--text-muted)]">Memuat...</p>}
       {error && <p className="text-sm text-red-600">{(error as Error).message}</p>}
       <div className="space-y-3">
         {(data ?? []).map((jo) => (
           <Link
             key={jo.id}
             to={`/careers/${tenantSlug}/${jo.id}`}
-            className="card block hover:bg-[var(--n-hover)]"
+            className="card block hover:bg-[var(--hover)]"
           >
-            <p className="font-semibold text-[var(--n-text)]">{jo.title}</p>
-            <p className="text-sm text-[var(--n-text-muted)]">
+            <p className="font-semibold text-[var(--text)]">{jo.title}</p>
+            <p className="text-sm text-[var(--text-muted)]">
               {jo.client_label}
               {jo.area ? ` · ${jo.area}` : ""} · {jo.headcount} orang
             </p>
-            <p className="mt-1 text-sm text-[var(--n-text)]">
+            <p className="mt-1 text-sm text-[var(--text)]">
               {jo.gross_salary
                 ? formatRupiah(jo.gross_salary)
                 : `${formatRupiah(jo.salary_min)} – ${formatRupiah(jo.salary_max)}`}
@@ -75,7 +75,7 @@ export function CareerListing() {
           </Link>
         ))}
         {data?.length === 0 && (
-          <p className="text-sm text-[var(--n-text-muted)]">Belum ada lowongan yang dibuka saat ini.</p>
+          <p className="text-sm text-[var(--text-muted)]">Belum ada lowongan yang dibuka saat ini.</p>
         )}
       </div>
     </CareerShell>
@@ -118,7 +118,7 @@ export function CareerDetail() {
     apply.mutate(fd);
   }
 
-  if (isLoading) return <CareerShell><p className="text-sm text-[var(--n-text-muted)]">Memuat...</p></CareerShell>;
+  if (isLoading) return <CareerShell><p className="text-sm text-[var(--text-muted)]">Memuat...</p></CareerShell>;
   if (error) return <CareerShell><p className="text-sm text-red-600">{(error as Error).message}</p></CareerShell>;
   if (!jo) return null;
 
@@ -128,22 +128,22 @@ export function CareerDetail() {
         &larr; Kembali ke daftar lowongan
       </Link>
       <div className="card space-y-2">
-        <h2 className="text-lg font-semibold text-[var(--n-text)]">{jo.title}</h2>
-        <p className="text-sm text-[var(--n-text-muted)]">
+        <h2 className="text-lg font-semibold text-[var(--text)]">{jo.title}</h2>
+        <p className="text-sm text-[var(--text-muted)]">
           {jo.client_label}
           {jo.area ? ` · ${jo.area}` : ""} · {jo.headcount} orang
         </p>
-        <p className="text-sm text-[var(--n-text)]">
+        <p className="text-sm text-[var(--text)]">
           {jo.gross_salary
             ? formatRupiah(jo.gross_salary)
             : `${formatRupiah(jo.salary_min)} – ${formatRupiah(jo.salary_max)}`}
           {jo.contract_duration_months ? ` · Kontrak ${jo.contract_duration_months} bulan` : ""}
         </p>
-        {jo.description && <p className="whitespace-pre-line text-sm text-[var(--n-text)]">{jo.description}</p>}
+        {jo.description && <p className="whitespace-pre-line text-sm text-[var(--text)]">{jo.description}</p>}
         {jo.requirements && (
           <div>
-            <p className="text-sm font-medium text-[var(--n-text)]">Kualifikasi</p>
-            <p className="whitespace-pre-line text-sm text-[var(--n-text-muted)]">{jo.requirements}</p>
+            <p className="text-sm font-medium text-[var(--text)]">Kualifikasi</p>
+            <p className="whitespace-pre-line text-sm text-[var(--text-muted)]">{jo.requirements}</p>
           </div>
         )}
       </div>
@@ -151,8 +151,8 @@ export function CareerDetail() {
       {result ? (
         <div className="card space-y-2 border-emerald-600">
           <p className="text-sm text-emerald-700">{result.message}</p>
-          <p className="text-xs text-[var(--n-text-muted)]">Token lamaran Anda:</p>
-          <p className="break-all rounded bg-[var(--n-hover)] p-2 font-mono text-sm">
+          <p className="text-xs text-[var(--text-muted)]">Token lamaran Anda:</p>
+          <p className="break-all rounded bg-[var(--hover)] p-2 font-mono text-sm">
             {result.application_token}
           </p>
           <Link
@@ -164,18 +164,18 @@ export function CareerDetail() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="card space-y-3">
-          <h3 className="font-semibold text-[var(--n-text)]">Lamar Posisi Ini</h3>
+          <h3 className="font-semibold text-[var(--text)]">Lamar Posisi Ini</h3>
           <input name="full_name" required placeholder="Nama Lengkap *" className="input w-full" />
           <input name="email" type="email" required placeholder="Email *" className="input w-full" />
           <input name="phone" placeholder="No. HP" className="input w-full" />
           <input name="file" type="file" required accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="input w-full" />
           {jo.screening_questions.map((q) => (
             <div key={q.id}>
-              <label className="text-sm text-[var(--n-text)]">{q.prompt}</label>
+              <label className="text-sm text-[var(--text)]">{q.prompt}</label>
               <input name={`q_${q.id}`} required={q.required} className="input mt-1 w-full" />
             </div>
           ))}
-          <label className="flex items-start gap-2 text-xs text-[var(--n-text-muted)]">
+          <label className="flex items-start gap-2 text-xs text-[var(--text-muted)]">
             <input name="consent" type="checkbox" required className="mt-0.5 h-4 w-4" />
             Saya setuju data pribadi saya diproses untuk keperluan rekrutmen ini (UU PDP).
           </label>
@@ -209,7 +209,7 @@ export function CareerTrack() {
   return (
     <CareerShell>
       <div className="card space-y-3">
-        <h3 className="font-semibold text-[var(--n-text)]">Cek Status Lamaran</h3>
+        <h3 className="font-semibold text-[var(--text)]">Cek Status Lamaran</h3>
         <div className="flex gap-2">
           <input
             value={token}
@@ -221,12 +221,12 @@ export function CareerTrack() {
             Cek
           </button>
         </div>
-        {isLoading && <p className="text-sm text-[var(--n-text-muted)]">Memuat...</p>}
+        {isLoading && <p className="text-sm text-[var(--text-muted)]">Memuat...</p>}
         {error && <p className="text-sm text-red-600">{(error as Error).message}</p>}
         {data && (
-          <div className="rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
-            <p className="font-medium text-[var(--n-text)]">{data.job_title}</p>
-            <p className="text-sm text-[var(--n-text-muted)]">{data.candidate_name}</p>
+          <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+            <p className="font-medium text-[var(--text)]">{data.job_title}</p>
+            <p className="text-sm text-[var(--text-muted)]">{data.candidate_name}</p>
             <p className="mt-2 pill p-blue">{data.status_label}</p>
           </div>
         )}

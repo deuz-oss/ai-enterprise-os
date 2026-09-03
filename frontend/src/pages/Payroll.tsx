@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Wallet } from "lucide-react";
-import { PageHeader, CalloutBlock } from "../components/notion";
+import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -109,18 +109,18 @@ function SaltabTable({ runId }: { runId: string | null }) {
 
   if (!runId)
     return (
-      <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>
+      <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>
         Pilih payroll run (klik "Slip Gaji") untuk melihat grid Saltab.
       </p>
     );
-  if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
+  if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
 
   return (
-    <div className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+    <div className="divide-y" style={{ borderColor: "var(--border)" }}>
       {(rows ?? []).map((row) => (
         <div key={row.payslip_id} className="px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{row.employee_name}</p>
+            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{row.employee_name}</p>
             <button
               onClick={() =>
                 downloadFile(`/payroll/runs/${runId}/bukti-potong/${row.employee_id}/pdf`)
@@ -136,13 +136,13 @@ function SaltabTable({ runId }: { runId: string | null }) {
             <tbody>
               {row.components.map((c) => (
                 <tr key={c.id}>
-                  <td className="py-0.5 pr-2 capitalize" style={{ color: "var(--n-text-muted)" }}>
+                  <td className="py-0.5 pr-2 capitalize" style={{ color: "var(--text-muted)" }}>
                     {c.name}
                     {c.source === "manual" && (
                       <span className="ml-1 pill p-indigo">manual</span>
                     )}
                   </td>
-                  <td className="py-0.5 pr-2 uppercase text-[10px]" style={{ color: "var(--n-text-muted)" }}>
+                  <td className="py-0.5 pr-2 uppercase text-[10px]" style={{ color: "var(--text-muted)" }}>
                     {c.ctype}
                   </td>
                   <td className="w-40 py-0.5 text-right font-mono">
@@ -191,7 +191,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 <td />
               </tr>
               {row.total_passthrough > 0 && (
-                <tr style={{ color: "var(--n-text-muted)" }}>
+                <tr style={{ color: "var(--text-muted)" }}>
                   <td className="pr-2" colSpan={2}>
                     + BPJS perusahaan (pass-through, ditagih ke klien)
                   </td>
@@ -204,7 +204,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
         </div>
       ))}
       {rows?.length === 0 && (
-        <p className="p-4 text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada slip pada run ini.</p>
+        <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Belum ada slip pada run ini.</p>
       )}
       {err && <p className="px-4 pb-3 text-sm text-red-600">{err.message}</p>}
     </div>
@@ -383,7 +383,7 @@ export default function Payroll() {
       </div>
 
       <div className="card">
-        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <h2 className="font-semibold" style={{ color: "var(--text)" }}>
           Absensi & Lembur — {period.month}/{period.year} (approval klien)
         </h2>
         <form onSubmit={handleAttendance} className="mt-3 flex flex-wrap items-center gap-2">
@@ -409,7 +409,7 @@ export default function Payroll() {
               <th className="th">Approval Klien</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(attendance ?? []).map((a) => {
               const emp = employees?.find((e) => e.id === a.employee_id);
               return (
@@ -434,7 +434,7 @@ export default function Payroll() {
             })}
             {attendance?.length === 0 && (
               <tr>
-                <td colSpan={4} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={4} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada rekap absensi untuk periode ini.
                 </td>
               </tr>
@@ -447,7 +447,7 @@ export default function Payroll() {
         <CalloutBlock tone="success">
           <p className="font-medium">Link approval klien aktif</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <code className="rounded px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--n-hover)", border: "1px solid var(--n-border)" }}>{clientLink.link}</code>
+            <code className="rounded px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--hover)", border: "1px solid var(--border)" }}>{clientLink.link}</code>
             <button
               className="btn-secondary py-0.5 text-xs"
               onClick={() => navigator.clipboard.writeText(window.location.origin + clientLink.link)}
@@ -461,7 +461,7 @@ export default function Payroll() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Periode</th>
               <th className="th">Jenis / Klien</th>
@@ -469,7 +469,7 @@ export default function Payroll() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(runs ?? []).map((r) => {
               const badge = STATUS_LABELS[r.status] ?? { label: r.status, cls: "pill p-gray" };
               return (
@@ -491,7 +491,7 @@ export default function Payroll() {
                     </button>
                     {(r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
                       <>
-                        <button onClick={() => generateSlips.mutate(r.id)} style={{ color: "var(--n-text-muted)" }} className="hover:opacity-80">
+                        <button onClick={() => generateSlips.mutate(r.id)} style={{ color: "var(--text-muted)" }} className="hover:opacity-80">
                           Generate
                         </button>
                         {r.run_type === "proyek" ? (
@@ -524,7 +524,7 @@ export default function Payroll() {
                       </button>
                     )}
                     {r.status === "submitted_to_client" && (
-                      <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>menunggu keputusan klien</span>
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>menunggu keputusan klien</span>
                     )}
                     {r.status === "final" && (
                       <button
@@ -550,7 +550,7 @@ export default function Payroll() {
             })}
             {runs?.length === 0 && (
               <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada payroll run.
                 </td>
               </tr>
@@ -561,11 +561,11 @@ export default function Payroll() {
 
       {selectedRunId && (
         <div className="card overflow-x-auto p-0">
-          <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Slip Gaji</h2>
+          <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Slip Gaji</h2>
           </div>
           <table className="w-full">
-            <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+            <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
               <tr>
                 <th className="th">Karyawan</th>
                 <th className="th">Gaji Pokok</th>
@@ -575,7 +575,7 @@ export default function Payroll() {
                 <th className="th">Diterima</th>
               </tr>
             </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
               {(slips ?? []).map((s) => {
                 const emp = employees?.find((e) => e.id === s.employee_id);
                 return (
@@ -595,7 +595,7 @@ export default function Payroll() {
               })}
               {slips?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                  <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                     Belum ada slip. Tekan "Generate" pada run ini.
                   </td>
                 </tr>
@@ -606,8 +606,8 @@ export default function Payroll() {
       )}
 
       <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
             Saltab (Grid Komponen) — Run terpilih
           </h2>
           {selectedRunId && (
@@ -638,8 +638,8 @@ export default function Payroll() {
       </div>
 
       <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
             Rekap Iuran BPJS — {period.year}-{String(period.month).padStart(2, "0")}
           </h2>
           <div className="flex gap-2">
@@ -660,7 +660,7 @@ export default function Payroll() {
           </div>
         </div>
         <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Karyawan</th>
               <th className="th">No BPJS TK</th>
@@ -670,19 +670,19 @@ export default function Payroll() {
               <th className="th">Total</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(bpjsRecap?.rows ?? []).map((r) => (
               <tr key={r.employee_id}>
                 <td className="td font-medium">{r.full_name}</td>
                 <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
                 <td className="td">{formatRupiah(r.salary_kesehatan)}</td>
-                <td className="td" style={{ color: "var(--n-text-muted)" }}>{formatRupiah(r.employer_total)}</td>
+                <td className="td" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.employer_total)}</td>
                 <td className="td text-rose-600">-{formatRupiah(r.employee_total)}</td>
                 <td className="td font-semibold">{formatRupiah(r.grand_total)}</td>
               </tr>
             ))}
             {bpjsRecap && bpjsRecap.rows.length > 0 && (
-              <tr className="font-bold" style={{ backgroundColor: "var(--n-hover)" }}>
+              <tr className="font-bold" style={{ backgroundColor: "var(--hover)" }}>
                 <td className="td" colSpan={3}>
                   Total
                 </td>
@@ -695,7 +695,7 @@ export default function Payroll() {
             )}
             {bpjsRecap?.rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Tidak ada karyawan aktif.
                 </td>
               </tr>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Shield } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -51,7 +51,7 @@ export default function Audit() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader icon={Shield} title="Jejak Audit" />
-        <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
           {data ? `${data.total} event` : "..."} · append-only
         </span>
       </div>
@@ -81,7 +81,7 @@ export default function Audit() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">Waktu</th>
               <th className="th">Aksi</th>
@@ -91,10 +91,10 @@ export default function Audit() {
               <th className="th">User ID</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(data?.items ?? []).map((item) => (
-              <tr key={item.id} className="transition-colors hover:bg-[var(--n-hover)]">
-                <td className="td whitespace-nowrap text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <tr key={item.id} className="transition-colors hover:bg-[var(--hover)]">
+                <td className="td whitespace-nowrap text-xs" style={{ color: "var(--text-muted)" }}>
                   {new Date(item.created_at).toLocaleString("id-ID")}
                 </td>
                 <td className="td">
@@ -106,7 +106,7 @@ export default function Audit() {
                   {item.entity_type ?? "-"}
                   {item.entity_id ? ` · ${item.entity_id.slice(0, 8)}…` : ""}
                 </td>
-                <td className="td max-w-sm truncate text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <td className="td max-w-sm truncate text-xs" style={{ color: "var(--text-muted)" }}>
                   {item.detail ? JSON.stringify(item.detail) : "-"}
                 </td>
                 <td className="td font-mono text-xs">{item.ip ?? "-"}</td>
@@ -117,7 +117,7 @@ export default function Audit() {
             ))}
             {data?.items.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada event audit.
                 </td>
               </tr>

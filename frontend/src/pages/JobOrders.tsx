@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Magnet } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -195,13 +195,13 @@ export default function JobOrders() {
       </div>
 
       {!clients?.length && (
-        <p className="text-sm text-[var(--n-text-muted)]">Tambahkan klien terlebih dahulu untuk membuat job order.</p>
+        <p className="text-sm text-[var(--text-muted)]">Tambahkan klien terlebih dahulu untuk membuat job order.</p>
       )}
 
       {showForm && (
         <div className="card space-y-3">
           <div>
-            <label className="text-sm font-medium text-[var(--n-text)]">
+            <label className="text-sm font-medium text-[var(--text)]">
               Upload Dokumen Job Order (opsional) — field di bawah akan diisi otomatis dari AI
             </label>
             <input
@@ -215,7 +215,7 @@ export default function JobOrders() {
               className="input mt-1"
             />
             {extractDoc.isPending && (
-              <p className="mt-1 text-xs text-[var(--n-text-muted)]">AI membaca dokumen...</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">AI membaca dokumen...</p>
             )}
             {extractDoc.error && (
               <p className="mt-1 text-xs text-red-600">{(extractDoc.error as Error).message}</p>
@@ -302,8 +302,8 @@ export default function JobOrders() {
               className="input sm:col-span-3"
             />
 
-            <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
-              <label className="flex items-center gap-2 text-sm font-medium text-[var(--n-text)]">
+            <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <label className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
                 <input
                   name="is_public"
                   type="checkbox"
@@ -321,7 +321,7 @@ export default function JobOrders() {
                     className="input w-full"
                   />
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-[var(--n-text-muted)]">
+                    <p className="text-xs font-medium text-[var(--text-muted)]">
                       Pertanyaan penyaring (opsional)
                     </p>
                     {questions.map((q, idx) => (
@@ -336,7 +336,7 @@ export default function JobOrders() {
                           placeholder={`Pertanyaan ${idx + 1}`}
                           className="input flex-1 py-1 text-xs"
                         />
-                        <label className="flex items-center gap-1 text-xs text-[var(--n-text-muted)]">
+                        <label className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
                           <input
                             type="checkbox"
                             checked={q.required}
@@ -396,7 +396,7 @@ export default function JobOrders() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-[var(--n-border)] bg-[var(--n-hover)]">
+          <thead className="border-b border-[var(--border)] bg-[var(--hover)]">
             <tr>
               <th className="th">Request ID</th>
               <th className="th">Posisi</th>
@@ -408,9 +408,9 @@ export default function JobOrders() {
               <th className="th">AI Matching</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--n-border)]">
+          <tbody className="divide-y divide-[var(--border)]">
             {(jobOrders ?? []).map((jo) => (
-              <tr key={jo.id} className="hover:bg-[var(--n-hover)]">
+              <tr key={jo.id} className="hover:bg-[var(--hover)]">
                 <td className="td">
                   {jo.has_source_document ? (
                     <a
@@ -477,7 +477,7 @@ export default function JobOrders() {
             ))}
             {jobOrders?.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center text-[var(--n-text-muted)]">
+                <td colSpan={8} className="td py-8 text-center text-[var(--text-muted)]">
                   Belum ada job order.
                 </td>
               </tr>
@@ -491,21 +491,21 @@ export default function JobOrders() {
       {(match.isPending || match.error || matchResults) && (
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[var(--n-text)]">
+            <h2 className="text-lg font-semibold text-[var(--text)]">
               Hasil AI Matching — Talent Cloud
             </h2>
             {matchJoId && (
-              <span className="text-xs text-[var(--n-text-muted)]">
+              <span className="text-xs text-[var(--text-muted)]">
                 {jobOrders?.find((j) => j.id === matchJoId)?.title}
               </span>
             )}
           </div>
-          <p className="text-[11px] text-[var(--n-text-muted)]">
+          <p className="text-[11px] text-[var(--text-muted)]">
             Matching native Talent Cloud — dikenakan 2k per pencarian job order, bukan per
             kandidat.
           </p>
           {match.isPending && (
-            <p className="text-sm text-[var(--n-text-muted)]">
+            <p className="text-sm text-[var(--text-muted)]">
               AI sedang menilai kandidat (bisa memakan waktu beberapa saat)...
             </p>
           )}
@@ -518,21 +518,21 @@ export default function JobOrders() {
                 const cand = matchCandidates?.find((c) => c.id === item.candidate_id);
                 return (
                   <li key={item.candidate_id} className="flex gap-3">
-                    <span className="w-6 pt-0.5 text-right text-sm font-bold text-[var(--n-text-muted)]">
+                    <span className="w-6 pt-0.5 text-right text-sm font-bold text-[var(--text-muted)]">
                       {idx + 1}.
                     </span>
-                    <div className="min-w-0 flex-1 rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
-                      <p className="text-sm font-medium text-[var(--n-text)]">
+                    <div className="min-w-0 flex-1 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                      <p className="text-sm font-medium text-[var(--text)]">
                         {cand?.full_name ?? item.candidate_id}{" "}
                         <span className="ml-1 text-xs">
                           (skor <ScoreBadge score={item.match_score} />/100)
                         </span>
                       </p>
-                      <p className="text-xs text-[var(--n-text-muted)]">
+                      <p className="text-xs text-[var(--text-muted)]">
                         {cand?.city ?? "-"}
                         {cand?.expected_salary ? ` · ${formatRupiah(cand.expected_salary)}` : ""}
                       </p>
-                      <p className="mt-1 text-sm text-[var(--n-text)]">{item.explain}</p>
+                      <p className="mt-1 text-sm text-[var(--text)]">{item.explain}</p>
                       {item.missing.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {item.missing.map((m) => (
@@ -547,7 +547,7 @@ export default function JobOrders() {
                 );
               })}
               {matchResults.length === 0 && (
-                <li className="text-sm text-[var(--n-text-muted)]">
+                <li className="text-sm text-[var(--text-muted)]">
                   Tidak ada kandidat aktif untuk job order ini.
                 </li>
               )}

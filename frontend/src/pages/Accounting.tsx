@@ -1,6 +1,6 @@
 import { Fragment, FormEvent, useState } from "react";
 import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, ShoppingCart } from "lucide-react";
-import { PageHeader, CalloutBlock } from "../components/notion";
+import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import AccountingAi from "./AccountingAi";
@@ -169,7 +169,7 @@ export default function Accounting() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader icon={BarChart3} title="Akunting" />
         <div className="flex items-center gap-2">
-          <span className="text-sm" style={{ color: "var(--n-text-muted)" }}>Tahun</span>
+          <span className="text-sm" style={{ color: "var(--text-muted)" }}>Tahun</span>
           <input
             type="number"
             value={year}
@@ -197,9 +197,9 @@ export default function Accounting() {
             onClick={() => setTab(k)}
             className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors"
             style={{
-              border: "1px solid var(--n-border)",
-              backgroundColor: tab === k ? "var(--n-hover)" : "transparent",
-              color: tab === k ? "var(--n-text)" : "var(--n-text-muted)",
+              border: "1px solid var(--border)",
+              backgroundColor: tab === k ? "var(--hover)" : "transparent",
+              color: tab === k ? "var(--text)" : "var(--text-muted)",
               fontWeight: tab === k ? 500 : 400,
             }}
           >
@@ -213,7 +213,7 @@ export default function Accounting() {
         <>
           <form onSubmit={handleCreate} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Jurnal Umum Baru</h2>
+              <h2 className="font-semibold" style={{ color: "var(--text)" }}>Jurnal Umum Baru</h2>
               <select name="status" defaultValue="posted" className="input w-auto text-xs">
                 <option value="posted">Langsung posted</option>
                 <option value="memorial">Memorial (draft)</option>
@@ -329,7 +329,7 @@ export default function Accounting() {
 
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)" }}>
+              <thead style={{ backgroundColor: "var(--hover)" }}>
                 <tr>
                   <th className="th">Kode</th>
                   <th className="th">Nama</th>
@@ -338,7 +338,7 @@ export default function Accounting() {
                   <th className="th">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(accounts ?? []).map((a) => (
                   <tr key={a.id}>
                     <td className="td font-mono text-xs">{a.code}</td>
@@ -364,7 +364,7 @@ export default function Accounting() {
             Tutup buku mengunci periode: input jurnal backdate ditolak dan mesin
             auto-journal melewati periode tertutup. Buka ulang tercatat di audit.
           </CalloutBlock>          <div className="card space-y-2">
-            <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Tutup Bulan</h2>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Tutup Bulan</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="number"
@@ -403,7 +403,7 @@ export default function Accounting() {
           </div>
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)" }}>
+              <thead style={{ backgroundColor: "var(--hover)" }}>
                 <tr>
                   <th className="th">Periode</th>
                   <th className="th">Ditutup</th>
@@ -411,7 +411,7 @@ export default function Accounting() {
                   <th className="th">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(periods ?? []).map((p) => (
                   <tr key={`${p.year}-${p.month}`}>
                     <td className="td font-medium">
@@ -434,7 +434,7 @@ export default function Accounting() {
                 ))}
                 {periods?.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                       Belum ada periode yang ditutup.
                     </td>
                   </tr>
@@ -455,11 +455,11 @@ export default function Accounting() {
       {tab === "jurnal" && (
         <>
           <div className="card overflow-x-auto p-0">
-            <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Neraca Saldo {year}</h2>
+            <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+              <h2 className="font-semibold" style={{ color: "var(--text)" }}>Neraca Saldo {year}</h2>
             </div>
             <table className="w-full">
-              <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+              <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
                 <tr>
                   <th className="th">Akun</th>
                   <th className="th">Nama</th>
@@ -467,7 +467,7 @@ export default function Accounting() {
                   <th className="th">Total Kredit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {(trialBalance ?? [])
                   .filter((r) => r.total_debit > 0 || r.total_credit > 0)
                   .map((r) => (
@@ -480,7 +480,7 @@ export default function Accounting() {
                   ))}
                 {(trialBalance ?? []).every((r) => r.total_debit === 0 && r.total_credit === 0) && (
                   <tr>
-                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                       Belum ada mutasi jurnal.
                     </td>
                   </tr>
@@ -491,7 +491,7 @@ export default function Accounting() {
 
           {incomeStatement && (
             <div className="card">
-              <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Laba Rugi {incomeStatement.year}</h2>
+              <h2 className="font-semibold" style={{ color: "var(--text)" }}>Laba Rugi {incomeStatement.year}</h2>
               <div className="mt-3 grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <p className="text-sm font-semibold text-emerald-700">Pendapatan</p>
@@ -516,7 +516,7 @@ export default function Accounting() {
                   </ul>
                 </div>
               </div>
-              <p className="mt-3 border-t pt-3 text-right font-semibold" style={{ borderColor: "var(--n-border)" }}>
+              <p className="mt-3 border-t pt-3 text-right font-semibold" style={{ borderColor: "var(--border)" }}>
                 Laba Bersih:{" "}
                 <span className={incomeStatement.net_income >= 0 ? "text-emerald-700" : "text-rose-700"}>
                   {formatRupiah(incomeStatement.net_income)}
@@ -560,8 +560,8 @@ function JournalList({
 
   return (
     <div className="card overflow-x-auto p-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Daftar Jurnal {year}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
+        <h2 className="font-semibold" style={{ color: "var(--text)" }}>Daftar Jurnal {year}</h2>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -576,7 +576,7 @@ function JournalList({
         </select>
       </div>
       <table className="w-full">
-        <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+        <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
           <tr>
             <th className="th">Tanggal</th>
             <th className="th">Keterangan</th>
@@ -585,7 +585,7 @@ function JournalList({
             <th className="th">Aksi</th>
           </tr>
         </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
           {(entries ?? []).map((e) => (
             <tr key={e.id}>
               <td className="td font-mono text-xs">{e.entry_date}</td>
@@ -647,7 +647,7 @@ function JournalList({
           ))}
           {entries?.length === 0 && (
             <tr>
-              <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+              <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                 Belum ada jurnal.
               </td>
             </tr>
@@ -690,10 +690,10 @@ function ApAgingPanel() {
           return (
             <div key={bucket} className="card">
               <span className={AGING_BUCKET_CLS[bucket]}>{bucket} hari</span>
-              <p className="mt-2 text-lg font-semibold" style={{ color: "var(--n-text)" }}>
+              <p className="mt-2 text-lg font-semibold" style={{ color: "var(--text)" }}>
                 {formatRupiah(total)}
               </p>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {bucketRows.length} tagihan
               </p>
             </div>
@@ -703,7 +703,7 @@ function ApAgingPanel() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">No. Tagihan</th>
               <th className="th">Vendor</th>
@@ -713,7 +713,7 @@ function ApAgingPanel() {
               <th className="th">Jumlah</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(rows ?? []).map((r) => (
               <tr key={r.bill_id}>
                 <td className="td font-mono text-xs">{r.bill_number ?? "-"}</td>
@@ -728,7 +728,7 @@ function ApAgingPanel() {
             ))}
             {rows?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Tidak ada utang vendor yang jatuh tempo.
                 </td>
               </tr>
@@ -826,7 +826,7 @@ function FixedAssetsPanel() {
           >
             Jalankan Susutan Periode Ini
           </button>
-          <label className="flex items-center gap-1.5 text-sm" style={{ color: "var(--n-text-muted)" }}>
+          <label className="flex items-center gap-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
             <input
               type="checkbox"
               checked={includeDisposed}
@@ -911,7 +911,7 @@ function FixedAssetsPanel() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">Nama</th>
               <th className="th">Perolehan</th>
@@ -923,7 +923,7 @@ function FixedAssetsPanel() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(assets ?? []).map((a) => (
               <tr key={a.id}>
                 <td className="td font-medium">{a.name}</td>
@@ -966,7 +966,7 @@ function FixedAssetsPanel() {
             ))}
             {assets?.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada aset tetap.
                 </td>
               </tr>
@@ -1090,7 +1090,7 @@ function PurchasesPanel() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">No. Tagihan</th>
               <th className="th">Vendor</th>
@@ -1102,7 +1102,7 @@ function PurchasesPanel() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(bills ?? []).map((b) => {
               const st = BILL_STATUS_LABELS[b.status] ?? BILL_STATUS_LABELS.belum_dibayar;
               return (
@@ -1131,7 +1131,7 @@ function PurchasesPanel() {
                   </tr>
                   {payingId === b.id && (
                     <tr>
-                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
+                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--hover)" }}>
                         <form
                           className="flex flex-wrap items-center gap-2 py-2"
                           onSubmit={(e) => {
@@ -1166,7 +1166,7 @@ function PurchasesPanel() {
             })}
             {bills?.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada bill vendor.
                 </td>
               </tr>
@@ -1317,7 +1317,7 @@ function CashBankPanel() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">Tanggal</th>
               <th className="th">Tipe</th>
@@ -1326,7 +1326,7 @@ function CashBankPanel() {
               <th className="th">Rekonsiliasi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(txs ?? []).map((t) => (
               <tr key={t.id}>
                 <td className="td text-xs">{t.tx_date}</td>
@@ -1351,7 +1351,7 @@ function CashBankPanel() {
             ))}
             {txs?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada transaksi kas/bank periode ini.
                 </td>
               </tr>

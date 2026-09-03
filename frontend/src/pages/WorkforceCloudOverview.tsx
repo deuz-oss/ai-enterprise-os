@@ -14,7 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { api } from "../api/client";
-import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/notion";
+import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/workspace";
 
 interface Overview {
   people: {
@@ -298,45 +298,45 @@ export default function WorkforceCloudOverview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Total Karyawan</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Total Karyawan</span>
             <IconBadge icon={Users} tone="green" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.people.total_employees ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {internalCount} internal · {outsourcingCount} outsourcing
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>BPJS Aktif</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>BPJS Aktif</span>
             <IconBadge icon={ShieldCheck} tone="accent" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.people.bpjs_complete ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>{bpjsPct}%</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{bpjsPct}%</p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Asuransi</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Asuransi</span>
             <IconBadge icon={Heart} tone="orange" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.people.insurance_complete ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>{insurancePct}%</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{insurancePct}%</p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Kontrak Akan Berakhir</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Kontrak Akan Berakhir</span>
             <IconBadge icon={AlertTriangle} tone="orange" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {contractsExpiring.data?.length ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>≤30 hari</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>≤30 hari</p>
         </div>
       </div>
 
@@ -344,23 +344,23 @@ export default function WorkforceCloudOverview() {
       <div className="card space-y-3">
         <div className="flex items-center gap-2">
           <IconBadge icon={ShieldCheck} tone="accent" />
-          <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>People & Compliance</h2>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>People & Compliance</h2>
         </div>
         <div>
-          <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--n-text)" }}>
+          <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--text)" }}>
             <span>BPJS Kesehatan & Ketenagakerjaan</span>
             <span>{overview.data?.people.bpjs_complete ?? 0}/{peopleTotal} · {bpjsPct}%</span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--hover)" }}>
             <div className="h-full rounded-full bg-emerald-500" style={{ width: `${bpjsPct}%` }} />
           </div>
         </div>
         <div>
-          <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--n-text)" }}>
+          <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--text)" }}>
             <span>Private Insurance (one-to-many)</span>
             <span>{overview.data?.people.insurance_complete ?? 0}/{peopleTotal} · {insurancePct}%</span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--hover)" }}>
             <div className="h-full rounded-full bg-amber-500" style={{ width: `${insurancePct}%` }} />
           </div>
         </div>
@@ -379,27 +379,27 @@ export default function WorkforceCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Users} tone="accent" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Daftar Karyawan</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{totalEmployees} total</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Daftar Karyawan</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{totalEmployees} total</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {(employees.data ?? []).slice(0, 2).map((e) => (
                 <RowFrame key={e.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{e.full_name}</span>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{e.full_name}</span>
                     <span className={`${EMPLOYEE_STATUS_PILL[e.status] ?? "pill p-gray"} shrink-0`}>
                       {EMPLOYEE_STATUS_LABELS[e.status] ?? e.status}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {EMPLOYMENT_TYPE_LABELS[e.employment_type] ?? e.employment_type}
                     {e.join_date ? ` · bergabung ${new Date(e.join_date).toLocaleDateString("id-ID")}` : ""}
                   </p>
                 </RowFrame>
               ))}
               {(employees.data ?? []).length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada karyawan.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada karyawan.</p>
               )}
             </div>
             <SeeAllLink to="/employees">Lihat semua karyawan →</SeeAllLink>
@@ -412,24 +412,24 @@ export default function WorkforceCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={AlertTriangle} tone="orange" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Expiry Alert</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Kontrak ≤30 hari</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Expiry Alert</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Kontrak ≤30 hari</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {(contractsExpiring.data ?? []).slice(0, 3).map((c) => (
                 <RowFrame key={c.contract_id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{c.employee_name}</span>
-                    <span className="shrink-0 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{c.employee_name}</span>
+                    <span className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
                       {c.days_left} hari
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>{c.contract_no}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{c.contract_no}</p>
                 </RowFrame>
               ))}
               {(contractsExpiring.data ?? []).length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada kontrak akan berakhir.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada kontrak akan berakhir.</p>
               )}
             </div>
             <SeeAllLink to="/employees">Lihat semua karyawan →</SeeAllLink>
@@ -440,8 +440,8 @@ export default function WorkforceCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={FileText} tone="violet" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Dokumen</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Dokumen</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                   {esignPending.length} menunggu eSign
                 </p>
               </div>
@@ -450,7 +450,7 @@ export default function WorkforceCloudOverview() {
               {esignPending.slice(0, 3).map((r) => (
                 <RowFrame key={r.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{r.signer_name}</span>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{r.signer_name}</span>
                     <span className={`shrink-0 text-[10px] ${ESIGN_STATUS_PILL[r.status] ?? "pill p-gray"}`}>
                       {ESIGN_STATUS_LABELS[r.status] ?? r.status}
                     </span>
@@ -458,7 +458,7 @@ export default function WorkforceCloudOverview() {
                 </RowFrame>
               ))}
               {esignPending.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada dokumen menunggu eSign.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada dokumen menunggu eSign.</p>
               )}
             </div>
             <SeeAllLink to="/employees">Kelola di Karyawan →</SeeAllLink>
@@ -472,8 +472,8 @@ export default function WorkforceCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Clock} tone="accent" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Kehadiran</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Bulan ini</p>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Kehadiran</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Bulan ini</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -485,7 +485,7 @@ export default function WorkforceCloudOverview() {
               ) : null,
             )}
             {Object.keys(attendanceCounts).length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada data absensi bulan ini.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada data absensi bulan ini.</p>
             )}
           </div>
           <SeeAllLink to="/attendance">Lihat semua →</SeeAllLink>
@@ -496,19 +496,19 @@ export default function WorkforceCloudOverview() {
           <div className="card space-y-2">
             <div className="flex items-center gap-2">
               <IconBadge icon={Activity} tone="green" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas Terbaru</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Aktivitas Terbaru</h2>
             </div>
             <div className="space-y-1.5">
               {activityFeed.map((a) => (
                 <RowFrame key={a.id}>
-                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{actionLabel(a.action)}</p>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{actionLabel(a.action)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     oleh {actorName(users.data, a.user_id)} · {timeAgo(a.created_at)}
                   </p>
                 </RowFrame>
               ))}
               {activityFeed.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada aktivitas.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas.</p>
               )}
             </div>
           </div>
@@ -519,8 +519,8 @@ export default function WorkforceCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Wallet} tone="green" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Payroll Run</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Payroll Run</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {now.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
               </p>
             </div>
@@ -529,7 +529,7 @@ export default function WorkforceCloudOverview() {
             {currentRuns.map((r) => (
               <RowFrame key={r.id}>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>
+                  <span className="truncate font-medium" style={{ color: "var(--text)" }}>
                     {PAYROLL_RUN_TYPE_LABELS[r.run_type] ?? r.run_type}
                     {r.client_id ? ` · ${clientName(r.client_id)}` : ""}
                   </span>
@@ -540,7 +540,7 @@ export default function WorkforceCloudOverview() {
               </RowFrame>
             ))}
             {currentRuns.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada payroll run bulan ini.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada payroll run bulan ini.</p>
             )}
           </div>
           <SeeAllLink to="/payroll">Kelola payroll →</SeeAllLink>

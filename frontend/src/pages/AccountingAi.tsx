@@ -70,7 +70,7 @@ function ScanFakturCard() {
     <div className="card space-y-3 p-4">
       <div>
         <h3 className="text-sm font-semibold">📷 Scan Faktur (OCR + Auto-kategori)</h3>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Foto faktur/nota → draft pembelian + saran COA. Butuh AI dikonfigurasi
           (AI_BASE_URL). Buat bill dari draft lewat tab Pembelian.
         </p>
@@ -89,7 +89,7 @@ function ScanFakturCard() {
         <p className="text-xs text-red-600">{(scan.error as Error).message}</p>
       )}
       {result && (
-        <div className="rounded p-3 text-xs" style={{ backgroundColor: "var(--n-hover)" }}>
+        <div className="rounded p-3 text-xs" style={{ backgroundColor: "var(--hover)" }}>
           <p className="font-semibold">{result.draft.vendor_name}</p>
           <p>
             DPP Rp{result.draft.amount.toLocaleString("id-ID")} · PPN{" "}
@@ -154,7 +154,7 @@ function RekonsiliasiCard() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">🧾 Rekonsiliasi Bank Cerdas</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Impor mutasi rekening koran; sistem mengusulkan pasangan transaksi
             secara deterministik dan menjelaskan yang tidak cocok.
           </p>
@@ -182,7 +182,7 @@ function RekonsiliasiCard() {
         <p className="text-xs text-red-600">{(importCsv.error as Error).message}</p>
       )}
       {importCsv.data && (
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           {importCsv.data.inserted} baris diimpor
           {importCsv.data.duplicates.length > 0 &&
             ` · ${importCsv.data.duplicates.length} duplikat dilewati`}
@@ -191,7 +191,7 @@ function RekonsiliasiCard() {
       )}
 
       <table className="w-full text-xs">
-        <thead style={{ backgroundColor: "var(--n-hover)" }}>
+        <thead style={{ backgroundColor: "var(--hover)" }}>
           <tr>
             <th className="th">Tanggal</th>
             <th className="th">Keterangan</th>
@@ -201,7 +201,7 @@ function RekonsiliasiCard() {
             <th className="th">Aksi</th>
           </tr>
         </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
           {(lines.data ?? []).map((ln) => (
             <tr key={ln.id}>
               <td className="td whitespace-nowrap">{ln.tx_date}</td>
@@ -218,7 +218,7 @@ function RekonsiliasiCard() {
                   {ln.status === "usulan" && ` ${Math.round(ln.match_score * 100)}%`}
                 </span>
                 {ln.match_reason && (
-                  <p className="mt-0.5 max-w-[220px]" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="mt-0.5 max-w-[220px]" style={{ color: "var(--text-muted)" }}>
                     {ln.match_reason}
                   </p>
                 )}
@@ -241,7 +241,7 @@ function RekonsiliasiCard() {
                     <button
                       onClick={() => ignore.mutate(ln.id)}
                       disabled={ignore.isPending}
-                      className="font-medium text-[var(--n-text-muted)] hover:text-[var(--n-text)]"
+                      className="font-medium text-[var(--text-muted)] hover:text-[var(--text)]"
                     >
                       Abaikan
                     </button>
@@ -253,7 +253,7 @@ function RekonsiliasiCard() {
           ))}
           {lines.data?.length === 0 && (
             <tr>
-              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
+              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
                 Belum ada rekening koran diimpor.
               </td>
             </tr>
@@ -277,12 +277,12 @@ function PrediksiKlienCard() {
     <div className="card space-y-3 p-4">
       <div>
         <h3 className="text-sm font-semibold">🔮 Prediksi Pembayaran Klien</h3>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Skor risiko telat bayar dari histori invoice → prioritas collection.
         </p>
       </div>
       <table className="w-full text-xs">
-        <thead style={{ backgroundColor: "var(--n-hover)" }}>
+        <thead style={{ backgroundColor: "var(--hover)" }}>
           <tr>
             <th className="th">Klien</th>
             <th className="th">Risiko</th>
@@ -292,14 +292,14 @@ function PrediksiKlienCard() {
             <th className="th">Prioritas</th>
           </tr>
         </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
           {(prediksi.data?.clients_ranked ?? []).map((r) => (
             <tr key={r.client_id}>
               <td className="td font-medium">{r.client_name}</td>
               <td className={`td font-semibold ${riskColor(r.risk_score)}`}>
                 {r.risk_score}/100
               </td>
-              <td className="td" style={{ color: "var(--n-text-muted)" }}>
+              <td className="td" style={{ color: "var(--text-muted)" }}>
                 {r.risk_basis}
               </td>
               <td className="td">{formatRupiah(r.outstanding_total)}</td>
@@ -311,7 +311,7 @@ function PrediksiKlienCard() {
           ))}
           {prediksi.data?.clients_ranked.length === 0 && (
             <tr>
-              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
+              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
                 Tidak ada invoice berjalan.
               </td>
             </tr>
@@ -319,7 +319,7 @@ function PrediksiKlienCard() {
         </tbody>
       </table>
       {prediksi.data && (
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Total outstanding {formatRupiah(prediksi.data.summary.total_outstanding)} · overdue{" "}
           {formatRupiah(prediksi.data.summary.total_overdue)}
         </p>
@@ -356,7 +356,7 @@ function CloseChecklistCard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">✅ Checklist Tutup Buku</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Deteksi deterministik (tanpa LLM) sebelum periode ditutup.
           </p>
         </div>
@@ -383,7 +383,7 @@ function CloseChecklistCard() {
               </li>
             ))}
             {checklist.data.findings.length === 0 && (
-              <li style={{ color: "var(--n-text-muted)" }}>Tidak ada temuan.</li>
+              <li style={{ color: "var(--text-muted)" }}>Tidak ada temuan.</li>
             )}
           </ul>
         </>
@@ -417,7 +417,7 @@ function AnomaliesCard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">🚨 Deteksi Anomali</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Duplikasi bill, transaksi besar tak wajar, ketidaksesuaian PPN.
           </p>
         </div>
@@ -439,7 +439,7 @@ function AnomaliesCard() {
           </li>
         ))}
         {anomalies.data?.anomalies.length === 0 && (
-          <li style={{ color: "var(--n-text-muted)" }}>Tidak ada anomali terdeteksi.</li>
+          <li style={{ color: "var(--text-muted)" }}>Tidak ada anomali terdeteksi.</li>
         )}
       </ul>
     </div>
@@ -466,7 +466,7 @@ function ExecutiveSummaryCard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">📋 Ringkasan Eksekutif</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Narasi otomatis dari data terverifikasi (LLM opsional).
           </p>
         </div>
@@ -491,22 +491,22 @@ function ExecutiveSummaryCard() {
       </div>
       {summary.data && (
         <>
-          <p className="whitespace-pre-line text-xs" style={{ color: "var(--n-text)" }}>{summary.data.narrative}</p>
+          <p className="whitespace-pre-line text-xs" style={{ color: "var(--text)" }}>{summary.data.narrative}</p>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div>
-              <p style={{ color: "var(--n-text-muted)" }}>Pendapatan</p>
+              <p style={{ color: "var(--text-muted)" }}>Pendapatan</p>
               <p className="font-semibold">{formatRupiah(summary.data.metrics.total_revenue)}</p>
             </div>
             <div>
-              <p style={{ color: "var(--n-text-muted)" }}>Beban</p>
+              <p style={{ color: "var(--text-muted)" }}>Beban</p>
               <p className="font-semibold">{formatRupiah(summary.data.metrics.total_expense)}</p>
             </div>
             <div>
-              <p style={{ color: "var(--n-text-muted)" }}>Laba Bersih</p>
+              <p style={{ color: "var(--text-muted)" }}>Laba Bersih</p>
               <p className="font-semibold">{formatRupiah(summary.data.metrics.net_income)}</p>
             </div>
             <div>
-              <p style={{ color: "var(--n-text-muted)" }}>Klien Aktif</p>
+              <p style={{ color: "var(--text-muted)" }}>Klien Aktif</p>
               <p className="font-semibold">{summary.data.metrics.active_clients}</p>
             </div>
           </div>
@@ -530,7 +530,7 @@ function AskReportCard() {
     <div className="card space-y-3 p-4">
       <div>
         <h3 className="text-sm font-semibold">💬 Tanya Laporan</h3>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Tanya soal laba rugi, neraca, margin klien, atau saldo -- kata kunci: "laba rugi",
           "neraca", "klien", "saldo".
         </p>
@@ -554,7 +554,7 @@ function AskReportCard() {
       </form>
       {ask.error && <p className="text-xs text-red-600">{(ask.error as Error).message}</p>}
       {ask.data && (
-        <p className="whitespace-pre-line rounded p-2 text-xs" style={{ backgroundColor: "var(--n-hover)" }}>
+        <p className="whitespace-pre-line rounded p-2 text-xs" style={{ backgroundColor: "var(--hover)" }}>
           {ask.data.answer}
         </p>
       )}
@@ -590,7 +590,7 @@ function LedgerCard() {
     <div className="card space-y-3 p-4">
       <div>
         <h3 className="text-sm font-semibold">📖 Buku Besar per Akun</h3>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Mutasi jurnal posted + saldo berjalan untuk satu kode akun.
         </p>
       </div>
@@ -613,7 +613,7 @@ function LedgerCard() {
       {ledger.error && <p className="text-xs text-red-600">{(ledger.error as Error).message}</p>}
       {ledger.data && (
         <table className="w-full text-xs">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Tanggal</th>
               <th className="th">Keterangan</th>
@@ -622,7 +622,7 @@ function LedgerCard() {
               <th className="th">Saldo</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {ledger.data.lines.map((l) => (
               <tr key={l.entry_id}>
                 <td className="td whitespace-nowrap">{l.entry_date}</td>
@@ -634,7 +634,7 @@ function LedgerCard() {
             ))}
             {ledger.data.lines.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
                   Tidak ada mutasi tahun ini.
                 </td>
               </tr>
@@ -671,16 +671,16 @@ function BalanceSheetCard() {
   function Section({ title, rows, total }: { title: string; rows: BalanceSheetRow[]; total: number }) {
     return (
       <div>
-        <h4 className="text-xs font-semibold" style={{ color: "var(--n-text)" }}>{title}</h4>
+        <h4 className="text-xs font-semibold" style={{ color: "var(--text)" }}>{title}</h4>
         <ul className="mt-1 space-y-0.5 text-xs">
           {rows.map((r) => (
             <li key={r.account_code} className="flex justify-between">
-              <span style={{ color: "var(--n-text-muted)" }}>{r.account_name}</span>
+              <span style={{ color: "var(--text-muted)" }}>{r.account_name}</span>
               <span>{formatRupiah(r.amount)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-1 flex justify-between border-t pt-1 text-xs font-semibold" style={{ borderColor: "var(--n-border)" }}>
+        <div className="mt-1 flex justify-between border-t pt-1 text-xs font-semibold" style={{ borderColor: "var(--border)" }}>
           <span>Total {title}</span>
           <span>{formatRupiah(total)}</span>
         </div>
@@ -693,7 +693,7 @@ function BalanceSheetCard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">⚖️ Neraca</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Posisi keuangan per tanggal.</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>Posisi keuangan per tanggal.</p>
         </div>
         <div className="flex items-center gap-2">
           <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="input text-xs" />

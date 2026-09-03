@@ -1,6 +1,6 @@
 import { Fragment, FormEvent, useState } from "react";
 import { Receipt } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -278,7 +278,7 @@ export default function Finance() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">No. Invoice</th>
               <th className="th">Periode</th>
@@ -290,7 +290,7 @@ export default function Finance() {
               <th className="th">Faktur Pajak</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(invoices ?? []).map((i) => {
               const st = STATUS_LABELS[i.status] ?? STATUS_LABELS.draft;
               const fakturStatus = i.tax_invoice_status ?? "belum_buat";
@@ -306,7 +306,7 @@ export default function Finance() {
                     <td className="td font-semibold">{formatRupiah(Number(i.total_due))}</td>
                     <td className="td text-xs">
                       {i.issued_date && (
-                        <div style={{ color: "var(--n-text-muted)" }}>Terbit: {i.issued_date}</div>
+                        <div style={{ color: "var(--text-muted)" }}>Terbit: {i.issued_date}</div>
                       )}
                       {i.due_date ?? "-"}
                     </td>
@@ -322,7 +322,7 @@ export default function Finance() {
                         <span className={`badge ${st.cls}`}>{st.label}</span>
                       )}
                       {i.paid_at && (
-                        <div className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        <div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                           {new Date(i.paid_at).toLocaleDateString("id-ID")}
                         </div>
                       )}
@@ -368,7 +368,7 @@ export default function Finance() {
                           </a>
                         )}
                         {fakturStatus === "approved" && i.tax_invoice_date && (
-                          <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                             {i.tax_invoice_date}
                           </span>
                         )}
@@ -380,7 +380,7 @@ export default function Finance() {
                           fakturStatus !== "pengganti" && (
                             <button
                               className="text-xs"
-                              style={{ color: "var(--n-text-muted)" }}
+                              style={{ color: "var(--text-muted)" }}
                               disabled={cancelTaxInvoice.isPending}
                               onClick={() => cancelTaxInvoice.mutate(i.id)}
                             >
@@ -392,7 +392,7 @@ export default function Finance() {
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--n-hover)" }}>
+                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--hover)" }}>
                         <form
                           onSubmit={(e) => handleSetFaktur(e, i.id)}
                           className="grid grid-cols-1 gap-2 py-2 sm:grid-cols-3"
@@ -461,7 +461,7 @@ export default function Finance() {
             })}
             {invoices?.length === 0 && (
               <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada invoice.
                 </td>
               </tr>
@@ -473,7 +473,7 @@ export default function Finance() {
       <div className="card">
         <h2 className="font-semibold text-rose-700">Aging — Tagihan Terlambat</h2>
         {(aging ?? []).length === 0 ? (
-          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>Tidak ada tagihan lewat jatuh tempo.</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>Tidak ada tagihan lewat jatuh tempo.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {aging!.map((a) => (
@@ -492,7 +492,7 @@ export default function Finance() {
 
       <div className="card">
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Arus Kas</h2>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Arus Kas</h2>
           <input
             type="number"
             value={cfYear}
@@ -512,7 +512,7 @@ export default function Finance() {
         </form>
         <ul className="mt-3 space-y-1 text-sm">
           {(cashflow ?? []).slice(0, 10).map((c) => (
-            <li key={c.id} className="flex justify-between rounded-lg p-2" style={{ backgroundColor: "var(--n-hover)" }}>
+            <li key={c.id} className="flex justify-between rounded-lg p-2" style={{ backgroundColor: "var(--hover)" }}>
               <span>
                 {c.entry_date} · {c.category}
               </span>
@@ -522,7 +522,7 @@ export default function Finance() {
             </li>
           ))}
           {cashflow?.length === 0 && (
-            <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada catatan arus kas.</li>
+            <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada catatan arus kas.</li>
           )}
         </ul>
       </div>
@@ -551,7 +551,7 @@ export default function Finance() {
           </form>
         </div>
         {runForecast.isPending && (
-          <p className="mt-2 text-sm" style={{ color: "var(--n-text-muted)" }}>AI sedang menganalisis tren arus kas...</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>AI sedang menganalisis tren arus kas...</p>
         )}
         {runForecast.error && (
           <p className="mt-2 text-sm text-red-600">{(runForecast.error as Error).message}</p>
@@ -570,15 +570,15 @@ export default function Finance() {
               >
                 Outlook: {forecast.outlook}
               </span>
-              <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 Piutang belum tertagih: {formatRupiah(forecast.pending_receivables)} · model:{" "}
                 {forecast.model}
               </span>
             </div>
-            <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>{forecast.summary}</p>
-            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--n-border)" }}>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>{forecast.summary}</p>
+            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
               <table className="w-full">
-                <thead style={{ backgroundColor: "var(--n-hover)" }}>
+                <thead style={{ backgroundColor: "var(--hover)" }}>
                   <tr>
                     <th className="th">Bulan</th>
                     <th className="th">Masuk</th>
@@ -586,9 +586,9 @@ export default function Finance() {
                     <th className="th">Net</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+                <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                   {forecast.history.map((h) => (
-                    <tr key={`h-${h.year}-${h.month}`} style={{ color: "var(--n-text-muted)" }}>
+                    <tr key={`h-${h.year}-${h.month}`} style={{ color: "var(--text-muted)" }}>
                       <td className="td">{`${h.year}-${String(h.month).padStart(2, "0")}`}</td>
                       <td className="td">{formatRupiah(h.inflow)}</td>
                       <td className="td">{formatRupiah(h.outflow)}</td>
@@ -617,7 +617,7 @@ export default function Finance() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
                       Risiko
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
                       {forecast.risks.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}
@@ -629,7 +629,7 @@ export default function Finance() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                       Rekomendasi
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
                       {forecast.recommendations.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}

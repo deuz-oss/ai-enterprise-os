@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserCog } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { api } from "../api/client";
 
 interface UserRow {
@@ -44,7 +44,7 @@ export default function Users() {
     <div className="space-y-4">
       <div>
         <PageHeader icon={UserCog} title="Pengguna" />
-        <p className="mt-1 text-sm" style={{ color: "var(--n-text-muted)" }}>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
           Kelola akun tim. Akun baru dibuat lewat tombol "+ Pengguna Baru".
         </p>
       </div>
@@ -82,7 +82,7 @@ export default function Users() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Nama</th>
               <th className="th">Email</th>
@@ -90,9 +90,9 @@ export default function Users() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(users ?? []).map((u) => (
-              <tr key={u.id} className="hover:bg-[var(--n-hover)]">
+              <tr key={u.id} className="hover:bg-[var(--hover)]">
                 <td className="td font-medium">{u.full_name}</td>
                 <td className="td">{u.email}</td>
                 <td className="td">

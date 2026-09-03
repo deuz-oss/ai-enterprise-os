@@ -119,12 +119,12 @@ export default function Pages() {
       {/* Page tree */}
       <aside
         className="hidden w-56 shrink-0 md:block"
-        style={{ borderRight: "1px solid var(--n-border)" }}
+        style={{ borderRight: "1px solid var(--border)" }}
       >
         <div className="flex items-center justify-between px-2 pb-2">
           <span
             className="text-[11px] font-semibold uppercase tracking-wide"
-            style={{ color: "var(--n-text-muted)" }}
+            style={{ color: "var(--text-muted)" }}
           >
             📄 Workspace
           </span>
@@ -153,7 +153,7 @@ export default function Pages() {
             </div>
           ))}
           {pages.data?.length === 0 && (
-            <p className="px-2 text-xs" style={{ color: "var(--n-text-muted)" }}>
+            <p className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>
               Belum ada halaman.
             </p>
           )}
@@ -165,11 +165,11 @@ export default function Pages() {
         {!pageId && (
           <>
             <div className="mb-4 text-[56px] leading-none">📄</div>
-            <h1 className="text-[38px] font-bold leading-[1.15] tracking-[-0.02em]" style={{ color: "var(--n-text)" }}>
+            <h1 className="text-[38px] font-bold leading-[1.15] tracking-[-0.02em]" style={{ color: "var(--text)" }}>
               Workspace
             </h1>
-            <p className="mb-6 mt-1 text-[15px]" style={{ color: "var(--n-text-muted)" }}>
-              Catatan & dokumen workspace dengan block editor ala Notion.
+            <p className="mb-6 mt-1 text-[15px]" style={{ color: "var(--text-muted)" }}>
+              Catatan & dokumen workspace dengan block editor rich-text.
             </p>
             <button
               onClick={() => createPage.mutate({ title: "Tanpa judul" })}
@@ -183,13 +183,13 @@ export default function Pages() {
 
         {pageId && (
           <>
-            {/* Header ala dokumen Notion */}
+            {/* Header dokumen halaman */}
             <div className="flex items-start justify-between gap-3">
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setIconPickerOpen((v) => !v)}
-                  className="block rounded-md px-1 transition-colors hover:bg-[var(--n-hover)]"
+                  className="block rounded-md px-1 transition-colors hover:bg-[var(--hover)]"
                   title="Ganti ikon"
                 >
                   <span className="text-[56px] leading-none">{icon ?? "📄"}</span>
@@ -198,8 +198,8 @@ export default function Pages() {
                   <div
                     className="absolute left-0 top-16 z-20 grid w-64 grid-cols-6 gap-1 rounded-lg p-2 shadow-lg"
                     style={{
-                      backgroundColor: "var(--n-bg-elevated)",
-                      border: "1px solid var(--n-border)",
+                      backgroundColor: "var(--bg-elevated)",
+                      border: "1px solid var(--border)",
                     }}
                   >
                     {EMOJIS.map((em) => (
@@ -209,7 +209,7 @@ export default function Pages() {
                           setIcon(em);
                           setIconPickerOpen(false);
                         }}
-                        className="rounded p-1 text-xl transition-colors hover:bg-[var(--n-hover)]"
+                        className="rounded p-1 text-xl transition-colors hover:bg-[var(--hover)]"
                       >
                         {em}
                       </button>
@@ -236,7 +236,7 @@ export default function Pages() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Judul halaman"
               className="w-full border-none bg-transparent text-[38px] font-bold leading-[1.15] tracking-[-0.02em] focus:outline-none"
-              style={{ color: "var(--n-text)" }}
+              style={{ color: "var(--text)" }}
             />
 
             <form onSubmit={handleSave} className="space-y-3">
@@ -278,7 +278,7 @@ export default function Pages() {
             {/* Sub-halaman */}
             {(childrenOf(pageId).length > 0 || true) && (
               <div className="pt-2 text-xs">
-                <b style={{ color: "var(--n-text-muted)" }}>Sub-halaman</b>
+                <b style={{ color: "var(--text-muted)" }}>Sub-halaman</b>
                 <div className="mt-1 space-y-0.5">
                   {childrenOf(pageId).map((c) => (
                     <TreeLink
@@ -320,12 +320,12 @@ function TreeLink({
   return (
     <a
       href={to}
-      className={`block truncate rounded px-2 py-1 text-sm transition-colors hover:bg-[var(--n-hover)] ${
+      className={`block truncate rounded px-2 py-1 text-sm transition-colors hover:bg-[var(--hover)] ${
         indent ? "pl-6" : ""
       }`}
       style={{
-        color: active ? "var(--n-text)" : "var(--n-text-muted)",
-        backgroundColor: active ? "var(--n-hover)" : undefined,
+        color: active ? "var(--text)" : "var(--text-muted)",
+        backgroundColor: active ? "var(--hover)" : undefined,
         fontWeight: active ? 500 : 400,
       }}
     >

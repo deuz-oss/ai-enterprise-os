@@ -18,15 +18,15 @@ export default {
       },
       // Token shell (nilai nyata di index.css via CSS variables).
       colors: {
-        notion: {
-          bg: "var(--n-bg)",
-          elevated: "var(--n-bg-elevated)",
-          sidebar: "var(--n-sidebar)",
-          hover: "var(--n-hover)",
-          border: "var(--n-border)",
-          text: "var(--n-text)",
-          muted: "var(--n-text-muted)",
-          accent: "var(--n-accent)",
+        surface: {
+          bg: "var(--bg)",
+          elevated: "var(--bg-elevated)",
+          sidebar: "var(--sidebar)",
+          hover: "var(--hover)",
+          border: "var(--border)",
+          text: "var(--text)",
+          muted: "var(--text-muted)",
+          accent: "var(--accent)",
         },
       },
       borderRadius: {

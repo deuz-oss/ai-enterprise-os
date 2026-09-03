@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
 import { Dna, Palette } from "lucide-react";
-import { CalloutBlock, PageHeader } from "../components/notion";
+import { CalloutBlock, PageHeader } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
 
 interface TpRow {
@@ -101,7 +101,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
 
   const field = (key: string, label: string) => (
     <label className="block text-xs">
-      <span style={{ color: "var(--n-text-muted)" }}>{label}</span>
+      <span style={{ color: "var(--text-muted)" }}>{label}</span>
       <input
         className="input mt-0.5"
         defaultValue={String(p[key] ?? "")}
@@ -111,12 +111,12 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   );
 
   return (
-    <div className="space-y-3 rounded p-3" style={{ backgroundColor: "var(--n-hover)" }}>
+    <div className="space-y-3 rounded p-3" style={{ backgroundColor: "var(--hover)" }}>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className={`${d.status === "gagal" ? "pill p-red" : d.status === "finalisasi" ? "pill p-green" : "pill p-yellow"}`}>
           {d.status.replace("_", " ")}
         </span>
-        <span style={{ color: "var(--n-text-muted)" }}>{d.file_name} · skema v{d.schema_version}/prompt v{d.prompt_version}</span>
+        <span style={{ color: "var(--text-muted)" }}>{d.file_name} · skema v{d.schema_version}/prompt v{d.prompt_version}</span>
         {d.status === "gagal" && (
           <button
             onClick={() => reprocess.mutate()}
@@ -173,7 +173,7 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
 
           <details className="text-xs">
             <summary className="cursor-pointer font-medium">Skema lengkap (JSON)</summary>
-            <pre className="mt-1 max-h-56 overflow-auto rounded p-2" style={{ backgroundColor: "var(--n-hover)" }}>
+            <pre className="mt-1 max-h-56 overflow-auto rounded p-2" style={{ backgroundColor: "var(--hover)" }}>
               {JSON.stringify(p, null, 2)}
             </pre>
           </details>
@@ -293,7 +293,7 @@ function BrandingCard() {
             src={`/api/v1${b.logo_url}`}
             alt="Logo"
             className="h-10 rounded border"
-            style={{ borderColor: "var(--n-border)" }}
+            style={{ borderColor: "var(--border)" }}
           />
         )}
         <label className="inline-flex items-center gap-1">
@@ -341,7 +341,7 @@ function BrandingCard() {
               onClick={() => removeLogo.mutate()}
               disabled={removeLogo.isPending}
               className="hover:text-rose-600"
-              style={{ color: "var(--n-text-muted)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               Hapus Logo
             </button>
@@ -428,7 +428,7 @@ export default function TalentPool() {
 
       <div className="card space-y-2 p-4">
         <h3 className="text-sm font-semibold">Unggah CV Kandidat</h3>
-        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           PDF (teks atau hasil scan), DOCX, atau foto. File asli tersimpan sebagai bukti sumber.
         </p>
         <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -448,7 +448,7 @@ export default function TalentPool() {
             {intake.isPending ? "Memproses…" : "Proses CV"}
           </button>
         </div>
-        {!consent && <p className="text-[11px]" style={{ color: "var(--n-text-muted)" }}>Centang persetujuan untuk mengaktifkan tombol.</p>}
+        {!consent && <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Centang persetujuan untuk mengaktifkan tombol.</p>}
         {intake.error && <p className="text-xs text-red-600">{(intake.error as Error).message}</p>}
       </div>
 
@@ -463,7 +463,7 @@ export default function TalentPool() {
           <option value="belum_tentu">Belum tentu</option>
         </select>
         <button type="submit" className="btn-secondary">Filter</button>
-        <span className="mx-1" style={{ color: "var(--n-border)" }}>|</span>
+        <span className="mx-1" style={{ color: "var(--border)" }}>|</span>
         <select
           value={matchJobOrderId}
           onChange={(e) => {
@@ -495,7 +495,7 @@ export default function TalentPool() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Kandidat</th>
               <th className="th">Domisili</th>
@@ -508,7 +508,7 @@ export default function TalentPool() {
               <th className="th"></th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {visibleRows.map((r) => {
               const match = scoreByCandidate.get(r.candidate_id);
               return (
@@ -554,7 +554,7 @@ export default function TalentPool() {
             })}
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={matchJobOrderId ? 9 : 8} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={matchJobOrderId ? 9 : 8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   {matchJobOrderId
                     ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
                     : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}

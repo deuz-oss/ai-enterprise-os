@@ -11,7 +11,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/notion";
+import { CalloutBlock, IconBadge, PageHeader, RowFrame, SeeAllLink } from "../components/workspace";
 
 interface Overview {
   finance: {
@@ -207,42 +207,42 @@ export default function RevenueCloudOverview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Revenue MTD</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Revenue MTD</span>
             <IconBadge icon={TrendingUp} tone="green" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {formatRupiah(overview.data?.finance.revenue_mtd)}
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Outstanding</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Outstanding</span>
             <IconBadge icon={Clock} tone="orange" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {formatRupiah(overview.data?.finance.outstanding)}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {overview.data?.finance.overdue ?? 0} overdue
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Profit Margin</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Profit Margin</span>
             <IconBadge icon={Percent} tone="violet" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>{avgMarginPct}%</p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>{avgMarginPct}%</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {topClient ? `tertinggi ${topClient.client} ${topClient.pct}%` : "belum ada data"}
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>e-Faktur DJP</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>e-Faktur DJP</span>
             <IconBadge icon={FileCheck} tone="accent" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>{faktorBuilt.length}</p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>{faktorBuilt.length}</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {faktorPending.length} pending
           </p>
         </div>
@@ -262,8 +262,8 @@ export default function RevenueCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Clock} tone="orange" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>e-Faktur Menunggu DJP</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{invoicesNeedingAction.length} perlu tindakan</p>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>e-Faktur Menunggu DJP</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{invoicesNeedingAction.length} perlu tindakan</p>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -272,17 +272,17 @@ export default function RevenueCloudOverview() {
               return (
                 <RowFrame key={i.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium font-mono text-xs" style={{ color: "var(--n-text)" }}>
+                    <span className="truncate font-medium font-mono text-xs" style={{ color: "var(--text)" }}>
                       {i.invoice_no}
                     </span>
                     <span className={`shrink-0 text-[10px] ${ft.cls}`}>{ft.label}</span>
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>{clientName(i.client_id)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{clientName(i.client_id)}</p>
                 </RowFrame>
               );
             })}
             {invoicesNeedingAction.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada e-Faktur menunggu.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada e-Faktur menunggu.</p>
             )}
           </div>
           <SeeAllLink to="/finance">Kelola di Finance →</SeeAllLink>
@@ -295,8 +295,8 @@ export default function RevenueCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Receipt} tone="accent" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Finance & DJP e-Faktur</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Finance & DJP e-Faktur</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 13 kolom DJP · lawan NPWP validasi
               </p>
             </div>
@@ -307,12 +307,12 @@ export default function RevenueCloudOverview() {
               return (
                 <RowFrame key={i.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-mono text-xs font-medium" style={{ color: "var(--n-text)" }}>
+                    <span className="truncate font-mono text-xs font-medium" style={{ color: "var(--text)" }}>
                       {i.invoice_no}
                     </span>
                     <span className={`shrink-0 text-[10px] ${ft.cls}`}>{ft.label}</span>
                   </div>
-                  <div className="mt-0.5 flex items-center justify-between text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <div className="mt-0.5 flex items-center justify-between text-xs" style={{ color: "var(--text-muted)" }}>
                     <span>
                       {clientName(i.client_id)}
                       {(i.no_seri_faktur || i.efaktur_nsr) ? ` · NSFP ${i.no_seri_faktur ?? i.efaktur_nsr}` : ""}
@@ -323,7 +323,7 @@ export default function RevenueCloudOverview() {
               );
             })}
             {recentInvoices.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada invoice.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada invoice.</p>
             )}
           </div>
           <SeeAllLink to="/finance">Lihat semua invoice →</SeeAllLink>
@@ -334,8 +334,8 @@ export default function RevenueCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={TrendingUp} tone="violet" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Client Profit Margin</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>profit-by-client</p>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Client Profit Margin</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>profit-by-client</p>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -343,16 +343,16 @@ export default function RevenueCloudOverview() {
               const pct = r.revenue > 0 ? Math.round((r.margin / r.revenue) * 100) : 0;
               return (
                 <div key={r.client} className="flex items-center justify-between text-sm">
-                  <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{r.client}</span>
+                  <span className="truncate font-medium" style={{ color: "var(--text)" }}>{r.client}</span>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>{formatRupiah(r.revenue)}</span>
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.revenue)}</span>
                     <span className={marginPillCls(pct)}>{pct}%</span>
                   </div>
                 </div>
               );
             })}
             {profitByClient.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada data profit klien.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada data profit klien.</p>
             )}
           </div>
         </div>
@@ -364,27 +364,27 @@ export default function RevenueCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Wallet} tone="accent" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Cashflow</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Cashflow</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {now.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
               </p>
             </div>
           </div>
           <div>
             <div className="flex items-center justify-between text-sm">
-              <span style={{ color: "var(--n-text-muted)" }}>Masuk</span>
+              <span style={{ color: "var(--text-muted)" }}>Masuk</span>
               <span className="font-mono font-semibold text-emerald-600">+{formatRupiah(inflow)}</span>
             </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--hover)" }}>
               <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(inflow / cashflowMax) * 100}%` }} />
             </div>
           </div>
           <div>
             <div className="flex items-center justify-between text-sm">
-              <span style={{ color: "var(--n-text-muted)" }}>Keluar</span>
-              <span className="font-mono font-semibold" style={{ color: "var(--n-text)" }}>-{formatRupiah(outflow)}</span>
+              <span style={{ color: "var(--text-muted)" }}>Keluar</span>
+              <span className="font-mono font-semibold" style={{ color: "var(--text)" }}>-{formatRupiah(outflow)}</span>
             </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--hover)" }}>
               <div className="h-full rounded-full" style={{ width: `${(outflow / cashflowMax) * 100}%`, backgroundColor: "var(--accent)" }} />
             </div>
           </div>
@@ -395,22 +395,22 @@ export default function RevenueCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Clock} tone="orange" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Invoice Overdue Terlama</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{aging.data?.length ?? 0} total</p>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Invoice Overdue Terlama</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{aging.data?.length ?? 0} total</p>
             </div>
           </div>
           <div className="space-y-1.5">
             {oldestAging.map((a) => (
               <RowFrame key={a.invoice_id}>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{a.client_name}</span>
-                  <span className="shrink-0 text-xs" style={{ color: "var(--n-text-muted)" }}>{a.days_overdue} hari</span>
+                  <span className="truncate font-medium" style={{ color: "var(--text)" }}>{a.client_name}</span>
+                  <span className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>{a.days_overdue} hari</span>
                 </div>
-                <p className="mt-0.5 font-mono text-xs" style={{ color: "var(--n-text-muted)" }}>{a.invoice_no}</p>
+                <p className="mt-0.5 font-mono text-xs" style={{ color: "var(--text-muted)" }}>{a.invoice_no}</p>
               </RowFrame>
             ))}
             {oldestAging.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada invoice overdue.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada invoice overdue.</p>
             )}
           </div>
           <SeeAllLink to="/finance">Lihat semua →</SeeAllLink>
@@ -421,19 +421,19 @@ export default function RevenueCloudOverview() {
           <div className="card space-y-2">
             <div className="flex items-center gap-2">
               <IconBadge icon={Activity} tone="green" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas Terbaru</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Aktivitas Terbaru</h2>
             </div>
             <div className="space-y-1.5">
               {activityFeed.map((a) => (
                 <RowFrame key={a.id}>
-                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{actionLabel(a.action)}</p>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{actionLabel(a.action)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     oleh {actorName(users.data, a.user_id)} · {timeAgo(a.created_at)}
                   </p>
                 </RowFrame>
               ))}
               {activityFeed.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada aktivitas.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas.</p>
               )}
             </div>
           </div>

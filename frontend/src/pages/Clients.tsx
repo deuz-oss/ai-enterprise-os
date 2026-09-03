@@ -1,6 +1,6 @@
 import { FormEvent, useRef, useState } from "react";
 import { Building2 } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -110,7 +110,7 @@ export default function Clients() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)", borderBottom: "1px solid var(--n-border)" }}>
+          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>
               <th className="th">Perusahaan</th>
               <th className="th">NPWP</th>
@@ -119,12 +119,12 @@ export default function Clients() {
               <th className="th">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(clients ?? []).map((c) => (
               <tr
                 key={c.id}
                 onClick={() => setSelectedId(c.id === selectedId ? null : c.id)}
-                className="cursor-pointer transition-colors hover:bg-[var(--n-hover)]"
+                className="cursor-pointer transition-colors hover:bg-[var(--hover)]"
                 style={{ backgroundColor: selectedId === c.id ? "var(--accent-tint)" : undefined }}
               >
                 <td className="td font-medium">{c.name}</td>
@@ -146,7 +146,7 @@ export default function Clients() {
             ))}
             {clients?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada klien.
                 </td>
               </tr>
@@ -157,7 +157,7 @@ export default function Clients() {
 
       {selectedId && (
         <div className="card">
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>Dokumen Legalitas</h2>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Dokumen Legalitas</h2>
           <form
             className="mt-3 flex flex-wrap gap-2"
             onSubmit={(e) => {
@@ -184,13 +184,13 @@ export default function Clients() {
               <li
                 key={d.id}
                 className="flex items-center justify-between rounded-lg p-3 text-sm"
-                style={{ backgroundColor: "var(--n-hover)" }}
+                style={{ backgroundColor: "var(--hover)" }}
               >
                 <div>
-                  <p className="font-medium" style={{ color: "var(--n-text)" }}>
+                  <p className="font-medium" style={{ color: "var(--text)" }}>
                     {TYPE_LABELS[d.document_type]} — v{d.version}
                   </p>
-                  <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                     {d.file_name} · {(d.file_size / 1024).toFixed(0)} KB
                   </p>
                 </div>
@@ -211,7 +211,7 @@ export default function Clients() {
               </li>
             ))}
             {documents?.length === 0 && (
-              <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>Belum ada dokumen.</li>
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada dokumen.</li>
             )}
           </ul>
         </div>

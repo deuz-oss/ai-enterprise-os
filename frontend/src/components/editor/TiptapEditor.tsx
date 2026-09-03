@@ -83,7 +83,7 @@ export default function TiptapEditor({
     padding: "3px 8px",
     fontSize: 12.5,
     fontWeight: active ? 600 : 400,
-    color: active ? "#ffffff" : "var(--n-text-muted)",
+    color: active ? "#ffffff" : "var(--text-muted)",
     backgroundColor: active ? "var(--accent)" : "transparent",
   });
 
@@ -92,7 +92,7 @@ export default function TiptapEditor({
       {editable && (
         <div
           className="mb-2 flex flex-wrap items-center gap-0.5 rounded-md px-1 py-1"
-          style={{ border: "1px solid var(--n-border)", backgroundColor: "var(--n-bg-elevated)" }}
+          style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
         >
           <button style={btn(inst.isActive("heading", { level: 1 }))} onClick={() => runWith(false)((c) => c.toggleHeading({ level: 1 }).run())}>
             H1
@@ -136,13 +136,13 @@ export default function TiptapEditor({
           <div
             className="absolute left-2 top-10 z-20 w-56 overflow-hidden rounded-lg py-1 shadow-lg"
             style={{
-              backgroundColor: "var(--n-bg-elevated)",
-              border: "1px solid var(--n-border)",
+              backgroundColor: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
             }}
           >
             <p
               className="px-3 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-wide"
-              style={{ color: "var(--n-text-muted)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               Blok
             </p>
@@ -159,8 +159,8 @@ export default function TiptapEditor({
               <button
                 key={m.label}
                 onClick={m.run}
-                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--n-hover)]"
-                style={{ color: "var(--n-text)" }}
+                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--hover)]"
+                style={{ color: "var(--text)" }}
               >
                 <span className="w-5 text-center">{m.emoji}</span>
                 {m.label}
@@ -171,7 +171,7 @@ export default function TiptapEditor({
       </div>
 
       {!editable && (
-        <p className="mt-2 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+        <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
           Mode pratinjau — klik “Ubah” untuk menyunting.
         </p>
       )}

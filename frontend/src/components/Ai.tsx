@@ -47,19 +47,19 @@ export function ScoreBadge({ score }: { score: number }) {
 
 export function AiResultCard({ screening }: { screening: Screening }) {
   return (
-    <div className="rounded-lg border p-4" style={{ borderColor: "var(--n-border)", backgroundColor: "var(--n-hover)" }}>
+    <div className="rounded-lg border p-4" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`${VERDICT_COLORS[screening.verdict] ?? "pill p-gray"}`}>
           {screening.verdict.replace(/_/g, " ")}
         </span>
-        <span className="text-sm" style={{ color: "var(--n-text-muted)" }}>
+        <span className="text-sm" style={{ color: "var(--text-muted)" }}>
           Skor kecocokan: <ScoreBadge score={screening.score} />/100
         </span>
         {screening.model && (
-          <span className="ml-auto text-xs" style={{ color: "var(--n-text-muted)" }}>model: {screening.model}</span>
+          <span className="ml-auto text-xs" style={{ color: "var(--text-muted)" }}>model: {screening.model}</span>
         )}
       </div>
-      <p className="mt-2 text-sm" style={{ color: "var(--n-text)" }}>{screening.summary}</p>
+      <p className="mt-2 text-sm" style={{ color: "var(--text)" }}>{screening.summary}</p>
       {(screening.strengths.length > 0 || screening.risks.length > 0) && (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {screening.strengths.length > 0 && (
@@ -67,7 +67,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                 Kekuatan
               </p>
-              <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
                 {screening.strengths.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
@@ -77,7 +77,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
           {screening.risks.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Risiko</p>
-              <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
                 {screening.risks.map((r, i) => (
                   <li key={i}>{r}</li>
                 ))}
@@ -86,7 +86,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
           )}
         </div>
       )}
-      <p className="mt-2 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+      <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
         {new Date(screening.created_at).toLocaleString("id-ID")}
       </p>
     </div>

@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { MessagesSquare } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -193,7 +193,7 @@ export default function AIInterview() {
             rows={2}
           />
           <div>
-            <label className="text-xs font-medium text-[var(--n-text-muted)]">Mode Interview</label>
+            <label className="text-xs font-medium text-[var(--text-muted)]">Mode Interview</label>
             <select name="mode" defaultValue="async_text" className="input mt-1 w-full">
               <option value="async_text">Teks — kandidat ketik jawaban</option>
               <option value="realtime_voice">
@@ -204,7 +204,7 @@ export default function AIInterview() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-medium text-[var(--n-text-muted)]">Pertanyaan</p>
+            <p className="text-xs font-medium text-[var(--text-muted)]">Pertanyaan</p>
             {questions.map((q, idx) => (
               <div key={idx} className="flex items-center gap-2">
                 <input
@@ -269,7 +269,7 @@ export default function AIInterview() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-medium text-[var(--n-text-muted)]">
+            <p className="text-xs font-medium text-[var(--text-muted)]">
               Kriteria Penilaian (kunci harus cocok dengan yang dipakai di pertanyaan di atas)
             </p>
             {criteria.map((c, idx) => (
@@ -337,21 +337,21 @@ export default function AIInterview() {
             <button
               key={t.id}
               onClick={() => setSelectedId(t.id === selectedId ? null : t.id)}
-              className="flex w-full items-center justify-between border-b p-3 text-left transition-colors hover:bg-[var(--n-hover)]"
+              className="flex w-full items-center justify-between border-b p-3 text-left transition-colors hover:bg-[var(--hover)]"
               style={{
-                borderColor: "var(--n-border)",
+                borderColor: "var(--border)",
                 backgroundColor: selectedId === t.id ? "var(--accent-tint)" : undefined,
               }}
             >
               <div>
-                <p className="text-sm font-medium text-[var(--n-text)]">{t.title}</p>
-                <p className="text-xs text-[var(--n-text-muted)]">{t.questions.length} pertanyaan</p>
+                <p className="text-sm font-medium text-[var(--text)]">{t.title}</p>
+                <p className="text-xs text-[var(--text-muted)]">{t.questions.length} pertanyaan</p>
               </div>
               <span className={`pill ${t.status === "aktif" ? "p-green" : "p-gray"}`}>{t.status}</span>
             </button>
           ))}
           {templates?.length === 0 && (
-            <p className="p-4 text-sm text-[var(--n-text-muted)]">Belum ada template.</p>
+            <p className="p-4 text-sm text-[var(--text-muted)]">Belum ada template.</p>
           )}
         </div>
 
@@ -360,9 +360,9 @@ export default function AIInterview() {
             <div className="card space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-[var(--n-text)]">{selected.title}</h3>
+                  <h3 className="font-semibold text-[var(--text)]">{selected.title}</h3>
                   {selected.objective && (
-                    <p className="text-sm text-[var(--n-text-muted)]">{selected.objective}</p>
+                    <p className="text-sm text-[var(--text-muted)]">{selected.objective}</p>
                   )}
                 </div>
                 {selected.status === "draft" && (
@@ -377,11 +377,11 @@ export default function AIInterview() {
               </div>
 
               {selected.status === "aktif" && (
-                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--n-border)" }}>
-                  <p className="text-xs font-medium text-[var(--n-text-muted)]">Undang Kandidat</p>
+                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Undang Kandidat</p>
                   <div className="max-h-40 space-y-1 overflow-y-auto">
                     {(candidates ?? []).map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 text-sm text-[var(--n-text)]">
+                      <label key={c.id} className="flex items-center gap-2 text-sm text-[var(--text)]">
                         <input
                           type="checkbox"
                           checked={candidateIds.includes(c.id)}
@@ -407,12 +407,12 @@ export default function AIInterview() {
             </div>
 
             <div className="card space-y-3 p-0">
-              <h4 className="p-3 pb-0 font-medium text-[var(--n-text)]">Response Kandidat</h4>
+              <h4 className="p-3 pb-0 font-medium text-[var(--text)]">Response Kandidat</h4>
               {(responses ?? []).map((r) => (
-                <div key={r.id} className="border-t p-3" style={{ borderColor: "var(--n-border)" }}>
+                <div key={r.id} className="border-t p-3" style={{ borderColor: "var(--border)" }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-[var(--n-text)]">
+                      <p className="text-sm font-medium text-[var(--text)]">
                         {candidateName(r.candidate_id)}
                       </p>
                       <div className="mt-1 flex gap-2">
@@ -445,20 +445,20 @@ export default function AIInterview() {
                   </div>
 
                   {r.ai_narrative && (
-                    <p className="mt-2 text-sm text-[var(--n-text-muted)]">{r.ai_narrative}</p>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">{r.ai_narrative}</p>
                   )}
                   {r.transcript_text && (
                     <details className="mt-1">
                       <summary className="cursor-pointer text-xs text-[var(--accent)]">
                         Lihat transkrip percakapan
                       </summary>
-                      <p className="mt-1 whitespace-pre-line text-xs text-[var(--n-text-muted)]">
+                      <p className="mt-1 whitespace-pre-line text-xs text-[var(--text-muted)]">
                         {r.transcript_text}
                       </p>
                     </details>
                   )}
                   {r.ai_score_breakdown.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-[var(--n-text-muted)]">
+                    <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-muted)]">
                       {r.ai_score_breakdown.map((b) => (
                         <li key={b.criterion_key}>
                           {b.criterion_key}: {b.score} — {b.reasoning}
@@ -471,7 +471,7 @@ export default function AIInterview() {
                     <form
                       onSubmit={(e) => handleReview(e, r.id)}
                       className="mt-2 space-y-2 rounded-lg border p-2"
-                      style={{ borderColor: "var(--n-border)" }}
+                      style={{ borderColor: "var(--border)" }}
                     >
                       <select name="review_status" className="input w-full py-1 text-xs" required>
                         <option value="disetujui">Setujui</option>
@@ -500,7 +500,7 @@ export default function AIInterview() {
                 </div>
               ))}
               {responses?.length === 0 && (
-                <p className="p-3 text-sm text-[var(--n-text-muted)]">Belum ada kandidat diundang.</p>
+                <p className="p-3 text-sm text-[var(--text-muted)]">Belum ada kandidat diundang.</p>
               )}
             </div>
           </div>

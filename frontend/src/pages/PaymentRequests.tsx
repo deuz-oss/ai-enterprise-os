@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { ClipboardList } from "lucide-react";
-import { PageHeader } from "../components/notion";
+import { PageHeader } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
 
 interface PrDecision {
@@ -97,7 +97,7 @@ function ApprovalChainPanel() {
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">Rantai Approval</h3>
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             Urutan tahap persetujuan PR per tenant. Kosong = management/admin mana pun memutus.
           </p>
         </div>
@@ -119,7 +119,7 @@ function ApprovalChainPanel() {
               }}
               disabled={current.length === 0}
               className="font-medium hover:opacity-80 disabled:opacity-40"
-              style={{ color: "var(--n-text-muted)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               − Hapus Terakhir
             </button>
@@ -132,7 +132,7 @@ function ApprovalChainPanel() {
           <li key={s.seq} className="text-xs flex items-center gap-2">
             <span
               className="inline-flex h-5 w-5 items-center justify-center rounded-full font-semibold"
-              style={{ backgroundColor: "var(--n-hover)", color: "var(--n-text)" }}
+              style={{ backgroundColor: "var(--hover)", color: "var(--text)" }}
             >
               {s.seq}
             </span>
@@ -140,14 +140,14 @@ function ApprovalChainPanel() {
           </li>
         ))}
         {(chain.data?.length ?? 0) === 0 && !dirty && (
-          <li className="text-xs italic" style={{ color: "var(--n-text-muted)" }}>
+          <li className="text-xs italic" style={{ color: "var(--text-muted)" }}>
             Belum dikonfigurasi — satu tahap (legacy).
           </li>
         )}
       </ol>
 
       {canEdit && dirty && (
-        <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: "var(--n-border)" }}>
+        <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
           {current.map((row, idx) => (
             <div key={idx} className="flex items-center gap-2 text-xs">
               <span className="w-12">Tahap {idx + 1}</span>
@@ -182,7 +182,7 @@ function ApprovalChainPanel() {
                 setDirty(false);
               }}
               className="px-2 py-1 text-xs hover:opacity-80"
-              style={{ color: "var(--n-text-muted)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               Batal
             </button>
@@ -249,7 +249,7 @@ export default function PaymentRequests() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Nomor</th>
               <th className="th">Jenis</th>
@@ -259,7 +259,7 @@ export default function PaymentRequests() {
               <th className="th">Aksi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(prRows ?? []).map((p) => (
               <tr key={p.id}>
                 <td className="td font-mono text-xs font-medium">{p.pr_number}</td>
@@ -272,7 +272,7 @@ export default function PaymentRequests() {
                   </span>
                   {p.progress?.total_steps > 0 &&
                     (p.status === "menunggu_atasan" || p.status === "disetujui_atasan") && (
-                      <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+                      <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
                         Tahap{" "}
                         {Math.min(p.progress.decisions.filter((d) => d.approved).length + 1, p.progress.total_steps)}
                         /{p.progress.total_steps}
@@ -280,7 +280,7 @@ export default function PaymentRequests() {
                       </p>
                     )}
                   {p.decision_note && (
-                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
                       {p.decision_note}
                     </p>
                   )}
@@ -318,14 +318,14 @@ export default function PaymentRequests() {
                       Eksekusi Pembayaran
                     </button>
                   ) : (
-                    <span style={{ color: "var(--n-text-muted)" }}>—</span>
+                    <span style={{ color: "var(--text-muted)" }}>—</span>
                   )}
                 </td>
               </tr>
             ))}
             {prRows?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi.
                 </td>
               </tr>

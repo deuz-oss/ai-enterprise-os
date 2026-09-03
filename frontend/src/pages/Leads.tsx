@@ -13,7 +13,7 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
+import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
 
 export interface Lead {
@@ -40,7 +40,7 @@ const STAGE_DOT: Record<string, string> = {
   gagal: "#e03e3e",
 };
 
-// B1: pill status pakai palet hex Notion persis mockup (lihat index.css).
+// B1: pill status pakai palet hex persis mockup (lihat index.css).
 const STAGE_PILL: Record<string, string> = {
   lead: "pill p-gray",
   kontak: "pill p-blue",
@@ -161,7 +161,7 @@ export default function Leads() {
         <div className="flex items-center gap-2">
           <div
             className="flex overflow-hidden rounded text-sm"
-            style={{ border: "1px solid var(--n-border)" }}
+            style={{ border: "1px solid var(--border)" }}
           >
             {(["tabel", "papan"] as const).map((v) => (
               <button
@@ -169,8 +169,8 @@ export default function Leads() {
                 onClick={() => setView(v)}
                 className="px-3 py-1.5 capitalize transition-colors"
                 style={{
-                  backgroundColor: view === v ? "var(--n-hover)" : "transparent",
-                  color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                  backgroundColor: view === v ? "var(--hover)" : "transparent",
+                  color: view === v ? "var(--text)" : "var(--text-muted)",
                   fontWeight: view === v ? 500 : 400,
                 }}
               >
@@ -229,8 +229,8 @@ export default function Leads() {
         <table className="w-full">
           <thead
             style={{
-              borderBottom: "1px solid var(--n-border)",
-              backgroundColor: "var(--n-hover)",
+              borderBottom: "1px solid var(--border)",
+              backgroundColor: "var(--hover)",
             }}
           >
             <tr>
@@ -242,7 +242,7 @@ export default function Leads() {
             </tr>
           </thead>
           <tbody
-            style={{ borderTop: "1px solid var(--n-border)" }}
+            style={{ borderTop: "1px solid var(--border)" }}
           >
             {(leadsTable ?? []).map((lead) => (
               <tr
@@ -279,7 +279,7 @@ export default function Leads() {
             ))}
             {leadsTable?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada lead.
                 </td>
               </tr>
@@ -293,7 +293,7 @@ export default function Leads() {
         <Pagination offset={offset} limit={pageLimit} total={leadsTotal} onOffsetChange={setOffset} />
       )}
 
-      {/* ===== View Papan (kanban ala Notion, drag-and-drop C3) ===== */}
+      {/* ===== View Papan (kanban drag-and-drop C3) ===== */}
       {view === "papan" && (
         <div className="flex gap-3 overflow-x-auto pb-2">
           {STAGES.map((stage) => {
@@ -305,7 +305,7 @@ export default function Leads() {
                 key={stage}
                 className="w-64 shrink-0 rounded-md transition-colors"
                 style={{
-                  backgroundColor: "var(--n-hover)",
+                  backgroundColor: "var(--hover)",
                   boxShadow: isOver ? "inset 0 0 0 2px var(--accent)" : undefined,
                 }}
                 onDragOver={(e) => {
@@ -320,16 +320,16 @@ export default function Leads() {
                 }}
               >
                 <div className="flex items-center justify-between px-3 pt-3">
-                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--text)" }}>
                     <span
                       className="inline-block h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: STAGE_DOT[stage] }}
                     />
                     <span className="capitalize">{stage}</span>
-                    <span style={{ color: "var(--n-text-muted)" }}>{cards.length}</span>
+                    <span style={{ color: "var(--text-muted)" }}>{cards.length}</span>
                   </span>
                 </div>
-                <p className="px-3 pb-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <p className="px-3 pb-1 text-xs" style={{ color: "var(--text-muted)" }}>
                   {formatRupiah(total)}
                 </p>
                 <div className="space-y-2 px-2 pb-3">
@@ -345,18 +345,18 @@ export default function Leads() {
                       onDragEnd={() => setDragId(null)}
                       className="rounded-md p-3 shadow-sm transition-shadow hover:shadow"
                       style={{
-                        backgroundColor: "var(--n-bg-elevated)",
-                        border: "1px solid var(--n-border)",
+                        backgroundColor: "var(--bg-elevated)",
+                        border: "1px solid var(--border)",
                         cursor: dragId === lead.id ? "grabbing" : "grab",
                         opacity: dragId === lead.id ? 0.5 : 1,
                       }}
                       onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
                       title={lead.industry ?? undefined}
                     >
-                      <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                      <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                         {lead.company_name}
                       </p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         {lead.contact_name ?? "—"}
                         {lead.estimated_headcount ? ` · ${lead.estimated_headcount} TKI` : ""}
                       </p>
@@ -377,7 +377,7 @@ export default function Leads() {
                             })
                           }
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
-                          style={{ border: "1px solid var(--n-border)" }}
+                          style={{ border: "1px solid var(--border)" }}
                           title="Tahap sebelumnya"
                         >
                           <ChevronLeft className="h-3.5 w-3.5" />
@@ -386,7 +386,7 @@ export default function Leads() {
                           value={lead.stage}
                           onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
                           className="cursor-pointer rounded bg-transparent text-xs capitalize"
-                          style={{ color: "var(--n-text-muted)", border: "none", outline: "none" }}
+                          style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
                         >
                           {STAGES.map((s) => (
                             <option key={s} value={s}>
@@ -403,7 +403,7 @@ export default function Leads() {
                             })
                           }
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
-                          style={{ border: "1px solid var(--n-border)" }}
+                          style={{ border: "1px solid var(--border)" }}
                           title="Tahap berikutnya"
                         >
                           <ChevronRight className="h-3.5 w-3.5" />
@@ -412,7 +412,7 @@ export default function Leads() {
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
                       Kosong
                     </p>
                   )}
@@ -478,7 +478,7 @@ export default function Leads() {
             );
           })()}
 
-          <h2 className="mt-6 font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas</h2>
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Aktivitas</h2>
           <form
             className="mt-3 flex gap-2"
             onSubmit={(e) => {
@@ -498,16 +498,16 @@ export default function Leads() {
               <li
                 key={a.id}
                 className="rounded-lg p-3 text-sm"
-                style={{ backgroundColor: "var(--n-hover)" }}
+                style={{ backgroundColor: "var(--hover)" }}
               >
-                <span className="font-medium" style={{ color: "var(--n-text-muted)" }}>
+                <span className="font-medium" style={{ color: "var(--text-muted)" }}>
                   [{a.activity_type}]
                 </span>{" "}
                 {a.content}
               </li>
             ))}
             {activities?.length === 0 && (
-              <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>
                 Belum ada aktivitas.
               </li>
             )}

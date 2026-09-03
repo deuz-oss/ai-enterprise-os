@@ -4,7 +4,7 @@ import { api, formatRupiah } from "../api/client";
 import { AiResultCard } from "../components/Ai";
 import type { Screening } from "../components/Ai";
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Paperclip, Users as UsersIcon } from "lucide-react";
-import { CalloutBlock, PageHeader } from "../components/notion";
+import { CalloutBlock, PageHeader } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
 import type { JobOrder } from "./JobOrders";
 
@@ -45,7 +45,7 @@ interface Placement {
 
 const STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
 
-// B1: pill palet hex Notion (index.css).
+// B1: pill palet hex (index.css).
 const BADGE_COLORS: Record<string, string> = {
   baru: "pill p-gray",
   screening: "pill p-blue",
@@ -228,15 +228,15 @@ export default function Candidates() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PageHeader icon={UsersIcon} title="Database Kandidat" />
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded text-sm" style={{ border: "1px solid var(--n-border)" }}>
+          <div className="flex overflow-hidden rounded text-sm" style={{ border: "1px solid var(--border)" }}>
             {(["tabel", "papan"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
                 className="px-3 py-1.5 capitalize transition-colors"
                 style={{
-                  backgroundColor: view === v ? "var(--n-hover)" : "transparent",
-                  color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                  backgroundColor: view === v ? "var(--hover)" : "transparent",
+                  color: view === v ? "var(--text)" : "var(--text-muted)",
                   fontWeight: view === v ? 500 : 400,
                 }}
               >
@@ -314,7 +314,7 @@ export default function Candidates() {
       {view === "tabel" && (
         <div className="card overflow-x-auto p-0">
           <table className="w-full">
-            <thead className="border-b border-[var(--n-border)] bg-[var(--n-hover)]">
+            <thead className="border-b border-[var(--border)] bg-[var(--hover)]">
               <tr>
                 <th className="th">Nama</th>
                 <th className="th">Kota</th>
@@ -325,10 +325,10 @@ export default function Candidates() {
                 <th className="th">AI</th>
               </tr>
             </thead>
-          <tbody className="divide-y divide-[var(--n-border)]">
+          <tbody className="divide-y divide-[var(--border)]">
             {(candidates ?? []).map((c) => (
               <Fragment key={c.id}>
-                <tr className="hover:bg-[var(--n-hover)]">
+                <tr className="hover:bg-[var(--hover)]">
                 <td className="td font-medium">{c.full_name}</td>
                 <td className="td">{c.city ?? "-"}</td>
                 <td className="td">{formatRupiah(c.expected_salary)}</td>
@@ -423,15 +423,15 @@ export default function Candidates() {
               </tr>
                 {offeringCandidateId === c.id && (
                   <tr>
-                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                    <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">
                       <div className="space-y-3">
-                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                        <span className="text-sm font-semibold text-[var(--text)]">
                           Kirim Surat Penawaran: {c.full_name}
                         </span>
                         {(placements.data ?? []).filter(
                           (p) => p.candidate_id === c.id && p.status !== "dibatalkan"
                         ).length === 0 && !placements.isLoading ? (
-                          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                             Kandidat ini belum diusulkan (placement) ke job order manapun. Gunakan
                             "Usulkan" di atas dulu sebelum kirim penawaran.
                           </p>
@@ -507,15 +507,15 @@ export default function Candidates() {
                 )}
                 {onboardCandidateId === c.id && (
                   <tr>
-                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                    <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">
                       <div className="space-y-3">
-                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                        <span className="text-sm font-semibold text-[var(--text)]">
                           Angkat jadi Karyawan: {c.full_name}
                         </span>
                         {(placements.data ?? []).filter(
                           (p) => p.candidate_id === c.id && p.status !== "dibatalkan"
                         ).length === 0 && !placements.isLoading ? (
-                          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                             Kandidat ini belum diusulkan (placement) ke job order manapun. Gunakan
                             "Usulkan" di atas dulu sebelum onboard.
                           </p>
@@ -579,9 +579,9 @@ export default function Candidates() {
                 )}
                 {interviewCandidateId === c.id && (
                   <tr>
-                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                    <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">
                       <div className="space-y-3">
-                        <span className="text-sm font-semibold text-[var(--n-text)]">
+                        <span className="text-sm font-semibold text-[var(--text)]">
                           Jadwalkan Interview: {c.full_name}
                         </span>
                         <form
@@ -648,7 +648,7 @@ export default function Candidates() {
                           {(interviews.data ?? [])
                             .filter((i) => i.candidate_id === c.id)
                             .map((i) => (
-                              <div key={i.id} className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                              <div key={i.id} className="text-xs" style={{ color: "var(--text-muted)" }}>
                                 <span
                                   className={`pill ${i.interview_type === "klien" ? "p-violet" : "p-blue"} mr-1 text-[10px]`}
                                 >
@@ -676,7 +676,7 @@ export default function Candidates() {
                                 {feedbackOpenId === i.id && (
                                   <form
                                     className="mt-1 flex flex-col gap-1.5 rounded p-2"
-                                    style={{ backgroundColor: "var(--n-hover)" }}
+                                    style={{ backgroundColor: "var(--hover)" }}
                                     onSubmit={(e) => {
                                       e.preventDefault();
                                       const form = new FormData(e.currentTarget);
@@ -720,7 +720,7 @@ export default function Candidates() {
                             ))}
                           {interviews.data &&
                             interviews.data.filter((i) => i.candidate_id === c.id).length === 0 && (
-                              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                                 Belum ada interview terjadwal.
                               </p>
                             )}
@@ -731,10 +731,10 @@ export default function Candidates() {
                 )}
                 {aiCandidateId === c.id && (
                   <tr>
-                    <td colSpan={7} className="bg-[var(--n-hover)]/60 px-4 py-4">
+                    <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-[var(--n-text)]">
+                          <span className="text-sm font-semibold text-[var(--text)]">
                             Screening AI: {c.full_name}
                           </span>
                           {!c.cv_file_name && (
@@ -776,14 +776,14 @@ export default function Candidates() {
                           </p>
                         )}
                         {screenings.isLoading ? (
-                          <p className="text-sm text-[var(--n-text-muted)]">Memuat riwayat...</p>
+                          <p className="text-sm text-[var(--text-muted)]">Memuat riwayat...</p>
                         ) : (
                           <div className="space-y-2">
                             {(screenings.data ?? []).map((s) => (
                               <AiResultCard key={s.id} screening={s} />
                             ))}
                             {screenings.data?.length === 0 && (
-                              <p className="text-sm text-[var(--n-text-muted)]">Belum ada hasil screening.</p>
+                              <p className="text-sm text-[var(--text-muted)]">Belum ada hasil screening.</p>
                             )}
                           </div>
                         )}
@@ -795,7 +795,7 @@ export default function Candidates() {
             ))}
             {candidates?.length === 0 && (
               <tr>
-                <td colSpan={7} className="td py-8 text-center text-[var(--n-text-muted)]">
+                <td colSpan={7} className="td py-8 text-center text-[var(--text-muted)]">
                   Belum ada kandidat.
                 </td>
               </tr>
@@ -814,12 +814,12 @@ export default function Candidates() {
           {STATUSES.map((stage) => {
             const cards = (boardCandidates ?? []).filter((c) => c.status === stage);
             return (
-              <div key={stage} className="w-64 shrink-0 rounded-md" style={{ backgroundColor: "var(--n-hover)" }}>
+              <div key={stage} className="w-64 shrink-0 rounded-md" style={{ backgroundColor: "var(--hover)" }}>
                 <div className="flex items-center justify-between px-3 pt-3">
-                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                  <span className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--text)" }}>
                     <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_DOT[stage] }} />
                     <span className="capitalize">{stage}</span>
-                    <span style={{ color: "var(--n-text-muted)" }}>{cards.length}</span>
+                    <span style={{ color: "var(--text-muted)" }}>{cards.length}</span>
                   </span>
                 </div>
                 <div className="space-y-2 px-2 pb-3 pt-2">
@@ -827,12 +827,12 @@ export default function Candidates() {
                     <div
                       key={c.id}
                       className="rounded-md p-3 shadow-sm transition-shadow hover:shadow"
-                      style={{ backgroundColor: "var(--n-bg-elevated)", border: "1px solid var(--n-border)" }}
+                      style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                     >
-                      <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                      <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                         {c.full_name}
                       </p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         {c.city ?? "—"} · {formatRupiah(c.expected_salary)}
                       </p>
                       {c.cv_file_name && (
@@ -845,7 +845,7 @@ export default function Candidates() {
                           disabled={STATUSES.indexOf(c.status) === 0}
                           onClick={() => changeStatus.mutate({ id: c.id, status: STATUSES[STATUSES.indexOf(c.status) - 1] })}
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
-                          style={{ border: "1px solid var(--n-border)" }}
+                          style={{ border: "1px solid var(--border)" }}
                         >
                           <ChevronLeft className="h-3.5 w-3.5" />
                         </button>
@@ -853,7 +853,7 @@ export default function Candidates() {
                           value={c.status}
                           onChange={(e) => changeStatus.mutate({ id: c.id, status: e.target.value })}
                           className="cursor-pointer rounded bg-transparent text-xs capitalize"
-                          style={{ color: "var(--n-text-muted)", border: "none", outline: "none" }}
+                          style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
                         >
                           {STATUSES.map((s) => (
                             <option key={s} value={s}>
@@ -865,14 +865,14 @@ export default function Candidates() {
                           disabled={STATUSES.indexOf(c.status) === STATUSES.length - 1}
                           onClick={() => changeStatus.mutate({ id: c.id, status: STATUSES[STATUSES.indexOf(c.status) + 1] })}
                           className="rounded px-1.5 py-0.5 disabled:opacity-25"
-                          style={{ border: "1px solid var(--n-border)" }}
+                          style={{ border: "1px solid var(--border)" }}
                         >
                           <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
                   ))}
-                  {cards.length === 0 && <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--n-text-muted)" }}>Kosong</p>}
+                  {cards.length === 0 && <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>Kosong</p>}
                 </div>
               </div>
             );

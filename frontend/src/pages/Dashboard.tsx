@@ -14,7 +14,7 @@ import {
   Sparkles,
   Wallet,
 } from "lucide-react";
-import { PageHeader, CalloutBlock } from "../components/notion";
+import { PageHeader, CalloutBlock } from "../components/workspace";
 import { api, formatRupiah } from "../api/client";
 
 interface Overview {
@@ -156,19 +156,19 @@ function KpiCard({
 }) {
   return (
     <div className="card">
-      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--n-text-muted)" }}>
+      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
         {label}
       </p>
-      <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+      <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
         {value}
       </p>
       {hint && (
-        <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
           {hint}
         </p>
       )}
       {barPct !== undefined && (
-        <div className="mt-3 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+        <div className="mt-3 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
           <div
             className="h-full rounded-full"
             style={{ width: `${Math.min(Math.max(barPct, 0), 100)}%`, backgroundColor: barColor ?? "var(--accent)" }}
@@ -191,11 +191,11 @@ function SectionCard({
   return (
     <div className="card">
       <div className="mb-3">
-        <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
           {title}
         </h2>
         {subtitle && (
-          <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             {subtitle}
           </p>
         )}
@@ -227,7 +227,7 @@ export default function Dashboard() {
   });
 
   if (isLoading || !data)
-    return <p className="text-sm" style={{ color: "var(--n-text-muted)" }}>Memuat...</p>;
+    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
   const recentInvoices = [...(invoices ?? [])].reverse().slice(0, 5);
@@ -275,14 +275,14 @@ export default function Dashboard() {
         <div className="space-y-5 lg:col-span-2">
           <SectionCard title="Recruitment & AI Matching" subtitle="Progres tahap job order & status kandidat">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium" style={{ color: "var(--n-text)" }}>
+              <span className="font-medium" style={{ color: "var(--text)" }}>
                 Tahap Job Order
               </span>
-              <span style={{ color: "var(--n-text-muted)" }}>
+              <span style={{ color: "var(--text-muted)" }}>
                 {data.recruitment_talent.interviews_this_week} interview minggu ini
               </span>
             </div>
-            <div className="mt-2 flex h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+            <div className="mt-2 flex h-2 overflow-hidden rounded-full" style={{ backgroundColor: "var(--hover)" }}>
               {JO_STAGE_ORDER.map((stage) => {
                 const count = data.recruitment_talent.job_orders_by_stage[stage] ?? 0;
                 if (!count) return null;
@@ -294,7 +294,7 @@ export default function Dashboard() {
                 );
               })}
             </div>
-            <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs" style={{ color: "var(--n-text-muted)" }}>
+            <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs" style={{ color: "var(--text-muted)" }}>
               {JO_STAGE_ORDER.map((stage) => (
                 <span key={stage}>
                   {data.recruitment_talent.job_orders_by_stage[stage] ?? 0} {JO_STAGE_LABELS[stage]}
@@ -302,8 +302,8 @@ export default function Dashboard() {
               ))}
             </div>
 
-            <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--n-border)" }}>
-              <p className="mb-2 text-xs font-medium" style={{ color: "var(--n-text)" }}>
+            <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: "var(--text)" }}>
                 Status Kandidat
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -313,7 +313,7 @@ export default function Dashboard() {
                   </span>
                 ))}
                 {data.candidates.total === 0 && (
-                  <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                     Belum ada kandidat.
                   </span>
                 )}
@@ -333,7 +333,7 @@ export default function Dashboard() {
                     <th className="th">Faktur</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+                <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                   {recentInvoices.map((inv) => (
                     <tr key={inv.id}>
                       <td className="td font-mono text-xs">{inv.invoice_no}</td>
@@ -342,14 +342,14 @@ export default function Dashboard() {
                       <td className="td">
                         <span className={`pill ${INVOICE_STATUS_PILL[inv.status] ?? "p-gray"}`}>{inv.status}</span>
                       </td>
-                      <td className="td text-xs" style={{ color: "var(--n-text-muted)" }}>
+                      <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
                         {FAKTUR_STATUS_LABEL[inv.tax_invoice_status ?? "belum_buat"] ?? "—"}
                       </td>
                     </tr>
                   ))}
                   {recentInvoices.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="td text-center" style={{ color: "var(--n-text-muted)" }}>
+                      <td colSpan={5} className="td text-center" style={{ color: "var(--text-muted)" }}>
                         Belum ada invoice.
                       </td>
                     </tr>
@@ -390,13 +390,13 @@ export default function Dashboard() {
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs">
-                  <span style={{ color: "var(--n-text)" }}>BPJS Lengkap</span>
-                  <span className="font-mono font-medium" style={{ color: "var(--n-text)" }}>
+                  <span style={{ color: "var(--text)" }}>BPJS Lengkap</span>
+                  <span className="font-mono font-medium" style={{ color: "var(--text)" }}>
                     {data.people.bpjs_complete}/{data.people.total_employees} ·{" "}
                     {pct(data.people.bpjs_complete, data.people.total_employees)}%
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
                   <div
                     className="h-full rounded-full bg-emerald-500"
                     style={{ width: `${pct(data.people.bpjs_complete, data.people.total_employees)}%` }}
@@ -405,13 +405,13 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="flex justify-between text-xs">
-                  <span style={{ color: "var(--n-text)" }}>Asuransi Lengkap</span>
-                  <span className="font-mono font-medium" style={{ color: "var(--n-text)" }}>
+                  <span style={{ color: "var(--text)" }}>Asuransi Lengkap</span>
+                  <span className="font-mono font-medium" style={{ color: "var(--text)" }}>
                     {data.people.insurance_complete}/{data.people.total_employees} ·{" "}
                     {pct(data.people.insurance_complete, data.people.total_employees)}%
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--n-hover)" }}>
+                <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
                   <div
                     className="h-full rounded-full bg-amber-500"
                     style={{ width: `${pct(data.people.insurance_complete, data.people.total_employees)}%` }}
@@ -437,10 +437,10 @@ export default function Dashboard() {
                   return (
                     <div key={row.client} className="flex items-center justify-between">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                        <p className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
                           {row.client}
                         </p>
-                        <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           {formatRupiah(row.revenue)}
                         </p>
                       </div>
@@ -452,7 +452,7 @@ export default function Dashboard() {
                 })}
               </div>
             ) : (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 Belum ada data margin per klien.
               </p>
             )}

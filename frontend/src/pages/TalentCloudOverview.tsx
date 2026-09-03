@@ -17,7 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { CalloutBlock, IconBadge, initials, PageHeader, RowFrame, SeeAllLink } from "../components/notion";
+import { CalloutBlock, IconBadge, initials, PageHeader, RowFrame, SeeAllLink } from "../components/workspace";
 import { ScoreBadge } from "../components/Ai";
 import type { Lead } from "./Leads";
 import type { ClientRow } from "./Clients";
@@ -312,43 +312,43 @@ export default function TalentCloudOverview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Klien Aktif</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Klien Aktif</span>
             <IconBadge icon={Building2} tone="green" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {clientsActive.length}
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Leads</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Leads</span>
             <IconBadge icon={Filter} tone="violet" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.leads.total ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
             {overview.data?.leads.won ?? 0} deal
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Job Order Terbuka</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Job Order Terbuka</span>
             <IconBadge icon={Briefcase} tone="orange" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.job_orders.open ?? "-"}
           </p>
-          <p className="mt-0.5 text-[11px]" style={{ color: overdueJO.length ? "#e03e3e" : "var(--n-text-muted)" }}>
+          <p className="mt-0.5 text-[11px]" style={{ color: overdueJO.length ? "#e03e3e" : "var(--text-muted)" }}>
             {overdueJO.length} lewat target
           </p>
         </div>
         <div className="card">
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>Talent Pool</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Talent Pool</span>
             <IconBadge icon={Database} tone="accent" shape="circle" />
           </div>
-          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--n-text)" }}>
+          <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
             {overview.data?.candidates.total ?? "-"}
           </p>
         </div>
@@ -359,7 +359,7 @@ export default function TalentCloudOverview() {
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <IconBadge icon={GitBranch} tone="accent" />
-            <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Recruitment Funnel</h2>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Recruitment Funnel</h2>
           </div>
           <span className="pill p-gray">{candidateTotal} total</span>
         </div>
@@ -371,10 +371,10 @@ export default function TalentCloudOverview() {
             return (
               <div key={s} className="min-w-0" style={{ width: `${pct}%` }} title={`${CANDIDATE_STATUS_LABELS[s]}: ${count}`}>
                 <div className="h-2.5 rounded-full" style={{ backgroundColor: CANDIDATE_STATUS_COLORS[s] }} />
-                <p className="mt-1.5 truncate text-center text-xs font-semibold" style={{ color: "var(--n-text)" }}>
+                <p className="mt-1.5 truncate text-center text-xs font-semibold" style={{ color: "var(--text)" }}>
                   {count}
                 </p>
-                <p className="truncate text-center text-[10px]" style={{ color: "var(--n-text-muted)" }}>
+                <p className="truncate text-center text-[10px]" style={{ color: "var(--text-muted)" }}>
                   {CANDIDATE_STATUS_LABELS[s]}
                 </p>
               </div>
@@ -396,7 +396,7 @@ export default function TalentCloudOverview() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <IconBadge icon={Sparkles} tone="accent" />
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Talent Pool & AI Matching</h2>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Talent Pool & AI Matching</h2>
               </div>
               <button
                 type="button"
@@ -432,12 +432,12 @@ export default function TalentCloudOverview() {
               <ol className="space-y-2">
                 {pagedMatchResults.map((item, idx) => (
                   <li key={item.candidate_id} className="flex gap-3">
-                    <span className="w-5 pt-2 text-right text-sm font-bold" style={{ color: "var(--n-text-muted)" }}>
+                    <span className="w-5 pt-2 text-right text-sm font-bold" style={{ color: "var(--text-muted)" }}>
                       {matchPage * MATCH_PAGE_SIZE + idx + 1}.
                     </span>
                     <div
                       className="flex min-w-0 flex-1 gap-3 rounded-lg border p-3"
-                      style={{ borderColor: "var(--n-border)" }}
+                      style={{ borderColor: "var(--border)" }}
                     >
                       <span
                         className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -447,7 +447,7 @@ export default function TalentCloudOverview() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                             {candidateName(item.candidate_id)}{" "}
                             <span className="ml-1 text-xs">(skor <ScoreBadge score={item.match_score} />/100)</span>
                           </p>
@@ -460,7 +460,7 @@ export default function TalentCloudOverview() {
                             Jadwalkan →
                           </button>
                         </div>
-                        <p className="mt-1 text-sm" style={{ color: "var(--n-text)" }}>{item.explain}</p>
+                        <p className="mt-1 text-sm" style={{ color: "var(--text)" }}>{item.explain}</p>
                         {item.missing.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             {item.missing.map((m) => (
@@ -473,34 +473,34 @@ export default function TalentCloudOverview() {
                   </li>
                 ))}
                 {matchResults.length === 0 && (
-                  <li className="text-sm" style={{ color: "var(--n-text-muted)" }}>
+                  <li className="text-sm" style={{ color: "var(--text-muted)" }}>
                     Tidak ada kandidat aktif untuk job order ini.
                   </li>
                 )}
               </ol>
             )}
             {matchResults && matchResults.length > MATCH_PAGE_SIZE && (
-              <div className="flex items-center justify-between border-t pt-2 text-xs" style={{ borderColor: "var(--n-border)" }}>
-                <span style={{ color: "var(--n-text-muted)" }}>
+              <div className="flex items-center justify-between border-t pt-2 text-xs" style={{ borderColor: "var(--border)" }}>
+                <span style={{ color: "var(--text-muted)" }}>
                   Menampilkan {pagedMatchResults.length} dari {matchResults.length}
                 </span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     className="grid h-7 w-7 place-items-center rounded-full border disabled:opacity-40"
-                    style={{ borderColor: "var(--n-border)" }}
+                    style={{ borderColor: "var(--border)" }}
                     disabled={matchPage === 0}
                     onClick={() => setMatchPage((p) => Math.max(0, p - 1))}
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </button>
-                  <span className="px-2 font-medium" style={{ color: "var(--n-text)" }}>
+                  <span className="px-2 font-medium" style={{ color: "var(--text)" }}>
                     {matchPage + 1} / {totalMatchPages}
                   </span>
                   <button
                     type="button"
                     className="grid h-7 w-7 place-items-center rounded-full border disabled:opacity-40"
-                    style={{ borderColor: "var(--n-border)" }}
+                    style={{ borderColor: "var(--border)" }}
                     disabled={matchPage >= totalMatchPages - 1}
                     onClick={() => setMatchPage((p) => Math.min(totalMatchPages - 1, p + 1))}
                   >
@@ -515,7 +515,7 @@ export default function TalentCloudOverview() {
           <div className="card space-y-3">
             <div className="flex items-center gap-2">
               <IconBadge icon={CalendarPlus} tone="accent" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Jadwalkan Interview</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Jadwalkan Interview</h2>
             </div>
             <form className="grid grid-cols-1 gap-2 sm:grid-cols-6" onSubmit={handleScheduleInterview}>
               <select
@@ -562,8 +562,8 @@ export default function TalentCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Briefcase} tone="accent" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Job Orders Aktif</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Job Orders Aktif</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                   {activeJO.length} aktif · {overdueJO.length} overdue
                 </p>
               </div>
@@ -572,16 +572,16 @@ export default function TalentCloudOverview() {
               {activeJO.slice(0, 2).map((j) => (
                 <RowFrame key={j.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{j.title}</span>
-                    <span className="ml-2 shrink-0 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{j.title}</span>
+                    <span className="ml-2 shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
                       {filledCount(j.id)}/{j.headcount} terisi
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>{clientName(j.client_id)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{clientName(j.client_id)}</p>
                 </RowFrame>
               ))}
               {activeJO.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada job order aktif.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada job order aktif.</p>
               )}
             </div>
             <SeeAllLink to="/job-orders">Lihat semua JO →</SeeAllLink>
@@ -592,23 +592,23 @@ export default function TalentCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Building2} tone="green" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Klien Aktif</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>{clientsActive.length} aktif</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Klien Aktif</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{clientsActive.length} aktif</p>
               </div>
             </div>
             <div className="space-y-1.5">
               {clientsActive.slice(0, 2).map((c) => (
                 <RowFrame key={c.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{c.name}</span>
-                    <span className="ml-2 shrink-0 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{c.name}</span>
+                    <span className="ml-2 shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
                       {activeJoCount(c.id)} JO aktif
                     </span>
                   </div>
                 </RowFrame>
               ))}
               {clientsActive.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada klien aktif.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada klien aktif.</p>
               )}
             </div>
             <SeeAllLink to="/clients">Lihat semua klien →</SeeAllLink>
@@ -619,8 +619,8 @@ export default function TalentCloudOverview() {
             <div className="flex items-center gap-2">
               <IconBadge icon={Filter} tone="violet" />
               <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Leads</h2>
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Leads</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                   {leads.data?.length ?? 0} total
                 </p>
               </div>
@@ -629,13 +629,13 @@ export default function TalentCloudOverview() {
               {(leads.data ?? []).slice(0, 3).map((l) => (
                 <RowFrame key={l.id}>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="truncate font-medium" style={{ color: "var(--n-text)" }}>{l.company_name}</span>
+                    <span className="truncate font-medium" style={{ color: "var(--text)" }}>{l.company_name}</span>
                     <span className="pill p-gray ml-2 shrink-0 text-[10px]">{l.stage}</span>
                   </div>
                 </RowFrame>
               ))}
               {(leads.data ?? []).length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada leads.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada leads.</p>
               )}
             </div>
             <SeeAllLink to="/leads">Lihat semua leads →</SeeAllLink>
@@ -649,8 +649,8 @@ export default function TalentCloudOverview() {
           <div className="flex items-center gap-2">
             <IconBadge icon={Calendar} tone="accent" />
             <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Interview Terjadwal</h2>
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Interview Terjadwal</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {overview.data?.recruitment_talent.interviews_this_week ?? 0} minggu ini
               </p>
             </div>
@@ -658,17 +658,17 @@ export default function TalentCloudOverview() {
           <div className="space-y-1.5">
             {upcomingInterviews.map((i) => (
               <RowFrame key={i.id}>
-                <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>
+                <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                   {candidateName(i.candidate_id)} · {joTitle(i.job_order_id)}
                 </p>
-                <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                   {new Date(i.scheduled_at).toLocaleString("id-ID")}
                   {i.location ? ` · ${i.location}` : ""}
                 </p>
               </RowFrame>
             ))}
             {upcomingInterviews.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Tidak ada interview terjadwal.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada interview terjadwal.</p>
             )}
           </div>
           <SeeAllLink to="/candidates">Kelola di Kandidat →</SeeAllLink>
@@ -679,19 +679,19 @@ export default function TalentCloudOverview() {
           <div className="card space-y-2">
             <div className="flex items-center gap-2">
               <IconBadge icon={Activity} tone="green" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Aktivitas Terbaru</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Aktivitas Terbaru</h2>
             </div>
             <div className="space-y-1.5">
               {activityFeed.map((a) => (
                 <RowFrame key={a.id}>
-                  <p className="text-sm font-medium" style={{ color: "var(--n-text)" }}>{actionLabel(a.action)}</p>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{actionLabel(a.action)}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     oleh {actorName(a.user_id)} · {timeAgo(a.created_at)}
                   </p>
                 </RowFrame>
               ))}
               {activityFeed.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada aktivitas.</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas.</p>
               )}
             </div>
           </div>
@@ -702,10 +702,10 @@ export default function TalentCloudOverview() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <IconBadge icon={Gift} tone="orange" />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--n-text)" }}>Offering</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Offering</h2>
             </div>
             {offering.data && (
-              <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {offering.data.total_active} aktif · {offering.data.awaiting_signature} menunggu ttd
               </span>
             )}
@@ -715,8 +715,8 @@ export default function TalentCloudOverview() {
               <RowFrame key={o.placement_id}>
                 <div className="flex items-start justify-between gap-2 text-sm">
                   <div className="min-w-0">
-                    <p className="font-medium" style={{ color: "var(--n-text)" }}>{o.candidate_name} · {o.job_order_title}</p>
-                    <p className="mt-0.5 text-xs" style={{ color: "var(--n-text-muted)" }}>
+                    <p className="font-medium" style={{ color: "var(--text)" }}>{o.candidate_name} · {o.job_order_title}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                       {o.client_name}
                       {o.offered_salary ? ` · ${formatRupiah(o.offered_salary)}` : ""}
                     </p>
@@ -730,7 +730,7 @@ export default function TalentCloudOverview() {
               </RowFrame>
             ))}
             {(offering.data?.items ?? []).length === 0 && (
-              <p className="text-xs" style={{ color: "var(--n-text-muted)" }}>Belum ada offering aktif.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada offering aktif.</p>
             )}
           </div>
         </div>

@@ -77,7 +77,7 @@ export function AIInterviewVoiceCall({
 
       {callState === "idle" && (
         <>
-          <p className="text-sm text-[var(--n-text-muted)]">
+          <p className="text-sm text-[var(--text-muted)]">
             Ini interview suara langsung dengan AI — pastikan mikrofon Anda aktif dan Anda berada
             di tempat yang tenang. Klik tombol di bawah untuk mulai.
           </p>
@@ -88,7 +88,7 @@ export function AIInterviewVoiceCall({
       )}
 
       {callState === "connecting" && (
-        <p className="text-sm text-[var(--n-text-muted)]">Menyambungkan panggilan...</p>
+        <p className="text-sm text-[var(--text-muted)]">Menyambungkan panggilan...</p>
       )}
 
       {callState === "connected" && (
@@ -108,7 +108,7 @@ export function AIInterviewVoiceCall({
       )}
 
       {callState === "ended" && (
-        <p className="text-sm text-[var(--n-text-muted)]">Panggilan selesai, memproses hasil...</p>
+        <p className="text-sm text-[var(--text-muted)]">Panggilan selesai, memproses hasil...</p>
       )}
 
       {callState === "error" && (

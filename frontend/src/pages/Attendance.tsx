@@ -2,7 +2,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
-import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/notion";
+import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 
 interface EmployeeRow {
   id: string;
@@ -54,7 +54,7 @@ const STATUS_LABELS: Record<string, string> = {
   dinas_luar: "Dinas Luar",
 };
 
-// C2: warna titik kalender per status (hex Notion).
+// C2: warna titik kalender per status.
 const STATUS_DOT: Record<string, string> = {
   hadir: "#0f7b6c",
   terlambat: "#cb912f",
@@ -168,10 +168,10 @@ export default function Attendance() {
           onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
           className="input w-24"
         />
-        {/* C2: toggle Tabel / Kalender ala segmented view Notion */}
+        {/* C2: toggle Tabel / Kalender ala segmented view */}
         <div
           className="flex overflow-hidden rounded text-sm"
-          style={{ border: "1px solid var(--n-border)" }}
+          style={{ border: "1px solid var(--border)" }}
         >
           {(["tabel", "kalender"] as const).map((v) => (
             <button
@@ -179,8 +179,8 @@ export default function Attendance() {
               onClick={() => setView(v)}
               className="px-3 py-1.5 capitalize transition-colors"
               style={{
-                backgroundColor: view === v ? "var(--n-hover)" : "transparent",
-                color: view === v ? "var(--n-text)" : "var(--n-text-muted)",
+                backgroundColor: view === v ? "var(--hover)" : "transparent",
+                color: view === v ? "var(--text)" : "var(--text-muted)",
                 fontWeight: view === v ? 500 : 400,
               }}
             >
@@ -197,10 +197,10 @@ export default function Attendance() {
       {/* C2: Kalender bulanan */}
       {view === "kalender" && (
         <div className="card">
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
             Kalender — {period.month}/{period.year}
           </h2>
-          <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             Titik warna = status kehadiran per karyawan (arahkan kursor untuk nama).
           </p>
           <div className="mt-3 grid grid-cols-7 gap-1 text-xs">
@@ -208,7 +208,7 @@ export default function Attendance() {
               <div
                 key={d}
                 className="pb-1 text-center font-semibold"
-                style={{ color: "var(--n-text-muted)" }}
+                style={{ color: "var(--text-muted)" }}
               >
                 {d}
               </div>
@@ -237,9 +237,9 @@ export default function Attendance() {
                   <div
                     key={iso}
                     className="min-h-[64px] rounded p-1"
-                    style={{ border: "1px solid var(--n-border)" }}
+                    style={{ border: "1px solid var(--border)" }}
                   >
-                    <div className="text-right text-[11px]" style={{ color: "var(--n-text-muted)" }}>
+                    <div className="text-right text-[11px]" style={{ color: "var(--text-muted)" }}>
                       {day}
                     </div>
                     <div className="flex flex-wrap gap-1 px-0.5 pt-0.5">
@@ -255,7 +255,7 @@ export default function Attendance() {
                         );
                       })}
                       {extra > 0 && (
-                        <span style={{ color: "var(--n-text-muted)" }}>+{extra}</span>
+                        <span style={{ color: "var(--text-muted)" }}>+{extra}</span>
                       )}
                     </div>
                   </div>
@@ -265,7 +265,7 @@ export default function Attendance() {
           </div>
           <div className="mt-3 flex flex-wrap gap-3 text-[11px]">
             {Object.entries(STATUS_DOT).map(([k, c]) => (
-              <span key={k} className="flex items-center gap-1" style={{ color: "var(--n-text-muted)" }}>
+              <span key={k} className="flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
                 <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
                 {STATUS_LABELS[k]}
               </span>
@@ -277,16 +277,16 @@ export default function Attendance() {
       {/* Rekap bulanan - validasi dua jalur */}
       {view === "tabel" && (
       <div className="card overflow-x-auto p-0">
-        <div className="border-b p-4" style={{ borderColor: "var(--n-border)" }}>
-          <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
             Rekap Bulanan — {period.month}/{period.year}
           </h2>
-          <p className="mt-1 text-xs" style={{ color: "var(--n-text-muted)" }}>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             Tervalidasi menjadi masukan Saltab. Jalur: internal→HR, eksternal→Ops.
           </p>
         </div>
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Karyawan</th>
               <th className="th">Jenis</th>
@@ -295,7 +295,7 @@ export default function Attendance() {
               <th className="th">Status Validasi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(summaries ?? []).map((s) => {
               const emp = empMap.get(s.employee_id);
               return (
@@ -329,7 +329,7 @@ export default function Attendance() {
             })}
             {summaries?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada rekap untuk periode ini — buat record harian dulu.
                 </td>
               </tr>
@@ -344,7 +344,7 @@ export default function Attendance() {
 
       {/* Record harian */}
       <div className="card">
-        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <h2 className="font-semibold" style={{ color: "var(--text)" }}>
           Input Manual
         </h2>
         <form onSubmit={handleManual} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
@@ -372,7 +372,7 @@ export default function Attendance() {
       </div>
 
       <div className="card">
-        <h2 className="font-semibold" style={{ color: "var(--n-text)" }}>
+        <h2 className="font-semibold" style={{ color: "var(--text)" }}>
           Impor CSV Mesin Fingerprint
         </h2>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -424,7 +424,7 @@ export default function Attendance() {
       {view === "tabel" && (
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead style={{ backgroundColor: "var(--n-hover)" }}>
+          <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Tanggal</th>
               <th className="th">Karyawan</th>
@@ -435,7 +435,7 @@ export default function Attendance() {
               <th className="th">Verifikasi</th>
             </tr>
           </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--n-border)" }}>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(records ?? []).map((r) => {
               const emp = empMap.get(r.employee_id);
               const hasVerification =
@@ -502,7 +502,7 @@ export default function Attendance() {
                         )}
                       </div>
                     ) : (
-                      <span style={{ color: "var(--n-text-muted)" }}>—</span>
+                      <span style={{ color: "var(--text-muted)" }}>—</span>
                     )}
                   </td>
                 </tr>
@@ -510,7 +510,7 @@ export default function Attendance() {
             })}
             {records?.length === 0 && (
               <tr>
-                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--n-text-muted)" }}>
+                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada record untuk periode ini.
                 </td>
               </tr>

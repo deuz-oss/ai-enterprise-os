@@ -115,7 +115,7 @@ function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
   return hits;
 }
 
-/** Command palette ala Notion: Ctrl/Cmd+K, filter, entitas, panah, Enter. */
+/** Command palette: Ctrl/Cmd+K, filter, entitas, panah, Enter. */
 export default function CommandPalette({
   open,
   onClose,
@@ -176,9 +176,9 @@ export default function CommandPalette({
       <div
         className="w-full max-w-xl overflow-hidden rounded-md"
         style={{
-          backgroundColor: "var(--n-bg-elevated)",
+          backgroundColor: "var(--bg-elevated)",
           boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
-          border: "1px solid var(--n-border)",
+          border: "1px solid var(--border)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -202,8 +202,8 @@ export default function CommandPalette({
           className="w-full px-4 py-3 text-sm focus:outline-none"
           style={{
             backgroundColor: "transparent",
-            color: "var(--n-text)",
-            borderBottom: "1px solid var(--n-border)",
+            color: "var(--text)",
+            borderBottom: "1px solid var(--border)",
           }}
         />
         <ul className="max-h-[50vh] overflow-y-auto py-1">
@@ -215,14 +215,14 @@ export default function CommandPalette({
                 className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm"
                 style={{
                   backgroundColor:
-                    i === active ? "var(--n-hover)" : "transparent",
-                  color: "var(--n-text)",
+                    i === active ? "var(--hover)" : "transparent",
+                  color: "var(--text)",
                 }}
               >
                 <span className="w-5">{item.emoji ?? "•"}</span>
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.group && (
-                  <span className="text-xs" style={{ color: "var(--n-text-muted)" }}>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                     {item.group}
                   </span>
                 )}
@@ -230,7 +230,7 @@ export default function CommandPalette({
             </li>
           ))}
           {results.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm" style={{ color: "var(--n-text-muted)" }}>
+            <li className="px-4 py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>
               Tidak ada hasil.
             </li>
           )}
@@ -238,8 +238,8 @@ export default function CommandPalette({
         <div
           className="flex items-center justify-between px-4 py-2 text-[11px]"
           style={{
-            borderTop: "1px solid var(--n-border)",
-            color: "var(--n-text-muted)",
+            borderTop: "1px solid var(--border)",
+            color: "var(--text-muted)",
           }}
         >
           <span>↑↓ navigasi · Enter buka · Esc tutup</span>

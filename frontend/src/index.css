@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   Token desain SaaS-admin bersih (arah baru menggantikan Notion-parity).
+   Token desain SaaS-admin bersih (arah baru menggantikan tema workspace lama).
    Sumber kebenaran: docs/design/mockups/dashboard.html — Inter, palet
    slate/putih, kartu rounded-xl berbatas tipis. --accent SELALU tema
    global (slate-900 terang / biru gelap), TIDAK pernah di-override per
@@ -13,26 +13,26 @@
    sidebar lewat APP_ACCENT_TOKENS di Layout.tsx, bukan lewat token ini.
    ============================================================ */
 :root {
-  --n-bg: #f8fafc;
-  --n-bg-elevated: #ffffff;
-  --n-sidebar: #ffffff;
-  --n-hover: #f1f5f9;
-  --n-border: #e2e8f0;
-  --n-text: #0f172a;
-  --n-text-muted: #64748b;
+  --bg: #f8fafc;
+  --bg-elevated: #ffffff;
+  --sidebar: #ffffff;
+  --hover: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
   /* Default aksen: slate-900 (tombol primer/nav aktif ala mockup). */
   --accent: #0f172a;
   --accent-tint: rgba(15, 23, 42, 0.08);
 }
 
 .dark {
-  --n-bg: #0b1220;
-  --n-bg-elevated: #111827;
-  --n-sidebar: #0f172a;
-  --n-hover: rgba(255, 255, 255, 0.06);
-  --n-border: rgba(255, 255, 255, 0.1);
-  --n-text: #e2e8f0;
-  --n-text-muted: #94a3b8;
+  --bg: #0b1220;
+  --bg-elevated: #111827;
+  --sidebar: #0f172a;
+  --hover: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
   --accent: #3b82f6;
   --accent-tint: rgba(59, 130, 246, 0.16);
 }
@@ -44,8 +44,8 @@ body,
 }
 
 body {
-  background-color: var(--n-bg);
-  color: var(--n-text);
+  background-color: var(--bg);
+  color: var(--text);
 }
 
 @layer components {
@@ -59,19 +59,19 @@ body {
   }
   .btn-secondary {
     @apply rounded-lg px-3 py-1.5 text-sm font-medium;
-    border: 1px solid var(--n-border);
-    background-color: var(--n-bg-elevated);
-    color: var(--n-text);
+    border: 1px solid var(--border);
+    background-color: var(--bg-elevated);
+    color: var(--text);
     transition: background-color 0.15s ease;
   }
   .btn-secondary:hover {
-    background-color: var(--n-hover);
+    background-color: var(--hover);
   }
   .input {
     @apply w-full rounded-lg px-3 py-2 text-sm focus:outline-none;
-    border: 1px solid var(--n-border);
-    background-color: var(--n-bg-elevated);
-    color: var(--n-text);
+    border: 1px solid var(--border);
+    background-color: var(--bg-elevated);
+    color: var(--text);
     transition: border-color 0.15s ease, background-color 0.15s ease;
   }
   .input:focus {
@@ -81,8 +81,8 @@ body {
   /* Kartu ala mockup dashboard.html: rounded-xl, border tipis, tanpa bayangan mencolok. */
   .card {
     @apply rounded-xl p-4;
-    border: 1px solid var(--n-border);
-    background-color: var(--n-bg-elevated);
+    border: 1px solid var(--border);
+    background-color: var(--bg-elevated);
   }
   .badge {
     @apply inline-block rounded-md px-2 py-0.5 text-xs font-medium;
@@ -120,17 +120,17 @@ body {
 
   .th {
     @apply px-3 py-2.5 text-left text-xs font-medium;
-    background-color: var(--n-hover);
-    color: var(--n-text-muted);
+    background-color: var(--hover);
+    color: var(--text-muted);
   }
   .td {
     @apply px-3 py-2.5 text-sm;
-    color: var(--n-text);
+    color: var(--text);
   }
 }
 
 /* Scrollbar tipis */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--n-border) transparent;
+  scrollbar-color: var(--border) transparent;
 }
