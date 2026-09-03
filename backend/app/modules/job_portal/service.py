@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from uuid import UUID
 
 from app.core.database import parse_uuid
 from app.core.tenancy import get_tenant, set_tenant
@@ -39,7 +40,7 @@ from app.modules.recruitment.models import (
 )
 from app.modules.recruitment.schemas import ScreeningQuestion
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 _STATUS_LABELS: dict[PlacementStatus, str] = {
@@ -192,16 +193,42 @@ async def apply_to_job_order(
     )
 
 
+def _resolve_placement_tenant(db: Session, token: str) -> UUID | None:
+    """`placements` sudah RLS-covered (beda dari ai_interview_responses/
+    payroll_run_tokens yang sengaja dikecualikan) -- lookup awal tanpa
+    tenant context akan diblokir RLS di Postgres sungguhan. Pakai fungsi
+    SQL sempit `resolve_placement_tenant()` (SECURITY DEFINER, lihat
+    migrasi c7f352d90854) yang cuma mengembalikan tenant_id, bukan bypass
+    RLS umum. SQLite (dev/test) tidak punya RLS/fungsi ini sama sekali --
+    caller query langsung, tetap benar di sana (return None)."""
+    if db.bind is None or db.bind.dialect.name != "postgresql":
+        return None
+    row = db.execute(
+        text("SELECT resolve_placement_tenant(:token) AS tenant_id"), {"token": token}
+    ).first()
+    return row.tenant_id if row is not None else None
+
+
 def get_application_status(db: Session, token: str) -> ApplicationStatusOut:
     """Tanpa tenant_slug — cari lintas-tenant dulu (konteks belum ada di
     titik ini), baru set_tenant setelah baris ditemukan."""
+    prev_tenant = get_tenant()
+    resolved_tenant = _resolve_placement_tenant(db, token)
+    if resolved_tenant is not None:
+        # Postgres+RLS: tenant sudah diketahui lewat fungsi SECURITY DEFINER
+        # di atas, set dulu supaya query di bawah lolos RLS.
+        set_tenant(resolved_tenant)
+    elif db.bind is not None and db.bind.dialect.name == "postgresql":
+        # Token tidak ditemukan sama sekali oleh fungsi resolver.
+        raise HTTPException(status_code=404, detail="Token lamaran tidak ditemukan")
+
     placement = db.execute(
         select(Placement).where(Placement.application_token == token)
     ).scalar_one_or_none()
     if placement is None:
+        set_tenant(prev_tenant)
         raise HTTPException(status_code=404, detail="Token lamaran tidak ditemukan")
 
-    prev_tenant = get_tenant()
     set_tenant(placement.tenant_id)
     try:
         candidate = db.get(Candidate, placement.candidate_id)

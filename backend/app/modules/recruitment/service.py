@@ -5,10 +5,11 @@ from datetime import UTC, date, timedelta, timezone
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import storage
-from app.core.database import parse_uuid
+from app.core.database import assert_not_referenced, parse_uuid
 from app.core.llm import ai_configured, chat_completion, embed_texts, vision_completion
 from app.modules import audit
 from app.modules.clients.models import Client
@@ -45,26 +46,62 @@ def _get_job_order(db: Session, jo_id: str) -> JobOrder:
 
 
 def _generate_request_id(db: Session) -> str:
-    """JO/{tahun}/{urutan berjalan} — ikut pola EMP-0001/INV/{tahun}/0001 yang sudah ada."""
-    count = db.scalar(select(func.count(JobOrder.id))) or 0
-    return f"JO/{date.today().year}/{count + 1:04d}"
+    """JO/{tahun}/{urutan berjalan} — ikut pola EMP-0001/INV/{tahun}/0001 yang sudah ada.
+
+    MAX-based (bukan COUNT) supaya tidak tabrakan kalau ada JO tahun ini
+    yang sudah dihapus (COUNT turun, tapi nomor tertinggi yang pernah
+    dipakai tidak). Race antar-request bersamaan tetap mungkin tanpa lock
+    -- ditangkap `UniqueConstraint("tenant_id", "request_id")` + retry di
+    `create_job_order` (temuan audit 2026-09-02, sebelumnya tidak ada
+    constraint sama sekali sehingga tabrakan sukses diam-diam)."""
+    year = date.today().year
+    prefix = f"JO/{year}/"
+    existing = db.scalars(
+        select(JobOrder.request_id).where(JobOrder.request_id.like(f"{prefix}%"))
+    ).all()
+    max_seq = 0
+    for req_id in existing:
+        if req_id is None:
+            continue
+        try:
+            max_seq = max(max_seq, int(req_id.rsplit("/", 1)[-1]))
+        except ValueError:
+            continue
+    return f"{prefix}{max_seq + 1:04d}"
 
 
 def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
     if db.get(Client, parse_uuid(payload.client_id)) is None:
         raise HTTPException(status_code=404, detail="Klien tidak ditemukan")
     data = payload.model_dump()
-    if not data.get("request_id"):
-        data["request_id"] = _generate_request_id(db)
+    auto_request_id = not data.get("request_id")
     if not data.get("request_date"):
         data["request_date"] = date.today()
     # `screening_questions` itu properti read-only (turunan JSON) di model —
     # simpan ke kolom mentahnya, bukan lewat nama atribut yang sama.
     questions = data.pop("screening_questions", None)
     data["screening_questions_json"] = json.dumps(questions) if questions else None
-    jo = JobOrder(**data)
-    db.add(jo)
-    db.commit()
+
+    # Retry kalau request_id auto-generate tabrakan (race antar-request
+    # bersamaan, MAX-based tanpa lock tetap bisa collide) -- request_id
+    # manual dari user TIDAK di-retry, tabrakan di situ harus jelas ke user
+    # (klien kirim ID yang sama dua kali = memang salah, bukan di-generate
+    # ulang diam-diam).
+    max_attempts = 5 if auto_request_id else 1
+    for attempt in range(max_attempts):
+        if auto_request_id:
+            data["request_id"] = _generate_request_id(db)
+        jo = JobOrder(**data)
+        db.add(jo)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == max_attempts - 1:
+                raise HTTPException(
+                    status_code=409, detail="Request ID job order sudah dipakai"
+                ) from None
     db.refresh(jo)
     # Fase 11: channel otomatis per job order (#jo-…)
     try:
@@ -77,14 +114,26 @@ def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
 
 
 def list_job_orders(
-    db: Session, client_id: str | None = None, status: JobOrderStatus | None = None
-) -> list[JobOrder]:
+    db: Session,
+    client_id: str | None = None,
+    status: JobOrderStatus | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[JobOrder], int]:
+    """`limit` default 200 -- sebelumnya TANPA batas sama sekali (temuan
+    audit performa 2026-09-02: endpoint list mengembalikan seluruh tabel).
+    200 dipilih supaya tidak memutus alur yang sudah ada sekarang (data
+    dev/demo jauh di bawah itu) sambil tetap membatasi query kalau tabel
+    membesar -- bukan solusi pagination penuh (itu pekerjaan UI terpisah),
+    cuma jaring pengaman di query."""
     stmt = select(JobOrder).order_by(JobOrder.created_at.desc())
     if client_id:
         stmt = stmt.where(JobOrder.client_id == parse_uuid(client_id))
     if status is not None:
         stmt = stmt.where(JobOrder.status == status)
-    return list(db.execute(stmt).scalars())
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
+    return rows, total
 
 
 def list_stale_job_orders(db: Session) -> list[JobOrder]:
@@ -116,6 +165,7 @@ def update_job_order(db: Session, jo_id: str, payload: JobOrderUpdate) -> JobOrd
 
 def delete_job_order(db: Session, jo_id: str) -> None:
     jo = _get_job_order(db, jo_id)
+    assert_not_referenced(db, "job_orders", jo.id, "Job order")
     db.delete(jo)
     db.commit()
 
@@ -315,14 +365,24 @@ async def upload_cv(db: Session, candidate_id: str, file: UploadFile) -> Candida
 
 
 def list_candidates(
-    db: Session, status: CandidateStatus | None = None, q: str | None = None
-) -> list[Candidate]:
+    db: Session,
+    status: CandidateStatus | None = None,
+    q: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[Candidate], int]:
+    """`limit` default 200 -- temuan audit performa 2026-09-02: sebelumnya
+    tanpa batas, dan tabel ini yang paling berisiko (teardown MyOHRIS
+    menunjukkan skala nyata 95 ribu kandidat). Gunakan `q` (search) untuk
+    UI seperti dropdown pemilihan kandidat, bukan andalkan limit tinggi."""
     stmt = select(Candidate).order_by(Candidate.created_at.desc())
     if status is not None:
         stmt = stmt.where(Candidate.status == status)
     if q:
         stmt = stmt.where(Candidate.full_name.ilike(f"%{q}%"))
-    return list(db.execute(stmt).scalars())
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
+    return rows, total
 
 
 def get_candidate(db: Session, candidate_id: str) -> Candidate:
@@ -340,6 +400,7 @@ def update_candidate(db: Session, candidate_id: str, payload: CandidateUpdate) -
 
 def delete_candidate(db: Session, candidate_id: str) -> None:
     candidate = _get_candidate(db, candidate_id)
+    assert_not_referenced(db, "candidates", candidate.id, "Kandidat")
     db.delete(candidate)
     db.commit()
 

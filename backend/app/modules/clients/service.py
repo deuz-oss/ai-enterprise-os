@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import storage
-from app.core.database import parse_uuid
+from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
 from app.modules.clients.models import Client, DocumentType, LegalDocument
 from app.modules.clients.schemas import ClientCreate, ClientUpdate
@@ -46,6 +46,7 @@ def update_client(db: Session, client_id: str, payload: ClientUpdate) -> Client:
 
 def delete_client(db: Session, client_id: str) -> None:
     client = _get(db, client_id)
+    assert_not_referenced(db, "clients", client.id, "Klien")
     db.delete(client)
     db.commit()
 

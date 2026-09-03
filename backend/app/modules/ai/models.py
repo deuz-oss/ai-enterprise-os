@@ -46,8 +46,8 @@ class AIScreening(TenantMixin, Base):
     model: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    candidate = relationship("Candidate", lazy="joined")
-    job_order = relationship("JobOrder", lazy="joined")
+    candidate = relationship("Candidate", lazy="selectin")
+    job_order = relationship("JobOrder", lazy="selectin")
 
     @property
     def strengths(self) -> list[str]:

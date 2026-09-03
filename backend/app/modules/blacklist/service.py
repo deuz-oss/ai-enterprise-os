@@ -19,10 +19,14 @@ from sqlalchemy.orm import Session
 _ACTIVE_STATUSES = (BlacklistStatus.pending, BlacklistStatus.approved)
 
 
-def _to_out(db: Session, entry: BlacklistEntry) -> BlacklistEntryOut:
-    candidate = db.get(Candidate, entry.candidate_id)
-    requester = db.get(User, entry.requested_by) if entry.requested_by else None
-    reviewer = db.get(User, entry.reviewed_by) if entry.reviewed_by else None
+def _to_out(
+    entry: BlacklistEntry,
+    candidates: dict[UUID, Candidate],
+    users: dict[UUID, User],
+) -> BlacklistEntryOut:
+    candidate = candidates.get(entry.candidate_id)
+    requester = users.get(entry.requested_by) if entry.requested_by else None
+    reviewer = users.get(entry.reviewed_by) if entry.reviewed_by else None
     return BlacklistEntryOut(
         id=entry.id,
         candidate_id=entry.candidate_id,
@@ -37,6 +41,30 @@ def _to_out(db: Session, entry: BlacklistEntry) -> BlacklistEntryOut:
         reviewed_at=entry.reviewed_at,
         review_notes=entry.review_notes,
     )
+
+
+def _to_out_many(db: Session, entries: list[BlacklistEntry]) -> list[BlacklistEntryOut]:
+    """Batch-fetch candidate/user sekali per kelompok, bukan 3 query per
+    baris (N+1 -- temuan audit 2026-09-02, terasa begitu daftar blacklist
+    membesar). `1 + 2` query total untuk berapa pun banyak `entries`."""
+    candidate_ids = {e.candidate_id for e in entries}
+    user_ids = {e.requested_by for e in entries if e.requested_by} | {
+        e.reviewed_by for e in entries if e.reviewed_by
+    }
+    candidates = (
+        {
+            c.id: c
+            for c in db.execute(select(Candidate).where(Candidate.id.in_(candidate_ids))).scalars()
+        }
+        if candidate_ids
+        else {}
+    )
+    users = (
+        {u.id: u for u in db.execute(select(User).where(User.id.in_(user_ids))).scalars()}
+        if user_ids
+        else {}
+    )
+    return [_to_out(e, candidates, users) for e in entries]
 
 
 def request_blacklist(
@@ -73,15 +101,15 @@ def request_blacklist(
         entity_id=candidate_id,
         detail={"blacklist_entry_id": str(entry.id), "reason": reason},
     )
-    return _to_out(db, entry)
+    return _to_out_many(db, [entry])[0]
 
 
 def list_entries(db: Session, status: BlacklistStatus | None = None) -> list[BlacklistEntryOut]:
     stmt = select(BlacklistEntry).order_by(BlacklistEntry.requested_at.desc())
     if status is not None:
         stmt = stmt.where(BlacklistEntry.status == status)
-    entries = db.execute(stmt).scalars().all()
-    return [_to_out(db, entry) for entry in entries]
+    entries = list(db.execute(stmt).scalars().all())
+    return _to_out_many(db, entries)
 
 
 def review_entry(
@@ -118,4 +146,4 @@ def review_entry(
         entity_id=entry.candidate_id,
         detail={"blacklist_entry_id": str(entry.id), "notes": notes},
     )
-    return _to_out(db, entry)
+    return _to_out_many(db, [entry])[0]

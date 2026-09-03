@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -41,11 +41,18 @@ router = APIRouter(
 
 @router.get("/job-orders", response_model=list[JobOrderOut])
 def list_job_orders(
+    response: Response,
     client_id: str | None = None,
     jo_status: JobOrderStatus | None = None,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return service.list_job_orders(db, client_id=client_id, status=jo_status)
+    rows, total = service.list_job_orders(
+        db, client_id=client_id, status=jo_status, limit=limit, offset=offset
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @router.post("/job-orders", response_model=JobOrderOut, status_code=status.HTTP_201_CREATED)
@@ -92,11 +99,18 @@ def delete_job_order(jo_id: str, db: Session = Depends(get_db)):
 
 @router.get("/candidates", response_model=list[CandidateOut])
 def list_candidates(
+    response: Response,
     candidate_status: CandidateStatus | None = None,
     q: str | None = Query(None, max_length=100),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return service.list_candidates(db, status=candidate_status, q=q)
+    rows, total = service.list_candidates(
+        db, status=candidate_status, q=q, limit=limit, offset=offset
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @router.post("/candidates", response_model=CandidateOut, status_code=status.HTTP_201_CREATED)

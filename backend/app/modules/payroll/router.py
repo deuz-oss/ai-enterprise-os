@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permissions import PAYROLL_ROLES
+from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_any_licensed_app, require_roles
+from app.core.tenancy import get_request_meta
 from app.modules.payroll import service
 from app.modules.payroll.schemas import (
     AttendanceOut,
@@ -217,10 +219,33 @@ def tax_preview(payload: TaxPreviewIn, db: Session = Depends(get_db)):
 
 public_router = APIRouter(prefix="/payroll/client", tags=["payroll-client"])
 
+# Entropi token (secrets.token_urlsafe(24)) sudah membuat brute-force tidak
+# praktis, tapi endpoint publik & mutating tetap wajib rate-limited -- pola
+# sama seperti ai_interview/router.py::_check_rate_limit.
+_CLIENT_RATE_MAX = 30
+_CLIENT_RATE_WINDOW_SEC = 3600
+
+
+def _check_rate_limit(db: Session) -> None:
+    ip, _ = get_request_meta()
+    limiter = get_limiter("payroll_client_token")
+    key = ip or "unknown"
+    allowed, retry_after = limiter.check(
+        db, key, max_attempts=_CLIENT_RATE_MAX, window_seconds=_CLIENT_RATE_WINDOW_SEC
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Terlalu banyak percobaan dari lokasi ini. Coba lagi nanti.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    limiter.hit(db, key, window_seconds=_CLIENT_RATE_WINDOW_SEC)
+
 
 @public_router.get("/{token}")
 def client_view(token: str, db: Session = Depends(get_db)):
     """Ringkasan payrol proyek untuk klien (read-only)."""
+    _check_rate_limit(db)
     return service.client_view(db, token)
 
 
@@ -231,4 +256,5 @@ def client_decision(
     db: Session = Depends(get_db),
 ):
     """Rekam keputusan klien: setujui / tolak dengan nama & catatan."""
+    _check_rate_limit(db)
     return service.decide_by_token(db, token, payload.approved, payload.name, payload.note)

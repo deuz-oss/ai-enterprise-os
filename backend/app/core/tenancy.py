@@ -20,7 +20,7 @@ from contextvars import ContextVar
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, event, text
+from sqlalchemy import ForeignKey, event
 from sqlalchemy.orm import (
     Mapped,
     Session,
@@ -104,27 +104,51 @@ def tenant_from_token(token: str) -> UUID | None:
 def install_tenancy_listeners() -> None:
     """Pasang listener sekali untuk semua Session (termasuk session test)."""
 
-    @event.listens_for(Session, "after_transaction_create")
-    def _set_pg_rls_tenant(session: Session, transaction):
-        """PostgreSQL RLS lapis kedua: set app.current_tenant per transaksi.
+    # PostgreSQL RLS lapis kedua: set app.current_tenant sebelum TIAP
+    # statement (bukan cuma sekali per transaksi -- lihat catatan kejujuran
+    # di bawah kenapa itu tidak cukup), di level Core (`before_cursor_execute`)
+    # supaya berlaku untuk ORM select/insert/update/delete DAN raw SQL sama
+    # rata. Engine-level (bukan Session-level) karena butuh akses cursor
+    # mentah langsung -- lihat komentar performa di bawah.
+    #
+    # CATATAN KEJUJURAN (ditemukan lewat bug produksi nyata, bukan teori):
+    # versi awal fungsi ini pakai `after_transaction_create` (sekali per
+    # transaksi). Itu SALAH untuk pola yang sudah lama dipakai di codebase
+    # ini: banyak fungsi query sesuatu dulu (mis. cari Tenant by slug) BARU
+    # panggil `set_tenant()` setelah baris ditemukan, semua dalam transaksi
+    # yang SAMA (tanpa commit di antaranya). `after_transaction_create` sudah
+    # kadung fire di query pertama (tenant masih None/lama saat itu) --
+    # statement BERIKUTNYA di transaksi yang sama tidak pernah dapat
+    # kesempatan menyetel ulang config, walau `set_tenant()` sudah dipanggil
+    # dengan benar sebelum statement itu. Konkret: `platform/service.py::
+    # get_or_create_default_tenant()` query Tenant dulu, baru `ensure_coa()`
+    # (yang panggil `set_tenant()`) menulis Account -- INSERT itu gagal
+    # "new row violates row-level security policy" begitu RLS+FORCE
+    # sungguhan aktif, karena config sudah telanjur ke-lock ke transaksi
+    # sebelum tenant diketahui. Ditemukan saat backend gagal start sama
+    # sekali sesudah RLS diperluas (lihat migrasi g8h9i0j1k2l3).
+    from app.core.database import engine as _engine
 
-        Kebijakan RLS (dibuat migrasi) membandingkan tenant_id baris dengan
-        setting ini; set_config(..., true) = berlaku hanya untuk transaksi
-        sehingga koneksi pooled otomatis bersih setelah commit/rollback.
-        SQLite (dev/test) tidak punya RLS — dilewati.
-        """
-        if transaction.parent is not None:
-            return  # savepoint mewarisi setting transaksi induk
-        bind = session.get_bind()
-        if bind.dialect.name != "postgresql":
+    @event.listens_for(_engine, "before_cursor_execute")
+    def _sync_pg_rls_tenant(conn, cursor, statement, parameters, context, executemany):
+        if conn.dialect.name != "postgresql":
             return
         tid = get_tenant()
-        # Session.connection() (bukan transaction.connection, yang di SQLAlchemy
-        # 2.0 adalah method butuh bindkey Mapper, bukan atribut Connection).
-        session.connection().execute(
-            text("SELECT set_config('app.current_tenant', :v, true)"),
-            {"v": str(tid) if tid else ""},
-        )
+        current = str(tid) if tid else ""
+        # SENGAJA TANPA cache/skip -- versi awal fungsi ini pakai
+        # `conn.info` untuk skip SET kalau tenant "belum berubah sejak
+        # statement sebelumnya di koneksi yang sama". Itu SALAH dan
+        # ketahuan lewat bug produksi nyata: `GET /job-orders` FLAKY
+        # (kadang 200 dgn 21 baris, kadang 200 dgn array kosong) --
+        # `conn.info` (Python-side, di proses ini) dan session-level
+        # `app.current_tenant` di Postgres (server-side, per physical
+        # connection) TERNYATA tidak selalu sinkron satu sama lain begitu
+        # connection pool + `--workers 2` terlibat; asumsi "aman di-cache"
+        # tidak terbukti benar. Set TANPA SYARAT di sini -- satu extra
+        # `SET` per statement, tapi tenant isolation adalah properti
+        # keamanan yang TIDAK BOLEH bergantung pada optimisasi yang
+        # asumsinya sendiri belum benar-benar diverifikasi.
+        cursor.execute("SELECT set_config('app.current_tenant', %s, false)", (current,))
 
     @event.listens_for(Session, "do_orm_execute")
     def _add_tenant_filter(execute_state: ORMExecuteState) -> None:

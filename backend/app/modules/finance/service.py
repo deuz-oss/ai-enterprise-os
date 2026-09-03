@@ -759,13 +759,19 @@ def list_payment_requests(
     db: Session,
     status: PaymentRequestStatus | None = None,
     pr_type: str | None = None,
-) -> list[PaymentRequest]:
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[PaymentRequest], int]:
+    """`limit` default 200, pola sama seperti `recruitment.list_candidates`
+    (Batch 1c)."""
     stmt = select(PaymentRequest).order_by(PaymentRequest.created_at.desc())
     if status is not None:
         stmt = stmt.where(PaymentRequest.status == status)
     if pr_type:
         stmt = stmt.where(PaymentRequest.pr_type == pr_type)
-    return list(db.execute(stmt).scalars())
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
+    return rows, total
 
 
 # ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
@@ -972,9 +978,13 @@ def list_payment_requests_detail(
     db: Session,
     status: PaymentRequestStatus | None = None,
     pr_type: str | None = None,
-) -> list[dict]:
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
     """Daftar PR + progres rantai approval per baris."""
-    rows = list_payment_requests(db, status=status, pr_type=pr_type)
+    rows, total = list_payment_requests(
+        db, status=status, pr_type=pr_type, limit=limit, offset=offset
+    )
     steps_cache: dict = {}
     result: list[dict] = []
     for p in rows:
@@ -994,4 +1004,4 @@ def list_payment_requests_detail(
                 "progress": _pr_progress(db, p, steps_cache[p.tenant_id]),
             }
         )
-    return result
+    return result, total

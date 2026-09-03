@@ -39,11 +39,16 @@ router = APIRouter(
 
 @router.get("", response_model=list[EmployeeOut])
 def list_employees(
+    response: Response,
     q: str | None = Query(None, max_length=100),
     status_filter: EmployeeStatus | None = Query(None, alias="status"),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return service.list_employees(db, q=q, status=status_filter)
+    rows, total = service.list_employees(db, q=q, status=status_filter, limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @router.post("", response_model=EmployeeOut, status_code=status.HTTP_201_CREATED)

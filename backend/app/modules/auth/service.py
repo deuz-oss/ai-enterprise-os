@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, verify_and_update_password, verify_password
 from app.modules.auth.models import PasswordResetToken, User
 from app.modules.auth.schemas import UserCreate
 
@@ -63,8 +63,14 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
     user = users[0] if users else None
     if user is None or not user.is_active:
         return None
-    if not verify_password(password, user.hashed_password):
+    ok, new_hash = verify_and_update_password(password, user.hashed_password)
+    if not ok:
         return None
+    if new_hash is not None:
+        # Hash lama pakai parameter usang (mis. rounds rendah) -- simpan
+        # ulang dengan parameter saat ini, transparan bagi user.
+        user.hashed_password = new_hash
+        db.commit()
     return user
 
 

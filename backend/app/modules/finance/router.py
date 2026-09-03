@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -46,11 +46,18 @@ pr_router = APIRouter(
 
 @pr_router.get("")
 def list_payment_requests(
+    response: Response,
     status_filter: PaymentRequestStatus | None = Query(None, alias="status"),
     pr_type: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return service.list_payment_requests_detail(db, status=status_filter, pr_type=pr_type)
+    rows, total = service.list_payment_requests_detail(
+        db, status=status_filter, pr_type=pr_type, limit=limit, offset=offset
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @pr_router.get("/approval-chain")

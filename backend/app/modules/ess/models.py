@@ -59,7 +59,7 @@ class AttendanceCorrection(TenantMixin, Base):
     decision_note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    employee = relationship("Employee", lazy="joined")
+    employee = relationship("Employee", lazy="selectin")
 
 
 class LeaveRequest(TenantMixin, Base):
@@ -94,7 +94,7 @@ class LeaveRequest(TenantMixin, Base):
     file_size: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    employee = relationship("Employee", lazy="joined")
+    employee = relationship("Employee", lazy="selectin")
 
 
 class LeaveBalance(TenantMixin, Base):

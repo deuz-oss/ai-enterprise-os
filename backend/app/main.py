@@ -41,6 +41,12 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Header kustom (bukan header "simple" bawaan CORS) harus di-expose
+        # eksplisit atau browser diam-diam menyembunyikannya dari JS di
+        # request cross-origin -- ketahuan saat X-Total-Count (Batch 1c,
+        # pagination /candidates & /job-orders) selalu null di frontend
+        # meski response header-nya benar (dicek via curl/proxy same-origin).
+        expose_headers=["X-Total-Count"],
     )
 
     from app.modules.accounting.router import router as accounting_router

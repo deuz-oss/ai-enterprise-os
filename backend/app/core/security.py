@@ -13,7 +13,13 @@ from app.core.database import get_db
 
 settings = get_settings()
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# 600k rounds = rekomendasi OWASP saat ini utk PBKDF2-HMAC-SHA256 (sebelumnya
+# default passlib ~29k, ~20x lebih murah untuk di-brute-force offline kalau
+# dump DB bocor). deprecated="auto" -- hash lama otomatis di-rehash saat
+# verify_password() berikutnya berhasil, tanpa migrasi data.
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256"], pbkdf2_sha256__rounds=600_000, deprecated="auto"
+)
 bearer_scheme = HTTPBearer(auto_error=False)
 
 ALGORITHM = "HS256"
@@ -25,6 +31,17 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def verify_and_update_password(plain: str, hashed: str) -> tuple[bool, str | None]:
+    """Verifikasi, dan kalau hash lama pakai parameter usang (mis. rounds
+    rendah sebelum diperketat ke 600k), kembalikan hash baru untuk disimpan
+    ulang oleh caller. `new_hash` None berarti tidak perlu update."""
+    try:
+        ok, new_hash = pwd_context.verify_and_update(plain, hashed)
+    except ValueError:
+        return False, None
+    return ok, new_hash
 
 
 def create_access_token(subject: str, tenant_id: UUID | None = None) -> str:

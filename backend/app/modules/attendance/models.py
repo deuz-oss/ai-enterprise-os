@@ -64,7 +64,7 @@ class AttendanceRecord(TenantMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    employee = relationship("Employee", lazy="joined")
+    employee = relationship("Employee", lazy="selectin")
 
     @property
     def has_clock_in_selfie(self) -> bool:

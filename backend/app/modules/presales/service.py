@@ -31,13 +31,19 @@ def list_leads(
     db: Session,
     stage: LeadStage | None = None,
     q: str | None = None,
-) -> list[Lead]:
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[Lead], int]:
+    """`limit` default 200, pola sama seperti `recruitment.list_candidates`
+    (Batch 1c)."""
     stmt = select(Lead).order_by(Lead.created_at.desc())
     if stage is not None:
         stmt = stmt.where(Lead.stage == stage)
     if q:
         stmt = stmt.where(Lead.company_name.ilike(f"%{q}%"))
-    return list(db.execute(stmt).scalars())
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
+    return rows, total
 
 
 def get_lead(db: Session, lead_id: str) -> Lead:

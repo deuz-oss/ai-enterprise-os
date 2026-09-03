@@ -96,7 +96,7 @@ class Invoice(TenantMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    client = relationship("Client", lazy="joined")
+    client = relationship("Client", lazy="selectin")
 
 
 class CashFlowDirection(str, enum.Enum):

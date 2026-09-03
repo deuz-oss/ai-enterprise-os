@@ -114,7 +114,7 @@ class JournalEntry(TenantMixin, Base):
         back_populates="entry",
         cascade="all, delete-orphan",
         order_by="JournalLine.account_code",
-        lazy="joined",
+        lazy="selectin",
     )
 
 

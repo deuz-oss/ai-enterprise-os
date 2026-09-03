@@ -7,10 +7,19 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Role aplikasi terpisah dari pemilik skema -- tanpa ini, RLS di
+      # backend/alembic/versions/*rls*.py TIDAK berlaku sama sekali, karena
+      # role pemilik tabel (dan superuser) SELALU melewati Postgres RLS
+      # terlepas dari kebijakan yang dibuat. `postgres` di sini adalah
+      # bootstrap superuser -- hanya dipakai migrasi (ALEMBIC_DATABASE_URL
+      # di service `backend`), bukan runtime app.
+      APP_DB_USER: ${APP_DB_USER:-aeos_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./deploy/pg:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -39,7 +48,11 @@ services:
     env_file: .env
     environment:
       APP_ENV: production
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Runtime memakai role terbatas aeos_app (bukan pemilik tabel -> RLS
+      # berlaku); migrasi (DDL) tetap lewat role pemilik skema, lihat
+      # ALEMBIC_DATABASE_URL. Pola sama persis docker-compose.prod.yml.
+      DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-aeos_app}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       STORAGE_ENDPOINT: http://minio:9000
     depends_on:
       postgres:

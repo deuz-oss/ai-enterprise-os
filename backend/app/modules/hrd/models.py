@@ -173,6 +173,9 @@ class EmploymentContract(TenantMixin, Base):
     """Kontrak kerja karyawan beserta status tanda tangan dan filenya."""
 
     __tablename__ = "employment_contracts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "contract_no", name="uq_contract_tenant_contract_no"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)

@@ -120,6 +120,9 @@ class InterviewSchedule(TenantMixin, Base):
 
 class JobOrder(TenantMixin, Base):
     __tablename__ = "job_orders"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="uq_job_order_tenant_request_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), index=True)
@@ -131,6 +134,19 @@ class JobOrder(TenantMixin, Base):
     salary_max: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
     due_date: Mapped[date | None] = mapped_column(Date, default=None)
     status: Mapped[JobOrderStatus] = mapped_column(
+        # SENGAJA TANPA values_callable, JANGAN ditambah tanpa migrasi data
+        # dulu. Sempat dicoba (2026-09-02) mengikuti pola business_status di
+        # bawah karena JobOrderStatus.interview="interview_klien" (nama !=
+        # nilai) terlihat seperti kelas bug yang sama -- ternyata SALAH:
+        # baris JobOrder yang sudah ada di Postgres tersimpan berbasis NAMA
+        # ("interview", bukan "interview_klien"), karena itu memang
+        # perilaku default SQLAlchemy Enum(native_enum=False) selama ini.
+        # Menambah values_callable membuat baris lama itu gagal dibaca
+        # (`LookupError: 'interview' is not among the defined enum values`)
+        # -- ketahuan langsung lewat verifikasi Docker+Postgres nyata,
+        # sebelum sempat commit. Kalau suatu saat benar-benar mau
+        # values_callable di sini, WAJIB dibarengi migrasi UPDATE data
+        # (name->value) di baris lama dulu, bukan cuma ubah kolom model.
         Enum(JobOrderStatus, native_enum=False, length=50),
         default=JobOrderStatus.open,
         index=True,
@@ -174,7 +190,7 @@ class JobOrder(TenantMixin, Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    client = relationship("Client", lazy="joined")
+    client = relationship("Client", lazy="selectin")
     placements: Mapped[list["Placement"]] = relationship(back_populates="job_order")
 
     @property
@@ -258,5 +274,5 @@ class Placement(TenantMixin, Base):
     screening_answers: Mapped[str | None] = mapped_column(Text, default=None)  # JSON
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    candidate = relationship("Candidate", lazy="joined")
-    job_order = relationship("JobOrder", back_populates="placements", lazy="joined")
+    candidate = relationship("Candidate", lazy="selectin")
+    job_order = relationship("JobOrder", back_populates="placements", lazy="selectin")

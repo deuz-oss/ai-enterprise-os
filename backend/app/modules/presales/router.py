@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -25,11 +25,16 @@ router = APIRouter(
 
 @router.get("", response_model=list[LeadOut])
 def list_leads(
+    response: Response,
     stage: LeadStage | None = None,
     q: str | None = Query(None, max_length=100),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return service.list_leads(db, stage=stage, q=q)
+    rows, total = service.list_leads(db, stage=stage, q=q, limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return rows
 
 
 @router.get("/funnel", response_model=FunnelStats)

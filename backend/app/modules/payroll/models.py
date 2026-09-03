@@ -57,7 +57,7 @@ class AttendanceSummary(TenantMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    employee = relationship("Employee", lazy="joined")
+    employee = relationship("Employee", lazy="selectin")
 
 
 class PayrollRun(TenantMixin, Base):
@@ -99,7 +99,7 @@ class PayrollRun(TenantMixin, Base):
     slips: Mapped[list["Payslip"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
-    client = relationship("Client", lazy="joined")
+    client = relationship("Client", lazy="selectin")
 
 
 class PayslipComponentType(str, enum.Enum):
@@ -176,7 +176,7 @@ class Payslip(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     run = relationship("PayrollRun", back_populates="slips")
-    employee = relationship("Employee", lazy="joined")
+    employee = relationship("Employee", lazy="selectin")
     components: Mapped[list["PayslipComponent"]] = relationship(
         back_populates="payslip",
         cascade="all, delete-orphan",

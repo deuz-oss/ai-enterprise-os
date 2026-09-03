@@ -3,10 +3,11 @@ from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import storage
-from app.core.database import parse_uuid
+from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
 from app.modules.hrd.models import (
     ContractSignStatus,
@@ -73,8 +74,14 @@ def create_employee(db: Session, payload: EmployeeCreate) -> Employee:
 
 
 def list_employees(
-    db: Session, q: str | None = None, status: EmployeeStatus | None = None
-) -> list[Employee]:
+    db: Session,
+    q: str | None = None,
+    status: EmployeeStatus | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> tuple[list[Employee], int]:
+    """`limit` default 200, pola sama seperti `recruitment.list_candidates`
+    (Batch 1c) -- cegah query tak terbatas begitu jumlah karyawan bertambah."""
     stmt = select(Employee).order_by(Employee.created_at.desc())
     if status is not None:
         stmt = stmt.where(Employee.status == status)
@@ -82,7 +89,9 @@ def list_employees(
         stmt = stmt.where(
             (Employee.full_name.ilike(f"%{q}%")) | (Employee.employee_no.ilike(f"%{q}%"))
         )
-    return list(db.execute(stmt).scalars())
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
+    return rows, total
 
 
 def get_employee(db: Session, employee_id: str) -> Employee:
@@ -148,6 +157,7 @@ def _resolve_linked_user(db: Session, employee: Employee, user_id: UUID | None) 
 
 def delete_employee(db: Session, employee_id: str) -> None:
     employee = _get_employee(db, employee_id)
+    assert_not_referenced(db, "employees", employee.id, "Karyawan")
     db.delete(employee)
     db.commit()
 
@@ -198,15 +208,24 @@ def _get_contract(db: Session, contract_id: str) -> EmploymentContract:
 
 
 def _generate_contract_no(db: Session, employee: Employee) -> str:
-    seq = (
-        db.scalar(
-            select(func.count(EmploymentContract.id)).where(
-                EmploymentContract.employee_id == employee.id
-            )
+    """MAX-based (bukan COUNT) + retry di caller -- pola sama seperti
+    `recruitment/service.py::_generate_request_id` (temuan audit
+    2026-09-02: sebelumnya tidak ada UniqueConstraint sama sekali di
+    `contract_no`, tabrakan sukses tersimpan diam-diam)."""
+    prefix = f"KON/{employee.employee_no}/"
+    existing = db.scalars(
+        select(EmploymentContract.contract_no).where(
+            EmploymentContract.employee_id == employee.id,
+            EmploymentContract.contract_no.like(f"{prefix}%"),
         )
-        or 0
-    )
-    return f"KON/{employee.employee_no}/{seq + 1:02d}"
+    ).all()
+    max_seq = 0
+    for no in existing:
+        try:
+            max_seq = max(max_seq, int(no.rsplit("/", 1)[-1]))
+        except ValueError:
+            continue
+    return f"{prefix}{max_seq + 1:02d}"
 
 
 def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> EmploymentContract:
@@ -214,11 +233,21 @@ def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> E
     data = payload.model_dump()
     if data.get("start_date") and data.get("end_date") and data["end_date"] < data["start_date"]:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
-    if not (data.get("contract_no") or "").strip():
-        data["contract_no"] = _generate_contract_no(db, employee)
-    contract = EmploymentContract(employee_id=employee.id, **data)
-    db.add(contract)
-    db.commit()
+    auto_no = not (data.get("contract_no") or "").strip()
+
+    max_attempts = 5 if auto_no else 1
+    for attempt in range(max_attempts):
+        if auto_no:
+            data["contract_no"] = _generate_contract_no(db, employee)
+        contract = EmploymentContract(employee_id=employee.id, **data)
+        db.add(contract)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == max_attempts - 1:
+                raise HTTPException(status_code=409, detail="Nomor kontrak sudah dipakai") from None
     db.refresh(contract)
     return contract
 
