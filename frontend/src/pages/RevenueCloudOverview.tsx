@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  BarChart3,
   Clock,
   FileCheck,
   Percent,
@@ -143,6 +144,7 @@ export default function RevenueCloudOverview() {
   });
 
   const canSeeActivity = me.data?.role === "admin" || me.data?.role === "management";
+  const canSeeRates = ["admin", "finance", "management"].includes(me.data?.role ?? "");
   const auditInvoice = useQuery({
     queryKey: ["audit-activity-rev", "invoice"],
     queryFn: () => api.get<{ total: number; items: AuditItem[] }>("/audit/logs?entity_type=invoice&limit=5"),
@@ -438,6 +440,27 @@ export default function RevenueCloudOverview() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Akunting */}
+        <div className="card space-y-2">
+          <div className="flex items-center gap-2">
+            <IconBadge icon={BarChart3} tone="accent" />
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Akunting</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Jurnal, aset tetap, kas & bank, laporan + AI
+              </p>
+            </div>
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Bagan akun dinamis, tutup buku per periode, neraca, buku besar, dan asisten AI
+            (checklist tutup buku, deteksi anomali, ringkasan eksekutif).
+          </p>
+          <SeeAllLink to="/accounting">Buka Akunting →</SeeAllLink>
+          {canSeeRates && <SeeAllLink to="/rates">Tarif & Rate →</SeeAllLink>}
+        </div>
       </div>
     </div>
   );

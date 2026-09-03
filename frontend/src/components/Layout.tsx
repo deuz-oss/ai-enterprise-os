@@ -177,14 +177,14 @@ const NAV_ITEMS: NavItem[] = [
     end: true,
     bundleLanding: true,
   },
-  { to: "/accounting", label: "Akunting", app: "accounting", bundle: "govern" },
+  { to: "/accounting", label: "Akunting", app: "accounting", bundle: "revenue" },
   // Kelola rate ber-versi — role finance ke atas.
   {
     to: "/rates",
     label: "Tarif & Rate",
     roles: ["admin", "finance", "management"],
     app: "accounting",
-    bundle: "govern",
+    bundle: "revenue",
   },
   // Jejak audit sensitif — disembunyikan dari role non-management.
   { to: "/audit", label: "Audit", roles: ["admin", "management"], bundle: "govern" },
