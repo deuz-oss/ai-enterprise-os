@@ -1,7 +1,8 @@
+import json
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.modules.hrd.models import (
     ContractSignStatus,
@@ -9,6 +10,8 @@ from app.modules.hrd.models import (
     EmploymentType,
     HrDocumentType,
     MaritalStatus,
+    MovementType,
+    WarningLetterType,
 )
 
 
@@ -30,6 +33,13 @@ class EmployeeCreate(BaseModel):
     base_salary: float = 0
     jkk_risk_category: int | None = None
     employment_type: EmploymentType = EmploymentType.eksternal
+    grade: str | None = None
+    level: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_phone: str | None = None
+    citizen_address: dict = {}
+    residential_address: dict = {}
 
 
 class EmployeeUpdate(BaseModel):
@@ -56,6 +66,13 @@ class EmployeeUpdate(BaseModel):
     bpjs_ketenagakerjaan_status: str | None = None
     bpjs_kesehatan_valid_until: date | None = None
     bpjs_ketenagakerjaan_valid_until: date | None = None
+    grade: str | None = None
+    level: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_phone: str | None = None
+    citizen_address: dict | None = None
+    residential_address: dict | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -87,6 +104,16 @@ class EmployeeOut(BaseModel):
     bpjs_ketenagakerjaan_valid_until: date | None = None
     bpjs_kesehatan_card_key: str | None = None
     bpjs_ketenagakerjaan_card_key: str | None = None
+    grade: str | None = None
+    level: str | None = None
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_phone: str | None = None
+    citizen_address: dict = {}
+    residential_address: dict = {}
+    payroll_locked: bool = False
+    payroll_locked_at: datetime | None = None
+    referral_code: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -162,7 +189,56 @@ class ContractOut(BaseModel):
     mime_type: str | None
     file_size: int
     notes: str | None
+    template_id: UUID | None = None
     created_at: datetime
+
+
+class ContractTemplateFieldDef(BaseModel):
+    """Satu baris `field_schema` template kontrak karyawan -- Fase 25.
+
+    `type="list"` (+ `list_style`) BARU dari sini, belum ada di
+    `presales.TemplateFieldDef` -- klausul kontrak bernomor/alfabet
+    (mis. job description), item bisa tambah/hapus di UI."""
+
+    key: str
+    label: str
+    type: str = "text"  # text | textarea | number | date | list
+    list_style: str = "numeric"  # numeric | alpha -- dipakai kalau type == "list"
+
+
+class EmploymentContractTemplateCreate(BaseModel):
+    name: str
+    field_schema: list[ContractTemplateFieldDef]
+    footer_text: str | None = None
+
+
+class EmploymentContractTemplateUpdate(BaseModel):
+    name: str | None = None
+    field_schema: list[ContractTemplateFieldDef] | None = None
+    footer_text: str | None = None
+    is_active: bool | None = None
+
+
+class EmploymentContractTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    field_schema: list[ContractTemplateFieldDef]
+    footer_text: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("field_schema", mode="before")
+    @classmethod
+    def _parse_field_schema(cls, v: object) -> object:
+        return json.loads(v) if isinstance(v, str) else v
+
+
+class ContractGenerateDocumentIn(BaseModel):
+    template_id: UUID
+    field_values: dict = {}
 
 
 class ContractExpiringOut(BaseModel):
@@ -190,3 +266,79 @@ class DocumentOut(BaseModel):
     file_size: int
     notes: str | None
     uploaded_at: datetime
+
+
+class WarningLetterCreate(BaseModel):
+    letter_type: WarningLetterType
+    reason: str
+    issued_at: date | None = None
+
+
+class WarningLetterOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    letter_type: WarningLetterType
+    reason: str
+    issued_at: date
+    valid_until: date | None
+    is_active: bool
+    file_name: str | None
+    mime_type: str | None
+    file_size: int
+    issued_by: UUID | None
+    created_at: datetime
+
+
+class EmployeeMovementCreate(BaseModel):
+    movement_type: MovementType
+    previous_grade: str | None = None
+    new_grade: str | None = None
+    previous_level: str | None = None
+    new_level: str | None = None
+    previous_division: str | None = None
+    new_division: str | None = None
+    previous_position: str | None = None
+    new_position: str | None = None
+    effective_date: date
+    notes: str | None = None
+
+
+class EmployeeMovementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    movement_type: MovementType
+    previous_grade: str | None
+    new_grade: str | None
+    previous_level: str | None
+    new_level: str | None
+    previous_division: str | None
+    new_division: str | None
+    previous_position: str | None
+    new_position: str | None
+    effective_date: date
+    notes: str | None
+    created_by: UUID | None
+    created_at: datetime
+
+
+class VaccineRecordCreate(BaseModel):
+    vaccine_name: str
+    dose_number: int = 1
+    vaccinated_at: date
+    location: str | None = None
+
+
+class VaccineRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    vaccine_name: str
+    dose_number: int
+    vaccinated_at: date
+    location: str | None
+    created_at: datetime

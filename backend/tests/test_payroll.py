@@ -233,3 +233,133 @@ def test_tax_preview_endpoint(client):
     )
     assert resp.status_code == 200
     assert resp.json()["tax_pph21"] == 0  # di bawah ambang TER A pertama
+
+
+def test_send_saltab_to_client_email(client):
+    """Fase 23 butir 4 -- tombol kirim manual, email penerima diisi manual."""
+    from unittest.mock import patch
+
+    headers = _auth_header(client)
+    _create_employee(client, headers, name="Saltab Karyawan")
+    run = _create_run(client, headers, year=2026, month=10)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    with patch("app.modules.notifications.service.send_raw_email_with_attachment") as send:
+        resp = client.post(
+            f"/api/v1/payroll/runs/{run['id']}/send-to-client",
+            headers=headers,
+            json={"recipient_email": "klien@contoh.co.id"},
+        )
+        assert resp.status_code == 204, resp.text
+        assert send.call_count == 1
+        args, kwargs = send.call_args
+        assert args[0] == "klien@contoh.co.id"
+        assert kwargs["attachment_bytes"][:4] == b"%PDF"
+
+    missing_email = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/send-to-client", headers=headers, json={}
+    )
+    assert missing_email.status_code == 422
+
+
+def test_payroll_lock_skips_employee_in_generate_slips(client):
+    """Fase 26 butir 4 -- karyawan payroll_locked dilewati saat generate slip."""
+    headers = _auth_header(client)
+    locked_emp = _create_employee(client, headers, name="Terkunci")
+    free_emp = _create_employee(client, headers, name="Bebas")
+
+    lock = client.post(f"/api/v1/employees/{locked_emp['id']}/payroll-lock", headers=headers)
+    assert lock.status_code == 200, lock.text
+
+    run = _create_run(client, headers, year=2026, month=11)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    slips = client.get(f"/api/v1/payroll/runs/{run['id']}/slips", headers=headers).json()
+    employee_ids = {s["employee_id"] for s in slips}
+    assert free_emp["id"] in employee_ids
+    assert locked_emp["id"] not in employee_ids
+
+
+def test_payroll_lock_blocks_saltab_component_edit(client):
+    """Fase 26 butir 4 -- setelah dikunci, edit grid Saltab karyawan tsb ditolak."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Rina Payroll")
+    run = _create_run(client, headers, year=2026, month=12)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    saltab = client.get(f"/api/v1/payroll/runs/{run['id']}/saltab", headers=headers).json()
+    component_id = saltab[0]["components"][0]["id"]
+
+    lock = client.post(f"/api/v1/employees/{emp['id']}/payroll-lock", headers=headers)
+    assert lock.status_code == 200
+
+    edit = client.patch(
+        f"/api/v1/payroll/saltab/components/{component_id}",
+        headers=headers,
+        json={"amount": 1_000_000},
+    )
+    assert edit.status_code == 409, edit.text
+
+
+def test_send_payslip_email_to_employee(client):
+    """Fase 26 butir 5 -- payslip dikirim ke email karyawan sendiri, terpisah
+    dari alur Ops->klien (Fase 23)."""
+    from unittest.mock import patch
+
+    from app.modules.auth.schemas import UserCreate
+    from app.modules.auth.service import create_user
+
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Sinta Payslip")
+
+    db = client.testing_session()
+    try:
+        user = create_user(
+            db,
+            UserCreate(
+                email="sinta-payslip@outsourcing.co.id",
+                full_name="Sinta",
+                password="rahasia-123",
+                role="karyawan",
+            ),
+        )
+        user_id = str(user.id)
+    finally:
+        db.close()
+
+    linked = client.patch(
+        f"/api/v1/employees/{emp['id']}", headers=headers, json={"user_id": user_id}
+    )
+    assert linked.status_code == 200, linked.text
+
+    run = _create_run(client, headers, year=2027, month=1)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    with patch("app.modules.notifications.service.send_raw_email_with_attachment") as send:
+        resp = client.post(
+            f"/api/v1/payroll/runs/{run['id']}/employees/{emp['id']}/send-payslip-email",
+            headers=headers,
+        )
+        assert resp.status_code == 204, resp.text
+        assert send.call_count == 1
+        args, kwargs = send.call_args
+        assert args[0] == "sinta-payslip@outsourcing.co.id"
+        assert kwargs["attachment_bytes"][:4] == b"%PDF"
+
+
+def test_send_payslip_email_requires_linked_account(client):
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Tono Belum Tertaut")
+    run = _create_run(client, headers, year=2027, month=2)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    resp = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/employees/{emp['id']}/send-payslip-email",
+        headers=headers,
+    )
+    assert resp.status_code == 400

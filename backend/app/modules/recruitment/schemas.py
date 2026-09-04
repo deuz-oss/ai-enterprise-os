@@ -9,6 +9,7 @@ from app.modules.recruitment.models import (
     JobOrderBusinessStatus,
     JobOrderStatus,
     PlacementStatus,
+    ReferralRewardStatus,
 )
 
 
@@ -72,6 +73,14 @@ class JobOrderCreate(BaseModel):
     working_days: list[str] = []
     working_hours_start: time | None = None
     working_hours_end: time | None = None
+    remote: bool = False
+    office_address: str | None = None
+    experience_level: str | None = None
+    contract_detail: str | None = None
+    industry: str | None = None
+    position: str | None = None
+    level: str | None = None
+    package_detail: str | None = None
 
 
 class JobOrderUpdate(BaseModel):
@@ -97,6 +106,14 @@ class JobOrderUpdate(BaseModel):
     working_days: list[str] | None = None
     working_hours_start: time | None = None
     working_hours_end: time | None = None
+    remote: bool | None = None
+    office_address: str | None = None
+    experience_level: str | None = None
+    contract_detail: str | None = None
+    industry: str | None = None
+    position: str | None = None
+    level: str | None = None
+    package_detail: str | None = None
 
 
 class JobOrderOut(BaseModel):
@@ -131,6 +148,14 @@ class JobOrderOut(BaseModel):
     working_hours_end: time | None
     has_generated_document: bool
     generated_document_at: datetime | None
+    remote: bool
+    office_address: str | None
+    experience_level: str | None
+    contract_detail: str | None
+    industry: str | None
+    position: str | None
+    level: str | None
+    package_detail: str | None
     created_at: datetime
 
 
@@ -164,8 +189,27 @@ class CandidateCreate(BaseModel):
     current_company: str | None = None
     expected_salary: float | None = None
     skills: str | None = None
+    skills_list: list[str] = []
     source: str | None = None
     notes: str | None = None
+    gender: str | None = None
+    current_position: str | None = None
+    birthdate: date | None = None
+    birthplace: str | None = None
+    address: str | None = None
+    ktp_no: str | None = None
+    marital_status: str | None = None
+    blood_type: str | None = None
+    religion: str | None = None
+    languages: list[str] = []
+    description: str | None = None
+    position_pool: str | None = None
+    job_level: str | None = None
+    school: str | None = None
+    education_level: str | None = None
+    # Fase 27 -- kode referral karyawan yang mereferensikan kandidat ini
+    # (input saja, resolusi ke `referred_by_employee_id` di service.py).
+    referral_code: str | None = None
 
 
 class CandidateUpdate(BaseModel):
@@ -178,9 +222,25 @@ class CandidateUpdate(BaseModel):
     current_company: str | None = None
     expected_salary: float | None = None
     skills: str | None = None
+    skills_list: list[str] | None = None
     source: str | None = None
     status: CandidateStatus | None = None
     notes: str | None = None
+    gender: str | None = None
+    current_position: str | None = None
+    birthdate: date | None = None
+    birthplace: str | None = None
+    address: str | None = None
+    ktp_no: str | None = None
+    marital_status: str | None = None
+    blood_type: str | None = None
+    religion: str | None = None
+    languages: list[str] | None = None
+    description: str | None = None
+    position_pool: str | None = None
+    job_level: str | None = None
+    school: str | None = None
+    education_level: str | None = None
 
 
 class CandidateOut(BaseModel):
@@ -196,10 +256,49 @@ class CandidateOut(BaseModel):
     current_company: str | None
     expected_salary: float | None
     skills: str | None
+    skills_list: list[str]
     source: str | None
     cv_file_name: str | None
     status: CandidateStatus
     notes: str | None
+    reference: str | None
+    gender: str | None
+    current_position: str | None
+    birthdate: date | None
+    birthplace: str | None
+    address: str | None
+    ktp_no: str | None
+    marital_status: str | None
+    blood_type: str | None
+    religion: str | None
+    languages: list[str]
+    description: str | None
+    position_pool: str | None
+    job_level: str | None
+    school: str | None
+    education_level: str | None
+    referred_by_employee_id: UUID | None = None
+    created_at: datetime
+
+
+class CandidateExperienceCreate(BaseModel):
+    company: str
+    position: str
+    start_date: date | None = None
+    end_date: date | None = None
+    description: str | None = None
+
+
+class CandidateExperienceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    candidate_id: UUID
+    company: str
+    position: str
+    start_date: date | None
+    end_date: date | None
+    description: str | None
     created_at: datetime
 
 
@@ -231,6 +330,35 @@ class PlacementOut(BaseModel):
     ojt_end_date: date | None
     offering_call_done: bool
     offering_call_at: datetime | None
+    created_at: datetime
+
+
+class ReferralProgramSettingIn(BaseModel):
+    is_enabled: bool
+    reward_amount: float = 0
+
+
+class ReferralProgramSettingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    is_enabled: bool
+    reward_amount: float
+    updated_at: datetime
+
+
+class ReferralRewardOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    candidate_id: UUID
+    placement_id: UUID | None
+    amount: float
+    eligible_at: date | None
+    status: ReferralRewardStatus
+    is_eligible: bool
+    paid_at: datetime | None
     created_at: datetime
 
 

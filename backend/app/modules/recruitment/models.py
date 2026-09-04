@@ -72,6 +72,9 @@ class PlacementStatus(str, enum.Enum):
     ojt = "ojt"
     proposed = "diusulkan"
     accepted = "disetujui_klien"
+    # Fase 24 -- disisipkan di antara accepted & onboarded, mengikuti istilah
+    # MYOHRIS "Hired": klien sudah setuju tapi belum resmi onboarding sistem.
+    hired = "hired"
     onboarded = "onboarded"
     rejected = "gagal"
     cancelled = "dibatalkan"
@@ -227,6 +230,18 @@ class JobOrder(TenantMixin, Base):
     generated_document_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Fase 24 -- field tambahan hasil audit MYOHRIS, mayoritas kolom datar.
+    # `frequency` SENGAJA TIDAK diimplementasikan (keputusan eksplisit PRD).
+    remote: Mapped[bool] = mapped_column(Boolean, default=False)
+    office_address: Mapped[str | None] = mapped_column(String(500), default=None)
+    experience_level: Mapped[str | None] = mapped_column(String(120), default=None)
+    # "Full Time"/"Part Time" -- beda dari contract_duration_months di atas.
+    contract_detail: Mapped[str | None] = mapped_column(String(50), default=None)
+    industry: Mapped[str | None] = mapped_column(String(120), default=None)
+    # `title` di atas tetap teks bebas; position+level klasifikasi terstruktur.
+    position: Mapped[str | None] = mapped_column(String(120), default=None)
+    level: Mapped[str | None] = mapped_column(String(120), default=None)
+    package_detail: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -293,7 +308,12 @@ class Candidate(TenantMixin, Base):
     experience_years: Mapped[int | None] = mapped_column(Integer, default=0)
     current_company: Mapped[str | None] = mapped_column(String(255))
     expected_salary: Mapped[float | None] = mapped_column(Numeric(14, 2), default=None)
+    # Teks bebas, ditokenisasi ad hoc (`.split()`) saat matching -- TIDAK
+    # diubah oleh Fase 24, biar logika matching yang sudah jalan tak kesentuh.
+    # `skills_json`/`skills_list` di bawah adalah field terstruktur baru,
+    # terpisah, utk filter/tampilan (populasi lewat UI baru ke depan).
     skills: Mapped[str | None] = mapped_column(Text)
+    skills_json: Mapped[str | None] = mapped_column(Text, default=None)
     source: Mapped[str | None] = mapped_column(String(120))
     cv_object_key: Mapped[str | None] = mapped_column(String(500))
     cv_file_name: Mapped[str | None] = mapped_column(String(255))
@@ -305,10 +325,79 @@ class Candidate(TenantMixin, Base):
         index=True,
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    # Fase 24 -- field tambahan hasil audit MYOHRIS. `industry`/
+    # `current_department` SENGAJA TIDAK diimplementasikan (keputusan
+    # eksplisit PRD).
+    reference: Mapped[str | None] = mapped_column(String(50), index=True)
+    gender: Mapped[str | None] = mapped_column(String(20), default=None)
+    current_position: Mapped[str | None] = mapped_column(String(255), default=None)
+    birthdate: Mapped[date | None] = mapped_column(Date, default=None)
+    birthplace: Mapped[str | None] = mapped_column(String(120), default=None)
+    address: Mapped[str | None] = mapped_column(String(500), default=None)
+    ktp_no: Mapped[str | None] = mapped_column(String(50), default=None)
+    marital_status: Mapped[str | None] = mapped_column(String(20), default=None)
+    blood_type: Mapped[str | None] = mapped_column(String(5), default=None)
+    religion: Mapped[str | None] = mapped_column(String(50), default=None)
+    languages_json: Mapped[str | None] = mapped_column(Text, default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    position_pool: Mapped[str | None] = mapped_column(String(255), default=None)
+    job_level: Mapped[str | None] = mapped_column(String(120), default=None)
+    school: Mapped[str | None] = mapped_column(String(255), default=None)
+    # `education` di atas tetap teks bebas gabungan; education_level terpisah.
+    education_level: Mapped[str | None] = mapped_column(String(120), default=None)
+    # Fase 27 -- jalur sourcing ketiga (referral), di samping Job Portal &
+    # Talent Pool. Nullable: mayoritas kandidat tetap tanpa referral.
+    referred_by_employee_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("employees.id"), default=None, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    experiences: Mapped[list["CandidateExperience"]] = relationship(
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="CandidateExperience.start_date.desc()",
+    )
+
+    @property
+    def skills_list(self) -> list[str]:
+        if not self.skills_json:
+            return []
+        try:
+            parsed = json.loads(self.skills_json)
+        except (TypeError, ValueError):
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+    @property
+    def languages(self) -> list[str]:
+        if not self.languages_json:
+            return []
+        try:
+            parsed = json.loads(self.languages_json)
+        except (TypeError, ValueError):
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+
+class CandidateExperience(TenantMixin, Base):
+    """Riwayat pengalaman per posisi -- Fase 24, mengganti gap `experience_years`
+    yang sebelumnya cuma angka total tanpa rincian per posisi."""
+
+    __tablename__ = "candidate_experiences"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    candidate_id: Mapped[UUID] = mapped_column(ForeignKey("candidates.id"), index=True)
+    company: Mapped[str] = mapped_column(String(255))
+    position: Mapped[str] = mapped_column(String(255))
+    start_date: Mapped[date | None] = mapped_column(Date, default=None)
+    end_date: Mapped[date | None] = mapped_column(Date, default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    candidate: Mapped[Candidate] = relationship(back_populates="experiences")
 
 
 class Placement(TenantMixin, Base):
@@ -347,3 +436,59 @@ class Placement(TenantMixin, Base):
 
     candidate = relationship("Candidate", lazy="selectin")
     job_order = relationship("JobOrder", back_populates="placements", lazy="selectin")
+
+
+class ReferralRewardStatus(str, enum.Enum):
+    pending = "pending"
+    eligible = "eligible"
+    paid = "paid"
+    cancelled = "cancelled"
+
+
+class ReferralProgramSetting(TenantMixin, Base):
+    """Fase 27 -- toggle on/off program referral per tenant (singleton).
+    Konvensi "satu baris per tenant" sama seperti `TenantCvBranding`
+    (talentpool/models.py) -- bukan tabel dengan banyak baris per tenant."""
+
+    __tablename__ = "referral_program_settings"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    reward_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ReferralReward(TenantMixin, Base):
+    """Fase 27 -- insentif referral, satu baris per kandidat-yang-direferensikan
+    yang berhasil placement. `eligible_at` = `placement.start_date` + 3 bulan,
+    dihitung ulang tiap `start_date` berubah (lihat `recruitment/service.py`).
+    Transisi pending->eligible dihitung on-the-fly lewat `is_eligible`
+    (pola sama `JobOrder.is_stale`), BUKAN job terjadwal -- tidak ada
+    infrastruktur scheduler di codebase ini."""
+
+    __tablename__ = "referral_rewards"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    candidate_id: Mapped[UUID] = mapped_column(ForeignKey("candidates.id"), index=True)
+    placement_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("placements.id"), default=None, index=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    eligible_at: Mapped[date | None] = mapped_column(Date, default=None)
+    status: Mapped[ReferralRewardStatus] = mapped_column(
+        Enum(ReferralRewardStatus, native_enum=False, length=20),
+        default=ReferralRewardStatus.pending,
+        index=True,
+    )
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def is_eligible(self) -> bool:
+        if self.status != ReferralRewardStatus.pending or self.eligible_at is None:
+            return False
+        return date.today() >= self.eligible_at

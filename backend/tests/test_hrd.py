@@ -277,3 +277,304 @@ def test_hr_endpoints_reject_non_admin_role(client):
     token = login.json()["access_token"]
     resp = client.get("/api/v1/employees", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403
+
+
+def _operations_header(client) -> dict[str, str]:
+    db = client.testing_session()
+    try:
+        from app.modules.auth.schemas import UserCreate
+        from app.modules.auth.service import create_user
+
+        create_user(
+            db,
+            UserCreate(
+                email="ops-fase23@outsourcing.co.id",
+                full_name="Ops",
+                password="rahasia-123",
+                role="operations",
+            ),
+        )
+    finally:
+        db.close()
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "ops-fase23@outsourcing.co.id", "password": "rahasia-123"},
+    )
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+def test_operations_role_sees_only_external_employees(client):
+    """Fase 23 butir 1 -- sebelumnya Ops sama sekali tidak bisa akses modul
+    karyawan; sekarang boleh, tapi dibatasi ke karyawan eksternal saja."""
+    headers = _auth_header(client)
+    internal = client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Karyawan Internal", "employment_type": "internal"},
+    ).json()
+    external = client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Karyawan Eksternal", "employment_type": "eksternal"},
+    ).json()
+
+    ops_headers = _operations_header(client)
+
+    listed = client.get("/api/v1/employees", headers=ops_headers)
+    assert listed.status_code == 200, listed.text
+    names = [row["full_name"] for row in listed.json()]
+    assert "Karyawan Eksternal" in names
+    assert "Karyawan Internal" not in names
+
+    visible = client.get(f"/api/v1/employees/{external['id']}", headers=ops_headers)
+    assert visible.status_code == 200
+
+    hidden = client.get(f"/api/v1/employees/{internal['id']}", headers=ops_headers)
+    assert hidden.status_code == 404
+
+    # Ops tidak boleh akses endpoint HRD administratif lain (di router terpisah).
+    forbidden = client.get(f"/api/v1/employees/{external['id']}/contracts", headers=ops_headers)
+    assert forbidden.status_code == 403
+
+
+def test_warning_letter_valid_until_computed(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Ferdi Wibowo"}
+    ).json()
+
+    created = client.post(
+        f"/api/v1/employees/{emp['id']}/warning-letters",
+        headers=headers,
+        data={"letter_type": "sp1", "reason": "Terlambat berulang", "issued_at": "2026-01-15"},
+    )
+    assert created.status_code == 201, created.text
+    letter = created.json()
+    assert letter["valid_until"] == "2026-07-14"
+    assert letter["is_active"] is False  # sudah lewat 2026-09-04 (tanggal berjalan tes)
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/warning-letters", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_contract_template_crud(client):
+    headers = _auth_header(client)
+    created = client.post(
+        "/api/v1/employees/contract-templates",
+        headers=headers,
+        json={
+            "name": "Kontrak PKWT Standar",
+            "field_schema": [
+                {"key": "posisi", "label": "Posisi", "type": "text"},
+                {
+                    "key": "klausul",
+                    "label": "Ketentuan Kerja",
+                    "type": "list",
+                    "list_style": "numeric",
+                },
+            ],
+            "footer_text": "Dokumen internal",
+        },
+    )
+    assert created.status_code == 201, created.text
+    tmpl = created.json()
+    assert tmpl["field_schema"][1]["type"] == "list"
+    assert tmpl["is_active"] is True
+
+    listed = client.get("/api/v1/employees/contract-templates", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+    updated = client.patch(
+        f"/api/v1/employees/contract-templates/{tmpl['id']}",
+        headers=headers,
+        json={"is_active": False},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["is_active"] is False
+
+
+def test_generate_contract_document_with_numeric_and_alpha_list_fields(client):
+    """Fase 25 -- klausul kontrak bernomor/alfabet, ground baru yang belum
+    ada di render_document_docx sebelum Fase 25 (Agreement Fase 20 cuma
+    pakai value string flat, tidak pernah list)."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Lupita Sari"}
+    ).json()
+    contract = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01"},
+    ).json()
+
+    tmpl = client.post(
+        "/api/v1/employees/contract-templates",
+        headers=headers,
+        json={
+            "name": "Kontrak Generate Test",
+            "field_schema": [
+                {"key": "posisi", "label": "Posisi", "type": "text"},
+                {
+                    "key": "tugas",
+                    "label": "Uraian Tugas",
+                    "type": "list",
+                    "list_style": "numeric",
+                },
+                {
+                    "key": "lampiran",
+                    "label": "Daftar Lampiran",
+                    "type": "list",
+                    "list_style": "alpha",
+                },
+            ],
+        },
+    ).json()
+
+    generated = client.post(
+        f"/api/v1/employees/contracts/{contract['id']}/generate-document",
+        headers=headers,
+        json={
+            "template_id": tmpl["id"],
+            "field_values": {
+                "posisi": "Staff Admin",
+                "tugas": ["Input data", "Rekap laporan"],
+                "lampiran": ["Fotokopi KTP", "Ijazah"],
+            },
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    body = generated.json()
+    assert body["template_id"] == tmpl["id"]
+    assert body["file_name"].endswith(".docx")
+
+    dl = client.get(f"/api/v1/employees/contracts/{contract['id']}/download-url", headers=headers)
+    assert dl.status_code == 200
+    file_resp = client.get(dl.json()["url"])
+    assert file_resp.status_code == 200
+
+    import io
+
+    from docx import Document
+
+    doc = Document(io.BytesIO(file_resp.content))
+    paragraphs = [p.text for p in doc.paragraphs]
+    assert "1. Input data" in paragraphs
+    assert "2. Rekap laporan" in paragraphs
+    assert "a. Fotokopi KTP" in paragraphs
+    assert "b. Ijazah" in paragraphs
+    assert "Staff Admin" in paragraphs
+
+
+def test_generate_contract_document_requires_existing_template(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Mahesa Putra"}
+    ).json()
+    contract = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts", headers=headers, json={}
+    ).json()
+
+    resp = client.post(
+        f"/api/v1/employees/contracts/{contract['id']}/generate-document",
+        headers=headers,
+        json={"template_id": "00000000-0000-0000-0000-000000000000", "field_values": {}},
+    )
+    assert resp.status_code == 404
+
+
+def test_employee_fase26_fields_roundtrip(client):
+    headers = _auth_header(client)
+    created = client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={
+            "full_name": "Nadia Kusuma",
+            "grade": "G3",
+            "level": "Senior",
+            "emergency_contact_name": "Rudi Kusuma",
+            "emergency_contact_relation": "Suami",
+            "emergency_contact_phone": "081200000000",
+            "citizen_address": {"province": "Jawa Barat", "city": "Bandung"},
+            "residential_address": {"province": "DKI Jakarta", "city": "Jakarta Selatan"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["grade"] == "G3"
+    assert body["level"] == "Senior"
+    assert body["emergency_contact_name"] == "Rudi Kusuma"
+    assert body["citizen_address"] == {"province": "Jawa Barat", "city": "Bandung"}
+    assert body["residential_address"] == {"province": "DKI Jakarta", "city": "Jakarta Selatan"}
+    assert body["payroll_locked"] is False
+
+    updated = client.patch(
+        f"/api/v1/employees/{body['id']}",
+        headers=headers,
+        json={"grade": "G4", "residential_address": {"province": "Jawa Barat"}},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["grade"] == "G4"
+    assert updated.json()["residential_address"] == {"province": "Jawa Barat"}
+
+
+def test_employee_movements_crud(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Oscar Putra"}
+    ).json()
+
+    created = client.post(
+        f"/api/v1/employees/{emp['id']}/movements",
+        headers=headers,
+        json={
+            "movement_type": "promosi",
+            "previous_grade": "G2",
+            "new_grade": "G3",
+            "effective_date": "2026-06-01",
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["new_grade"] == "G3"
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/movements", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_vaccine_records_crud(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Putri Amelia"}
+    ).json()
+
+    created = client.post(
+        f"/api/v1/employees/{emp['id']}/vaccine-records",
+        headers=headers,
+        json={"vaccine_name": "COVID-19 Booster", "dose_number": 3, "vaccinated_at": "2026-03-01"},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["vaccine_name"] == "COVID-19 Booster"
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/vaccine-records", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_employee_payroll_lock_toggle(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Qori Ramadhan"}
+    ).json()
+
+    locked = client.post(f"/api/v1/employees/{emp['id']}/payroll-lock", headers=headers)
+    assert locked.status_code == 200, locked.text
+    assert locked.json()["payroll_locked"] is True
+    assert locked.json()["payroll_locked_at"] is not None
+
+    unlocked = client.delete(f"/api/v1/employees/{emp['id']}/payroll-lock", headers=headers)
+    assert unlocked.status_code == 200
+    assert unlocked.json()["payroll_locked"] is False
+    assert unlocked.json()["payroll_locked_at"] is None

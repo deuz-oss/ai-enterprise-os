@@ -156,6 +156,16 @@ def export_saltab_pdf(run_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/runs/{run_id}/send-to-client", status_code=204)
+def send_saltab_to_client(run_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Kirim manual Saltab ke email klien -- Fase 23 butir 4. Email penerima
+    diisi manual di body (`recipient_email`), bukan diambil otomatis."""
+    recipient_email = (payload.get("recipient_email") or "").strip()
+    if not recipient_email:
+        raise HTTPException(status_code=422, detail="recipient_email wajib diisi")
+    service.send_saltab_to_client(db, run_id, recipient_email)
+
+
 @router.get("/runs/{run_id}/bukti-potong/{employee_id}/pdf")
 def export_bukti_potong_pdf(
     run_id: str,
@@ -171,6 +181,25 @@ def export_bukti_potong_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/runs/{run_id}/employees/{employee_id}/payslip/pdf")
+def export_employee_payslip_pdf(run_id: str, employee_id: str, db: Session = Depends(get_db)):
+    """Fase 26 butir 5 -- payslip lengkap per karyawan (beda dari bukti potong)."""
+    from fastapi import Response
+
+    content, filename = service.employee_payslip_pdf(db, run_id, employee_id)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/runs/{run_id}/employees/{employee_id}/send-payslip-email", status_code=204)
+def send_payslip_email(run_id: str, employee_id: str, db: Session = Depends(get_db)):
+    """Fase 26 butir 5 -- kirim payslip ke email karyawan sendiri."""
+    service.send_payslip_email(db, run_id, employee_id)
 
 
 @router.post("/runs/{run_id}/finalize", response_model=RunOut)

@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
     from app.modules.files import router as files_router
     from app.modules.finance.router import pr_router as payment_request_router
     from app.modules.finance.router import router as finance_router
+    from app.modules.hrd.router import employees_view_router as hrd_employees_view_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.job_portal.router import router as job_portal_router
     from app.modules.notifications.router import router as notifications_router
@@ -184,6 +185,14 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         hrd_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("people_ops"))],
+    )
+    # Harus didaftarkan SETELAH hrd_router: path literal seperti
+    # /employees/selfservice-accounts di atas harus cocok duluan sebelum
+    # jatuh ke /employees/{employee_id} milik router ini (Fase 23).
+    app.include_router(
+        hrd_employees_view_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("people_ops"))],
     )

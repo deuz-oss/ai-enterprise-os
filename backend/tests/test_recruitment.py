@@ -603,3 +603,294 @@ def test_generate_job_order_document_requires_existing_template(client):
         json={"template_id": "00000000-0000-0000-0000-000000000000"},
     )
     assert resp.status_code == 404
+
+
+def test_job_order_fase24_fields_roundtrip(client):
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    resp = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=headers,
+        json={
+            "client_id": cid,
+            "title": "Staff Gudang",
+            "headcount": 1,
+            "remote": True,
+            "office_address": "Jl. Industri No. 1",
+            "experience_level": "1-3 tahun",
+            "contract_detail": "Full Time",
+            "industry": "Logistik",
+            "position": "Staff",
+            "level": "Junior",
+            "package_detail": "BPJS + Tunjangan Transport",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["remote"] is True
+    assert body["office_address"] == "Jl. Industri No. 1"
+    assert body["contract_detail"] == "Full Time"
+    assert body["position"] == "Staff"
+    assert body["level"] == "Junior"
+    assert body["package_detail"] == "BPJS + Tunjangan Transport"
+
+    updated = client.patch(
+        f"/api/v1/recruitment/job-orders/{body['id']}",
+        headers=headers,
+        json={"remote": False, "industry": "Manufaktur"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["remote"] is False
+    assert updated.json()["industry"] == "Manufaktur"
+
+
+def test_candidate_fase24_fields_and_reference(client):
+    headers = _auth_header(client)
+    first = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={
+            "full_name": "Gilang Pratama",
+            "gender": "L",
+            "birthdate": "1998-05-10",
+            "skills_list": ["excel", "forklift"],
+            "languages": ["Indonesia", "Inggris"],
+            "education_level": "SMA",
+        },
+    )
+    assert first.status_code == 201, first.text
+    body = first.json()
+    assert body["reference"] == "CAND-00001"
+    assert body["skills_list"] == ["excel", "forklift"]
+    assert body["languages"] == ["Indonesia", "Inggris"]
+    assert body["gender"] == "L"
+    assert body["education_level"] == "SMA"
+
+    second = client.post(
+        "/api/v1/recruitment/candidates", headers=headers, json={"full_name": "Hana Putri"}
+    )
+    assert second.json()["reference"] == "CAND-00002"
+
+    updated = client.patch(
+        f"/api/v1/recruitment/candidates/{body['id']}",
+        headers=headers,
+        json={"skills_list": ["excel", "forklift", "sim-b1"]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["skills_list"] == ["excel", "forklift", "sim-b1"]
+
+
+def test_candidate_experience_crud(client):
+    headers = _auth_header(client)
+    cand_id = _create_candidate(client, headers, "Irfan Maulana")
+
+    created = client.post(
+        f"/api/v1/recruitment/candidates/{cand_id}/experiences",
+        headers=headers,
+        json={
+            "company": "PT Contoh Jaya",
+            "position": "Admin Gudang",
+            "start_date": "2022-01-01",
+            "end_date": "2024-06-30",
+        },
+    )
+    assert created.status_code == 201, created.text
+    exp = created.json()
+    assert exp["company"] == "PT Contoh Jaya"
+
+    listed = client.get(
+        f"/api/v1/recruitment/candidates/{cand_id}/experiences", headers=headers
+    ).json()
+    assert len(listed) == 1
+
+    deleted = client.delete(
+        f"/api/v1/recruitment/candidates/experiences/{exp['id']}", headers=headers
+    )
+    assert deleted.status_code == 204
+    assert (
+        client.get(f"/api/v1/recruitment/candidates/{cand_id}/experiences", headers=headers).json()
+        == []
+    )
+
+
+def test_candidate_activity_log_on_status_change(client):
+    headers = _auth_header(client)
+    cand_id = _create_candidate(client, headers, "Joko Widodo Test")
+
+    updated = client.patch(
+        f"/api/v1/recruitment/candidates/{cand_id}",
+        headers=headers,
+        json={"status": "screening"},
+    )
+    assert updated.status_code == 200, updated.text
+
+    log = client.get(
+        f"/api/v1/recruitment/candidates/{cand_id}/activity-log", headers=headers
+    ).json()
+    assert any(entry["action"] == "candidate.status_changed" for entry in log)
+    changed = next(e for e in log if e["action"] == "candidate.status_changed")
+    assert changed["detail"]["from"] == "baru"
+    assert changed["detail"]["to"] == "screening"
+
+
+def test_placement_status_hired_stage(client):
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers, "Kirana Dewi")
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    )
+    assert placement.status_code == 201, placement.text
+    pid = placement.json()["id"]
+
+    hired = client.patch(
+        f"/api/v1/recruitment/placements/{pid}",
+        headers=headers,
+        json={"status": "hired"},
+    )
+    assert hired.status_code == 200, hired.text
+
+
+def _create_referring_employee(client, headers, name="Referrer") -> dict:
+    resp = client.post("/api/v1/employees", headers=headers, json={"full_name": name})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_employee_gets_referral_code(client):
+    headers = _auth_header(client)
+    emp = _create_referring_employee(client, headers)
+    assert emp["referral_code"].startswith("REF-")
+
+
+def test_referral_program_setting_toggle(client):
+    headers = _auth_header(client)
+    default = client.get("/api/v1/recruitment/referral-setting", headers=headers)
+    assert default.status_code == 200, default.text
+    assert default.json()["is_enabled"] is False
+
+    updated = client.put(
+        "/api/v1/recruitment/referral-setting",
+        headers=headers,
+        json={"is_enabled": True, "reward_amount": 500_000},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["is_enabled"] is True
+    assert updated.json()["reward_amount"] == 500_000
+
+
+def test_referral_reward_created_when_program_enabled(client):
+    headers = _auth_header(client)
+    client.put(
+        "/api/v1/recruitment/referral-setting",
+        headers=headers,
+        json={"is_enabled": True, "reward_amount": 250_000},
+    )
+    referrer = _create_referring_employee(client, headers, "Referrer Aktif")
+
+    cand = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={"full_name": "Kandidat Referral", "referral_code": referrer["referral_code"]},
+    )
+    assert cand.status_code == 201, cand.text
+    assert cand.json()["referred_by_employee_id"] == referrer["id"]
+
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={
+            "candidate_id": cand.json()["id"],
+            "job_order_id": jo_id,
+            "start_date": "2026-06-01",
+        },
+    )
+    assert placement.status_code == 201, placement.text
+
+    rewards = client.get(
+        "/api/v1/recruitment/referral-rewards",
+        headers=headers,
+        params={"employee_id": referrer["id"]},
+    ).json()
+    assert len(rewards) == 1
+    reward = rewards[0]
+    assert reward["status"] == "pending"
+    assert reward["amount"] == 250_000
+    assert reward["eligible_at"] == "2026-09-01"  # start_date + 3 bulan
+    assert reward["is_eligible"] is True  # sudah lewat (tanggal berjalan tes 2026-09-04)
+
+
+def test_referral_reward_not_created_when_program_disabled(client):
+    headers = _auth_header(client)
+    client.put(
+        "/api/v1/recruitment/referral-setting",
+        headers=headers,
+        json={"is_enabled": False, "reward_amount": 250_000},
+    )
+    referrer = _create_referring_employee(client, headers, "Referrer Nonaktif")
+    cand = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={"full_name": "Kandidat Tanpa Reward", "referral_code": referrer["referral_code"]},
+    )
+    assert cand.status_code == 201, cand.text
+
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand.json()["id"], "job_order_id": jo_id},
+    )
+    assert placement.status_code == 201, placement.text
+
+    rewards = client.get(
+        "/api/v1/recruitment/referral-rewards",
+        headers=headers,
+        params={"employee_id": referrer["id"]},
+    ).json()
+    assert rewards == []
+
+
+def test_mark_referral_reward_paid(client):
+    headers = _auth_header(client)
+    client.put(
+        "/api/v1/recruitment/referral-setting",
+        headers=headers,
+        json={"is_enabled": True, "reward_amount": 300_000},
+    )
+    referrer = _create_referring_employee(client, headers, "Referrer Dibayar")
+    cand = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={"full_name": "Kandidat Dibayar", "referral_code": referrer["referral_code"]},
+    ).json()
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand["id"], "job_order_id": jo_id},
+    )
+    reward_id = client.get(
+        "/api/v1/recruitment/referral-rewards",
+        headers=headers,
+        params={"employee_id": referrer["id"]},
+    ).json()[0]["id"]
+
+    paid = client.post(
+        f"/api/v1/recruitment/referral-rewards/{reward_id}/mark-paid", headers=headers
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["paid_at"] is not None
+
+    again = client.post(
+        f"/api/v1/recruitment/referral-rewards/{reward_id}/mark-paid", headers=headers
+    )
+    assert again.status_code == 409

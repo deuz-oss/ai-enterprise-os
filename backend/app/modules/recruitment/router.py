@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.permissions import RECRUITMENT_ROLES
 from app.core.security import get_current_user, require_roles
+from app.modules.audit.schemas import AuditLogOut
 from app.modules.recruitment import service
 from app.modules.recruitment.models import (
     CandidateStatus,
@@ -12,6 +13,8 @@ from app.modules.recruitment.models import (
 )
 from app.modules.recruitment.schemas import (
     CandidateCreate,
+    CandidateExperienceCreate,
+    CandidateExperienceOut,
     CandidateOut,
     CandidateUpdate,
     InterviewScheduleCreate,
@@ -32,6 +35,9 @@ from app.modules.recruitment.schemas import (
     PlacementCreate,
     PlacementOut,
     PlacementUpdate,
+    ReferralProgramSettingIn,
+    ReferralProgramSettingOut,
+    ReferralRewardOut,
 )
 
 router = APIRouter(
@@ -186,6 +192,35 @@ def delete_candidate(candidate_id: str, db: Session = Depends(get_db)):
     service.delete_candidate(db, candidate_id)
 
 
+@router.get("/candidates/{candidate_id}/activity-log", response_model=list[AuditLogOut])
+def candidate_activity_log(
+    candidate_id: str, limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db)
+):
+    """Fase 24 -- Log Book kandidat."""
+    return service.candidate_activity_log(db, candidate_id, limit=limit)
+
+
+@router.post(
+    "/candidates/{candidate_id}/experiences",
+    response_model=CandidateExperienceOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_candidate_experience(
+    candidate_id: str, payload: CandidateExperienceCreate, db: Session = Depends(get_db)
+):
+    return service.create_candidate_experience(db, candidate_id, payload)
+
+
+@router.get("/candidates/{candidate_id}/experiences", response_model=list[CandidateExperienceOut])
+def list_candidate_experiences(candidate_id: str, db: Session = Depends(get_db)):
+    return service.list_candidate_experiences(db, candidate_id)
+
+
+@router.delete("/candidates/experiences/{experience_id}", status_code=204)
+def delete_candidate_experience(experience_id: str, db: Session = Depends(get_db)):
+    service.delete_candidate_experience(db, experience_id)
+
+
 # ---------- Placements ----------
 
 
@@ -272,3 +307,26 @@ def match_for_jo(jo_id: str, payload: MatchRequest | None = None, db: Session = 
 def get_matches(jo_id: str, top_k: int = 50, min_score: int = 0, db: Session = Depends(get_db)):
     results = service.match_candidates(db, jo_id, top_k=top_k)
     return [r for r in results if r["match_score"] >= min_score]
+
+
+# ---------- Program referral karyawan (Fase 27) ----------
+
+
+@router.get("/referral-setting", response_model=ReferralProgramSettingOut)
+def get_referral_setting(db: Session = Depends(get_db)):
+    return service.get_referral_setting(db)
+
+
+@router.put("/referral-setting", response_model=ReferralProgramSettingOut)
+def update_referral_setting(payload: ReferralProgramSettingIn, db: Session = Depends(get_db)):
+    return service.update_referral_setting(db, payload.is_enabled, payload.reward_amount)
+
+
+@router.get("/referral-rewards", response_model=list[ReferralRewardOut])
+def list_referral_rewards(employee_id: str | None = Query(None), db: Session = Depends(get_db)):
+    return service.list_referral_rewards(db, employee_id=employee_id)
+
+
+@router.post("/referral-rewards/{reward_id}/mark-paid", response_model=ReferralRewardOut)
+def mark_referral_reward_paid(reward_id: str, db: Session = Depends(get_db)):
+    return service.mark_referral_reward_paid(db, reward_id)

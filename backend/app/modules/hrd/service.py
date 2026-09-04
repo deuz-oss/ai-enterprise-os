@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
@@ -13,16 +14,26 @@ from app.modules.hrd.models import (
     ContractSignStatus,
     Employee,
     EmployeeDocument,
+    EmployeeMovement,
     EmployeeStatus,
     EmploymentContract,
+    EmploymentContractTemplate,
+    EmploymentType,
     HrDocumentType,
+    VaccineRecord,
+    WarningLetter,
+    WarningLetterType,
 )
 from app.modules.hrd.schemas import (
     ContractCreate,
     ContractUpdate,
     EmployeeCreate,
+    EmployeeMovementCreate,
     EmployeeUpdate,
+    EmploymentContractTemplateCreate,
+    EmploymentContractTemplateUpdate,
     OnboardCreate,
+    VaccineRecordCreate,
 )
 from app.modules.recruitment.models import Placement, PlacementStatus
 from app.modules.recruitment.service import update_placement_status
@@ -40,6 +51,13 @@ def _generate_employee_no(db: Session) -> str:
     return f"EMP-{total + 1:04d}"
 
 
+def _generate_referral_code(db: Session) -> str:
+    """Fase 27 -- pola sama `_generate_employee_no` (COUNT-based, tanpa retry
+    -- konsisten dgn precedent yang sudah ada, bukan kebutuhan baru)."""
+    total = db.scalar(select(func.count(Employee.id)).where(Employee.referral_code.is_not(None)))
+    return f"REF-{(total or 0) + 1:05d}"
+
+
 def _ensure_unique_employee_no(db: Session, employee_no: str, exclude_id=None) -> None:
     stmt = select(Employee).where(Employee.employee_no == employee_no)
     if exclude_id is not None:
@@ -51,12 +69,26 @@ def _ensure_unique_employee_no(db: Session, employee_no: str, exclude_id=None) -
 # ---------- Employees ----------
 
 
+def _pop_employee_json_addresses(data: dict) -> dict:
+    """`citizen_address`/`residential_address` itu properti read-only
+    (turunan JSON) di model -- simpan ke kolom `*_json` mentahnya, pola
+    sama seperti `benefits`/`working_days` milik JobOrder (Fase 26)."""
+    if "citizen_address" in data:
+        addr = data.pop("citizen_address")
+        data["citizen_address_json"] = json.dumps(addr) if addr else None
+    if "residential_address" in data:
+        addr = data.pop("residential_address")
+        data["residential_address_json"] = json.dumps(addr) if addr else None
+    return data
+
+
 def create_employee(db: Session, payload: EmployeeCreate) -> Employee:
-    data = payload.model_dump()
+    data = _pop_employee_json_addresses(payload.model_dump())
     employee_no = (data.pop("employee_no") or "").strip()
     if not employee_no:
         employee_no = _generate_employee_no(db)
     _ensure_unique_employee_no(db, employee_no)
+    data["referral_code"] = _generate_referral_code(db)
     if data.get("placement_id") is not None:
         placement = db.get(Placement, parse_uuid(str(data["placement_id"])))
         if placement is None:
@@ -79,9 +111,13 @@ def list_employees(
     status: EmployeeStatus | None = None,
     limit: int = 200,
     offset: int = 0,
+    viewer_role: str | None = None,
 ) -> tuple[list[Employee], int]:
     """`limit` default 200, pola sama seperti `recruitment.list_candidates`
-    (Batch 1c) -- cegah query tak terbatas begitu jumlah karyawan bertambah."""
+    (Batch 1c) -- cegah query tak terbatas begitu jumlah karyawan bertambah.
+
+    `viewer_role="operations"` membatasi hasil ke karyawan eksternal saja
+    -- role ini tidak boleh melihat data karyawan internal (Fase 23)."""
     stmt = select(Employee).order_by(Employee.created_at.desc())
     if status is not None:
         stmt = stmt.where(Employee.status == status)
@@ -89,18 +125,35 @@ def list_employees(
         stmt = stmt.where(
             (Employee.full_name.ilike(f"%{q}%")) | (Employee.employee_no.ilike(f"%{q}%"))
         )
+    if viewer_role == "operations":
+        stmt = stmt.where(Employee.employment_type == EmploymentType.eksternal)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
     return rows, total
 
 
-def get_employee(db: Session, employee_id: str) -> Employee:
-    return _get_employee(db, employee_id)
+def get_employee_by_referral_code(db: Session, code: str) -> Employee | None:
+    """Fase 27 -- resolusi kode referral saat kandidat baru masuk lewat
+    kode rujukan. Dipanggil lazy dari `recruitment/service.py` (hrd sudah
+    impor dari recruitment di file ini, jadi impor sebaliknya harus lazy
+    di sisi pemanggil supaya tidak circular)."""
+    if not code:
+        return None
+    return db.execute(select(Employee).where(Employee.referral_code == code)).scalar_one_or_none()
+
+
+def get_employee(db: Session, employee_id: str, viewer_role: str | None = None) -> Employee:
+    employee = _get_employee(db, employee_id)
+    if viewer_role == "operations" and employee.employment_type != EmploymentType.eksternal:
+        # Jangan bocorkan keberadaan data lewat 404 vs 403 -- 404 supaya Ops
+        # tidak bisa membedakan "tidak ada" dari "ada tapi internal" (Fase 23).
+        raise HTTPException(status_code=404, detail="Karyawan tidak ditemukan")
+    return employee
 
 
 def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> Employee:
     employee = _get_employee(db, employee_id)
-    data = payload.model_dump(exclude_unset=True)
+    data = _pop_employee_json_addresses(payload.model_dump(exclude_unset=True))
     new_no = data.pop("employee_no", None)
     if new_no is not None and new_no != employee.employee_no:
         _ensure_unique_employee_no(db, new_no, exclude_id=employee.id)
@@ -318,6 +371,116 @@ async def upload_contract_file(
     return contract
 
 
+# ---------- Template & generate dokumen kontrak karyawan (Fase 25) ----------
+
+
+def _get_contract_template(db: Session, template_id: str) -> EmploymentContractTemplate:
+    tmpl = db.get(EmploymentContractTemplate, parse_uuid(template_id))
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template kontrak tidak ditemukan")
+    return tmpl
+
+
+def create_contract_template(
+    db: Session, payload: EmploymentContractTemplateCreate
+) -> EmploymentContractTemplate:
+    data = payload.model_dump()
+    data["field_schema"] = json.dumps(data["field_schema"])
+    tmpl = EmploymentContractTemplate(**data)
+    db.add(tmpl)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+
+def list_contract_templates(db: Session) -> list[EmploymentContractTemplate]:
+    stmt = select(EmploymentContractTemplate).order_by(EmploymentContractTemplate.name)
+    return list(db.scalars(stmt))
+
+
+def update_contract_template(
+    db: Session, template_id: str, payload: EmploymentContractTemplateUpdate
+) -> EmploymentContractTemplate:
+    tmpl = _get_contract_template(db, template_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "field_schema" in data:
+        data["field_schema"] = json.dumps(data["field_schema"])
+    for field, value in data.items():
+        setattr(tmpl, field, value)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+
+def _format_contract_list_value(values: list, list_style: str) -> list[str]:
+    """Beri prefix nomor/abjad manual per item -- rendering.py sengaja
+    tidak tahu soal gaya penomoran (lihat komentar di
+    `presales/rendering.py::render_document_docx`)."""
+    items = [str(v) for v in values]
+    if list_style == "alpha":
+        labels = [chr(ord("a") + i) for i in range(len(items))]
+    else:
+        labels = [str(i + 1) for i in range(len(items))]
+    return [f"{label}. {item}" for label, item in zip(labels, items, strict=True)]
+
+
+def generate_contract_document(
+    db: Session, contract_id: str, template_id: str, field_values: dict
+) -> EmploymentContract:
+    """Generate dokumen `.docx` dari template, isi `object_key` kontrak --
+    langkah download/edit-manual/upload-ulang/kirim-esign setelahnya REUSE
+    endpoint yang sudah ada (`upload_contract_file`, `contract_file_
+    download_url`, `POST /esign/contracts/{id}/send`), tidak ada endpoint
+    baru untuk 3 langkah itu (lihat plan Fase 25)."""
+    from app.modules.presales.rendering import render_document_docx, store_generated_document
+
+    contract = _get_contract(db, contract_id)
+    template = _get_contract_template(db, template_id)
+    schema = json.loads(template.field_schema)
+
+    sections: list[tuple[str, str | list[str]]] = []
+    for f in schema:
+        raw = field_values.get(f["key"])
+        if f.get("type") == "list":
+            values = raw if isinstance(raw, list) else []
+            list_style = f.get("list_style", "numeric")
+            sections.append((f["label"], _format_contract_list_value(values, list_style)))
+        else:
+            sections.append((f["label"], str(raw) if raw is not None else "-"))
+
+    employee = _get_employee(db, str(contract.employee_id))
+    docx_bytes = render_document_docx(
+        title="Perjanjian Kerja",
+        subtitle=employee.full_name,
+        sections=sections,
+        footer_text=template.footer_text,
+    )
+    file_name = f"kontrak-{contract.id}.docx"
+    object_key = store_generated_document(
+        object_prefix="contracts",
+        file_name=file_name,
+        data=docx_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    contract.template_id = template.id
+    contract.field_values = json.dumps(field_values)
+    contract.object_key = object_key
+    contract.file_name = file_name
+    contract.mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    contract.file_size = len(docx_bytes)
+    db.commit()
+    db.refresh(contract)
+    audit.log_event(
+        db,
+        action="contract.generated_document",
+        entity_type="employment_contract",
+        entity_id=contract.id,
+        object_key=object_key,
+        detail={"template_id": str(template.id)},
+    )
+    return contract
+
+
 def expiring_contracts(db: Session, within_days: int) -> list[dict]:
     """Kontrak karyawan aktif yang berakhir dalam `within_days` ke depan."""
     limit = date.today() + timedelta(days=within_days)
@@ -428,6 +591,129 @@ def document_download_url(db: Session, document_id: str) -> str:
         detail={"file_name": document.file_name},
     )
     return storage.presigned_get_url(document.object_key)
+
+
+# ---------- Warning letters (Fase 23 butir 3) ----------
+
+
+async def create_warning_letter(
+    db: Session,
+    employee_id: str,
+    letter_type: WarningLetterType,
+    reason: str,
+    issued_at: date | None,
+    file: UploadFile | None,
+    issued_by,
+) -> WarningLetter:
+    employee = _get_employee(db, employee_id)
+    issued = issued_at or date.today()
+    object_key = None
+    file_name = None
+    mime_type = None
+    file_size = 0
+    if file is not None:
+        data = await file.read()
+        if data:
+            if len(data) > 25 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Ukuran file maksimal 25 MB")
+            file_name = file.filename or "surat-peringatan.pdf"
+            mime_type = file.content_type or "application/octet-stream"
+            object_key = storage.new_object_key(
+                f"employees/{employee.id}/warning-letters", file_name
+            )
+            storage.put_object(object_key, data, mime_type)
+            file_size = len(data)
+
+    letter = WarningLetter(
+        employee_id=employee.id,
+        letter_type=letter_type,
+        reason=reason,
+        issued_at=issued,
+        valid_until=issued + timedelta(days=180),
+        object_key=object_key,
+        file_name=file_name,
+        mime_type=mime_type,
+        file_size=file_size,
+        issued_by=issued_by,
+    )
+    db.add(letter)
+    db.commit()
+    db.refresh(letter)
+    audit.log_event(
+        db,
+        action="warning_letter.create",
+        entity_type="warning_letter",
+        entity_id=letter.id,
+        object_key=letter.object_key,
+        detail={"employee_id": str(employee.id), "letter_type": letter_type.value},
+    )
+    return letter
+
+
+def list_warning_letters(db: Session, employee_id: str) -> list[WarningLetter]:
+    employee = _get_employee(db, employee_id)
+    return list(employee.warning_letters)
+
+
+def warning_letter_download_url(db: Session, letter_id: str) -> str:
+    letter = db.get(WarningLetter, parse_uuid(letter_id))
+    if letter is None or not letter.object_key:
+        raise HTTPException(status_code=404, detail="Surat peringatan tidak ditemukan")
+    return storage.presigned_get_url(letter.object_key)
+
+
+# ---------- Movements & vaccine records (Fase 26) ----------
+
+
+def create_employee_movement(
+    db: Session, employee_id: str, payload: EmployeeMovementCreate, created_by
+) -> EmployeeMovement:
+    employee = _get_employee(db, employee_id)
+    movement = EmployeeMovement(
+        employee_id=employee.id, created_by=created_by, **payload.model_dump()
+    )
+    db.add(movement)
+    db.commit()
+    db.refresh(movement)
+    return movement
+
+
+def list_employee_movements(db: Session, employee_id: str) -> list[EmployeeMovement]:
+    employee = _get_employee(db, employee_id)
+    return list(employee.movements)
+
+
+def create_vaccine_record(
+    db: Session, employee_id: str, payload: VaccineRecordCreate
+) -> VaccineRecord:
+    employee = _get_employee(db, employee_id)
+    record = VaccineRecord(employee_id=employee.id, **payload.model_dump())
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def list_vaccine_records(db: Session, employee_id: str) -> list[VaccineRecord]:
+    employee = _get_employee(db, employee_id)
+    return list(employee.vaccine_records)
+
+
+def set_employee_payroll_lock(db: Session, employee_id: str, locked: bool) -> Employee:
+    """Kunci/buka payroll level karyawan -- Fase 26 butir 4. Enforcement
+    pemblokiran edit slip ada di `payroll/service.py`, bukan di sini."""
+    employee = _get_employee(db, employee_id)
+    employee.payroll_locked = locked
+    employee.payroll_locked_at = datetime.now(UTC) if locked else None
+    db.commit()
+    db.refresh(employee)
+    audit.log_event(
+        db,
+        action="employee.payroll_lock_set" if locked else "employee.payroll_lock_cleared",
+        entity_type="employee",
+        entity_id=employee.id,
+    )
+    return employee
 
 
 def contract_file_download_url(db: Session, contract_id: str) -> str:

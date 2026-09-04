@@ -15,19 +15,28 @@ from app.modules.ess.schemas import (
     SelfserviceAccountOut,
 )
 from app.modules.hrd import service
-from app.modules.hrd.models import EmployeeStatus, HrDocumentType
+from app.modules.hrd.models import EmployeeStatus, HrDocumentType, WarningLetterType
 from app.modules.hrd.schemas import (
     ContractCreate,
+    ContractGenerateDocumentIn,
     ContractOut,
     ContractUpdate,
     DocumentOut,
     EmployeeCreate,
+    EmployeeMovementCreate,
+    EmployeeMovementOut,
     EmployeeOut,
     EmployeeUpdate,
+    EmploymentContractTemplateCreate,
+    EmploymentContractTemplateOut,
+    EmploymentContractTemplateUpdate,
     InsuranceCreate,
     InsuranceOut,
     InsuranceUpdate,
     OnboardCreate,
+    VaccineRecordCreate,
+    VaccineRecordOut,
+    WarningLetterOut,
 )
 
 router = APIRouter(
@@ -36,8 +45,19 @@ router = APIRouter(
     dependencies=[Depends(get_current_user), Depends(require_roles(*HRD_ROLES))],
 )
 
+# Router terpisah, khusus dua endpoint "lihat data karyawan": Ops boleh akses
+# (dibatasi ke karyawan eksternal, difilter di service.py), tapi TIDAK boleh
+# akses endpoint HR administratif lain (leave, insurance, bpjs, kontrak, dst)
+# di `router` atas -- makanya perlu router sendiri, bukan cuma tambah role di
+# `router` yang otomatis akan membuka semua endpoint HR admin utk Ops (Fase 23).
+employees_view_router = APIRouter(
+    prefix="/employees",
+    tags=["hrd"],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*HRD_ROLES, "operations"))],
+)
 
-@router.get("", response_model=list[EmployeeOut])
+
+@employees_view_router.get("", response_model=list[EmployeeOut])
 def list_employees(
     response: Response,
     q: str | None = Query(None, max_length=100),
@@ -45,8 +65,16 @@ def list_employees(
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    rows, total = service.list_employees(db, q=q, status=status_filter, limit=limit, offset=offset)
+    rows, total = service.list_employees(
+        db,
+        q=q,
+        status=status_filter,
+        limit=limit,
+        offset=offset,
+        viewer_role=current_user.role.value,
+    )
     response.headers["X-Total-Count"] = str(total)
     return rows
 
@@ -183,9 +211,11 @@ def expiring_contracts(within_days: int = Query(30, ge=1, le=365), db: Session =
     return service.expiring_contracts(db, within_days)
 
 
-@router.get("/{employee_id}", response_model=EmployeeOut)
-def get_employee(employee_id: str, db: Session = Depends(get_db)):
-    return service.get_employee(db, employee_id)
+@employees_view_router.get("/{employee_id}", response_model=EmployeeOut)
+def get_employee(
+    employee_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)
+):
+    return service.get_employee(db, employee_id, viewer_role=current_user.role.value)
 
 
 @router.patch("/{employee_id}", response_model=EmployeeOut)
@@ -240,6 +270,41 @@ def contract_download_url(contract_id: str, db: Session = Depends(get_db)):
     return {"url": service.contract_file_download_url(db, contract_id)}
 
 
+# ---------- Template & generate dokumen kontrak (Fase 25) ----------
+
+
+@router.post(
+    "/contract-templates",
+    response_model=EmploymentContractTemplateOut,
+    status_code=201,
+)
+def create_contract_template(
+    payload: EmploymentContractTemplateCreate, db: Session = Depends(get_db)
+):
+    return service.create_contract_template(db, payload)
+
+
+@router.get("/contract-templates", response_model=list[EmploymentContractTemplateOut])
+def list_contract_templates(db: Session = Depends(get_db)):
+    return service.list_contract_templates(db)
+
+
+@router.patch("/contract-templates/{template_id}", response_model=EmploymentContractTemplateOut)
+def update_contract_template(
+    template_id: str, payload: EmploymentContractTemplateUpdate, db: Session = Depends(get_db)
+):
+    return service.update_contract_template(db, template_id, payload)
+
+
+@router.post("/contracts/{contract_id}/generate-document", response_model=ContractOut)
+def generate_contract_document(
+    contract_id: str, payload: ContractGenerateDocumentIn, db: Session = Depends(get_db)
+):
+    return service.generate_contract_document(
+        db, contract_id, str(payload.template_id), payload.field_values
+    )
+
+
 # ---------- Dokumen HR ----------
 
 
@@ -266,6 +331,82 @@ def list_documents(employee_id: str, db: Session = Depends(get_db)):
 @router.get("/documents/{document_id}/download-url")
 def download_url(document_id: str, db: Session = Depends(get_db)):
     return {"url": service.document_download_url(db, document_id)}
+
+
+# ---------- Surat Peringatan (SP1/SP2/SP3) — Fase 23 butir 3 ----------
+
+
+@router.post("/{employee_id}/warning-letters", response_model=WarningLetterOut, status_code=201)
+async def create_warning_letter(
+    employee_id: str,
+    letter_type: WarningLetterType = Form(...),
+    reason: str = Form(...),
+    issued_at: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from datetime import date
+
+    issued = None
+    if issued_at:
+        try:
+            issued = date.fromisoformat(issued_at)
+        except ValueError:
+            issued = None
+    return await service.create_warning_letter(
+        db, employee_id, letter_type, reason, issued, file, current_user.id
+    )
+
+
+@router.get("/{employee_id}/warning-letters", response_model=list[WarningLetterOut])
+def list_warning_letters(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_warning_letters(db, employee_id)
+
+
+@router.get("/warning-letters/{letter_id}/download-url")
+def warning_letter_download_url(letter_id: str, db: Session = Depends(get_db)):
+    return {"url": service.warning_letter_download_url(db, letter_id)}
+
+
+# ---------- Movements, vaccine records, payroll lock (Fase 26) ----------
+
+
+@router.post("/{employee_id}/movements", response_model=EmployeeMovementOut, status_code=201)
+def create_employee_movement(
+    employee_id: str,
+    payload: EmployeeMovementCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return service.create_employee_movement(db, employee_id, payload, current_user.id)
+
+
+@router.get("/{employee_id}/movements", response_model=list[EmployeeMovementOut])
+def list_employee_movements(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_employee_movements(db, employee_id)
+
+
+@router.post("/{employee_id}/vaccine-records", response_model=VaccineRecordOut, status_code=201)
+def create_vaccine_record(
+    employee_id: str, payload: VaccineRecordCreate, db: Session = Depends(get_db)
+):
+    return service.create_vaccine_record(db, employee_id, payload)
+
+
+@router.get("/{employee_id}/vaccine-records", response_model=list[VaccineRecordOut])
+def list_vaccine_records(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_vaccine_records(db, employee_id)
+
+
+@router.post("/{employee_id}/payroll-lock", response_model=EmployeeOut)
+def lock_employee_payroll(employee_id: str, db: Session = Depends(get_db)):
+    return service.set_employee_payroll_lock(db, employee_id, True)
+
+
+@router.delete("/{employee_id}/payroll-lock", response_model=EmployeeOut)
+def unlock_employee_payroll(employee_id: str, db: Session = Depends(get_db)):
+    return service.set_employee_payroll_lock(db, employee_id, False)
 
 
 # ---------- Asuransi one-to-many — PRD v3.0 Workforce Cloud ----------

@@ -15,6 +15,7 @@ from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.recruitment.models import (
     Candidate,
+    CandidateExperience,
     CandidateStatus,
     InterviewSchedule,
     JobOrder,
@@ -23,9 +24,13 @@ from app.modules.recruitment.models import (
     JobOrderTemplate,
     Placement,
     PlacementStatus,
+    ReferralProgramSetting,
+    ReferralReward,
+    ReferralRewardStatus,
 )
 from app.modules.recruitment.schemas import (
     CandidateCreate,
+    CandidateExperienceCreate,
     CandidateUpdate,
     InterviewScheduleCreate,
     InterviewScheduleUpdate,
@@ -255,8 +260,7 @@ def generate_job_order_document(db: Session, jo_id: str, template_id: str) -> Jo
     working_hours = None
     if jo.working_hours_start and jo.working_hours_end:
         working_hours = (
-            f"{jo.working_hours_start.strftime('%H:%M')} – "
-            f"{jo.working_hours_end.strftime('%H:%M')}"
+            f"{jo.working_hours_start.strftime('%H:%M')} – {jo.working_hours_end.strftime('%H:%M')}"
         )
 
     sections = [
@@ -465,8 +469,34 @@ def _get_candidate(db: Session, candidate_id: str) -> Candidate:
     return candidate
 
 
+def _generate_candidate_reference(db: Session) -> str:
+    total = db.scalar(select(func.count(Candidate.id))) or 0
+    return f"CAND-{total + 1:05d}"
+
+
+def _pop_candidate_json_lists(data: dict) -> dict:
+    """`skills_list`/`languages` itu properti read-only (turunan JSON) di
+    model -- simpan ke kolom `*_json` mentahnya, pola sama seperti
+    `benefits`/`working_days` milik JobOrder."""
+    if "skills_list" in data:
+        skills = data.pop("skills_list")
+        data["skills_json"] = json.dumps(skills) if skills else None
+    if "languages" in data:
+        languages = data.pop("languages")
+        data["languages_json"] = json.dumps(languages) if languages else None
+    return data
+
+
 def create_candidate(db: Session, payload: CandidateCreate) -> Candidate:
-    candidate = Candidate(**payload.model_dump())
+    data = _pop_candidate_json_lists(payload.model_dump())
+    data["reference"] = _generate_candidate_reference(db)
+    referral_code = data.pop("referral_code", None)
+    if referral_code:
+        from app.modules.hrd.service import get_employee_by_referral_code
+
+        referrer = get_employee_by_referral_code(db, referral_code)
+        data["referred_by_employee_id"] = referrer.id if referrer else None
+    candidate = Candidate(**data)
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
@@ -525,11 +555,58 @@ def get_candidate(db: Session, candidate_id: str) -> Candidate:
 
 def update_candidate(db: Session, candidate_id: str, payload: CandidateUpdate) -> Candidate:
     candidate = _get_candidate(db, candidate_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = _pop_candidate_json_lists(payload.model_dump(exclude_unset=True))
+    previous_status = candidate.status
+    for field, value in data.items():
         setattr(candidate, field, value)
     db.commit()
     db.refresh(candidate)
+    if "status" in data and candidate.status != previous_status:
+        audit.log_event(
+            db,
+            action="candidate.status_changed",
+            entity_type="candidate",
+            entity_id=candidate.id,
+            detail={"from": previous_status.value, "to": candidate.status.value},
+        )
     return candidate
+
+
+def candidate_activity_log(db: Session, candidate_id: str, limit: int = 100):
+    """Fase 24 -- Log Book kandidat, reuse `audit.query_logs` per-entity yang
+    sudah generic, bukan tabel baru."""
+    candidate = _get_candidate(db, candidate_id)
+    rows, _total = audit.query_logs(
+        db, entity_type="candidate", entity_id=candidate.id, limit=limit
+    )
+    return [audit.to_out(row) for row in rows]
+
+
+# ---------- Riwayat pengalaman kandidat (Fase 24) ----------
+
+
+def create_candidate_experience(
+    db: Session, candidate_id: str, payload: CandidateExperienceCreate
+) -> CandidateExperience:
+    candidate = _get_candidate(db, candidate_id)
+    experience = CandidateExperience(candidate_id=candidate.id, **payload.model_dump())
+    db.add(experience)
+    db.commit()
+    db.refresh(experience)
+    return experience
+
+
+def list_candidate_experiences(db: Session, candidate_id: str) -> list[CandidateExperience]:
+    candidate = _get_candidate(db, candidate_id)
+    return list(candidate.experiences)
+
+
+def delete_candidate_experience(db: Session, experience_id: str) -> None:
+    experience = db.get(CandidateExperience, parse_uuid(experience_id))
+    if experience is None:
+        raise HTTPException(status_code=404, detail="Riwayat pengalaman tidak ditemukan")
+    db.delete(experience)
+    db.commit()
 
 
 def delete_candidate(db: Session, candidate_id: str) -> None:
@@ -628,6 +705,11 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
         ensure_project_channel(db, placement)
     except Exception:
         pass
+    # Fase 27: reward referral kalau kandidat direferensikan & program aktif
+    try:
+        _create_referral_reward_if_applicable(db, placement, candidate)
+    except Exception:
+        pass
     return placement
 
 
@@ -659,6 +741,7 @@ def update_placement_status(
         placement.ojt_end_date = ojt_end_date
     candidate = db.get(Candidate, placement.candidate_id)
     jo = db.get(JobOrder, placement.job_order_id)
+    previous_candidate_status = candidate.status if candidate else None
     if candidate and jo:
         if new_status in (
             PlacementStatus.interview_internal,
@@ -688,6 +771,22 @@ def update_placement_status(
             candidate.status = CandidateStatus.rejected
     db.commit()
     db.refresh(placement)
+    if (
+        candidate is not None
+        and previous_candidate_status is not None
+        and candidate.status != previous_candidate_status
+    ):
+        audit.log_event(
+            db,
+            action="candidate.status_changed",
+            entity_type="candidate",
+            entity_id=candidate.id,
+            detail={
+                "from": previous_candidate_status.value,
+                "to": candidate.status.value,
+                "via_placement_status": new_status.value,
+            },
+        )
     return placement
 
 
@@ -793,6 +892,10 @@ def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn
         placement.offered_salary = payload.offered_salary
     if payload.start_date is not None:
         placement.start_date = payload.start_date
+        try:
+            _sync_referral_reward_eligible_at(db, placement)
+        except Exception:
+            pass
     if placement.offered_salary is None:
         raise HTTPException(
             status_code=422, detail="Gaji yang ditawarkan wajib diisi sebelum kirim penawaran"
@@ -1268,3 +1371,116 @@ def match_candidates(
         except Exception:
             pass
     return results
+
+
+# ---------- Program referral karyawan (Fase 27) ----------
+
+
+def _add_months(d: date, months: int) -> date:
+    """Tanpa dependency baru (`dateutil` tidak dipakai di mana pun di
+    codebase ini) -- math bulan manual, cukup untuk kebutuhan +3 bulan."""
+    month_index = d.month - 1 + months
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    import calendar
+
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def get_referral_setting(db: Session) -> ReferralProgramSetting:
+    """Singleton per tenant -- buat baris default (nonaktif) kalau belum ada,
+    pola sama `TenantCvBranding.get_or_create` (talentpool)."""
+    setting = db.execute(select(ReferralProgramSetting)).scalars().first()
+    if setting is None:
+        setting = ReferralProgramSetting(is_enabled=False, reward_amount=0)
+        db.add(setting)
+        db.commit()
+        db.refresh(setting)
+    return setting
+
+
+def update_referral_setting(
+    db: Session, is_enabled: bool, reward_amount: float
+) -> ReferralProgramSetting:
+    setting = get_referral_setting(db)
+    setting.is_enabled = is_enabled
+    setting.reward_amount = reward_amount
+    db.commit()
+    db.refresh(setting)
+    return setting
+
+
+def _create_referral_reward_if_applicable(
+    db: Session, placement: Placement, candidate: Candidate
+) -> None:
+    """Dipanggil dari `create_placement` -- tidak raise, best-effort seperti
+    side-effect lain di fungsi itu (auto-activate client, lock CV, dst),
+    supaya kegagalan di sini tidak menggagalkan pembuatan placement."""
+    if candidate.referred_by_employee_id is None:
+        return
+    setting = get_referral_setting(db)
+    if not setting.is_enabled:
+        return
+    existing = db.execute(
+        select(ReferralReward).where(ReferralReward.placement_id == placement.id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    reward = ReferralReward(
+        employee_id=candidate.referred_by_employee_id,
+        candidate_id=candidate.id,
+        placement_id=placement.id,
+        amount=setting.reward_amount,
+        eligible_at=_add_months(placement.start_date, 3) if placement.start_date else None,
+        status=ReferralRewardStatus.pending,
+    )
+    db.add(reward)
+    db.commit()
+
+
+def _sync_referral_reward_eligible_at(db: Session, placement: Placement) -> None:
+    """Dipanggil setiap `placement.start_date` diisi/berubah (lihat
+    `send_offering_letter`) -- `eligible_at` = start_date + 3 bulan."""
+    if placement.start_date is None:
+        return
+    reward = db.execute(
+        select(ReferralReward).where(
+            ReferralReward.placement_id == placement.id,
+            ReferralReward.status == ReferralRewardStatus.pending,
+        )
+    ).scalar_one_or_none()
+    if reward is None:
+        return
+    reward.eligible_at = _add_months(placement.start_date, 3)
+    db.commit()
+
+
+def list_referral_rewards(db: Session, employee_id: str | None = None) -> list[ReferralReward]:
+    """`pending -> eligible` dihitung on-the-fly lewat `.is_eligible`
+    (properti model) -- lihat komentar di `ReferralReward`, bukan job
+    terjadwal. Baris `status` tetap `pending` di DB sampai memang di-flip
+    manual (mis. saat dibayar), `is_eligible` yang jadi sinyal ke UI/FE."""
+    stmt = select(ReferralReward).order_by(ReferralReward.created_at.desc())
+    if employee_id:
+        stmt = stmt.where(ReferralReward.employee_id == parse_uuid(employee_id))
+    return list(db.execute(stmt).scalars())
+
+
+def mark_referral_reward_paid(db: Session, reward_id: str) -> ReferralReward:
+    reward = db.get(ReferralReward, parse_uuid(reward_id))
+    if reward is None:
+        raise HTTPException(status_code=404, detail="Referral reward tidak ditemukan")
+    if reward.status == ReferralRewardStatus.paid:
+        raise HTTPException(status_code=409, detail="Referral reward sudah dibayar")
+    reward.status = ReferralRewardStatus.paid
+    reward.paid_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(reward)
+    audit.log_event(
+        db,
+        action="referral_reward.paid",
+        entity_type="referral_reward",
+        entity_id=reward.id,
+    )
+    return reward

@@ -87,14 +87,21 @@ def render_document_docx(
     *,
     title: str,
     subtitle: str | None,
-    sections: list[tuple[str, str]],
+    sections: list[tuple[str, str | list[str]]],
     footer_text: str | None = None,
 ) -> bytes:
     """Render dokumen `.docx` struktur sederhana -- dipakai Agreement (item 3),
     yang PRD-nya minta output editable/`.docx` (beda dari Quotation yang
     cukup PDF). Belum ada precedent *authoring* `.docx` di codebase ini
     sebelum fungsi ini (python-docx sebelumnya cuma dipakai untuk *membaca*
-    CV upload di talentpool) -- ground baru, bukan pola yang disalin."""
+    CV upload di talentpool) -- ground baru, bukan pola yang disalin.
+
+    `value` boleh `list[str]` (Fase 25 -- klausul kontrak bernomor/alfabet):
+    tiap item jadi paragraf sendiri, APA ADANYA (tanpa auto-numbering Word).
+    Penomoran/pengabjadan ("1.", "a.") jadi tanggung jawab caller (lihat
+    `hrd/service.py::generate_contract_document`) yang tahu `list_style`
+    dari field_schema -- rendering.py sengaja tidak tahu soal itu, biar
+    dipakai lintas jenis dokumen tanpa asumsi gaya penomoran tertentu."""
     import io
 
     from docx import Document
@@ -109,7 +116,14 @@ def render_document_docx(
 
     for label, value in sections:
         doc.add_heading(label, level=3)
-        doc.add_paragraph(value or "-")
+        if isinstance(value, list):
+            if value:
+                for item in value:
+                    doc.add_paragraph(item)
+            else:
+                doc.add_paragraph("-")
+        else:
+            doc.add_paragraph(value or "-")
 
     if footer_text:
         doc.add_paragraph()

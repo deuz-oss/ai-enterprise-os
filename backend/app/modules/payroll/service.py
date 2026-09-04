@@ -237,7 +237,11 @@ def generate_slips(
             "config_id": bpjs_cfg.id,
         }
 
-    employee_stmt = select(Employee).where(Employee.status == EmployeeStatus.active)
+    # Fase 26 butir 4: employee.payroll_locked -- karyawan terkunci dilewati
+    # saat generate slip baru (bukan cuma cegah edit slip yang sudah ada).
+    employee_stmt = select(Employee).where(
+        Employee.status == EmployeeStatus.active, Employee.payroll_locked.is_(False)
+    )
     if payload.employee_ids:
         ids = [parse_uuid(str(e)) for e in payload.employee_ids]
         employee_stmt = employee_stmt.where(Employee.id.in_(ids))
@@ -499,6 +503,9 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
         raise HTTPException(
             status_code=409, detail="Grid hanya bisa diedit saat draft/ditolak klien"
         )
+    employee = db.get(Employee, slip.employee_id)
+    if employee is not None and employee.payroll_locked:
+        raise HTTPException(status_code=409, detail="Payroll karyawan ini terkunci")
 
     old = float(comp.amount)
     comp.amount = amount
@@ -733,6 +740,36 @@ def saltab_export_pdf(db: Session, run_id: str) -> tuple[bytes, str]:
     return buf.getvalue(), filename
 
 
+def send_saltab_to_client(db: Session, run_id: str, recipient_email: str) -> None:
+    """Kirim manual Saltab (PDF) ke email klien -- Fase 23 butir 4.
+
+    Tombol ini dipencet Ops, BUKAN dikirim otomatis begitu link dibuat, dan
+    email penerima diisi manual tiap kirim (bukan diambil dari data klien)
+    karena PIC bisa beda-beda per pengiriman -- keputusan eksplisit PRD."""
+    from app.modules import audit
+
+    run = _get_run(db, run_id)
+    content, filename = saltab_export_pdf(db, run_id)
+    from app.modules.notifications.service import send_raw_email_with_attachment
+
+    send_raw_email_with_attachment(
+        recipient_email,
+        f"Saltab {run.year}-{run.month:02d}",
+        "Terlampir rekap Saltab (slip gaji tabel) untuk periode ini.",
+        attachment_bytes=content,
+        attachment_filename=filename,
+        attachment_maintype="application",
+        attachment_subtype="pdf",
+    )
+    audit.log_event(
+        db,
+        action="payroll.saltab_sent_to_client",
+        entity_type="payroll_run",
+        entity_id=run.id,
+        detail={"recipient_email": recipient_email},
+    )
+
+
 def bukti_potong_pdf(db: Session, run_id: str, employee_id: str) -> tuple[bytes, str]:
     """PRD v3.0 §6 — Bukti Pemotongan PPh 21 per karyawan per run payrol.
 
@@ -861,6 +898,119 @@ def bukti_potong_pdf(db: Session, run_id: str, employee_id: str) -> tuple[bytes,
     doc.build(story)
     filename = f"bukti-potong-{no_bukti}-{employee.employee_no}.pdf"
     return buf.getvalue(), filename
+
+
+def _get_employee_slip(db: Session, run_id: str, employee_id: str) -> Payslip:
+    run = _get_run(db, run_id)
+    slip = db.execute(
+        select(Payslip).where(
+            Payslip.run_id == run.id, Payslip.employee_id == parse_uuid(employee_id)
+        )
+    ).scalar_one_or_none()
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip karyawan tidak ditemukan pada run ini")
+    return slip
+
+
+def employee_payslip_pdf(db: Session, run_id: str, employee_id: str) -> tuple[bytes, str]:
+    """Payslip lengkap per karyawan -- Fase 26 butir 5, BEDA dari
+    `bukti_potong_pdf` (itu sertifikat pajak PPh21, bukan slip gaji utuh)."""
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    slip = _get_employee_slip(db, run_id, employee_id)
+    run = _get_run(db, run_id)
+    employee = slip.employee
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=f"Payslip {run.year}-{run.month:02d}",
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Heading2"]
+    normal = styles["Normal"]
+
+    rows = [["Komponen", "Jenis", "Nominal (Rp)"]]
+    for comp in slip.components:
+        rows.append([comp.name, comp.ctype.value, f"{float(comp.amount):,.0f}"])
+    rows.append(["THP (Net Pay)", "", f"{float(slip.net_pay):,.0f}"])
+
+    tbl = Table(rows, colWidths=[80 * mm, 40 * mm, 45 * mm])
+    tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3864")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9D9D9")),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFF2CC")),
+            ]
+        )
+    )
+
+    story = [
+        Paragraph(f"SLIP GAJI &mdash; {run.year}/{run.month:02d}", title_style),
+        Spacer(1, 4),
+        Paragraph(f"Nama: {employee.full_name}", normal),
+        Paragraph(f"No. Induk Karyawan: {employee.employee_no}", normal),
+        Spacer(1, 10),
+        tbl,
+    ]
+    doc.build(story)
+    filename = f"payslip-{run.year}{run.month:02d}-{employee.employee_no}.pdf"
+    return buf.getvalue(), filename
+
+
+def send_payslip_email(db: Session, run_id: str, employee_id: str) -> None:
+    """Kirim payslip langsung ke email karyawan -- Fase 26 butir 5, TERPISAH
+    dari alur Ops->klien Fase 23 butir 4 (`send_saltab_to_client`, penerima
+    beda: karyawan sendiri, bukan PIC klien)."""
+    from app.modules.auth.models import User
+    from app.modules.notifications.service import send_raw_email_with_attachment
+
+    slip = _get_employee_slip(db, run_id, employee_id)
+    employee = slip.employee
+    if employee.user_id is None:
+        raise HTTPException(
+            status_code=400, detail="Karyawan ini belum tertaut akun (tidak ada email tujuan)"
+        )
+    user = db.get(User, employee.user_id)
+    if user is None or not user.email:
+        raise HTTPException(status_code=400, detail="Akun karyawan tidak punya email")
+
+    run = _get_run(db, run_id)
+    content, filename = employee_payslip_pdf(db, run_id, employee_id)
+    send_raw_email_with_attachment(
+        user.email,
+        f"Slip Gaji {run.year}-{run.month:02d}",
+        "Terlampir slip gaji Anda untuk periode ini.",
+        attachment_bytes=content,
+        attachment_filename=filename,
+        attachment_maintype="application",
+        attachment_subtype="pdf",
+    )
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="payroll.payslip_emailed",
+        entity_type="payslip",
+        entity_id=slip.id,
+        detail={"employee_id": str(employee.id)},
+    )
 
 
 def finalize_run(db: Session, run_id: str, tenant_id=None) -> PayrollRun:
