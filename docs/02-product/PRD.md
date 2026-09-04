@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-02
+**Terakhir diperbarui:** 2026-09-04
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -127,6 +127,8 @@ Mekari):
 | 7 | Absensi hanya rekap bulanan manual | Selisih jam kerja/lembur baru ketahuan saat payrol |
 | 8 | *(baru)* Sourcing calon klien manual (cold call/email tanpa data kontak terstruktur per departemen); quotation & agreement dibuat manual di Word/Excel, dikirim via email tanpa jejak versi/approval | Waktu presales lama, tidak ada visibilitas siapa yang sudah di-approach, risiko quotation terkirim tanpa approval harga/term |
 | 9 | *(baru)* Detail Job Order (benefit, jam kerja) numpang di teks bebas `description`/`requirements`, tidak ada dokumen JO ter-generate dari sistem, jadwal interview tidak tersinkron ke kalender kandidat/rekruter | Detail JO gampang terlewat/salah kutip ke offering letter, double-booking jadwal interview, kandidat lupa jadwal karena tidak ada reminder kalender |
+| 10 | *(baru)* Role Operations tidak bisa akses modul karyawan sama sekali (bukan cuma dibatasi ke eksternal); tidak ada pencatatan riwayat surat peringatan; pengiriman Saltab ke klien manual tanpa jejak sistem | Ops harus minta HR tiap butuh data karyawan eksternal untuk kerja sehari-hari; riwayat SP karyawan tidak terpusat; tidak ada audit trail kapan/ke siapa Saltab dikirim |
+| 11 | *(baru)* Dibanding tool existing SPC (MYOHRIS): field Job Order & Talent Pool kurang detail (klasifikasi posisi/level, riwayat kerja terstruktur, dst.), kontrak karyawan masih upload manual tanpa template, halaman Employee belum ada riwayat mutasi/vaksin/kontak darurat, dan belum ada program referral karyawan | Data kandidat/karyawan kurang terklasifikasi untuk pelaporan, pembuatan kontrak lambat & rawan salah kutip, riwayat karyawan tersebar/tidak tercatat, sourcing kandidat kehilangan jalur rujukan internal |
 
 ## 3. Pengguna & Peran
 
@@ -723,6 +725,202 @@ badge, progress tracker Placement, tombol offering).
 - **Migrasi belum menyeluruh** — 29 file frontend lain yang sama-sama
   ditemukan bypass token di audit awal BELUM disentuh di fase ini;
   migrasi lanjutan dilakukan bertahap, bukan sekaligus.
+
+### Fase 23 — Employee: RBAC Ops, SKCK, Warning Letter, Kirim Saltab *(direncanakan, belum dimulai)*
+
+Audit lintas modul `hrd`/`payroll`/`esign`/`attendance` (2026-09-03)
+menunjukkan alur inti sudah dibangun lengkap — dokumen legal karyawan
+(`EmployeeDocument`), kontrak+esign (`EmploymentContract`,
+`ContractSignStatus`), konversi Placement→Employee
+(`onboard_from_placement`), absensi+cuti, **sistem line-item payroll
+yang fleksibel** (`PayslipComponent`: THR/UUCK/bonus/insentif/
+reimbursement/perdin/cash advance/admin bank/hold salary semua bisa
+ditampung lewat `code`/`name`/`amount` TANPA ubah skema), generate
+dokumen Saltab (`saltab_export_csv/excel/pdf`), link approval klien
+tanpa akun (`PayrollRunToken`), dan Payment Request (`finance` module)
+— semua ini SUDAH ADA. Fase ini menutup 4 gap konkret:
+
+1. **RBAC Ops vs HR untuk data karyawan — prioritas tertinggi, ini bug
+   keamanan bukan sekadar fitur kurang**: `HRD_ROLES = ("hr",
+   "management")` saat ini TIDAK menyertakan `"operations"` sama
+   sekali — kondisi sekarang bukan "Ops lihat eksternal saja", tapi
+   **Ops tidak bisa akses modul karyawan sama sekali** (internal maupun
+   eksternal). Perbaikan 2 lapis: (a) tambah `"operations"` ke
+   `HRD_ROLES`, (b) tambah **filter row-level** di `list_employees()`
+   DAN `get_employee()` — kalau `user.role == "operations"`, query
+   dibatasi `Employee.employment_type == EmploymentType.eksternal`.
+   Filter di endpoint detail (`get_employee`) WAJIB ada, bukan cuma di
+   listing — kalau tidak, Ops masih bisa buka data karyawan internal
+   langsung lewat ID meski tidak muncul di daftar (security by
+   obscurity, bukan kontrol akses nyata). Modul `payroll` TIDAK
+   terdampak gap ini — `PAYROLL_ROLES` sudah menyertakan `"operations"`
+   sejak awal.
+2. **`HrDocumentType` tambah nilai `skck`** — saat ini SKCK kemungkinan
+   numpang di kategori `lainnya` (catch-all), sehingga tidak bisa
+   di-filter/reminder otomatis khusus SKCK saat cek kelengkapan dokumen
+   karyawan baru.
+3. **Model baru `WarningLetter`** — satu-satunya gap yang butuh tabel
+   baru: `employee_id` (FK), `letter_type` (SP1/SP2/SP3), `reason`,
+   `issued_at`, `valid_until` (SP lazimnya berlaku 6 bulan lalu gugur —
+   field ini yang bedakan "masih berlaku" vs "riwayat lama" di halaman
+   Employee), `object_key` (scan surat), `issued_by`. Pola mengikuti
+   `EmployeeDocument` yang sudah ada.
+4. **Kirim Saltab ke klien — tombol manual, BUKAN otomatis (keputusan
+   eksplisit, 2026-09-03)**: klarifikasi penting — yang mengirim Saltab
+   ke klien untuk approval adalah **Ops, bukan HR**, dan prosesnya
+   TETAP manual (bukan auto-send begitu link dibuat). Implementasi:
+   tombol "Kirim ke klien" di halaman Saltab + kolom input email
+   penerima (bukan diambil otomatis dari data klien — Ops yang isi
+   manual saat kirim, mengakomodasi kasus PIC berbeda per pengiriman).
+   Di balik tombol itu, reuse fungsi `send_raw_email()` yang sudah ada
+   di modul `notifications` (bukan bangun sistem email baru) —
+   dikombinasikan dengan `PayrollRunToken` yang sudah ada untuk link
+   approval-nya.
+
+**Urutan pembangunan**: butir 1 (RBAC) dikerjakan lebih dulu dan
+terpisah dari 3 lainnya — ini perbaikan keamanan, bukan penambahan
+fitur, sebaiknya tidak menunggu prioritas fitur lain. Butir 2, 3, 4
+saling independen, urutan bebas.
+
+### Fase 24 — Job Order & Talent Pool: Perluasan Field ala MYOHRIS *(direncanakan, belum dimulai)*
+
+Review langsung terhadap MYOHRIS (tool existing SPC, 2026-09-04)
+dibandingkan ke `JobOrder` dan `Candidate` — sebagian besar berupa
+field tambahan, bukan restrukturisasi. **Konvensi penamaan
+(keputusan eksplisit)**: field baru TIDAK memakai prefix "Job"/
+"Talent" meski nama tampilan MYOHRIS memakainya (mis. field Aeos
+`industry`, bukan `job_industry`).
+
+**`JobOrder` — field baru:**
+`remote` (Boolean), `office_address`, `experience_level`,
+`contract_detail` (Full Time/Part Time — beda dari
+`contract_duration_months` yang sudah ada), `industry`, `position`
++ `level` (klasifikasi terstruktur, `title` sekarang teks bebas),
+`package_detail` (paket benefit predefined — memperjelas gap
+"benefit" di Fase 21 poin 2, ternyata bukan list bebas melainkan
+paket). **`frequency` SENGAJA TIDAK diimplementasikan** (keputusan
+eksplisit — fitur di-drop, bukan cuma soal nama).
+
+**`Candidate` — field baru:**
+`reference` (kode unik), `gender`, `current_position` (beda dari
+`current_company` yang sudah ada), `birthdate`, `birthplace`,
+`address` (perluasan `city`), `ktp_no`, `marital_status`,
+`blood_type`, `religion`, `languages` (list), `description` (bio),
+`position_pool` (kategori posisi diminati, lepas dari 1 JO
+spesifik), `job_level`, `school` + `education_level` (pisah dari
+`education` yang sekarang teks bebas gabungan). **`industry` dan
+`current_department` SENGAJA TIDAK diimplementasikan** (keputusan
+eksplisit — di-drop).
+
+**Gap tambahan yang butuh desain terpisah** (bukan sekadar kolom
+baru): `skills` perlu diubah tipenya jadi list terstruktur (sekarang
+teks blob), `experience` perlu jadi riwayat per-posisi (sekarang
+cuma `experience_years` angka total), dan perlu **Log Book** —
+activity trail per aksi (upload dokumen, perubahan sumber, kapan)
+yang belum punya padanan sama sekali (`created_at`/`updated_at` saja
+tidak cukup untuk ini).
+
+**`PlacementStatus` — tambah stage baru "Hired" (keputusan
+eksplisit, 2026-09-04):** alur interview TETAP 2 jenis
+(internal/klien) yang sudah dirancang Fase 21 — tidak diubah jadi 3
+babak terpisah meski MYOHRIS punya kolom Kanban HR/User/Final
+Interview terpisah. Sebagai gantinya, tambah 1 stage baru persis
+mengikuti istilah MYOHRIS:
+```
+... → proposed (diusulkan) → accepted (disetujui_klien)
+    → hired (BARU) → onboarded
+```
+
+### Fase 25 — Employee Contract Generator (template engine terpisah dari Fase 20) *(direncanakan, belum dimulai)*
+
+Ditemukan dari alur "Create Employee" 8-langkah MYOHRIS (Select
+Candidate → Personal → Employment → Payroll → Additional → Preview →
+Edit & Send → Finish). `EmploymentContract` Aeos sekarang **upload-
+only** (`object_key` saja) — pola sama seperti
+`JobOrder.source_document_object_key`, tidak ada template engine.
+
+- **Step "Additional" (MYOHRIS)**: isi list dinamis untuk klausul
+  kontrak (mis. job description bernomor/alfabet) dengan pilihan
+  gaya urutan (numerik/alfabet a-z/A-Z), bisa tambah/hapus item.
+  Field schema perlu dukung **tipe list/array**, bukan cuma field
+  datar seperti dirancang di Fase 20.
+- **Step "Preview"**: dokumen kontrak (contoh nyata: "PERJANJIAN
+  KEMITRAAN") ter-generate penuh dari template, branded, otomatis
+  terisi data personal dari langkah sebelumnya.
+- **Step "Edit & Send"**: safety-valve — download hasil generate
+  (.docx), edit manual di luar sistem, upload ulang versi editan
+  SEBELUM terkirim ke kandidat. Ada opsi "custom mail message".
+
+**Keputusan eksplisit (2026-09-04): template engine ini TERPISAH
+dari Agreement generator klien (Fase 20)** — bukan satu sistem
+bersama seperti sempat direkomendasikan saat audit. Dua modul
+berbeda, meski pola dasarnya (field_schema JSON + tipe list + alur
+download-edit-upload-ulang) sama-sama berlaku independen di
+keduanya.
+
+### Fase 26 — Employee Detail: Movements, Vaccine, Emergency Contact, Lock Payroll, Payslip Email *(direncanakan, belum dimulai)*
+
+Perluasan Fase 23 dari review halaman Employee Detail MYOHRIS.
+**Struktur tab acuan**: Summary → Timesheet → Payroll
+(Incomes/Deductions/Overtimes/Overview) → Movements → Documents →
+Notes → History.
+
+Gap baru (dicek ke code, nol hasil untuk kelimanya):
+1. **Tab "Movements"** — model baru untuk riwayat mutasi/promosi
+   (perubahan grade/divisi/posisi dari waktu ke waktu).
+2. **Vaccine records** — riwayat vaksinasi karyawan, konsep baru.
+3. **Emergency Contact** — field terstruktur (nama, hubungan,
+   telepon), sekarang tidak ada sama sekali.
+4. **Lock Payroll** — kunci periode payroll yang sudah final di
+   level karyawan, cegah edit lebih lanjut setelah dikunci.
+5. **Send Email payslip langsung ke karyawan** — tombol terpisah
+   dari alur Ops→klien (Fase 23 poin 4); ini kirim slip gaji ke
+   email karyawan yang bersangkutan.
+
+Juga mengonfirmasi ulang & memperdalam gap yang sudah tercatat:
+Employee Level dan Employee Grade adalah 2 konsep hierarki terpisah
+(bukan satu), dan alamat perlu hierarki geografis lengkap (Provinsi
+→ Kabupaten → Kecamatan → Kode Pos) untuk Citizen Address DAN
+Residential Address secara terpisah.
+
+### Fase 27 — Program Referral Karyawan *(direncanakan, belum dimulai)*
+
+Fitur baru (2026-09-04, tidak pernah dibahas sebelumnya): setiap
+karyawan punya kode referral unik untuk melacak kandidat yang masuk
+lewat rujukan. Menjadikan referral sebagai **jalur sourcing
+ketiga**, di samping Job Portal dan Talent Pool (Fase 21).
+
+```
+Employee (ditambah)
+└── referral_code (String, unique per tenant, auto-generated)
+
+Candidate (ditambah)
+└── referred_by_employee_id → FK Employee (nullable)
+
+ReferralProgramSetting (baru, per tenant, singleton)
+├── is_enabled (Boolean, default False) — toggle utama on/off
+└── reward_amount (Numeric) — nominal default insentif
+
+ReferralReward (baru)
+├── employee_id → FK (siapa yang mereferensikan)
+├── candidate_id → FK
+├── placement_id → FK (nullable, terisi begitu placed)
+├── amount (Numeric)
+├── eligible_at (Date — dihitung otomatis: placement.start_date + 3 bulan)
+├── status: pending / eligible / paid / cancelled
+└── paid_at (nullable)
+```
+
+**Aturan cair (keputusan eksplisit): 3 bulan setelah placement.**
+`eligible_at` dihitung otomatis dari `placement.start_date + 3
+bulan` — transisi `pending`→`eligible` tidak butuh approval manual,
+cukup dihitung on-the-fly saat query ATAU via scheduled job harian
+(pilih salah satu saat implementasi).
+
+**Efek toggle "off"**: kode referral karyawan tetap ada (tidak
+dihapus), tapi kandidat baru yang masuk lewat kode itu selama
+program nonaktif TIDAK menghasilkan `ReferralReward` baru — riwayat
+reward lama tetap utuh.
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
