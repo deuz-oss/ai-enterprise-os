@@ -10,6 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  FileCheck2,
+  FileSignature,
   Filter,
   Gift,
   GitBranch,
@@ -178,6 +180,14 @@ export default function TalentCloudOverview() {
   });
   const leads = useQuery({ queryKey: ["leads"], queryFn: () => api.get<Lead[]>("/leads") });
   const clients = useQuery({ queryKey: ["clients"], queryFn: () => api.get<ClientRow[]>("/clients") });
+  const quotations = useQuery({
+    queryKey: ["quotations"],
+    queryFn: () => api.get<{ id: string; status: string }[]>("/quotations"),
+  });
+  const agreements = useQuery({
+    queryKey: ["agreements"],
+    queryFn: () => api.get<{ id: string; status: string }[]>("/agreements"),
+  });
   const jobOrders = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -639,6 +649,38 @@ export default function TalentCloudOverview() {
               )}
             </div>
             <SeeAllLink to="/leads">Lihat semua leads →</SeeAllLink>
+          </div>
+
+          {/* Quotation (Fase 20) */}
+          <div className="card space-y-2">
+            <div className="flex items-center gap-2">
+              <IconBadge icon={FileSignature} tone="accent" />
+              <div>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Quotation</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {quotations.data?.length ?? 0} total ·{" "}
+                  {(quotations.data ?? []).filter((q) => q.status === "pending_approval").length}{" "}
+                  menunggu approval
+                </p>
+              </div>
+            </div>
+            <SeeAllLink to="/quotations">Lihat semua quotation →</SeeAllLink>
+          </div>
+
+          {/* Agreement (Fase 20) */}
+          <div className="card space-y-2">
+            <div className="flex items-center gap-2">
+              <IconBadge icon={FileCheck2} tone="accent" />
+              <div>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Agreement</h2>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {agreements.data?.length ?? 0} total ·{" "}
+                  {(agreements.data ?? []).filter((a) => a.status === "internal_review").length}{" "}
+                  menunggu review
+                </p>
+              </div>
+            </div>
+            <SeeAllLink to="/agreements">Lihat semua agreement →</SeeAllLink>
           </div>
         </div>
       </div>

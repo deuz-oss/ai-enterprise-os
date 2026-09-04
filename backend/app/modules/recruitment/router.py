@@ -19,7 +19,11 @@ from app.modules.recruitment.schemas import (
     InterviewScheduleUpdate,
     JobOrderCreate,
     JobOrderExtractOut,
+    JobOrderGenerateDocumentIn,
     JobOrderOut,
+    JobOrderTemplateCreate,
+    JobOrderTemplateOut,
+    JobOrderTemplateUpdate,
     JobOrderUpdate,
     MatchRequest,
     MatchResult,
@@ -92,6 +96,45 @@ def update_job_order(jo_id: str, payload: JobOrderUpdate, db: Session = Depends(
 @router.delete("/job-orders/{jo_id}", status_code=204)
 def delete_job_order(jo_id: str, db: Session = Depends(get_db)):
     service.delete_job_order(db, jo_id)
+
+
+# ---------- Template & generate dokumen Job Order (Fase 21 item 4) ----------
+
+
+@router.get("/job-order-templates", response_model=list[JobOrderTemplateOut])
+def list_job_order_templates(active_only: bool = False, db: Session = Depends(get_db)):
+    return service.list_job_order_templates(db, active_only=active_only)
+
+
+@router.post(
+    "/job-order-templates", response_model=JobOrderTemplateOut, status_code=status.HTTP_201_CREATED
+)
+def create_job_order_template(payload: JobOrderTemplateCreate, db: Session = Depends(get_db)):
+    return service.create_job_order_template(db, payload)
+
+
+@router.get("/job-order-templates/{template_id}", response_model=JobOrderTemplateOut)
+def get_job_order_template(template_id: str, db: Session = Depends(get_db)):
+    return service.get_job_order_template(db, template_id)
+
+
+@router.patch("/job-order-templates/{template_id}", response_model=JobOrderTemplateOut)
+def update_job_order_template(
+    template_id: str, payload: JobOrderTemplateUpdate, db: Session = Depends(get_db)
+):
+    return service.update_job_order_template(db, template_id, payload)
+
+
+@router.post("/job-orders/{jo_id}/generate-document", response_model=JobOrderOut)
+def generate_job_order_document(
+    jo_id: str, payload: JobOrderGenerateDocumentIn, db: Session = Depends(get_db)
+):
+    return service.generate_job_order_document(db, jo_id, str(payload.template_id))
+
+
+@router.get("/job-orders/{jo_id}/generated-document/download-url")
+def job_order_generated_document_download_url(jo_id: str, db: Session = Depends(get_db)):
+    return {"url": service.job_order_generated_document_download_url(db, jo_id)}
 
 
 # ---------- Candidates ----------
@@ -184,6 +227,12 @@ def send_offering(placement_id: str, payload: OfferingSendIn, db: Session = Depe
 
     request = service.send_offering_letter(db, placement_id, payload)
     return EsignRequestOut.model_validate(request)
+
+
+@router.post("/placements/{placement_id}/offering-call", response_model=PlacementOut)
+def record_offering_call(placement_id: str, db: Session = Depends(get_db)):
+    """Fase 21 item 2 — catat offering call, independen dari offering letter."""
+    return service.record_offering_call(db, placement_id)
 
 
 # ---------- Interviews — PRD v3.0 Talent Cloud ----------

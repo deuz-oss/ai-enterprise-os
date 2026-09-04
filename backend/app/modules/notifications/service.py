@@ -29,6 +29,60 @@ def build_email_message(to: str, subject: str, body: str) -> EmailMessage:
     return msg
 
 
+def build_email_message_with_attachment(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    attachment_bytes: bytes,
+    attachment_filename: str,
+    attachment_maintype: str,
+    attachment_subtype: str,
+    attachment_params: dict | None = None,
+) -> EmailMessage:
+    """Sama seperti `build_email_message`, ditambah satu lampiran biner --
+    dipakai pertama kali untuk invite `.ics` interview (Fase 21 item 5).
+    Belum ada precedent attachment email di codebase ini sebelum fungsi
+    ini; `EmailMessage.add_attachment` standar library, bukan dependency
+    baru."""
+    msg = build_email_message(to, subject, body)
+    msg.add_attachment(
+        attachment_bytes,
+        maintype=attachment_maintype,
+        subtype=attachment_subtype,
+        filename=attachment_filename,
+        params=attachment_params or {},
+    )
+    return msg
+
+
+def send_raw_email_with_attachment(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    attachment_bytes: bytes,
+    attachment_filename: str,
+    attachment_maintype: str,
+    attachment_subtype: str,
+    attachment_params: dict | None = None,
+) -> None:
+    """Sibling `send_raw_email` dengan lampiran -- no-op senyap bila SMTP
+    tak dikonfigurasi (sama seperti `send_raw_email`)."""
+    _smtp_send(
+        build_email_message_with_attachment(
+            to,
+            subject,
+            body,
+            attachment_bytes=attachment_bytes,
+            attachment_filename=attachment_filename,
+            attachment_maintype=attachment_maintype,
+            attachment_subtype=attachment_subtype,
+            attachment_params=attachment_params,
+        )
+    )
+
+
 def _smtp_send(msg: EmailMessage) -> None:
     """Kirim pesan lewat SMTP; kegagalan hanya dicatat ke log."""
     settings = get_settings()

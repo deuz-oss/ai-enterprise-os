@@ -420,3 +420,186 @@ def test_interview_schedule_notifies_interviewer_and_posts_to_jo_channel(client)
     # scheduled_at "09:00" tanpa offset dianggap UTC lalu ditampilkan WIB
     # (UTC+7) di teks notifikasi/chat — regresi bug tampilan jam mentah UTC.
     assert any("10 Sep 2026 16:00 WIB" in m["content"] for m in messages)
+
+
+def test_job_order_structured_benefits_and_working_hours(client):
+    """Fase 21 item 1 — field terstruktur benefit & jam kerja, bukan lagi
+    numpang di teks bebas description/requirements."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    resp = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=headers,
+        json={
+            "client_id": cid,
+            "title": "Operator Produksi",
+            "benefits": ["BPJS Kesehatan", "Tunjangan Makan", "Tunjangan Transport"],
+            "working_days": ["senin", "selasa", "rabu", "kamis", "jumat"],
+            "working_hours_start": "08:00:00",
+            "working_hours_end": "17:00:00",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    jo = resp.json()
+    assert jo["benefits"] == ["BPJS Kesehatan", "Tunjangan Makan", "Tunjangan Transport"]
+    assert jo["working_days"] == ["senin", "selasa", "rabu", "kamis", "jumat"]
+    assert jo["working_hours_start"] == "08:00:00"
+    assert jo["working_hours_end"] == "17:00:00"
+
+    updated = client.patch(
+        f"/api/v1/recruitment/job-orders/{jo['id']}",
+        headers=headers,
+        json={"benefits": ["BPJS Kesehatan"]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["benefits"] == ["BPJS Kesehatan"]
+    # working_days tidak disentuh oleh update parsial -- tetap seperti semula.
+    assert updated.json()["working_days"] == ["senin", "selasa", "rabu", "kamis", "jumat"]
+
+
+def test_offering_call_recorded_independent_of_offering_letter(client):
+    """Fase 21 item 2 — offering call tercatat sebagai aksi terpisah,
+    tidak butuh offering letter/esign dulu."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    ).json()
+    pid = placement["id"]
+    assert placement["offering_call_done"] is False
+    assert placement["offering_call_at"] is None
+
+    recorded = client.post(f"/api/v1/recruitment/placements/{pid}/offering-call", headers=headers)
+    assert recorded.status_code == 200, recorded.text
+    assert recorded.json()["offering_call_done"] is True
+    assert recorded.json()["offering_call_at"] is not None
+
+
+def test_interview_schedule_sends_ics_invite_to_candidate_and_interviewer(client):
+    """Fase 21 item 5 — invite `.ics` lampiran email, BUKAN OAuth Google
+    Calendar (keputusan eksplisit PRD). Verifikasi lewat mock `_smtp_send`
+    (tanpa SMTP sungguhan) menangkap pesan + lampiran .ics valid."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+    client.patch(
+        f"/api/v1/recruitment/candidates/{cand_id}",
+        headers=headers,
+        json={"email": "andi@kandidat.co.id"},
+    )
+
+    sent_messages = []
+    with patch(
+        "app.modules.notifications.service._smtp_send",
+        side_effect=lambda msg: sent_messages.append(msg),
+    ):
+        created = client.post(
+            "/api/v1/recruitment/interviews",
+            headers=headers,
+            json={
+                "candidate_id": cand_id,
+                "job_order_id": jo_id,
+                "scheduled_at": "2026-09-10T09:00:00",
+                "location": "Kantor Pusat",
+            },
+        )
+    assert created.status_code == 201, created.text
+    assert len(sent_messages) == 1
+    msg = sent_messages[0]
+    assert msg["To"] == "andi@kandidat.co.id"
+    attachments = list(msg.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].get_filename() == "interview.ics"
+    ics_payload = attachments[0].get_payload(decode=True)
+    assert b"BEGIN:VEVENT" in ics_payload
+    assert b"BEGIN:VCALENDAR" in ics_payload
+
+
+def test_job_order_template_crud(client):
+    headers = _auth_header(client)
+    created = client.post(
+        "/api/v1/recruitment/job-order-templates",
+        headers=headers,
+        json={"name": "Template JO Standar", "footer_text": "Dibuat otomatis oleh sistem."},
+    )
+    assert created.status_code == 201, created.text
+    tmpl = created.json()
+    assert tmpl["is_active"] is True
+
+    listed = client.get("/api/v1/recruitment/job-order-templates", headers=headers).json()
+    assert len(listed) == 1
+
+    updated = client.patch(
+        f"/api/v1/recruitment/job-order-templates/{tmpl['id']}",
+        headers=headers,
+        json={"is_active": False},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["is_active"] is False
+
+
+def test_generate_job_order_document_reuses_fase20_pdf_rendering(client):
+    """Fase 21 item 4 — generate dokumen JO dari field JO sendiri (benefits/
+    working_days/hours dari item 1), reuse penuh `presales.rendering` yang
+    sama dipakai Quotation (Fase 20)."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=headers,
+        json={
+            "client_id": cid,
+            "title": "Operator Produksi",
+            "area": "Cikarang",
+            "headcount": 3,
+            "salary_min": 4_500_000,
+            "salary_max": 5_500_000,
+            "contract_duration_months": 12,
+            "benefits": ["BPJS Kesehatan", "Tunjangan Makan"],
+            "working_days": ["senin", "selasa", "rabu", "kamis", "jumat"],
+            "working_hours_start": "08:00:00",
+            "working_hours_end": "17:00:00",
+        },
+    ).json()
+    assert jo["has_generated_document"] is False
+
+    tmpl = client.post(
+        "/api/v1/recruitment/job-order-templates",
+        headers=headers,
+        json={"name": "Template JO Standar"},
+    ).json()
+
+    generated = client.post(
+        f"/api/v1/recruitment/job-orders/{jo['id']}/generate-document",
+        headers=headers,
+        json={"template_id": tmpl["id"]},
+    )
+    assert generated.status_code == 200, generated.text
+    body = generated.json()
+    assert body["has_generated_document"] is True
+    assert body["generated_document_at"] is not None
+
+    dl = client.get(
+        f"/api/v1/recruitment/job-orders/{jo['id']}/generated-document/download-url",
+        headers=headers,
+    )
+    assert dl.status_code == 200
+    assert dl.json()["url"]
+
+
+def test_generate_job_order_document_requires_existing_template(client):
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    resp = client.post(
+        f"/api/v1/recruitment/job-orders/{jo_id}/generate-document",
+        headers=headers,
+        json={"template_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert resp.status_code == 404

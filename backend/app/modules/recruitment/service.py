@@ -1,7 +1,7 @@
 import base64
 import json
 import math
-from datetime import UTC, date, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
@@ -20,6 +20,7 @@ from app.modules.recruitment.models import (
     JobOrder,
     JobOrderBusinessStatus,
     JobOrderStatus,
+    JobOrderTemplate,
     Placement,
     PlacementStatus,
 )
@@ -29,6 +30,8 @@ from app.modules.recruitment.schemas import (
     InterviewScheduleCreate,
     InterviewScheduleUpdate,
     JobOrderCreate,
+    JobOrderTemplateCreate,
+    JobOrderTemplateUpdate,
     JobOrderUpdate,
     OfferingSendIn,
     PlacementCreate,
@@ -77,10 +80,15 @@ def create_job_order(db: Session, payload: JobOrderCreate) -> JobOrder:
     auto_request_id = not data.get("request_id")
     if not data.get("request_date"):
         data["request_date"] = date.today()
-    # `screening_questions` itu properti read-only (turunan JSON) di model —
-    # simpan ke kolom mentahnya, bukan lewat nama atribut yang sama.
+    # `screening_questions`/`benefits`/`working_days` itu properti read-only
+    # (turunan JSON) di model — simpan ke kolom mentahnya, bukan lewat nama
+    # atribut yang sama.
     questions = data.pop("screening_questions", None)
     data["screening_questions_json"] = json.dumps(questions) if questions else None
+    benefits = data.pop("benefits", None)
+    data["benefits_json"] = json.dumps(benefits) if benefits else None
+    working_days = data.pop("working_days", None)
+    data["working_days_json"] = json.dumps(working_days) if working_days else None
 
     # Retry kalau request_id auto-generate tabrakan (race antar-request
     # bersamaan, MAX-based tanpa lock tetap bisa collide) -- request_id
@@ -156,6 +164,12 @@ def update_job_order(db: Session, jo_id: str, payload: JobOrderUpdate) -> JobOrd
     if "screening_questions" in data:
         questions = data.pop("screening_questions")
         jo.screening_questions_json = json.dumps(questions) if questions else None
+    if "benefits" in data:
+        benefits = data.pop("benefits")
+        jo.benefits_json = json.dumps(benefits) if benefits else None
+    if "working_days" in data:
+        working_days = data.pop("working_days")
+        jo.working_days_json = json.dumps(working_days) if working_days else None
     for field, value in data.items():
         setattr(jo, field, value)
     db.commit()
@@ -182,6 +196,126 @@ def job_order_document_download_url(db: Session, jo_id: str) -> str:
         detail={"file_name": jo.source_document_file_name},
     )
     return storage.presigned_get_url(jo.source_document_object_key)
+
+
+# ---------- Template & generate dokumen Job Order (Fase 21 item 4) ----------
+
+
+def _get_job_order_template(db: Session, template_id: str) -> JobOrderTemplate:
+    tmpl = db.get(JobOrderTemplate, parse_uuid(template_id))
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template Job Order tidak ditemukan")
+    return tmpl
+
+
+def create_job_order_template(db: Session, payload: JobOrderTemplateCreate) -> JobOrderTemplate:
+    tmpl = JobOrderTemplate(**payload.model_dump())
+    db.add(tmpl)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+
+def list_job_order_templates(db: Session, active_only: bool = False) -> list[JobOrderTemplate]:
+    stmt = select(JobOrderTemplate).order_by(JobOrderTemplate.created_at.desc())
+    if active_only:
+        stmt = stmt.where(JobOrderTemplate.is_active.is_(True))
+    return list(db.execute(stmt).scalars())
+
+
+def get_job_order_template(db: Session, template_id: str) -> JobOrderTemplate:
+    return _get_job_order_template(db, template_id)
+
+
+def update_job_order_template(
+    db: Session, template_id: str, payload: JobOrderTemplateUpdate
+) -> JobOrderTemplate:
+    tmpl = _get_job_order_template(db, template_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(tmpl, field, value)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+
+def generate_job_order_document(db: Session, jo_id: str, template_id: str) -> JobOrder:
+    """Fase 21 item 4 — generate dokumen JO dari template, reuse penuh
+    infrastruktur rendering PDF Fase 20 (`presales.rendering`). Isi dokumen
+    100% dari field JobOrder sendiri (lihat catatan di `JobOrderTemplate`) --
+    tidak ada field_values terpisah seperti Quotation/Agreement."""
+    from app.modules.presales.rendering import render_document_pdf, store_generated_document
+
+    jo = _get_job_order(db, jo_id)
+    template = _get_job_order_template(db, template_id)
+    client = db.get(Client, jo.client_id)
+
+    salary_range = None
+    if jo.salary_min or jo.salary_max:
+        salary_range = f"Rp{jo.salary_min or 0:,.0f} – Rp{jo.salary_max or 0:,.0f}"
+    working_hours = None
+    if jo.working_hours_start and jo.working_hours_end:
+        working_hours = (
+            f"{jo.working_hours_start.strftime('%H:%M')} – "
+            f"{jo.working_hours_end.strftime('%H:%M')}"
+        )
+
+    sections = [
+        ("Posisi", jo.title),
+        ("Klien", client.name if client else "-"),
+        ("Area", jo.area or "-"),
+        ("Jumlah Kebutuhan", f"{jo.headcount} orang"),
+        ("Range Gaji", salary_range or "-"),
+        (
+            "Durasi Kontrak",
+            f"{jo.contract_duration_months} bulan" if jo.contract_duration_months else "-",
+        ),
+        ("Jam Kerja", working_hours or "-"),
+        ("Hari Kerja", ", ".join(jo.working_days) if jo.working_days else "-"),
+        ("Benefit", ", ".join(jo.benefits) if jo.benefits else "-"),
+        ("Kualifikasi", jo.requirements or "-"),
+        ("Deskripsi", jo.description or "-"),
+    ]
+
+    pdf_bytes = render_document_pdf(
+        title="Dokumen Job Order",
+        subtitle=f"{jo.request_id or jo.id}",
+        sections=sections,
+        footer_text=template.footer_text,
+        accent_color=template.accent_color,
+    )
+    object_key = store_generated_document(
+        object_prefix=f"job-orders/{jo.id}",
+        file_name=f"jo-{jo.id}.pdf",
+        data=pdf_bytes,
+    )
+    jo.generated_document_object_key = object_key
+    jo.generated_document_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(jo)
+    audit.log_event(
+        db,
+        action="job_order_document.generated",
+        entity_type="job_order",
+        entity_id=jo.id,
+        object_key=object_key,
+    )
+    return jo
+
+
+def job_order_generated_document_download_url(db: Session, jo_id: str) -> str:
+    jo = _get_job_order(db, jo_id)
+    if not jo.generated_document_object_key:
+        raise HTTPException(
+            status_code=404, detail="Job order ini belum punya dokumen ter-generate"
+        )
+    audit.log_event(
+        db,
+        action="job_order_generated_document.download_url",
+        entity_type="job_order",
+        entity_id=jo.id,
+        object_key=jo.generated_document_object_key,
+    )
+    return storage.presigned_get_url(jo.generated_document_object_key)
 
 
 # ---------- Ekstraksi dokumen Job Order / Manpower Requisition (PRD v3.1 Patch 3b) ----------
@@ -701,6 +835,24 @@ def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn
     return request
 
 
+def record_offering_call(db: Session, placement_id: str) -> Placement:
+    """Fase 21 item 2: catat aksi "offering call" sebagai aksi terpisah,
+    independen dari `send_offering_letter` di atas — klien bisa pilih call
+    saja, letter saja, atau keduanya (sebelumnya cuma letter yang tercatat)."""
+    placement = _get_placement(db, placement_id)
+    placement.offering_call_done = True
+    placement.offering_call_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(placement)
+    audit.log_event(
+        db,
+        action="recruitment.offering_call_recorded",
+        entity_type="placement",
+        entity_id=placement.id,
+    )
+    return placement
+
+
 def offering_summary(db: Session) -> dict:
     """Ringkasan pipeline offering — dipakai widget "Offering" Talent Cloud.
 
@@ -836,6 +988,53 @@ def _notify_interview_scheduled(db: Session, *, jo, candidate, sched) -> None:
             db.commit()
     except Exception:
         db.rollback()
+    _send_interview_ics_invite(db, jo=jo, candidate=candidate, sched=sched)
+
+
+def _send_interview_ics_invite(db: Session, *, jo, candidate, sched) -> None:
+    """Fase 21 item 5: invite `.ics` ke kandidat + interviewer via email
+    (bukan OAuth Google — lihat catatan di `calendar_invite.py`). Best-effort,
+    sama seperti sisa `_notify_interview_scheduled`; tanpa SMTP dikonfigurasi
+    `send_raw_email_with_attachment` sudah no-op senyap sendiri."""
+    try:
+        from app.modules.auth.models import User
+        from app.modules.notifications.service import send_raw_email_with_attachment
+        from app.modules.recruitment.calendar_invite import build_interview_ics
+
+        attendee_emails = [e for e in [candidate.email] if e]
+        organizer_email = None
+        if sched.interviewer_id:
+            interviewer = db.get(User, sched.interviewer_id)
+            if interviewer and interviewer.email:
+                organizer_email = interviewer.email
+                attendee_emails.append(interviewer.email)
+
+        ics_bytes = build_interview_ics(
+            sched,
+            candidate_name=candidate.full_name,
+            job_order_title=jo.title,
+            organizer_email=organizer_email,
+            attendee_emails=attendee_emails,
+        )
+        subject = f"Undangan Interview — {candidate.full_name} ({jo.title})"
+        body = (
+            f"Interview untuk posisi {jo.title} telah dijadwalkan.\n"
+            "File .ics terlampir bisa ditambahkan ke Google Calendar, Outlook, "
+            "atau kalender apa pun."
+        )
+        for email in attendee_emails:
+            send_raw_email_with_attachment(
+                email,
+                subject,
+                body,
+                attachment_bytes=ics_bytes,
+                attachment_filename="interview.ics",
+                attachment_maintype="text",
+                attachment_subtype="calendar",
+                attachment_params={"method": "REQUEST", "name": "interview.ics"},
+            )
+    except Exception:
+        pass
 
 
 def list_interviews(db: Session, job_order_id: str | None = None) -> list[InterviewSchedule]:

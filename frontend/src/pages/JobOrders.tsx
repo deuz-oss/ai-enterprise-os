@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Link } from "react-router-dom";
 import { Magnet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
@@ -29,6 +30,12 @@ export interface JobOrder {
   is_public: boolean;
   public_client_label: string | null;
   screening_questions: ScreeningQuestion[];
+  benefits: string[];
+  working_days: string[];
+  working_hours_start: string | null;
+  working_hours_end: string | null;
+  has_generated_document: boolean;
+  generated_document_at: string | null;
 }
 
 interface ScreeningQuestion {
@@ -86,6 +93,7 @@ export default function JobOrders() {
   const [extracted, setExtracted] = useState<JobOrderExtract | null>(null);
   const [isPublic, setIsPublic] = useState(false);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
+  const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
   const [clientFilter, setClientFilter] = useState("");
   const pageLimit = 50;
@@ -171,8 +179,17 @@ export default function JobOrders() {
       is_public: form.get("is_public") === "on",
       public_client_label: form.get("public_client_label") || null,
       screening_questions: questions.filter((q) => q.prompt.trim()),
+      benefits: String(form.get("benefits") || "")
+        .split(",")
+        .map((b) => b.trim())
+        .filter(Boolean),
+      working_days: workingDays,
+      working_hours_start: form.get("working_hours_start") || null,
+      working_hours_end: form.get("working_hours_end") || null,
     });
   }
+
+  const DAY_OPTIONS = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"];
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "-";
 
@@ -187,6 +204,7 @@ export default function JobOrders() {
             setExtracted(null);
             setIsPublic(false);
             setQuestions([]);
+            setWorkingDays([]);
           }}
           disabled={!clients?.length}
         >
@@ -301,6 +319,37 @@ export default function JobOrders() {
               defaultValue={extracted?.mandatory_criteria?.join("; ") ?? ""}
               className="input sm:col-span-3"
             />
+
+            {/* Fase 21 item 1 — field terstruktur benefit & jam kerja, bukan
+                lagi numpang di teks bebas description/requirements. */}
+            <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <input
+                name="benefits"
+                placeholder="Benefit (pisah koma, mis. BPJS Kesehatan, Tunjangan Makan)"
+                className="input w-full"
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <input name="working_hours_start" type="time" title="Jam mulai kerja" className="input w-auto" />
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>s/d</span>
+                <input name="working_hours_end" type="time" title="Jam selesai kerja" className="input w-auto" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {DAY_OPTIONS.map((d) => (
+                  <label key={d} className="flex items-center gap-1 text-xs capitalize" style={{ color: "var(--text-muted)" }}>
+                    <input
+                      type="checkbox"
+                      checked={workingDays.includes(d)}
+                      onChange={(e) =>
+                        setWorkingDays((days) =>
+                          e.target.checked ? [...days, d] : days.filter((x) => x !== d)
+                        )
+                      }
+                    />
+                    {d}
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
               <label className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
@@ -439,7 +488,11 @@ export default function JobOrders() {
                     </span>
                   )}
                 </td>
-                <td className="td font-medium">{jo.title}</td>
+                <td className="td font-medium">
+                  <Link to={`/job-orders/${jo.id}`} className="hover:opacity-80" style={{ color: "var(--accent)" }}>
+                    {jo.title}
+                  </Link>
+                </td>
                 <td className="td">{clientName(jo.client_id)}</td>
                 <td className="td">{jo.area ?? "-"}</td>
                 <td className="td">{jo.headcount} orang</td>

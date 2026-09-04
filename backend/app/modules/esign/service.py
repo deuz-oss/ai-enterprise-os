@@ -179,8 +179,73 @@ def send_placement_offering(
     return request
 
 
+def send_agreement(
+    db: Session,
+    agreement_id: UUID,
+    *,
+    docx_bytes: bytes,
+    file_name: str,
+    title: str,
+    signer_name: str,
+    signer_email: str,
+) -> EsignRequest:
+    """Kirim agreement klien (Fase 20 item 4) ke penyedia TTE.
+
+    Sejajar `send_placement_offering` -- caller (`presales.service.
+    send_agreement_for_signature`) sudah render dokumennya, di sini cuma
+    kirim bytes-nya + catat `EsignRequest`."""
+    pending = db.scalars(
+        select(EsignRequest)
+        .where(EsignRequest.agreement_id == agreement_id)
+        .where(EsignRequest.status.in_([EsignStatus.sent, EsignStatus.viewed]))
+        .limit(1)
+    ).first()
+    if pending:
+        raise HTTPException(
+            status_code=409,
+            detail="Masih ada permintaan TTE yang berjalan untuk agreement ini",
+        )
+
+    # `pdf_bytes` di sini nama parameter adapter apa adanya (lihat
+    # `core/esign/base.py::EsignAdapter.send_document`) -- provider-agnostic
+    # sebenarnya, cuma belum di-generalisasi namanya; docx tetap valid dikirim.
+    result = get_adapter().send_document(
+        pdf_bytes=docx_bytes,
+        file_name=file_name,
+        title=title,
+        signer_name=signer_name,
+        signer_email=signer_email,
+    )
+    request = EsignRequest(
+        agreement_id=agreement_id,
+        provider=get_settings().esign_provider,
+        provider_document_id=result.provider_document_id,
+        signer_name=signer_name,
+        signer_email=signer_email,
+        sign_url=result.sign_url,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    audit.log_event(
+        db,
+        action="esign.sent",
+        entity_type="agreement",
+        entity_id=agreement_id,
+        detail={
+            "esign_request_id": str(request.id),
+            "provider_document_id": result.provider_document_id,
+            "signer_email": signer_email,
+        },
+    )
+    return request
+
+
 def list_requests(
-    db: Session, contract_id: UUID | None = None, placement_id: UUID | None = None
+    db: Session,
+    contract_id: UUID | None = None,
+    placement_id: UUID | None = None,
+    agreement_id: UUID | None = None,
 ) -> list[EsignRequest]:
     stmt = select(EsignRequest).order_by(EsignRequest.created_at.desc())
     if contract_id:
@@ -188,6 +253,8 @@ def list_requests(
         stmt = stmt.where(EsignRequest.contract_id == contract_id)
     if placement_id:
         stmt = stmt.where(EsignRequest.placement_id == placement_id)
+    if agreement_id:
+        stmt = stmt.where(EsignRequest.agreement_id == agreement_id)
     return list(db.scalars(stmt).all())
 
 
@@ -275,12 +342,33 @@ def _apply_status(
             placement = db.get(Placement, esign_request.placement_id)
             if placement:
                 placement.offering_signed_at = esign_request.signed_at
+        elif esign_request.agreement_id:
+            # Efek samping: agreement klien resmi ditandatangani (Fase 20 item 4).
+            from app.modules.presales.models import Agreement, AgreementStatus
+
+            agreement = db.get(Agreement, esign_request.agreement_id)
+            if agreement:
+                agreement.status = AgreementStatus.signed
+                agreement.signed_at = esign_request.signed_at
     elif status in (EsignStatus.declined, EsignStatus.expired):
         esign_request.error = f"Dokumen {status.value} oleh penandatangan"
+        if esign_request.agreement_id:
+            from app.modules.presales.models import Agreement, AgreementStatus
+
+            agreement = db.get(Agreement, esign_request.agreement_id)
+            if agreement:
+                agreement.status = AgreementStatus.declined
     db.commit()
     db.refresh(esign_request)
-    entity_type = "employment_contract" if esign_request.contract_id else "placement"
-    entity_id = esign_request.contract_id or esign_request.placement_id
+    if esign_request.contract_id:
+        entity_type = "employment_contract"
+    elif esign_request.placement_id:
+        entity_type = "placement"
+    else:
+        entity_type = "agreement"
+    entity_id = (
+        esign_request.contract_id or esign_request.placement_id or esign_request.agreement_id
+    )
     audit.log_event(
         db,
         action=f"esign.{status.value}",

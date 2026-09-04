@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -10,6 +10,35 @@ from app.modules.recruitment.models import (
     JobOrderStatus,
     PlacementStatus,
 )
+
+
+class JobOrderTemplateCreate(BaseModel):
+    name: str
+    footer_text: str | None = None
+    accent_color: str = "#0f172a"
+
+
+class JobOrderTemplateUpdate(BaseModel):
+    name: str | None = None
+    footer_text: str | None = None
+    accent_color: str | None = None
+    is_active: bool | None = None
+
+
+class JobOrderTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    footer_text: str | None
+    accent_color: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobOrderGenerateDocumentIn(BaseModel):
+    template_id: UUID
 
 
 class ScreeningQuestion(BaseModel):
@@ -39,6 +68,10 @@ class JobOrderCreate(BaseModel):
     is_public: bool = False
     public_client_label: str | None = None
     screening_questions: list[ScreeningQuestion] = []
+    benefits: list[str] = []
+    working_days: list[str] = []
+    working_hours_start: time | None = None
+    working_hours_end: time | None = None
 
 
 class JobOrderUpdate(BaseModel):
@@ -60,6 +93,10 @@ class JobOrderUpdate(BaseModel):
     is_public: bool | None = None
     public_client_label: str | None = None
     screening_questions: list[ScreeningQuestion] | None = None
+    benefits: list[str] | None = None
+    working_days: list[str] | None = None
+    working_hours_start: time | None = None
+    working_hours_end: time | None = None
 
 
 class JobOrderOut(BaseModel):
@@ -88,6 +125,12 @@ class JobOrderOut(BaseModel):
     is_public: bool
     public_client_label: str | None
     screening_questions: list[ScreeningQuestion]
+    benefits: list[str]
+    working_days: list[str]
+    working_hours_start: time | None
+    working_hours_end: time | None
+    has_generated_document: bool
+    generated_document_at: datetime | None
     created_at: datetime
 
 
@@ -186,6 +229,8 @@ class PlacementOut(BaseModel):
     status: PlacementStatus
     ojt_start_date: date | None
     ojt_end_date: date | None
+    offering_call_done: bool
+    offering_call_at: datetime | None
     created_at: datetime
 
 

@@ -86,6 +86,15 @@ def create_app() -> FastAPI:
     from app.modules.payroll.router import public_router as payroll_public_router
     from app.modules.payroll.router import router as payroll_router
     from app.modules.platform.router import router as platform_router
+    from app.modules.presales.router import (
+        agreement_templates_router as presales_agreement_templates_router,
+    )
+    from app.modules.presales.router import agreements_router as presales_agreements_router
+    from app.modules.presales.router import companies_router as presales_companies_router
+    from app.modules.presales.router import (
+        quotation_templates_router as presales_quotation_templates_router,
+    )
+    from app.modules.presales.router import quotations_router as presales_quotations_router
     from app.modules.presales.router import router as presales_router
     from app.modules.rates.router import router as rates_router
     from app.modules.recruitment.router import router as recruitment_router
@@ -98,6 +107,31 @@ def create_app() -> FastAPI:
     # Guard lisensi Fase 7: endpoint aplikasi tanpa lisensi tenant → 403.
     app.include_router(
         presales_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        presales_companies_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        presales_quotation_templates_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        presales_quotations_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        presales_agreement_templates_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_licensed_app("sales_crm"))],
+    )
+    app.include_router(
+        presales_agreements_router,
         prefix="/api/v1",
         dependencies=[Depends(require_licensed_app("sales_crm"))],
     )

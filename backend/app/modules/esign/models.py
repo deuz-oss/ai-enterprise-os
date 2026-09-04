@@ -19,9 +19,10 @@ class EsignStatus(str, enum.Enum):
 
 
 class EsignRequest(TenantMixin, Base):
-    """Permintaan tanda tangan elektronik atas kontrak kerja ATAU surat
-    penawaran kerja (PRD v3.0 §4 aksi "Offering") — tepat satu dari
-    `contract_id`/`placement_id` terisi, sisanya NULL.
+    """Permintaan tanda tangan elektronik atas kontrak kerja, surat
+    penawaran kerja (PRD v3.0 §4 aksi "Offering"), ATAU agreement klien
+    (Fase 20 item 4) — tepat satu dari `contract_id`/`placement_id`/
+    `agreement_id` terisi, sisanya NULL.
     """
 
     __tablename__ = "esign_requests"
@@ -32,6 +33,9 @@ class EsignRequest(TenantMixin, Base):
     )
     placement_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("placements.id"), nullable=True, index=True
+    )
+    agreement_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("agreements.id"), nullable=True, index=True
     )
     provider: Mapped[str] = mapped_column(String(50))
     provider_document_id: Mapped[str] = mapped_column(String(255), index=True)

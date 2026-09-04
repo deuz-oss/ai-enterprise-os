@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Accounting from "./pages/Accounting";
+import Agreements from "./pages/Agreements";
 import AIInterview from "./pages/AIInterview";
 import AIInterviewSession from "./pages/AIInterviewSession";
 import Apps from "./pages/Apps";
@@ -18,6 +19,7 @@ import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
 import ForgotPassword from "./pages/ForgotPassword";
 import GovernCloudOverview from "./pages/GovernCloudOverview";
+import JobOrderDetail from "./pages/JobOrderDetail";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
@@ -25,6 +27,7 @@ import MyPortal from "./pages/MyPortal";
 import PaymentRequests from "./pages/PaymentRequests";
 import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
+import Quotations from "./pages/Quotations";
 import Rates from "./pages/Rates";
 import ResetPassword from "./pages/ResetPassword";
 import TalentCloudOverview from "./pages/TalentCloudOverview";
@@ -58,7 +61,10 @@ export default function App() {
             <Route path="/talent-cloud" element={<TalentCloudOverview />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/quotations" element={<Quotations />} />
+            <Route path="/agreements" element={<Agreements />} />
             <Route path="/job-orders" element={<JobOrders />} />
+            <Route path="/job-orders/:id" element={<JobOrderDetail />} />
             <Route path="/candidates" element={<Candidates />} />
             <Route path="/talent-pool" element={<TalentPool />} />
             <Route path="/ai-interview" element={<AIInterview />} />

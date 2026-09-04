@@ -6,6 +6,43 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 20 (item 1-4) & Fase 21: Presales Documents, Job Order Enhancements
+
+- **Company/Contact refactor**: `Lead.company_id` jadi FK ke `Company`
+  (dengan `Contact[]` multi-kontak per company), menggantikan field bebas
+  `company_name`/`contact_*` — migrasi backfill data lama otomatis
+  (`b0946b216ff2`). API tetap backward-compatible lewat properti Python.
+- **Quotation generator**: `QuotationTemplate` + `Quotation` (state machine
+  `draft → pending_approval → approved/rejected → sent`), approval
+  single-level, render PDF via `reportlab`. Halaman `Quotations.tsx`.
+- **Agreement generator + perluasan Esign**: `AgreementTemplate` +
+  `Agreement` (state machine `draft → internal_review → approved/declined
+  → sent → signed`), output `.docx` (ground baru, python-docx baru dipakai
+  untuk *authoring* pertama kali). `EsignRequest.agreement_id` — modul
+  esign sekarang tuntas menandatangani 3 jenis dokumen (kontrak, offering
+  letter, agreement). Halaman `Agreements.tsx`.
+- **Job Order — field terstruktur**: `benefits`/`working_days`/
+  `working_hours_start`/`working_hours_end`, dulunya numpang di teks bebas
+  description/requirements.
+- **Offering call**: `Placement.offering_call_done`/`offering_call_at` —
+  aksi tercatat terpisah dari offering letter+esign yang sudah ada.
+- **Unifikasi UI interview**: halaman baru `JobOrderDetail.tsx`
+  (`/job-orders/:id`) — pipeline placement via `ProgressStep`, satu tombol
+  "Jadwalkan Interview" bercabang ke mode human (form inline) atau AI
+  (deep-link ke `AIInterview.tsx` dengan kandidat ter-pre-select). Backend
+  tetap 2 sistem terpisah, tidak digabung.
+- **Invite kalender `.ics`**: dependency baru `icalendar`; kapabilitas
+  attachment email baru di `notifications/service.py` (belum pernah ada
+  sebelumnya) — interview terjadwal otomatis kirim `.ics` ke kandidat +
+  interviewer, bukan OAuth Google Calendar (keputusan eksplisit).
+- **Generate dokumen Job Order**: `JobOrderTemplate` (tanpa `field_schema`
+  — isi dokumen 100% dari field JobOrder sendiri, beda dari
+  Quotation/AgreementTemplate) + `JobOrder.generated_document_object_key`/
+  `generated_document_at`, reuse penuh `presales/rendering.py`.
+- **Belum dikerjakan**: Fase 20 item 5 (lead sourcing scraping LinkedIn) —
+  menunggu konsultasi legal (UU PDP), sengaja di luar cakupan batch ini.
+- Detail keputusan lengkap di `PRD.md` Fase 20 & 21.
+
 ### Added — Fase 22: Component Library Frontend (Button, Badge, Card, ProgressStep)
 
 - 4 komponen dasar baru di `frontend/src/components/ui/`: `Button`,

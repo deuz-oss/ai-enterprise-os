@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MessagesSquare } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -79,11 +80,18 @@ const REVIEW_PILL: Record<string, string> = {
 
 export default function AIInterview() {
   const qc = useQueryClient();
+  // Fase 21 item 3 — deep-link dari tombol "Jadwalkan Interview" terunifikasi
+  // di JobOrderDetail.tsx (mode AI): kandidat sudah terpilih begitu halaman
+  // ini dibuka, recruiter tinggal pilih template.
+  const [searchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
-  const [candidateIds, setCandidateIds] = useState<string[]>([]);
+  const [candidateIds, setCandidateIds] = useState<string[]>(() => {
+    const preselected = searchParams.get("candidate_id");
+    return preselected ? [preselected] : [];
+  });
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const { data: templates } = useQuery({

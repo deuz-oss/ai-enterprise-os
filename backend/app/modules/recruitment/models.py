@@ -1,6 +1,6 @@
 import enum
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
     UniqueConstraint,
     func,
 )
@@ -118,6 +119,32 @@ class InterviewSchedule(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class JobOrderTemplate(TenantMixin, Base):
+    """Fase 21 item 4 — template dokumen Job Order, pola generate identik
+    Quotation/Agreement (Fase 20): render lewat `presales.rendering.
+    render_document_pdf`, simpan lewat `store_generated_document`.
+
+    SENGAJA lebih ramping dari QuotationTemplate/AgreementTemplate --
+    TIDAK punya `field_schema`. Isi dokumen JO 100% deterministik dari
+    field JobOrder sendiri (title, area, benefits, working_days/hours,
+    dst — lihat `generate_job_order_document`), tidak ada input bebas per
+    dokumen seperti Quotation/Agreement. Template di sini murni kontrol
+    presentasi (footer, warna aksen) -- nambah field_schema yang tidak
+    pernah dipakai cuma kompleksitas tanpa manfaat."""
+
+    __tablename__ = "job_order_templates"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    footer_text: Mapped[str | None] = mapped_column(String(255))
+    accent_color: Mapped[str] = mapped_column(String(9), default="#0f172a")
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class JobOrder(TenantMixin, Base):
     __tablename__ = "job_orders"
     __table_args__ = (
@@ -185,6 +212,21 @@ class JobOrder(TenantMixin, Base):
     # identitasnya disembunyikan dari iklan lowongan publik).
     public_client_label: Mapped[str | None] = mapped_column(String(255), default=None)
     screening_questions_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # Fase 21 item 1 — field terstruktur benefit & jam kerja, dulunya numpang
+    # di teks bebas description/requirements. benefits: JSON list terstruktur
+    # (bukan teks bebas) supaya bisa di-auto-fill ke dokumen JO/offering
+    # letter nanti. working_days: JSON list hari kerja (mis. ["senin",...]).
+    benefits_json: Mapped[str | None] = mapped_column(Text, default=None)
+    working_days_json: Mapped[str | None] = mapped_column(Text, default=None)
+    working_hours_start: Mapped[time | None] = mapped_column(Time, default=None)
+    working_hours_end: Mapped[time | None] = mapped_column(Time, default=None)
+    # Fase 21 item 4 — dokumen JO ter-generate dari template, BEDA dari
+    # source_document_object_key di atas (itu untuk *upload* dokumen JO dari
+    # klien; ini untuk *generate* keluar dari sistem berdasar field JO sendiri).
+    generated_document_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+    generated_document_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -192,6 +234,26 @@ class JobOrder(TenantMixin, Base):
 
     client = relationship("Client", lazy="selectin")
     placements: Mapped[list["Placement"]] = relationship(back_populates="job_order")
+
+    @property
+    def benefits(self) -> list[str]:
+        if not self.benefits_json:
+            return []
+        try:
+            parsed = json.loads(self.benefits_json)
+        except (TypeError, ValueError):
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+    @property
+    def working_days(self) -> list[str]:
+        if not self.working_days_json:
+            return []
+        try:
+            parsed = json.loads(self.working_days_json)
+        except (TypeError, ValueError):
+            return []
+        return parsed if isinstance(parsed, list) else []
 
     @property
     def is_stale(self) -> bool:
@@ -203,6 +265,10 @@ class JobOrder(TenantMixin, Base):
     @property
     def has_source_document(self) -> bool:
         return self.source_document_object_key is not None
+
+    @property
+    def has_generated_document(self) -> bool:
+        return self.generated_document_object_key is not None
 
     @property
     def screening_questions(self) -> list[dict]:
@@ -268,6 +334,11 @@ class Placement(TenantMixin, Base):
     offering_signed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Fase 21 item 2 — offering call sebagai aksi tercatat terpisah dari
+    # offering letter+esign di atas (klien bisa pilih call saja, letter
+    # saja, atau keduanya; sebelumnya cuma letter yang punya jejak).
+    offering_call_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    offering_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # PRD v3.1 Patch 5 — Job Portal: NULL kalau sourcing dari Talent Pool
     # internal, terisi kalau kandidat apply sendiri lewat portal publik.
     application_token: Mapped[str | None] = mapped_column(String(64), unique=True, default=None)

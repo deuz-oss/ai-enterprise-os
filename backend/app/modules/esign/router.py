@@ -39,9 +39,10 @@ def send_contract(contract_id: UUID, payload: EsignSendIn, db: Session = Depends
 def list_requests(
     contract_id: UUID | None = None,
     placement_id: UUID | None = None,
+    agreement_id: UUID | None = None,
     db: Session = Depends(get_db),
 ):
-    return service.list_requests(db, contract_id, placement_id)
+    return service.list_requests(db, contract_id, placement_id, agreement_id)
 
 
 @router.post("/requests/{request_id}/refresh", response_model=EsignRequestOut)

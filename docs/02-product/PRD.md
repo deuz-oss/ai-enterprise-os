@@ -559,14 +559,14 @@ dikonfirmasi jalan dengan stack final (STT self-hosted + LLM & TTS
 OpenAI). Latensi/turn-taking real menunggu akses server ber-GPU + uji
 manusia. Belum di-commit (menunggu instruksi eksplisit).
 
-### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign *(direncanakan, belum dimulai)*
+### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign — ✅ Item 1-4 Selesai (2026-09-04), Item 5 belum dimulai
 
 Menutup gap di §2 baris 8 — memperdalam tahap presales sebelum `Lead`
 existing (§Fase 15 dst. asumsikan lead sudah ada). Urutan pembangunan
 sengaja mengikuti ketergantungan alur kerja (lihat catatan tiap butir),
 bukan cuma kemudahan teknis:
 
-1. **Refactor `Lead` → `Company` + `Contact` (multi-kontak)** — model
+1. ✅ **Refactor `Lead` → `Company` + `Contact` (multi-kontak)** — model
    `Lead` saat ini (`presales/models.py`) cuma menyimpan satu kontak per
    lead (`contact_name`/`contact_phone`/`contact_email` tunggal). Pecah
    jadi `Company` (nama, industri, size, sumber data) dengan `Contact[]`
@@ -574,14 +574,14 @@ bukan cuma kemudahan teknis:
    marketing, dll — email, telp, `linkedin_url`). `Lead.company_id` jadi
    FK, bukan field bebas lagi. Ini fondasi semua butir berikutnya dan
    TIDAK menunggu scraper jadi — bisa diisi manual dulu.
-2. **Quotation generator** — entitas baru `QuotationTemplate`
+2. ✅ **Quotation generator** — entitas baru `QuotationTemplate`
    (`field_schema` JSON, hasil **template builder visual/drag-drop** —
    keputusan eksplisit, bukan template terkode) dan `Quotation`
    (status: `draft` → `pending_approval` → `approved`/`rejected` → `sent`
    → `accepted_by_client`/`expired`; **approval internal wajib** sebelum
    `sent` — keputusan eksplisit, bukan langsung kirim). Render PDF pakai
    `reportlab` (sudah jadi dependency backend, tidak perlu library baru).
-3. **Agreement generator (template engine)** — pola sama seperti
+3. ✅ **Agreement generator (template engine)** — pola sama seperti
    Quotation (template visual + JSON schema), tapi output `.docx`
    (`python-docx`, sudah jadi dependency) dan/atau PDF, dengan status
    tambahan `internal_review` (klausul legal butuh review manusia sebelum
@@ -589,14 +589,14 @@ bukan cuma kemudahan teknis:
    SEBELUM butir 4** — agreement harus ada wujudnya dulu sebelum
    disambungkan ke e-signature, meski butir 4 secara teknis lebih murah
    dikerjakan.
-4. **Perluasan Esign untuk Agreement klien** — modul `esign` sudah
+4. ✅ **Perluasan Esign untuk Agreement klien** — modul `esign` sudah
    punya `PrivyAdapter` lengkap (kirim dokumen, webhook status,
    sent/viewed/completed/declined/expired) tapi `EsignRequest` saat ini
    cuma terima `contract_id` (kontrak kerja karyawan) ATAU `placement_id`
    (offering kandidat). Tambah kolom `agreement_id` (nullable, exclusive
    terhadap 2 lainnya) — reuse penuh adapter, webhook, dan status
    tracking yang sudah ada, tidak perlu dibangun ulang.
-5. **Lead sourcing via scraping (LinkedIn)** — sumber pertama yang
+5. ⬜ *(belum dimulai)* **Lead sourcing via scraping (LinkedIn)** — sumber pertama yang
    ditarget adalah LinkedIn (keputusan eksplisit, risiko tertinggi dari
    opsi yang dipertimbangkan — dibanding scraping website resmi
    perusahaan atau direktori bisnis publik yang lebih aman tapi datanya
@@ -624,7 +624,7 @@ menyentuh API pihak ketiga berbayar = charge per-pakai (pass-through
 cost + margin) — termasuk kalau nanti lead sourcing beralih dari
 scraping ke API data B2B berbayar.
 
-### Fase 21 — Job Order: Field Terstruktur, Dokumen JO, Kalender, Offering Call *(direncanakan, belum dimulai)*
+### Fase 21 — Job Order: Field Terstruktur, Dokumen JO, Kalender, Offering Call — ✅ Selesai (2026-09-04)
 
 Audit lintas modul `recruitment`/`job_portal`/`talentpool`/`ai_interview`/`esign`
 (2026-09-03) menunjukkan alur rekrutmen inti **sudah dibangun lengkap dan
@@ -636,16 +636,16 @@ offering letter+esign, konversi Placement→Employee (`onboard_from_placement`)
 — semua ini SUDAH ADA, tidak perlu dibangun ulang. Fase ini menutup 5 gap
 konkret yang ditemukan, diurutkan dari yang paling sederhana:
 
-1. **Field terstruktur benefit & jam kerja** — `JobOrder` baru punya
+1. ✅ **Field terstruktur benefit & jam kerja** — `JobOrder` baru punya
    `description`/`requirements` (teks bebas). Tambah kolom: `benefits`
    (JSON, list terstruktur — bukan teks bebas, supaya bisa di-auto-fill ke
    dokumen JO/offering letter), `working_days` (JSON/enum hari), `working_
    hours_start`/`working_hours_end` (Time). Fondasi untuk butir 2.
-2. **Offering call sebagai aksi terpisah** — tambah `offering_call_done`
+2. ✅ **Offering call sebagai aksi terpisah** — tambah `offering_call_done`
    (Boolean) + `offering_call_at` (DateTime) di `Placement`, supaya
    tercatat sebagai aksi independen dari `offering_letter_object_key`
    (klien bisa pilih call saja, letter saja, atau keduanya).
-3. **Interview manusia vs AI — unifikasi UI saja (keputusan eksplisit)**:
+3. ✅ **Interview manusia vs AI — unifikasi UI saja (keputusan eksplisit)**:
    backend TETAP 2 sistem terpisah (`InterviewSchedule` dan
    `AIInterviewResponse`) — pemisahan aslinya di Fase 19 (AI interview
    reusable/re-scorable) tetap valid, tidak dipaksa digabung. Yang berubah
@@ -653,14 +653,20 @@ konkret yang ditemukan, diurutkan dari yang paling sederhana:
    bercabang ke salah satu dari dua sistem berdasarkan pilihan mode,
    `PlacementStatus.interview_internal` tetap satu status yang sama
    terlepas mode yang dipakai.
-4. **Generate dokumen Job Order dari template** — pola identik dengan
-   Quotation/Agreement generator (Fase 20): `JobOrderTemplate` (`field_
-   schema` JSON, reuse template builder visual yang sama) + kolom baru
-   `JobOrder.generated_document_object_key`/`generated_at` (beda dari
+4. ✅ **Generate dokumen Job Order dari template** — pola identik dengan
+   Quotation/Agreement generator (Fase 20): `JobOrderTemplate` + kolom baru
+   `JobOrder.generated_document_object_key`/`generated_document_at` (beda dari
    `source_document_object_key` yang sudah ada, yang itu untuk *upload*
    dokumen JO dari klien — bukan *generate* keluar dari sistem). Render
-   pakai `reportlab` (sudah dependency).
-5. **Sinkronisasi Google Calendar — invite .ics via email (keputusan
+   pakai `reportlab` (sudah dependency), reuse fungsi generik
+   `presales/rendering.py::render_document_pdf` yang sama dipakai Quotation.
+   **Penyesuaian dari rencana awal**: `JobOrderTemplate` SENGAJA tidak
+   punya `field_schema` seperti Quotation/AgreementTemplate — isi dokumen
+   JO 100% deterministik dari field JobOrder sendiri (title, area,
+   benefits, working_days/hours, dst, hasil item 1), tidak ada input bebas
+   per dokumen; template di sini murni kontrol presentasi (footer, warna
+   aksen).
+5. ✅ **Sinkronisasi Google Calendar — invite .ics via email (keputusan
    eksplisit, BUKAN OAuth)**: kandidat dan rekruter menerima file `.ics`
    terlampir di email undangan interview, bisa ditambahkan ke Google
    Calendar/Outlook/kalender apa pun tanpa perlu connect/login akun
@@ -670,9 +676,10 @@ konkret yang ditemukan, diurutkan dari yang paling sederhana:
    yang umumnya juga pakai pendekatan invite `.ics`, bukan minta OAuth
    kandidat. Ini juga berarti **tidak ada dependency Google Cloud/OAuth
    client baru** di infrastruktur — cukup generate file `.ics` standar
-   (library minimal seperti `icalendar`, belum ada di `pyproject.toml`,
-   perlu ditambah) dan lampirkan ke email undangan yang sudah dikirim via
-   jalur email existing.
+   (`icalendar`, ditambah ke `pyproject.toml`) dan lampirkan ke email
+   undangan yang sudah dikirim via jalur email existing — sekalian
+   menambah kapabilitas attachment yang belum pernah ada sebelumnya di
+   `notifications/service.py`.
 
 **Urutan pembangunan**: 1 → 2 → 3 saling independen, bisa paralel/urutan
 bebas (masing-masing kecil, tidak saling bergantung). 4 sebaiknya
