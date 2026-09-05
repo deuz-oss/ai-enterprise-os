@@ -501,7 +501,9 @@ def send_agreement_for_signature(
     lead = agreement.lead
     schema = json.loads(template.field_schema)
     values = json.loads(agreement.field_values)
-    sections = [(f["label"], str(values.get(f["key"], "-"))) for f in schema]
+    sections: list[tuple[str, str | list[str]]] = [
+        (str(f["label"]), str(values.get(f["key"], "-"))) for f in schema
+    ]
 
     docx_bytes = render_document_docx(
         title="Perjanjian Kerja Sama",

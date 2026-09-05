@@ -168,6 +168,15 @@ def reconcile_payment(db: Session, provider_invoice_id: str) -> PaymentIntent:
         intent.paid_at = datetime.now(UTC)
 
         if intent.type == PaymentIntentType.subscription:
+            if intent.tier is None:
+                # Tidak boleh terjadi -- satu-satunya pemanggil `create_checkout_intent`
+                # dengan type=subscription (endpoint /subscribe) selalu mengisi tier
+                # (SubscribeIn.tier wajib, bukan Optional). Kalau ini terpicu berarti
+                # ada jalur baru yang melanggar invariant itu.
+                raise HTTPException(
+                    status_code=500,
+                    detail="Payment intent subscription tanpa tier -- data tidak konsisten",
+                )
             _activate_subscription(db, intent.tenant_id, intent.tier, float(intent.amount))
         else:
             record_credit_transaction(
