@@ -1,10 +1,21 @@
-import { FormEvent, Fragment, useRef, useState } from "react";
+import { FormEvent, Fragment, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { AiResultCard } from "../components/Ai";
 import type { Screening } from "../components/Ai";
-import { ChevronLeft, ChevronRight, LayoutGrid, List, Paperclip, Users as UsersIcon } from "lucide-react";
+import {
+  Briefcase,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Inbox,
+  LayoutGrid,
+  List,
+  Paperclip,
+  Users as UsersIcon,
+} from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 import type { JobOrder } from "./JobOrders";
 
@@ -107,13 +118,29 @@ export default function Candidates() {
   });
   const candidates = candidatesPage?.data;
   const candidatesTotal = candidatesPage?.total ?? 0;
-  // Papan Kanban butuh keseluruhan (dikelompokkan per status), bukan satu
-  // halaman — dimuat terpisah, cuma saat papan aktif (limit maksimum backend).
+  // Keseluruhan kandidat (dikelompokkan per status, limit maksimum backend) --
+  // dipakai papan Kanban, DAN sumber count KPI/tab pill di view tabel supaya
+  // count-nya benar lintas-halaman (bukan cuma halaman ter-paginasi aktif).
   const { data: boardCandidates } = useQuery({
     queryKey: ["candidates-board"],
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates?limit=1000"),
-    enabled: view === "papan",
   });
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = boardCandidates ?? [];
+    return [
+      { key: "", label: "Semua", count: all.length },
+      ...STATUSES.map((s) => ({
+        key: s,
+        label: s[0].toUpperCase() + s.slice(1),
+        count: all.filter((c) => c.status === s).length,
+      })),
+    ];
+  }, [boardCandidates]);
+  const inProcessCount = (boardCandidates ?? []).filter((c) =>
+    ["screening", "interview", "offered"].includes(c.status)
+  ).length;
+  const placedCount = (boardCandidates ?? []).filter((c) => c.status === "placed").length;
+  const newCount = (boardCandidates ?? []).filter((c) => c.status === "baru").length;
   const { data: jobOrders } = useQuery({
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
@@ -389,32 +416,40 @@ export default function Candidates() {
       )}
 
       {view === "tabel" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setOffset(0);
-            }}
-            placeholder="Cari nama kandidat..."
-            className="input w-56"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setOffset(0);
-            }}
-            className="input w-auto"
-          >
-            <option value="">Semua status</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="Total Kandidat" value={(boardCandidates ?? []).length} icon={UsersIcon} iconTone="info" />
+            <KpiCard label="Kandidat Baru" value={newCount} icon={Inbox} iconTone="neutral" context="Belum diproses" />
+            <KpiCard
+              label="Dalam Proses"
+              value={inProcessCount}
+              icon={Briefcase}
+              iconTone="warning"
+              context="Screening/interview/offered"
+            />
+            <KpiCard label="Placed" value={placedCount} icon={CheckCircle2} iconTone="success" />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PillTabs
+              tabs={statusTabs}
+              value={statusFilter}
+              onChange={(k) => {
+                setStatusFilter(k);
+                setOffset(0);
+              }}
+            />
+            <input
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setOffset(0);
+              }}
+              placeholder="Cari nama kandidat..."
+              className="input w-56"
+            />
+          </div>
+        </>
       )}
 
       {candidates?.length === 0 && view === "tabel" && (

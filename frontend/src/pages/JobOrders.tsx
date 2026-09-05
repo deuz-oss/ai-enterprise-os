@@ -1,7 +1,8 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Magnet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Magnet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -104,20 +105,41 @@ export default function JobOrders() {
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
   const [clientFilter, setClientFilter] = useState("");
+  // Tab/Pill filter (§1.5) atas business_status -- backend belum expose
+  // param filter ini, jadi diambil sekaligus (limit besar, endpoint yang
+  // sama persis dipakai tabel) lalu difilter+dipaginasi di klien supaya
+  // count tiap pill akurat lintas-halaman.
+  const [statusTab, setStatusTab] = useState("");
   const pageLimit = 50;
   // Sengaja cuma filter client_id -- jo_status (pipeline internal
   // open/screening/interview_klien/dst) sudah dihapus dari UI ini
   // sebelumnya atas permintaan eksplisit (dianggap membingungkan
   // berdampingan dengan business_status), tidak dikembalikan di sini.
-  const { data: jobOrdersPage } = useQuery({
-    queryKey: ["job-orders", offset, clientFilter],
+  const { data: jobOrdersAll } = useQuery({
+    queryKey: ["job-orders", clientFilter],
     queryFn: () =>
       api.getPaged<JobOrder>(
-        `/recruitment/job-orders?limit=${pageLimit}&offset=${offset}${clientFilter ? `&client_id=${clientFilter}` : ""}`
+        `/recruitment/job-orders?limit=1000&offset=0${clientFilter ? `&client_id=${clientFilter}` : ""}`
       ),
   });
-  const jobOrders = jobOrdersPage?.data;
-  const jobOrdersTotal = jobOrdersPage?.total ?? 0;
+  const allRows = jobOrdersAll?.data ?? [];
+  const businessFiltered = useMemo(
+    () => allRows.filter((jo) => !statusTab || jo.business_status === statusTab),
+    [allRows, statusTab]
+  );
+  const jobOrders = businessFiltered.slice(offset, offset + pageLimit);
+  const jobOrdersTotal = businessFiltered.length;
+  const statusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: allRows.length },
+    ...BUSINESS_STATUSES.map((s) => ({
+      key: s,
+      label: s[0].toUpperCase() + s.slice(1),
+      count: allRows.filter((jo) => jo.business_status === s).length,
+    })),
+  ];
+  const staleCount = allRows.filter((jo) => jo.is_stale).length;
+  const openCount = allRows.filter((jo) => jo.business_status === "dibuka").length;
+  const filledCount = allRows.filter((jo) => jo.business_status === "terisi").length;
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
@@ -460,21 +482,45 @@ export default function JobOrders() {
         </div>
       )}
 
-      <select
-        value={clientFilter}
-        onChange={(e) => {
-          setClientFilter(e.target.value);
-          setOffset(0);
-        }}
-        className="input w-auto"
-      >
-        <option value="">Semua klien</option>
-        {(clients ?? []).map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Job Order" value={allRows.length} icon={Magnet} iconTone="info" />
+        <KpiCard label="Dibuka" value={openCount} icon={Magnet} iconTone="accent" />
+        <KpiCard label="Terisi" value={filledCount} icon={CheckCircle2} iconTone="success" />
+        <KpiCard
+          label="Lewat 30 Hari"
+          value={staleCount}
+          icon={AlertTriangle}
+          iconTone="danger"
+          context="Belum filled sejak request date"
+          badge={staleCount > 0 ? { label: "Kritis", tone: "danger" } : undefined}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PillTabs
+          tabs={statusTabs}
+          value={statusTab}
+          onChange={(k) => {
+            setStatusTab(k);
+            setOffset(0);
+          }}
+        />
+        <select
+          value={clientFilter}
+          onChange={(e) => {
+            setClientFilter(e.target.value);
+            setOffset(0);
+          }}
+          className="input w-auto"
+        >
+          <option value="">Semua klien</option>
+          {(clients ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
@@ -491,7 +537,7 @@ export default function JobOrders() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
-            {(jobOrders ?? []).map((jo) => (
+            {jobOrders.map((jo) => (
               <tr key={jo.id} className="hover:bg-[var(--hover)]">
                 <td className="td">
                   {jo.has_source_document ? (
@@ -561,10 +607,10 @@ export default function JobOrders() {
                 </td>
               </tr>
             ))}
-            {jobOrders?.length === 0 && (
+            {jobOrders.length === 0 && (
               <tr>
                 <td colSpan={8} className="td py-8 text-center text-[var(--text-muted)]">
-                  Belum ada job order.
+                  {allRows.length === 0 ? "Belum ada job order." : "Tidak ada job order untuk status ini."}
                 </td>
               </tr>
             )}
@@ -582,7 +628,7 @@ export default function JobOrders() {
             </h2>
             {matchJoId && (
               <span className="text-xs text-[var(--text-muted)]">
-                {jobOrders?.find((j) => j.id === matchJoId)?.title}
+                {allRows.find((j) => j.id === matchJoId)?.title}
               </span>
             )}
           </div>

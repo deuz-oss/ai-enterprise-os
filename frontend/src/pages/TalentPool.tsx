@@ -2,8 +2,9 @@ import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
-import { Dna, Palette } from "lucide-react";
+import { CheckCircle2, Clock, Dna, FileCheck2, Palette } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import type { JobOrder } from "./JobOrders";
 
 interface TpRow {
@@ -396,7 +397,27 @@ export default function TalentPool() {
   });
   const scoreByCandidate = new Map((matchScores ?? []).map((m) => [m.candidate_id, m]));
   const matchedIds = matchJobOrderId ? new Set((matchScores ?? []).map((m) => m.candidate_id)) : null;
-  const visibleRows = (pool.data ?? []).filter((r) => !matchedIds || matchedIds.has(r.candidate_id));
+  const matchFilteredRows = (pool.data ?? []).filter((r) => !matchedIds || matchedIds.has(r.candidate_id));
+
+  // Tab/Pill filter (§1.5) atas tp_status -- difilter di klien atas hasil
+  // fetch yang sama (endpoint `/talentpool` sudah mendukung param `tp_status`
+  // tapi sengaja tidak dipakai di sini, supaya count tiap pill tetap
+  // mencerminkan seluruh hasil pencarian/filter lain yang sedang aktif).
+  const [tpStatusTab, setTpStatusTab] = useState("");
+  const visibleRows = matchFilteredRows.filter((r) => !tpStatusTab || r.tp_status === tpStatusTab);
+  const tpStatusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: matchFilteredRows.length },
+    ...["baru", "diproses", "placed", "non_aktif"].map((s) => ({
+      key: s,
+      label: s === "non_aktif" ? "Non-aktif" : s[0].toUpperCase() + s.slice(1),
+      count: matchFilteredRows.filter((r) => r.tp_status === s).length,
+    })),
+  ];
+
+  // KPI row (§1.3) -- dari data talent pool yang sudah di-fetch (`pool.data`).
+  const needsReviewCount = matchFilteredRows.filter((r) => r.needs_review_count > 0).length;
+  const cvStandarReadyCount = matchFilteredRows.filter((r) => r.latest_cv_version > 0).length;
+  const readySoonCount = matchFilteredRows.filter((r) => r.readiness === "segera").length;
 
   const intake = useMutation({
     mutationFn: (file: File) => {
@@ -425,6 +446,21 @@ export default function TalentPool() {
       />
 
       <BrandingCard />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Talent" value={matchFilteredRows.length} icon={Dna} iconTone="info" />
+        <KpiCard
+          label="Perlu Review"
+          value={needsReviewCount}
+          icon={Clock}
+          iconTone="warning"
+          badge={needsReviewCount > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="CV Standar Siap" value={cvStandarReadyCount} icon={FileCheck2} iconTone="success" />
+        <KpiCard label="Siap Ditempatkan Segera" value={readySoonCount} icon={CheckCircle2} iconTone="accent" />
+      </div>
+
+      <PillTabs tabs={tpStatusTabs} value={tpStatusTab} onChange={setTpStatusTab} />
 
       <div className="card space-y-2 p-4">
         <h3 className="text-sm font-semibold">Unggah CV Kandidat</h3>
@@ -557,7 +593,9 @@ export default function TalentPool() {
                 <td colSpan={matchJobOrderId ? 9 : 8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   {matchJobOrderId
                     ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
-                    : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
+                    : tpStatusTab
+                      ? "Tidak ada talent dengan status ini."
+                      : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
                 </td>
               </tr>
             )}

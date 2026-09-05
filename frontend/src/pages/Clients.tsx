@@ -1,6 +1,7 @@
-import { FormEvent, useRef, useState } from "react";
-import { Building2 } from "lucide-react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+import { Building2, CalendarClock, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -38,6 +39,7 @@ export default function Clients() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [statusTab, setStatusTab] = useState("semua");
   const fileRef = useRef<HTMLInputElement>(null);
   const docTypeRef = useRef<HTMLSelectElement>(null);
 
@@ -45,6 +47,32 @@ export default function Clients() {
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
+
+  const filteredClients = useMemo(
+    () => (clients ?? []).filter((c) => statusTab === "semua" || c.status === statusTab),
+    [clients, statusTab]
+  );
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = clients ?? [];
+    return [
+      { key: "semua", label: "Semua", count: all.length },
+      { key: "aktif", label: "Aktif", count: all.filter((c) => c.status === "aktif").length },
+      { key: "berhenti", label: "Berhenti", count: all.filter((c) => c.status === "berhenti").length },
+    ];
+  }, [clients]);
+
+  // KPI row (§1.3) -- semua dihitung dari `clients` yang sudah di-fetch.
+  const activeClients = (clients ?? []).filter((c) => c.status === "aktif");
+  const churnedCount = (clients ?? []).filter((c) => c.status === "berhenti").length;
+  const expiringSoon = useMemo(() => {
+    const now = Date.now();
+    const in30d = now + 30 * 24 * 60 * 60 * 1000;
+    return activeClients.filter((c) => {
+      if (!c.contract_end) return false;
+      const t = new Date(c.contract_end).getTime();
+      return t >= now && t <= in30d;
+    });
+  }, [activeClients]);
   const { data: documents } = useQuery({
     queryKey: ["client-docs", selectedId],
     queryFn: () => api.get<LegalDoc[]>(`/clients/${selectedId}/documents`),
@@ -108,6 +136,28 @@ export default function Clients() {
         </form>
       )}
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Klien" value={(clients ?? []).length} icon={Building2} iconTone="info" />
+        <KpiCard
+          label="Klien Aktif"
+          value={activeClients.length}
+          icon={Building2}
+          iconTone="success"
+          context={`dari ${(clients ?? []).length} klien terdaftar`}
+        />
+        <KpiCard
+          label="Kontrak Akan Berakhir"
+          value={expiringSoon.length}
+          icon={CalendarClock}
+          iconTone="warning"
+          context="Dalam 30 hari ke depan"
+          badge={expiringSoon.length > 0 ? { label: "Perlu Tindak Lanjut", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Klien Berhenti" value={churnedCount} icon={UserX} iconTone="neutral" />
+      </div>
+
+      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
@@ -120,7 +170,7 @@ export default function Clients() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(clients ?? []).map((c) => (
+            {filteredClients.map((c) => (
               <tr
                 key={c.id}
                 onClick={() => setSelectedId(c.id === selectedId ? null : c.id)}
@@ -144,10 +194,10 @@ export default function Clients() {
                 </td>
               </tr>
             ))}
-            {clients?.length === 0 && (
+            {filteredClients.length === 0 && (
               <tr>
                 <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada klien.
+                  {clients?.length === 0 ? "Belum ada klien." : "Tidak ada klien untuk status ini."}
                 </td>
               </tr>
             )}
