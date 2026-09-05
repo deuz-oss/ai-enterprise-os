@@ -1,6 +1,7 @@
-import { Fragment, FormEvent, useState } from "react";
-import { Receipt } from "lucide-react";
+import { Fragment, FormEvent, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -109,18 +110,21 @@ export default function Finance() {
   const [fakturError, setFakturError] = useState<string | null>(null);
 
   const [clientFilter, setClientFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // Tab/Pill filter (§1.5) menggantikan dropdown status lama -- filtering
+  // dilakukan di klien atas SATU hasil fetch (tanpa param status) supaya
+  // count di tiap pill selalu mencerminkan keseluruhan data, bukan cuma
+  // subset yang kebetulan sedang aktif difilter.
+  const [statusTab, setStatusTab] = useState("semua");
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
   const { data: invoices } = useQuery({
-    queryKey: ["invoices", clientFilter, statusFilter],
+    queryKey: ["invoices", clientFilter],
     queryFn: () => {
       const params = new URLSearchParams();
       if (clientFilter) params.set("client_id", clientFilter);
-      if (statusFilter) params.set("status", statusFilter);
       const qs = params.toString();
       return api.get<InvoiceRow[]>(`/finance/invoices${qs ? `?${qs}` : ""}`);
     },
@@ -133,6 +137,42 @@ export default function Finance() {
     queryKey: ["cashflow", cfYear],
     queryFn: () => api.get<CashFlowRow[]>(`/finance/cashflow?year=${cfYear}`),
   });
+
+  const filteredInvoices = useMemo(
+    () => (invoices ?? []).filter((i) => statusTab === "semua" || i.status === statusTab),
+    [invoices, statusTab]
+  );
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = invoices ?? [];
+    return [
+      { key: "semua", label: "Semua", count: all.length },
+      ...Object.keys(STATUS_LABELS).map((s) => ({
+        key: s,
+        label: STATUS_LABELS[s].label[0].toUpperCase() + STATUS_LABELS[s].label.slice(1),
+        count: all.filter((i) => i.status === s).length,
+      })),
+    ];
+  }, [invoices]);
+
+  // KPI row (§1.3) -- 4 kartu, semua angka dihitung dari `invoices`/`aging`
+  // yang sudah di-fetch halaman ini, bukan endpoint baru.
+  const outstanding = useMemo(
+    () => (invoices ?? []).filter((i) => i.status === "draft" || i.status === "terkirim"),
+    [invoices]
+  );
+  const outstandingTotal = outstanding.reduce((sum, i) => sum + Number(i.total_due), 0);
+  const paidInvoices = useMemo(() => (invoices ?? []).filter((i) => i.status === "dibayar"), [invoices]);
+  const paidTotal = paidInvoices.reduce((sum, i) => sum + Number(i.total_due), 0);
+  const overdueTotal = (aging ?? []).reduce((sum, a) => sum + Number(a.total_due), 0);
+  const pendingFaktur = useMemo(
+    () =>
+      (invoices ?? []).filter((i) => {
+        if (i.status === "draft" || i.status === "dibatalkan") return false;
+        const fs = i.tax_invoice_status ?? "belum_buat";
+        return fs === "belum_buat" || fs === "draft" || fs === "ditolak";
+      }),
+    [invoices]
+  );
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["invoices"] });
@@ -257,20 +297,46 @@ export default function Finance() {
         </form>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Outstanding"
+          value={formatRupiah(outstandingTotal)}
+          icon={Receipt}
+          iconTone="info"
+          context={`${outstanding.length} faktur belum terlunasi`}
+        />
+        <KpiCard
+          label="Jatuh Tempo"
+          value={formatRupiah(overdueTotal)}
+          icon={AlertTriangle}
+          iconTone="danger"
+          context={`${(aging ?? []).length} faktur lewat tempo`}
+          badge={(aging ?? []).length > 0 ? { label: "Kritis", tone: "danger" } : undefined}
+        />
+        <KpiCard
+          label="Terbayar"
+          value={formatRupiah(paidTotal)}
+          icon={CheckCircle2}
+          iconTone="success"
+          context={`${paidInvoices.length} faktur lunas`}
+        />
+        <KpiCard
+          label="Faktur Pajak Tertunda"
+          value={pendingFaktur.length}
+          icon={FileWarning}
+          iconTone="warning"
+          context="Menunggu dikirim ke DJP"
+          badge={pendingFaktur.length > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
         <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="input w-auto">
           <option value="">Semua klien</option>
           {(clients ?? []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
-            </option>
-          ))}
-        </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-auto">
-          <option value="">Semua status</option>
-          {Object.keys(STATUS_LABELS).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s].label}
             </option>
           ))}
         </select>
@@ -291,7 +357,7 @@ export default function Finance() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(invoices ?? []).map((i) => {
+            {filteredInvoices.map((i) => {
               const st = STATUS_LABELS[i.status] ?? STATUS_LABELS.draft;
               const fakturStatus = i.tax_invoice_status ?? "belum_buat";
               const ft = FAKTUR_LABELS[fakturStatus] ?? FAKTUR_LABELS.belum_buat;
@@ -459,10 +525,10 @@ export default function Finance() {
                 </Fragment>
               );
             })}
-            {invoices?.length === 0 && (
+            {filteredInvoices.length === 0 && (
               <tr>
                 <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada invoice.
+                  {invoices?.length === 0 ? "Belum ada invoice." : "Tidak ada invoice untuk status ini."}
                 </td>
               </tr>
             )}
