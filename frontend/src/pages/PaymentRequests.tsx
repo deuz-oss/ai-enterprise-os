@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
-import { ClipboardList } from "lucide-react";
+import { CheckCircle2, ClipboardList, Clock, Wallet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 interface PrDecision {
@@ -198,19 +199,40 @@ function ApprovalChainPanel() {
 
 export default function PaymentRequests() {
   const qc = useQueryClient();
+  // Tab/Pill filter (§1.5) butuh count tiap status sekaligus -- diambil
+  // sekali (limit besar, endpoint yang sama) lalu difilter+dipaginasi di
+  // klien, bukan 5x query terpisah per status.
   const [statusFilter, setStatusFilter] = useState("");
   const [offset, setOffset] = useState(0);
   const pageLimit = 50;
 
   const prs = useQuery({
-    queryKey: ["payment-requests", statusFilter, offset],
-    queryFn: () =>
-      api.getPaged<PrRow>(
-        `/payment-requests?limit=${pageLimit}&offset=${offset}${statusFilter ? `&status=${statusFilter}` : ""}`
-      ),
+    queryKey: ["payment-requests"],
+    queryFn: () => api.getPaged<PrRow>(`/payment-requests?limit=1000&offset=0`),
   });
-  const prRows = prs.data?.data;
-  const prTotal = prs.data?.total ?? 0;
+  const allPrs = prs.data?.data ?? [];
+  const filteredPrs = useMemo(
+    () => allPrs.filter((p) => !statusFilter || p.status === statusFilter),
+    [allPrs, statusFilter]
+  );
+  const prRows = filteredPrs.slice(offset, offset + pageLimit);
+  const prTotal = filteredPrs.length;
+  const statusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: allPrs.length },
+    ...Object.keys(STATUS_BADGE).map((s) => {
+      const label = s.replace("_", " ");
+      return {
+        key: s,
+        label: label[0].toUpperCase() + label.slice(1),
+        count: allPrs.filter((p) => p.status === s).length,
+      };
+    }),
+  ];
+  const awaitingCount = allPrs.filter((p) => p.status === "diajukan" || p.status === "menunggu_atasan").length;
+  const readyToExecuteCount = allPrs.filter((p) => p.status === "disetujui_atasan").length;
+  const outstandingTotal = allPrs
+    .filter((p) => p.status !== "dieksekusi" && p.status !== "ditolak")
+    .reduce((sum, p) => sum + Number(p.amount), 0);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["payment-requests"] });
 
@@ -225,27 +247,35 @@ export default function PaymentRequests() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader
-          icon={ClipboardList}
-          title="Payment Request"
-          subtitle="Diajukan → Menunggu Atasan (rantai approval per tenant) → Disetujui → Dieksekusi Finance"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
-          className="input w-auto"
-        >
-          <option value="">Semua status</option>
-          {Object.keys(STATUS_BADGE).map((s) => (
-            <option key={s} value={s}>
-              {s.replace("_", " ")}
-            </option>
-          ))}
-        </select>
-      </div>
+      <PageHeader
+        icon={ClipboardList}
+        title="Payment Request"
+        subtitle="Diajukan → Menunggu Atasan (rantai approval per tenant) → Disetujui → Dieksekusi Finance"
+      />
 
       <ApprovalChainPanel />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Payment Request" value={allPrs.length} icon={ClipboardList} iconTone="info" />
+        <KpiCard
+          label="Menunggu Persetujuan"
+          value={awaitingCount}
+          icon={Clock}
+          iconTone="warning"
+          badge={awaitingCount > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Siap Dieksekusi" value={readyToExecuteCount} icon={CheckCircle2} iconTone="accent" />
+        <KpiCard label="Total Nilai Outstanding" value={formatRupiah(outstandingTotal)} icon={Wallet} iconTone="neutral" />
+      </div>
+
+      <PillTabs
+        tabs={statusTabs}
+        value={statusFilter}
+        onChange={(k) => {
+          setStatusFilter(k);
+          setOffset(0);
+        }}
+      />
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
@@ -260,7 +290,7 @@ export default function PaymentRequests() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(prRows ?? []).map((p) => (
+            {prRows.map((p) => (
               <tr key={p.id}>
                 <td className="td font-mono text-xs font-medium">{p.pr_number}</td>
                 <td className="td capitalize">{p.pr_type}</td>
@@ -323,10 +353,12 @@ export default function PaymentRequests() {
                 </td>
               </tr>
             ))}
-            {prRows?.length === 0 && (
+            {prRows.length === 0 && (
               <tr>
                 <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi.
+                  {allPrs.length === 0
+                    ? "Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi."
+                    : "Tidak ada payment request untuk status ini."}
                 </td>
               </tr>
             )}

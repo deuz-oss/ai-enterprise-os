@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserCog } from "lucide-react";
+import { UserCheck, UserCog, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { api } from "../api/client";
 
 interface UserRow {
@@ -28,6 +30,17 @@ export default function Users() {
     queryKey: ["users"],
     queryFn: () => api.get<UserRow[]>("/auth/users"),
   });
+  const [statusTab, setStatusTab] = useState("");
+  const activeCount = (users ?? []).filter((u) => u.is_active).length;
+  const inactiveCount = (users ?? []).filter((u) => !u.is_active).length;
+  const filteredUsers = (users ?? []).filter(
+    (u) => !statusTab || (statusTab === "aktif" ? u.is_active : !u.is_active)
+  );
+  const statusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: (users ?? []).length },
+    { key: "aktif", label: "Aktif", count: activeCount },
+    { key: "nonaktif", label: "Nonaktif", count: inactiveCount },
+  ];
 
   const updateUser = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
@@ -80,6 +93,14 @@ export default function Users() {
         </div>
       </form>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard label="Total Pengguna" value={(users ?? []).length} icon={UserCog} iconTone="info" />
+        <KpiCard label="Aktif" value={activeCount} icon={UserCheck} iconTone="success" />
+        <KpiCard label="Nonaktif" value={inactiveCount} icon={UserX} iconTone="neutral" />
+      </div>
+
+      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
@@ -91,7 +112,7 @@ export default function Users() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(users ?? []).map((u) => (
+            {filteredUsers.map((u) => (
               <tr key={u.id} className="hover:bg-[var(--hover)]">
                 <td className="td font-medium">{u.full_name}</td>
                 <td className="td">{u.email}</td>
@@ -120,6 +141,13 @@ export default function Users() {
                 </td>
               </tr>
             ))}
+            {filteredUsers.length === 0 && (
+              <tr>
+                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                  Tidak ada pengguna untuk status ini.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
