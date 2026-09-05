@@ -4,9 +4,10 @@
 
 /* ============================================================
    Token desain SaaS-admin bersih (arah baru menggantikan tema workspace lama).
-   Sumber kebenaran: docs/design/mockups/dashboard.html — Inter, palet
-   slate/putih, kartu rounded-xl berbatas tipis. --accent SELALU tema
-   global (slate-900 terang / biru gelap), TIDAK pernah di-override per
+   Layout dasar (Inter, palet slate/putih, kartu rounded-xl berbatas tipis)
+   dari docs/design/mockups/dashboard.html; warna --accent sendiri mengikuti
+   keputusan final teal di docs/design/design.md §3. --accent SELALU tema
+   global (teal terang / teal muda gelap), TIDAK pernah di-override per
    halaman — persis mockup: logo & highlight nav aktif selalu netral.
    Warna kategori (biru=Sales, violet=Recruitment, emerald=People&Ops/
    Payroll, amber=Finance, slate=Akunting) hanya menempel di ikon grup
@@ -20,9 +21,9 @@
   --border: #e2e8f0;
   --text: #0f172a;
   --text-muted: #64748b;
-  /* Default aksen: slate-900 (tombol primer/nav aktif ala mockup). */
-  --accent: #0f172a;
-  --accent-tint: rgba(15, 23, 42, 0.08);
+  /* Default aksen: teal (tombol primer/nav aktif — docs/design/design.md §3). */
+  --accent: #0f6e56;
+  --accent-tint: rgba(15, 110, 86, 0.08);
 }
 
 .dark {
@@ -33,8 +34,8 @@
   --border: rgba(255, 255, 255, 0.1);
   --text: #e2e8f0;
   --text-muted: #94a3b8;
-  --accent: #3b82f6;
-  --accent-tint: rgba(59, 130, 246, 0.16);
+  --accent: #5dcaa5;
+  --accent-tint: rgba(93, 202, 165, 0.16);
 }
 
 html,

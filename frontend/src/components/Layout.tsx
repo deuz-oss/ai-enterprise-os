@@ -90,7 +90,7 @@ const CATEGORY_ORDER: Category[] = [
 // biar sidebar tidak menyesatkan (menampilkan/menyembunyikan menu yang
 // sebenarnya beda dgn apa yang backend izinkan).
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Dashboard", end: true },
+  { to: "/", label: "Overview", end: true },
   // Ringkasan gabungan Sales CRM + Recruitment (halaman lama, isinya lintas
   // dua kategori baru) — diletakkan di bawah "crm" saja (keputusan
   // implementasi Fase 28: satu landing bersama lebih murah daripada
@@ -420,7 +420,7 @@ export default function Layout() {
         <button
           onClick={() => navigate("/")}
           className="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--hover)]"
-          title="Ke Dashboard"
+          title="Ke Overview"
         >
           <span
             className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white"

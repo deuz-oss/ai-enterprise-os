@@ -236,7 +236,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={LayoutDashboard} title="Dashboard" subtitle="Ringkasan operasional hari ini" />
+      <PageHeader icon={LayoutDashboard} title="Overview" subtitle="Ringkasan operasional hari ini" />
 
       {/* Baris KPI */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
