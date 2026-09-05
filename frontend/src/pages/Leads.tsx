@@ -13,7 +13,8 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
+import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
+import { KpiCard } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface Lead {
@@ -24,7 +25,15 @@ export interface Lead {
   estimated_headcount: number | null;
   estimated_value: number | null;
   stage: string;
+  notes: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
   created_at: string;
+}
+
+interface UserOption {
+  id: string;
+  full_name: string;
 }
 
 const STAGES = ["lead", "kontak", "presentasi", "penawaran", "negosiasi", "deal", "gagal"];
@@ -89,6 +98,29 @@ export default function Leads() {
     queryFn: () => api.get<Activity[]>(`/leads/${selectedId}/activities`),
     enabled: Boolean(selectedId),
   });
+  // Untuk avatar+nama "Pemilik Deal" (§1.8) & dropdown assign owner. Endpoint
+  // ini admin-only di backend -- sama seperti dipakai Candidates.tsx untuk
+  // pilihan interviewer, jadi kalau gagal (403) dropdown cuma kosong, tidak
+  // memblokir fitur lain di halaman ini.
+  const { data: users } = useQuery({
+    queryKey: ["users-lite"],
+    queryFn: () => api.get<UserOption[]>("/auth/users"),
+    retry: false,
+  });
+
+  // KPI row (§2 archetype F) -- archetype F spec menyebut 4 kartu contoh
+  // (total nilai, win rate, target, estimasi komisi), tapi "target" dan
+  // "estimasi komisi" tidak punya data pendukung sama sekali di backend
+  // presales (dicek, tidak ada field/endpoint terkait) -- diganti 2 kartu
+  // lain yang genuinely real dari data yang sama.
+  const allLeads = leadsLookup ?? [];
+  const activeLeads = allLeads.filter((l) => l.stage !== "deal" && l.stage !== "gagal");
+  const wonLeads = allLeads.filter((l) => l.stage === "deal");
+  const lostLeads = allLeads.filter((l) => l.stage === "gagal");
+  const pipelineValue = activeLeads.reduce((sum, l) => sum + Number(l.estimated_value ?? 0), 0);
+  const wonValue = wonLeads.reduce((sum, l) => sum + Number(l.estimated_value ?? 0), 0);
+  const winRateDenom = wonLeads.length + lostLeads.length;
+  const winRate = winRateDenom > 0 ? Math.round((wonLeads.length / winRateDenom) * 100) : null;
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["leads"] });
@@ -110,6 +142,12 @@ export default function Leads() {
     onSuccess: invalidate,
     // C3: rollback bila server menolak perpindahan tahap
     onError: invalidate,
+  });
+
+  const assignOwner = useMutation({
+    mutationFn: ({ id, ownerId }: { id: string; ownerId: string | null }) =>
+      api.patch(`/leads/${id}`, { owner_id: ownerId }),
+    onSuccess: invalidate,
   });
 
   const convertLead = useMutation({
@@ -183,6 +221,31 @@ export default function Leads() {
             {showForm ? "Tutup" : "+ Lead Baru"}
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total Nilai Pipeline"
+          value={formatRupiah(pipelineValue)}
+          icon={CircleDollarSign}
+          iconTone="info"
+          context={`${activeLeads.length} lead aktif`}
+        />
+        <KpiCard
+          label="Win Rate"
+          value={winRate !== null ? `${winRate}%` : "-"}
+          icon={Briefcase}
+          iconTone="success"
+          context={winRateDenom > 0 ? `${wonLeads.length} menang dari ${winRateDenom}` : "Belum ada deal selesai"}
+        />
+        <KpiCard label="Lead Aktif" value={activeLeads.length} icon={Users} iconTone="neutral" />
+        <KpiCard
+          label="Deal Menang"
+          value={wonLeads.length}
+          icon={Building2}
+          iconTone="accent"
+          context={formatRupiah(wonValue)}
+        />
       </div>
 
       {showForm && (
@@ -363,6 +426,45 @@ export default function Leads() {
                       <p className="mt-1 text-xs font-medium">
                         {formatRupiah(lead.estimated_value)}
                       </p>
+                      {/* Avatar + pemilik deal, chip status kontekstual dari `notes` (§1.8) */}
+                      <div
+                        className="mt-2 flex items-center justify-between gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                            style={{ backgroundColor: "var(--accent)" }}
+                          >
+                            {lead.owner_name ? initials(lead.owner_name) : "?"}
+                          </span>
+                          <select
+                            value={lead.owner_id ?? ""}
+                            onChange={(e) =>
+                              assignOwner.mutate({ id: lead.id, ownerId: e.target.value || null })
+                            }
+                            className="min-w-0 cursor-pointer truncate rounded bg-transparent text-xs"
+                            style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
+                            title="Pemilik deal"
+                          >
+                            <option value="">Belum ditugaskan</option>
+                            {(users ?? []).map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.full_name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {lead.notes && (
+                          <span
+                            className="pill p-gray shrink-0 truncate text-[10px]"
+                            style={{ maxWidth: "40%" }}
+                            title={lead.notes}
+                          >
+                            {lead.notes}
+                          </span>
+                        )}
+                      </div>
                       {/* Pindah tahap cepat: panah kiri/kanan */}
                       <div
                         className="mt-2 flex items-center justify-between text-xs"

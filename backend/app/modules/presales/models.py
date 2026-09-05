@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.tenancy import TenantMixin
+from app.modules.auth.models import User
 
 
 class LeadStage(str, enum.Enum):
@@ -214,6 +215,14 @@ class Lead(TenantMixin, Base):
     activities: Mapped[list["LeadActivity"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", order_by="LeadActivity.created_at"
     )
+    owner: Mapped["User | None"] = relationship()
+
+    # "Pemilik deal" -- kartu Kanban Pipeline (component-implementation-spec.md
+    # §1.8). `owner_id` sudah ada sejak awal, properti ini baru dipakai sejak
+    # LeadOut mengeksposnya (Fase 28 redesign).
+    @property
+    def owner_name(self) -> str | None:
+        return self.owner.full_name if self.owner else None
 
     # ---- Kompatibilitas mundur (Fase 20 refactor, 2026-09-04) ----
     # `company_name`/`contact_*` dulunya kolom tertanam di Lead. Sekarang

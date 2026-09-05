@@ -228,6 +228,9 @@ class LeadUpdate(BaseModel):
     estimated_value: float | None = None
     stage: LeadStage | None = None
     notes: str | None = None
+    # Pemilik deal (§1.8 kartu Kanban) -- kolom `owner_id` sudah ada di model
+    # sejak awal, baru diekspos lewat schema di sini (Fase 28 redesign).
+    owner_id: UUID | None = None
 
 
 class LeadOut(BaseModel):
@@ -243,6 +246,8 @@ class LeadOut(BaseModel):
     estimated_headcount: int | None
     estimated_value: float | None
     stage: LeadStage
+    owner_id: UUID | None = None
+    owner_name: str | None = None
     notes: str | None
     created_at: datetime
     updated_at: datetime
