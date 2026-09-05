@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Info } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
@@ -27,7 +28,11 @@ const TIERS: { key: string; label: string; fee: number; blurb: string }[] = [
 ];
 
 export default function Billing() {
-  const [tab, setTab] = useState<"tier" | "topup" | "history">("tier");
+  // Widget saldo di topbar mengarahkan ke sini dengan state.tab="topup"
+  // supaya klik "Top Up" langsung buka tab yang relevan, bukan tab default.
+  const location = useLocation();
+  const initialTab = (location.state as { tab?: "tier" | "topup" | "history" } | null)?.tab ?? "tier";
+  const [tab, setTab] = useState<"tier" | "topup" | "history">(initialTab);
   const [topupAmount, setTopupAmount] = useState("100000");
   const [error, setError] = useState<string | null>(null);
 

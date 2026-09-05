@@ -40,6 +40,7 @@ import {
   Users,
   Wallet,
   X,
+  Zap,
 } from "lucide-react";
 import { api, clearToken, formatRupiah, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
@@ -454,13 +455,13 @@ export default function Layout() {
 
         <button
           onClick={() => setPaletteOpen(true)}
-          className="ml-2 hidden max-w-md flex-1 cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm lg:flex"
+          className="ml-2 hidden min-w-0 max-w-md flex-1 cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm lg:flex"
           style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)", color: "var(--text-muted)" }}
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Cari halaman, kandidat, invoice...</span>
+          <span className="min-w-0 flex-1 truncate">Cari halaman, kandidat, invoice...</span>
           <span
-            className="rounded px-1.5 py-0.5 text-[10px]"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
             style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
           >
             ⌘K
@@ -485,22 +486,43 @@ export default function Layout() {
             {periodLabel}
             <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
           </button>
-          {balance.data && (
-            <button
-              onClick={() => navigate("/billing")}
-              className={`hidden cursor-pointer sm:flex pill ${
-                balance.data.state === "empty"
-                  ? "p-red"
-                  : balance.data.state === "warning"
-                    ? "p-orange"
-                    : "p-green"
-              }`}
-              title="Saldo & langganan Opsi G"
-            >
-              <Wallet className="h-3.5 w-3.5" />
-              {formatRupiah(balance.data.cycle_remaining + balance.data.credit_balance)}
-            </button>
-          )}
+          {balance.data && (() => {
+            const totalRemaining = balance.data.cycle_remaining + balance.data.credit_balance;
+            // Persentase cuma bermakna relatif ke jatah bulanan langganan --
+            // kalau tenant belum punya cycle aktif (cycle_included 0), jangan
+            // tampilkan angka karangan (§0 component-implementation-spec.md).
+            const pct =
+              balance.data.cycle_included > 0
+                ? Math.max(0, Math.round((totalRemaining / balance.data.cycle_included) * 100))
+                : null;
+            const colorClass =
+              balance.data.state === "empty" ? "p-red" : balance.data.state === "warning" ? "p-orange" : "p-green";
+            const solidBg =
+              balance.data.state === "empty" ? "#b91c1c" : balance.data.state === "warning" ? "#c2410c" : "#047857";
+            return (
+              <div
+                onClick={() => navigate("/billing")}
+                className={`hidden cursor-pointer items-center gap-2.5 rounded-lg py-1 pl-2.5 pr-1 sm:flex ${colorClass}`}
+                title="Saldo & langganan Opsi G"
+              >
+                <Zap className="h-4 w-4 shrink-0" />
+                <span className="leading-tight">
+                  <span className="block text-xs font-semibold">Saldo: {formatRupiah(totalRemaining)}</span>
+                  {pct !== null && <span className="block text-[10px] opacity-80">({pct}%)</span>}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/billing", { state: { tab: "topup" } });
+                  }}
+                  className="ml-1 shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium text-white transition-colors hover:brightness-110"
+                  style={{ backgroundColor: solidBg }}
+                >
+                  Top Up
+                </button>
+              </div>
+            );
+          })()}
           <div className="relative">
             <button
               onClick={() => setInboxOpen((v) => !v)}
