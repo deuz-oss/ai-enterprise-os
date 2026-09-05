@@ -20,7 +20,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { Badge, Button, Card, ProgressStep } from "../components/ui";
+import { Badge, Button, Card, PillTabs, ProgressStep } from "../components/ui";
 import { PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
 import type { ClientRow } from "./Clients";
@@ -80,6 +80,9 @@ export default function JobOrderDetail() {
   const qc = useQueryClient();
   const [interviewModeFor, setInterviewModeFor] = useState<string | null>(null);
   const [docTemplateId, setDocTemplateId] = useState("");
+  // Archetype C (Detail/Profile) -- tab horizontal menggantikan seksi yang
+  // sebelumnya ditumpuk vertikal, tanpa mengubah logic/section-nya sendiri.
+  const [tab, setTab] = useState<"info" | "dokumen" | "pipeline">("info");
 
   const { data: jo } = useQuery({
     queryKey: ["job-order", id],
@@ -173,6 +176,17 @@ export default function JobOrderDetail() {
 
       <PageHeader icon={Magnet} title={jo.title} subtitle={clientName(jo.client_id)} />
 
+      <PillTabs
+        tabs={[
+          { key: "info", label: "Info" },
+          { key: "dokumen", label: "Dokumen" },
+          { key: "pipeline", label: `Pipeline Kandidat (${placements?.length ?? 0})` },
+        ]}
+        value={tab}
+        onChange={(k) => setTab(k as typeof tab)}
+      />
+
+      {tab === "info" && (
       <Card>
         <PropertiesPanel>
           <PropertyRow icon={MapPin} label="Area">{jo.area ?? "—"}</PropertyRow>
@@ -205,7 +219,9 @@ export default function JobOrderDetail() {
           </PropertyRow>
         </PropertiesPanel>
       </Card>
+      )}
 
+      {tab === "dokumen" && (
       <Card title="Dokumen Job Order" subtitle="Fase 21 item 4 — generate dari template">
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -249,7 +265,10 @@ export default function JobOrderDetail() {
           </p>
         )}
       </Card>
+      )}
 
+      {tab === "pipeline" && (
+      <>
       <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
         Pipeline Kandidat
       </h2>
@@ -364,6 +383,8 @@ export default function JobOrderDetail() {
           </p>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
