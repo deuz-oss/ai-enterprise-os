@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CreditCard, Info } from "lucide-react";
+import { CreditCard, Info, Zap } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
 import { CalloutBlock, PageHeader } from "../components/workspace";
+import { PillTabs } from "../components/ui";
 
 interface BalanceSummary {
   cycle_remaining: number;
@@ -72,54 +73,53 @@ export default function Billing() {
         subtitle="Langganan, top up saldo, dan riwayat transaksi kredit."
       />
 
-      {balance.data && (
-        <div className="card flex flex-wrap items-center gap-6">
-          <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Sisa jatah bulan ini
-            </p>
-            <p className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-              {formatRupiah(balance.data.cycle_remaining)}
-              <span className="text-sm font-normal" style={{ color: "var(--text-muted)" }}>
-                {" "}
-                / {formatRupiah(balance.data.cycle_included)}
-              </span>
-            </p>
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Saldo top up
-            </p>
-            <p className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-              {formatRupiah(balance.data.credit_balance)}
-            </p>
-          </div>
-        </div>
-      )}
+      {balance.data &&
+        (() => {
+          const totalRemaining = balance.data.cycle_remaining + balance.data.credit_balance;
+          const pct =
+            balance.data.cycle_included > 0
+              ? Math.max(0, Math.round((totalRemaining / balance.data.cycle_included) * 100))
+              : null;
+          // Widget besar §1.1 -- kartu berwarna sesuai state, sama seperti
+          // indikator topbar (Layout.tsx), cuma versi lebih besar + rincian.
+          const colorClass =
+            balance.data.state === "empty" ? "p-red" : balance.data.state === "warning" ? "p-orange" : "p-green";
+          return (
+            <div className={`card flex flex-wrap items-center gap-6 border ${colorClass}`}>
+              <div className="flex items-center gap-3">
+                <Zap className="h-8 w-8 shrink-0" />
+                <div>
+                  <p className="text-xs opacity-80">Saldo Tersedia</p>
+                  <p className="text-2xl font-bold tabular-nums">{formatRupiah(totalRemaining)}</p>
+                  {pct !== null && <p className="text-xs opacity-80">{pct}% dari kuota bulanan</p>}
+                </div>
+              </div>
+              <div className="ml-auto flex flex-wrap gap-6 border-l pl-6" style={{ borderColor: "currentColor" }}>
+                <div>
+                  <p className="text-xs opacity-80">Sisa jatah bulan ini</p>
+                  <p className="text-sm font-semibold tabular-nums">
+                    {formatRupiah(balance.data.cycle_remaining)}
+                    <span className="font-normal opacity-70"> / {formatRupiah(balance.data.cycle_included)}</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs opacity-80">Saldo top up</p>
+                  <p className="text-sm font-semibold tabular-nums">{formatRupiah(balance.data.credit_balance)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
-      <div className="flex gap-2">
-        {(
-          [
-            ["tier", "Pilih Paket"],
-            ["topup", "Top Up"],
-            ["history", "Riwayat"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className="rounded px-3 py-1.5 text-sm transition-colors"
-            style={{
-              border: "1px solid var(--border)",
-              backgroundColor: tab === k ? "var(--hover)" : "transparent",
-              color: tab === k ? "var(--text)" : "var(--text-muted)",
-              fontWeight: tab === k ? 500 : 400,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <PillTabs
+        tabs={[
+          { key: "tier", label: "Pilih Paket" },
+          { key: "topup", label: "Top Up" },
+          { key: "history", label: "Riwayat" },
+        ]}
+        value={tab}
+        onChange={(k) => setTab(k as typeof tab)}
+      />
 
       {error && <CalloutBlock tone="danger">{error}</CalloutBlock>}
 
