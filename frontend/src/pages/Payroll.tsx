@@ -1,6 +1,7 @@
-import { FormEvent, useState } from "react";
-import { Wallet } from "lucide-react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+import { AlertCircle, Landmark, ShieldAlert, Users, Wallet } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
+import { KpiCard, PreflightAlert } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -9,6 +10,9 @@ interface EmployeeRow {
   employee_no: string;
   full_name: string;
   status: string;
+  bank_name: string | null;
+  bpjs_kesehatan_valid_until: string | null;
+  bpjs_ketenagakerjaan_valid_until: string | null;
 }
 
 interface AttendanceRow {
@@ -265,6 +269,23 @@ export default function Payroll() {
       api.get<BpjsRecap>(`/bpjs/contributions/${period.year}/${period.month}`),
   });
 
+  // Sinyal anomali NYATA (bukan 3 contoh ilustratif di spec -- PPh21 salah
+  // hitung/NPWP kedaluwarsa/NIK duplikat tidak punya data pendukung di
+  // backend, dikonfirmasi lewat investigasi & keputusan eksplisit sebelum
+  // implementasi ini). Semua dihitung dari data yang SUDAH di-fetch di atas.
+  const [alertDismissed, setAlertDismissed] = useState(false);
+  const infoCardsRef = useRef<HTMLDivElement>(null);
+  const activeEmployees = (employees ?? []).filter((e) => e.status === "aktif");
+  const today = new Date();
+  const missingBankEmployees = activeEmployees.filter((e) => !e.bank_name);
+  const expiredBpjsEmployees = activeEmployees.filter((e) => {
+    const kes = e.bpjs_kesehatan_valid_until ? new Date(e.bpjs_kesehatan_valid_until) : null;
+    const tk = e.bpjs_ketenagakerjaan_valid_until ? new Date(e.bpjs_ketenagakerjaan_valid_until) : null;
+    return (kes !== null && kes < today) || (tk !== null && tk < today);
+  });
+  const negativeNetPaySlips = (slips ?? []).filter((s) => Number(s.net_pay) < 0);
+  const totalAnomalies = missingBankEmployees.length + expiredBpjsEmployees.length + negativeNetPaySlips.length;
+
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ["attendance"] });
     qc.invalidateQueries({ queryKey: ["runs"] });
@@ -401,6 +422,47 @@ export default function Payroll() {
             + Run Payrol
           </button>
         </div>
+      </div>
+
+      {totalAnomalies > 0 && !alertDismissed && (
+        <PreflightAlert
+          title="Perlu Perhatian Sebelum Proses Payroll"
+          summary={[
+            missingBankEmployees.length > 0 && `${missingBankEmployees.length} karyawan rekening bank kosong`,
+            expiredBpjsEmployees.length > 0 && `${expiredBpjsEmployees.length} karyawan BPJS kedaluwarsa`,
+            negativeNetPaySlips.length > 0 && `${negativeNetPaySlips.length} slip net pay negatif`,
+          ]
+            .filter((v): v is string => Boolean(v))
+            .join(", ")}
+          actionLabel={`Lihat ${totalAnomalies} Kasus`}
+          onAction={() => infoCardsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          onDismiss={() => setAlertDismissed(true)}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Karyawan Aktif" value={activeEmployees.length} icon={Users} iconTone="info" />
+        <KpiCard
+          label="Absensi Tercatat"
+          value={(attendance ?? []).length}
+          icon={Users}
+          iconTone="neutral"
+          context={`dari ${activeEmployees.length} karyawan aktif`}
+        />
+        <KpiCard
+          label="Total Iuran BPJS"
+          value={formatRupiah(bpjsRecap?.summary.grand_total ?? 0)}
+          icon={ShieldAlert}
+          iconTone="accent"
+          context={`Periode ${period.month}/${period.year}`}
+        />
+        <KpiCard
+          label="Anomali Terdeteksi"
+          value={totalAnomalies}
+          icon={AlertCircle}
+          iconTone="danger"
+          badge={totalAnomalies > 0 ? { label: "Perlu Tindakan", tone: "danger" } : undefined}
+        />
       </div>
 
       <div className="card">
@@ -599,6 +661,7 @@ export default function Payroll() {
             <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
               {(slips ?? []).map((s) => {
                 const emp = employees?.find((e) => e.id === s.employee_id);
+                const isNegative = Number(s.net_pay) < 0;
                 return (
                   <tr key={s.id}>
                     <td className="td">{emp?.full_name ?? "-"}</td>
@@ -608,8 +671,17 @@ export default function Payroll() {
                     </td>
                     <td className="td">{formatRupiah(Number(s.gross))}</td>
                     <td className="td text-rose-600">-{formatRupiah(Number(s.tax_pph21))}</td>
-                    <td className="td font-semibold text-emerald-700">
-                      {formatRupiah(Number(s.net_pay))}
+                    <td className="td font-semibold">
+                      {isNegative ? (
+                        <>
+                          <span style={{ color: "#b45309" }}>{formatRupiah(Number(s.net_pay))}*</span>
+                          <div className="text-[11px] font-normal" style={{ color: "#b45309" }}>
+                            (Net Pay Negatif)
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-emerald-700">{formatRupiah(Number(s.net_pay))}</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -763,6 +835,54 @@ export default function Payroll() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Kartu Info Baris Bawah (§1.7) -- kesiapan rekening & kepatuhan BPJS
+          dari data karyawan yang sudah di-fetch, bukan jadwal cut-off
+          fiktif (tidak ada konsep itu di backend Payroll). */}
+      <div ref={infoCardsRef} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="card">
+          <div className="flex items-center gap-2">
+            <Landmark className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Kesiapan Rekening</h3>
+            {missingBankEmployees.length > 0 && <span className="pill p-red ml-auto">{missingBankEmployees.length} kosong</span>}
+          </div>
+          <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+            {missingBankEmployees.length === 0
+              ? "Semua karyawan aktif sudah punya rekening bank terdaftar."
+              : `${missingBankEmployees.slice(0, 3).map((e) => e.full_name).join(", ")}${
+                  missingBankEmployees.length > 3 ? ` +${missingBankEmployees.length - 3} lagi` : ""
+                } belum punya rekening bank.`}
+          </p>
+        </div>
+        <div className="card">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Kepatuhan BPJS</h3>
+            {expiredBpjsEmployees.length > 0 && <span className="pill p-red ml-auto">{expiredBpjsEmployees.length} kedaluwarsa</span>}
+          </div>
+          <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+            {expiredBpjsEmployees.length === 0
+              ? "Tidak ada BPJS kedaluwarsa pada karyawan aktif."
+              : `${expiredBpjsEmployees.slice(0, 3).map((e) => e.full_name).join(", ")}${
+                  expiredBpjsEmployees.length > 3 ? ` +${expiredBpjsEmployees.length - 3} lagi` : ""
+                } BPJS-nya sudah kedaluwarsa.`}
+          </p>
+        </div>
+        <div className="card">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Slip Bermasalah</h3>
+            {negativeNetPaySlips.length > 0 && <span className="pill p-red ml-auto">{negativeNetPaySlips.length} negatif</span>}
+          </div>
+          <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+            {!selectedRunId
+              ? "Pilih run (\"Slip Gaji\") untuk memeriksa net pay."
+              : negativeNetPaySlips.length === 0
+                ? "Tidak ada slip dengan net pay negatif pada run ini."
+                : `${negativeNetPaySlips.length} slip pada run ini punya net pay negatif -- lihat tabel Slip Gaji di atas.`}
+          </p>
+        </div>
       </div>
     </div>
   );
