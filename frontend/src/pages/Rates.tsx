@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Calculator } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
+import { PillTabs, type PillTab } from "../components/ui";
 
 interface Pph21Row {
   id: string;
@@ -143,30 +144,22 @@ export default function Rates() {
     <div className="space-y-4">
       <PageHeader icon={Calculator} title="Tarif & Rate" subtitle="Rate ber-versi per tanggal efektif — terpisah dari kode; laporan historis memakai snapshot" />
 
-      <div className="flex gap-2">
-        {(
+      {/* Bukan filter status/kategori atas satu tabel (§1.5) -- ini pemilih
+          4 dataset rate yang berbeda sama sekali, jadi count per-tab tidak
+          bermakna dan sengaja tidak ditampilkan. Cuma dipakai gaya pill
+          yang sama untuk konsistensi visual antar halaman archetype B. */}
+      <PillTabs
+        tabs={
           [
-            ["pph21", "PPh 21"],
-            ["bpjs", "BPJS"],
-            ["billing", "Billing"],
-            ["bank", "Bank Fee"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className="rounded px-3 py-1.5 text-sm transition-colors"
-            style={{
-              border: "1px solid var(--border)",
-              backgroundColor: tab === k ? "var(--hover)" : "transparent",
-              color: tab === k ? "var(--text)" : "var(--text-muted)",
-              fontWeight: tab === k ? 500 : 400,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { key: "pph21", label: "PPh 21" },
+            { key: "bpjs", label: "BPJS" },
+            { key: "billing", label: "Billing" },
+            { key: "bank", label: "Bank Fee" },
+          ] satisfies PillTab[]
+        }
+        value={tab}
+        onChange={(k) => setTab(k as typeof tab)}
+      />
 
       {error && <CalloutBlock tone="danger">{error}</CalloutBlock>}
 

@@ -1,8 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gift } from "lucide-react";
+import { CheckCircle2, Clock, Gift, Wallet } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 
 /** Program referral karyawan (Fase 27) — jalur sourcing ketiga di samping
  * Job Portal (Fase 16) dan Talent Pool. Halaman baru berdiri sendiri,
@@ -57,6 +58,27 @@ export default function Referral() {
     queryKey: ["referral-rewards"],
     queryFn: () => api.get<ReferralReward[]>("/recruitment/referral-rewards"),
   });
+  const [statusTab, setStatusTab] = useState("");
+  const filteredRewards = useMemo(
+    () => (rewards ?? []).filter((r) => !statusTab || r.status === statusTab),
+    [rewards, statusTab]
+  );
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = rewards ?? [];
+    return [
+      { key: "", label: "Semua", count: all.length },
+      ...Object.keys(STATUS_BADGE).map((s) => ({
+        key: s,
+        label: s[0].toUpperCase() + s.slice(1),
+        count: all.filter((r) => r.status === s).length,
+      })),
+    ];
+  }, [rewards]);
+  const eligibleCount = (rewards ?? []).filter((r) => r.status === "eligible").length;
+  const paidCount = (rewards ?? []).filter((r) => r.status === "paid").length;
+  const unpaidTotal = (rewards ?? [])
+    .filter((r) => r.status === "pending" || r.status === "eligible")
+    .reduce((sum, r) => sum + Number(r.amount), 0);
   const { data: employees } = useQuery({
     queryKey: ["employees-lookup"],
     queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
@@ -136,9 +158,25 @@ export default function Referral() {
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Reward" value={(rewards ?? []).length} icon={Gift} iconTone="info" />
+        <KpiCard
+          label="Siap Dibayar"
+          value={eligibleCount}
+          icon={Clock}
+          iconTone="warning"
+          badge={eligibleCount > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Sudah Dibayar" value={paidCount} icon={CheckCircle2} iconTone="success" />
+        <KpiCard label="Total Belum Dibayar" value={formatRupiah(unpaidTotal)} icon={Wallet} iconTone="neutral" />
+      </div>
+
       <div className="card overflow-x-auto p-0">
         <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Daftar Reward</h2>
+        </div>
+        <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
         </div>
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
@@ -152,7 +190,7 @@ export default function Referral() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(rewards ?? []).map((r) => (
+            {filteredRewards.map((r) => (
               <tr key={r.id}>
                 <td className="td font-medium">{employeeName(r.employee_id)}</td>
                 <td className="td">{candidateName(r.candidate_id)}</td>
@@ -179,10 +217,10 @@ export default function Referral() {
                 </td>
               </tr>
             ))}
-            {rewards?.length === 0 && (
+            {filteredRewards.length === 0 && (
               <tr>
                 <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada reward referral.
+                  {(rewards ?? []).length === 0 ? "Belum ada reward referral." : "Tidak ada reward untuk status ini."}
                 </td>
               </tr>
             )}

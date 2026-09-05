@@ -1,6 +1,7 @@
-import { FormEvent, useState } from "react";
-import { Building2 } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
+import { AlertTriangle, Building2, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { api, formatRupiah } from "../api/client";
@@ -196,6 +197,25 @@ export default function PlatformTenants() {
     },
     enabled: Boolean(tenants?.length),
   });
+  const [statusTab, setStatusTab] = useState("");
+  const allTenants = tenants ?? [];
+  const filteredTenants = useMemo(
+    () => allTenants.filter((t) => !statusTab || t.status === statusTab),
+    [allTenants, statusTab]
+  );
+  const statusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: allTenants.length },
+    { key: "aktif", label: "Aktif", count: allTenants.filter((t) => t.status === "aktif").length },
+    {
+      key: "ditangguhkan",
+      label: "Ditangguhkan",
+      count: allTenants.filter((t) => t.status === "ditangguhkan").length,
+    },
+  ];
+  const criticalBalanceCount = allTenants.filter((t) => {
+    const state = billingByTenant?.[t.id]?.state;
+    return state === "warning" || state === "empty";
+  }).length;
   const { data: billingSummary } = useQuery({
     queryKey: ["tenant-billing", billingExpandedId],
     queryFn: () => api.get<BillingSummary>(`/platform/tenants/${billingExpandedId}/billing-summary`),
@@ -302,6 +322,31 @@ export default function PlatformTenants() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Tenant" value={allTenants.length} icon={Building2} iconTone="info" />
+        <KpiCard
+          label="Tenant Aktif"
+          value={allTenants.filter((t) => t.status === "aktif").length}
+          icon={CheckCircle2}
+          iconTone="success"
+        />
+        <KpiCard
+          label="Ditangguhkan"
+          value={allTenants.filter((t) => t.status === "ditangguhkan").length}
+          icon={XCircle}
+          iconTone="neutral"
+        />
+        <KpiCard
+          label="Saldo Kritis/Habis"
+          value={criticalBalanceCount}
+          icon={AlertTriangle}
+          iconTone="danger"
+          badge={criticalBalanceCount > 0 ? { label: "Perlu Perhatian", tone: "danger" } : undefined}
+        />
+      </div>
+
+      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
@@ -316,7 +361,7 @@ export default function PlatformTenants() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(tenants ?? []).map((t) => {
+            {filteredTenants.map((t) => {
               const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
               const tb = billingByTenant?.[t.id];
               return (
@@ -647,10 +692,10 @@ export default function PlatformTenants() {
                 </td>
               </tr>
             )}
-            {isLoading === false && tenants?.length === 0 && (
+            {isLoading === false && filteredTenants.length === 0 && (
               <tr>
                 <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada tenant.
+                  {allTenants.length === 0 ? "Belum ada tenant." : "Tidak ada tenant untuk status ini."}
                 </td>
               </tr>
             )}
