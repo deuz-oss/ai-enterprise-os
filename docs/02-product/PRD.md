@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-04
+**Terakhir diperbarui:** 2026-09-05
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -1060,10 +1060,27 @@ menyentuh tenant yang sudah aktif berbayar.
 7. **Perluas `PlatformTenants.tsx`** — visibilitas status pembayaran
    semua tenant untuk platform admin.
 
-**Perlu strategi migrasi untuk tenant existing** yang sudah aktif di
-Opsi F (§4.1-4.3) — belum dirancang di sini, perlu dibahas terpisah
-sebelum eksekusi (apakah auto-convert ke tier terdekat, atau tenant
-existing pilih manual).
+**Strategi migrasi tenant existing** (keputusan 2026-09-05, dibahas
+terpisah dari desain teknis di atas sebelum eksekusi dimulai — jumlah
+tenant `commercial` aktif di Opsi F saat ini masih sangat sedikit,
+jadi migrasi dirancang sebagai **one-shot script**, bukan rollout
+bertahap per-cohort):
+
+8. **Auto-convert tier berdasar jumlah bundle aktif saat cutover** —
+   baca `TenantAppLicense` aktif tiap tenant `commercial`, hitung
+   jumlah bundle unik (dari `BUNDLE_REGISTRY`: Talent/Workforce/
+   Revenue/Govern), lalu petakan: **1 bundle → Tier 1** (Rp500rb),
+   **2 bundle → Tier 2** (Rp2jt), **3-4 bundle → Tier 3** (Rp5jt).
+   Tenant tanpa bundle aktif sama sekali saat cutover (baru
+   trial/belum bayar) **TIDAK di-auto-assign tier** — tetap
+   foundation-only sampai tenant memilih tier sendiri lewat halaman
+   pembayaran self-service (poin 6).
+9. **Tidak ada periode grandfathering harga** — cutover langsung ke
+   harga/akses Opsi G penuh di tanggal migrasi berjalan, tidak ada
+   masa transisi dengan harga/akses lama. Konsekuensi: setelah script
+   migrasi jalan, guard lisensi per-SKU (poin 2) langsung dihapus
+   untuk seluruh tenant `commercial` sekaligus, bukan per-tenant
+   bertahap.
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
