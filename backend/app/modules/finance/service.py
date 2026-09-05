@@ -150,6 +150,17 @@ def generate_invoice(
         notes=payload.notes,
     )
     db.add(invoice)
+    db.flush()  # invoice.id terisi supaya bisa direferensikan ledger di bawah
+
+    from app.modules.billing.service import charge_metered_event
+
+    charge_metered_event(
+        db,
+        amount=5_000,
+        ref_event="finance.invoice_issued",
+        ref_entity_type="invoice",
+        ref_entity_id=str(invoice.id),
+    )
     db.commit()
     db.refresh(invoice)
 
@@ -823,6 +834,16 @@ def send_tax_invoice(db: Session, invoice_id: str) -> Invoice:
         inv.tax_invoice_status = "terkirim_djp"
         inv.efaktur_payload = '{"stub": "terkirim"}'
     inv.faktur_status_detail = None
+
+    from app.modules.billing.service import charge_metered_event
+
+    charge_metered_event(
+        db,
+        amount=8_000,
+        ref_event="invoice.tax_invoice_sent",
+        ref_entity_type="invoice",
+        ref_entity_id=str(inv.id),
+    )
     db.commit()
     db.refresh(inv)
     audit.log_event(

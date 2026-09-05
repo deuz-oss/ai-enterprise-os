@@ -95,6 +95,14 @@ class Settings(BaseSettings):
     efaktur_npkp: str | None = None
     efaktur_retry_max: int = 3
 
+    # Gateway pembayaran Opsi G (Fase 28). "" (nonaktif) | "sandbox" | "xendit".
+    payment_provider: str = ""
+    xendit_api_key: str | None = None
+    # Xendit verifikasi webhook via header X-Callback-Token dibanding token
+    # statis (BUKAN HMAC-of-body seperti esign_webhook_secret) -- lihat
+    # `billing/router.py::_verify_xendit_token`.
+    xendit_webhook_token: str | None = None
+
     @field_validator(
         "database_url",
         "storage_endpoint",
@@ -119,6 +127,8 @@ class Settings(BaseSettings):
         "efaktur_api_url",
         "efaktur_api_key",
         "efaktur_npkp",
+        "xendit_api_key",
+        "xendit_webhook_token",
         mode="before",
     )
     @classmethod
@@ -170,6 +180,10 @@ class Settings(BaseSettings):
     @property
     def esign_configured(self) -> bool:
         return self.esign_provider in ("sandbox", "privy")
+
+    @property
+    def payment_configured(self) -> bool:
+        return self.payment_provider in ("sandbox", "xendit")
 
     @property
     def email_enabled(self) -> bool:

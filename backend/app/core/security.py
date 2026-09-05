@@ -8,6 +8,7 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import app.modules.billing.models  # noqa: F401  -- registrasi tabel TenantSubscription
 from app.core.config import get_settings
 from app.core.database import get_db
 
@@ -152,60 +153,36 @@ def _is_billing_bypass(db: Session, tenant_id) -> bool:
     return mode == "internal"
 
 
-def require_licensed_app(app_key: str):
-    """Guard lisensi PRD v3.0: per-tenant + global → 403 jika tanpa lisensi."""
+def require_active_subscription():
+    """Guard Opsi G (Fase 28): satu status langganan per tenant, menggantikan
+    lisensi per-SKU (`require_licensed_app`/`require_any_licensed_app`,
+    dihapus sekaligus dalam cutover yang sama -- ADR-0007, tanpa masa
+    transisi/grandfathering per keputusan PRD Fase 28).
+    """
 
     def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
         if _is_billing_bypass(db, user.tenant_id):
             return user
-        from app.modules.platform.service import is_licensed
-
         if user.role == "platform_admin" or user.tenant_id is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akun platform tidak memiliki akses ke data tenant",
             )
-        # LEGACY_KEY_MAP untuk backward compat test/seed lama
-        from app.core.apps import LEGACY_KEY_MAP
+        from app.modules.billing.service import has_active_subscription
 
-        resolved = LEGACY_KEY_MAP.get(app_key, app_key)
-        if not is_licensed(db, user.tenant_id, resolved):
+        if not has_active_subscription(db, user.tenant_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Aplikasi belum aktif untuk perusahaan Anda. "
-                    "Buka menu Aplikasi untuk memulai trial atau berlangganan."
-                ),
+                detail="Tenant belum berlangganan. Pilih paket di halaman Pembayaran.",
             )
-        return user
 
-    return dependency
+        # Safety-net: tutup cycle yang sudah lewat waktunya kalau scheduler
+        # eksternal (POST /platform/internal/run-cycle-charge) terlewat --
+        # korektnes penagihan periodik tidak boleh bergantung penuh pada
+        # trigger di luar proses ini. No-op murah bila cycle masih berlaku.
+        from app.modules.billing.cycle_close import close_cycle_for_tenant
 
-
-def require_any_licensed_app(*app_keys: str):
-    """Guard OR: cukup salah satu bundle berlisensi. Per-tenant override."""
-
-    def dependency(user=Depends(get_current_user), db: Session = Depends(get_db)):
-        if _is_billing_bypass(db, user.tenant_id):
-            return user
-        from app.modules.platform.service import is_licensed
-
-        if user.role == "platform_admin" or user.tenant_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Akun platform tidak memiliki akses ke data tenant",
-            )
-        from app.core.apps import LEGACY_KEY_MAP
-
-        resolved_keys = [LEGACY_KEY_MAP.get(k, k) for k in app_keys]
-        if not any(is_licensed(db, user.tenant_id, key) for key in resolved_keys):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Aplikasi terkait belum aktif untuk perusahaan Anda. "
-                    "Buka menu Aplikasi untuk memulai trial atau berlangganan."
-                ),
-            )
+        close_cycle_for_tenant(db, user.tenant_id)
         return user
 
     return dependency

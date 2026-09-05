@@ -5,8 +5,8 @@ import Accounting from "./pages/Accounting";
 import Agreements from "./pages/Agreements";
 import AIInterview from "./pages/AIInterview";
 import AIInterviewSession from "./pages/AIInterviewSession";
-import Apps from "./pages/Apps";
 import Audit from "./pages/Audit";
+import Billing from "./pages/Billing";
 import Blacklist from "./pages/Blacklist";
 import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
@@ -58,7 +58,6 @@ export default function App() {
           <Route path="/ai-interview/session/:token" element={<AIInterviewSession />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/apps" element={<Apps />} />
             <Route path="/talent-cloud" element={<TalentCloudOverview />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/clients" element={<Clients />} />
@@ -84,6 +83,7 @@ export default function App() {
             <Route path="/govern-cloud" element={<GovernCloudOverview />} />
             <Route path="/accounting" element={<Accounting />} />
             <Route path="/rates" element={<Rates />} />
+            <Route path="/billing" element={<Billing />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/users" element={<Users />} />
             <Route path="/portal-saya" element={<MyPortal />} />

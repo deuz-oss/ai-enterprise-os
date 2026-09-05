@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ClipboardList,
+  CreditCard,
   Dna,
   FileCheck2,
   FileSignature,
@@ -29,7 +30,6 @@ import {
   PartyPopper,
   Plus,
   Receipt,
-  Rocket,
   Scale,
   Search,
   Shield,
@@ -41,8 +41,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { api, clearToken, getToken } from "../api/client";
-import AppLauncherGrid from "./AppLauncherGrid";
+import { api, clearToken, formatRupiah, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
 
 interface NavItem {
@@ -50,51 +49,39 @@ interface NavItem {
   label: string;
   end?: boolean;
   roles?: string[];
-  app?: AppKey;
-  apps?: AppKey[];
-  bundle?: Bundle;
-  // Item ini adalah landing page bundle-nya (mis. /talent-cloud) — kalau
-  // sebuah grup bundle punya item dengan flag ini, sidebar HANYA menampilkan
-  // satu baris tunggal (nama bundle, ikon landing) alih-alih tree flat semua
-  // item. Item lain di bundle itu tetap ada (tetap kena cek lisensi & tetap
-  // muncul di ⌘K), cuma disembunyikan dari daftar sidebar — navigasi ke sana
-  // dilakukan lewat link "Lihat semua X →" di dalam landing page itu sendiri
-  // (ala docs/design/mockups/talent-cloud.html).
+  bundle?: Category;
+  // Item ini adalah landing page kategori-nya (mis. /talent-cloud) — kalau
+  // sebuah grup kategori punya item dengan flag ini, sidebar HANYA menampilkan
+  // satu baris tunggal (nama kategori, ikon landing) alih-alih tree flat semua
+  // item. Item lain di kategori itu tetap ada (tetap muncul di ⌘K), cuma
+  // disembunyikan dari daftar sidebar — navigasi ke sana dilakukan lewat
+  // link "Lihat semua X →" di dalam landing page itu sendiri.
   bundleLanding?: boolean;
 }
 
-// Kelompok sidebar ala 4 "Metered SKU Bundles" di dashboard.html (Talent/
-// Workforce/Revenue/Govern Cloud) — murni pengelompokan TAMPILAN, terpisah
-// dari `app`/`apps` di atas (yang menentukan status lisensi per item).
-// Beberapa modul lisensi asli sengaja disatukan ke satu bundel tampilan
-// (mis. Sales CRM + Recruitment → Talent Cloud) supaya sidebar seringkas
-// mockup — 4 grup bundel, bukan satu grup per app.
-type Bundle = "talent" | "workforce" | "revenue" | "govern";
+// 5 kategori sidebar Opsi G (Fase 28), menggantikan branding "Cloud"
+// (Talent/Workforce/Revenue/Govern) — murni pengelompokan TAMPILAN, tidak
+// terkait sama sekali dengan app_key teknis di backend (`core/apps.py`,
+// sudah tidak dipakai untuk penegakan akses sejak guard subscription
+// menggantikan lisensi per-SKU). Semua fitur terbuka penuh untuk tenant
+// berlangganan aktif -- kategori ini murni navigasi, bukan gating.
+type Category = "crm" | "recruitment" | "workforce" | "finance_accounting" | "administration";
 
-const BUNDLE_META: Record<Bundle, { label: string; accent: string }> = {
-  talent: { label: "Talent Cloud", accent: "#7c3aed" },
-  workforce: { label: "Workforce Cloud", accent: "#059669" },
-  revenue: { label: "Revenue Cloud", accent: "#d97706" },
-  govern: { label: "Govern Cloud", accent: "#475569" },
+const CATEGORY_META: Record<Category, { label: string; accent: string }> = {
+  crm: { label: "CRM", accent: "#7c3aed" },
+  recruitment: { label: "Recruitment", accent: "#2563eb" },
+  workforce: { label: "Workforce", accent: "#059669" },
+  finance_accounting: { label: "Finance & Accounting", accent: "#d97706" },
+  administration: { label: "Administration", accent: "#475569" },
 };
 
-const BUNDLE_ORDER: Bundle[] = ["talent", "workforce", "revenue", "govern"];
-
-// Regresi ditemukan saat redesign: key di sini sebelumnya ("hr_payroll",
-// "operations_billing", "finance_accounting") TIDAK PERNAH cocok dengan key
-// lisensi asli di backend (`APP_REGISTRY` — app/core/apps.py:
-// sales_crm/recruitment/people_ops/payroll/finance/accounting/ai_addon).
-// Akibatnya `licensedSet.has(key)` selalu false utk 3 grup itu → nav
-// Karyawan/Absensi/Payment Request/Payroll/Finance/Akunting/Tarif TIDAK
-// PERNAH tampil di sidebar (juga hilang dari hasil ⌘K) untuk siapa pun,
-// admin maupun karyawan — bukan cuma soal desain.
-type AppKey =
-  | "sales_crm"
-  | "recruitment"
-  | "people_ops"
-  | "payroll"
-  | "finance"
-  | "accounting";
+const CATEGORY_ORDER: Category[] = [
+  "crm",
+  "recruitment",
+  "workforce",
+  "finance_accounting",
+  "administration",
+];
 
 // `roles` di bawah cuma menyembunyikan menu (allowlist ketat, admin TIDAK
 // otomatis lolos di sini) — keamanan sesungguhnya ditegakkan backend lewat
@@ -104,117 +91,109 @@ type AppKey =
 // sebenarnya beda dgn apa yang backend izinkan).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
-  // Ringkasan gabungan Sales CRM + Recruitment (mockup talent-cloud.html) — item
-  // paling atas grup bundle "talent", label "Ringkasan" (bukan "Talent Cloud")
-  // supaya tidak bentrok nama dengan header grup bundle di bawahnya.
+  // Ringkasan gabungan Sales CRM + Recruitment (halaman lama, isinya lintas
+  // dua kategori baru) — diletakkan di bawah "crm" saja (keputusan
+  // implementasi Fase 28: satu landing bersama lebih murah daripada
+  // membelah jadi dua halaman ringkasan terpisah sekarang).
   {
     to: "/talent-cloud",
     label: "Ringkasan",
-    apps: ["sales_crm", "recruitment"],
-    bundle: "talent",
+    bundle: "crm",
     end: true,
     bundleLanding: true,
   },
-  { to: "/leads", label: "Pipeline", app: "sales_crm", bundle: "talent" },
-  { to: "/clients", label: "Klien", app: "sales_crm", bundle: "talent" },
-  { to: "/quotations", label: "Quotation", app: "sales_crm", bundle: "talent" },
-  { to: "/agreements", label: "Agreement", app: "sales_crm", bundle: "talent" },
-  { to: "/job-orders", label: "Job Orders", app: "recruitment", bundle: "talent" },
-  { to: "/candidates", label: "Kandidat", app: "recruitment", bundle: "talent" },
-  { to: "/referral", label: "Referral", app: "recruitment", bundle: "talent" },
+  { to: "/leads", label: "Pipeline", bundle: "crm" },
+  { to: "/clients", label: "Klien", bundle: "crm" },
+  { to: "/quotations", label: "Quotation", bundle: "crm" },
+  { to: "/agreements", label: "Agreement", bundle: "crm" },
+  { to: "/job-orders", label: "Job Orders", bundle: "recruitment" },
+  { to: "/candidates", label: "Kandidat", bundle: "recruitment" },
+  { to: "/referral", label: "Referral", bundle: "recruitment" },
   {
     to: "/talent-pool",
     label: "Talent Pool",
-    app: "recruitment",
-    bundle: "talent",
+    bundle: "recruitment",
     roles: ["admin", "recruiter", "operations", "hr", "management"],
   },
   {
     to: "/ai-interview",
     label: "AI Interview",
-    app: "recruitment",
-    bundle: "talent",
+    bundle: "recruitment",
     roles: ["admin", "recruiter", "management"],
   },
   {
     to: "/blacklist",
     label: "Black Lists",
-    app: "recruitment",
-    bundle: "talent",
+    bundle: "recruitment",
     roles: ["admin", "recruiter", "management"],
   },
   {
     to: "/workforce-cloud",
     label: "Ringkasan",
-    app: "people_ops",
     bundle: "workforce",
     end: true,
     bundleLanding: true,
   },
-  { to: "/employees", label: "Karyawan", app: "people_ops", bundle: "workforce" },
-  { to: "/attendance", label: "Absensi", apps: ["people_ops", "payroll"], bundle: "workforce" },
+  { to: "/employees", label: "Karyawan", bundle: "workforce" },
+  { to: "/attendance", label: "Absensi", bundle: "workforce" },
   { to: "/chat", label: "Chat" },
   {
     to: "/payment-requests",
     label: "Payment Request",
-    apps: ["people_ops", "finance"],
     bundle: "workforce",
     roles: ["admin", "operations", "hr", "finance", "management"],
   },
-  // Payroll masuk Revenue Cloud (bukan Workforce) — persis PRD v3.0 §2.2
-  // Opsi F: "Payroll hitung (saltab/PPh21) + tagih (invoice/faktur)" adalah
-  // satu paket komersial Revenue Cloud bersama Finance.
-  {
-    to: "/revenue-cloud",
-    label: "Ringkasan",
-    app: "finance",
-    bundle: "revenue",
-    end: true,
-    bundleLanding: true,
-  },
-  { to: "/payroll", label: "Payroll", app: "payroll", bundle: "revenue" },
-  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], app: "payroll", bundle: "workforce" },
-  { to: "/finance", label: "Finance", app: "finance", bundle: "revenue" },
+  // Payroll sengaja di Workforce, bukan Finance & Accounting -- keputusan
+  // desain Fase 28 (docs/design/design.md §7), beda dari pengelompokan
+  // Opsi F lama yang menyatukan payroll dengan Revenue Cloud.
+  { to: "/payroll", label: "Payroll", bundle: "workforce" },
+  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], bundle: "workforce" },
+  // "Ringkasan Finance" jadi entri biasa (bukan bundleLanding) karena
+  // /govern-cloud di bawah sudah jadi landing kategori administration --
+  // isinya audit+users+roles, cocoknya di sana, bukan di Finance & Accounting
+  // seperti pengelompokan Opsi F lama.
+  { to: "/revenue-cloud", label: "Ringkasan Finance", bundle: "finance_accounting" },
+  { to: "/finance", label: "Finance", bundle: "finance_accounting" },
+  { to: "/accounting", label: "Akunting", bundle: "finance_accounting" },
+  // Landing kategori administration -- isinya audit log + users + roles,
+  // konten halaman ini sebenarnya sudah pas di sini sejak awal.
   {
     to: "/govern-cloud",
     label: "Ringkasan",
     roles: ["admin", "management"],
-    bundle: "govern",
+    bundle: "administration",
     end: true,
     bundleLanding: true,
   },
-  { to: "/accounting", label: "Akunting", app: "accounting", bundle: "revenue" },
   // Kelola rate ber-versi — role finance ke atas.
   {
     to: "/rates",
-    label: "Tarif & Rate",
+    label: "Rate Configuration",
     roles: ["admin", "finance", "management"],
-    app: "accounting",
-    bundle: "revenue",
+    bundle: "administration",
+  },
+  // Langganan & saldo kredit Opsi G (Fase 28) — role finance ke atas, sama
+  // seperti Rate Configuration.
+  {
+    to: "/billing",
+    label: "Pembayaran",
+    roles: ["admin", "finance", "management"],
+    bundle: "administration",
   },
   // Jejak audit sensitif — disembunyikan dari role non-management.
-  { to: "/audit", label: "Audit", roles: ["admin", "management"], bundle: "govern" },
+  { to: "/audit", label: "Audit", roles: ["admin", "management"], bundle: "administration" },
   // Kelola akun tim & role — hanya admin (dibutuhkan utk buat akun role "karyawan"
   // sebelum bisa ditautkan ke data karyawan di halaman People & Ops).
-  { to: "/users", label: "Pengguna", roles: ["admin"], bundle: "govern" },
+  { to: "/users", label: "Pengguna", roles: ["admin"], bundle: "administration" },
   // Manajemen tenant SaaS — hanya platform_admin (Brian), menu tersendiri
   // (dulu cuma bisa diakses lewat URL langsung, tanpa link menu apa pun).
   { to: "/platform", label: "Manajemen Tenant", roles: ["platform_admin"] },
 ];
 
-interface AppEntitlement {
-  key: string;
-  name: string;
-  emoji: string;
-  description?: string;
-  status?: string | null;
-  licensed: boolean;
-}
-
 // Emoji untuk command palette (hasil pencarian entitas di CommandPalette.tsx
 // masih pakai emoji, jadi daftar ini tetap ada utk item quick-nav di sana).
-const PAGE_EMOJI: Record<string, string> = {  "/": "🏠",
-  "/apps": "🚀",
+const PAGE_EMOJI: Record<string, string> = {
+  "/": "🏠",
   "/talent-cloud": "✨",
   "/leads": "🎯",
   "/clients": "🎯",
@@ -239,6 +218,7 @@ const PAGE_EMOJI: Record<string, string> = {  "/": "🏠",
   "/govern-cloud": "⚖️",
   "/accounting": "📊",
   "/rates": "🧮",
+  "/billing": "💳",
   "/audit": "🛡️",
   "/users": "👥",
   "/platform": "🏢",
@@ -249,7 +229,6 @@ const PAGE_EMOJI: Record<string, string> = {  "/": "🏠",
 // emoji, beda jauh dari garis vektor bersih di mockup).
 const PAGE_ICON: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
-  "/apps": Rocket,
   "/talent-cloud": Sparkles,
   "/leads": Briefcase,
   "/clients": Building2,
@@ -274,6 +253,7 @@ const PAGE_ICON: Record<string, LucideIcon> = {
   "/govern-cloud": Scale,
   "/accounting": BarChart3,
   "/rates": Calculator,
+  "/billing": CreditCard,
   "/audit": Shield,
   "/users": UserCog,
   "/platform": Building2,
@@ -293,10 +273,8 @@ function useDarkMode() {
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const qc = useQueryClient();
   const { dark, toggle } = useDarkMode();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [launcherOpen, setLauncherOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [helpDismissed, setHelpDismissed] = useState(
@@ -311,12 +289,6 @@ export default function Layout() {
     enabled: Boolean(getToken()),
     retry: false,
   });
-  // Entitlement Fase 7: nav dinamis mengikuti lisensi aplikasi tenant.
-  const apps = useQuery({
-    queryKey: ["apps"],
-    queryFn: () => api.get<AppEntitlement[]>("/apps"),
-    enabled: Boolean(getToken()) && me.data?.role !== "platform_admin",
-  });
   // Badge Kotak Masuk dari notifikasi in-app sungguhan.
   const unread = useQuery({
     queryKey: ["notif-unread"],
@@ -324,9 +296,21 @@ export default function Layout() {
     enabled: Boolean(getToken()),
     refetchInterval: 30_000,
   });
-  const startTrialSidebar = useMutation({
-    mutationFn: (key: string) => api.post(`/apps/${key}/trial`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["apps"] }),
+  // Indikator saldo kredit Opsi G (Fase 28) -- hanya tenant biasa, bukan
+  // platform_admin/karyawan (mereka tidak berlangganan langsung).
+  const balance = useQuery({
+    queryKey: ["billing-balance"],
+    queryFn: () =>
+      api.get<{
+        cycle_remaining: number;
+        cycle_included: number;
+        credit_balance: number;
+        state: "normal" | "warning" | "empty";
+      }>("/billing/balance-summary"),
+    enabled:
+      Boolean(getToken()) && me.data?.role !== "platform_admin" && me.data?.role !== "karyawan",
+    refetchInterval: 30_000,
+    retry: false,
   });
 
   // Ctrl/Cmd+K membuka command palette dari mana saja.
@@ -337,19 +321,13 @@ export default function Layout() {
         setPaletteOpen((o) => !o);
       }
       if (e.key === "Escape") {
-        setLauncherOpen(false);
         setInboxOpen(false);
         setProfileMenuOpen(false);
       }
     }
-    function onCloseLauncher() {
-      setLauncherOpen(false);
-    }
     window.addEventListener("keydown", onKeyDown);
-    document.addEventListener("aeos:close-launcher", onCloseLauncher);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("aeos:close-launcher", onCloseLauncher);
     };
   }, []);
 
@@ -369,36 +347,29 @@ export default function Layout() {
     return <Navigate to="/portal-saya" replace />;
   }
 
-  const licensedSet = new Set(
-    (apps.data ?? []).filter((a) => a.licensed).map((a) => a.key)
-  );
-
-  function licensedFor(item: NavItem): boolean {
-    const keys: AppKey[] = item.apps ?? (item.app ? [item.app] : []);
-    if (!keys.length) return true;
-    return keys.some((k) => licensedSet.has(k));
-  }
-
+  // Visibilitas nav murni role-based sejak Fase 28 -- semua fitur terbuka
+  // penuh untuk tenant berlangganan aktif (ditegakkan backend lewat
+  // `require_active_subscription()`), tidak ada lagi gating per-app_key.
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (isKaryawan && !KARYAWAN_ALLOWED_PATHS.includes(item.to)) return false;
     if (isPlatform && !PLATFORM_ALLOWED_PATHS.includes(item.to)) return false;
     if (item.roles && !(me.data && item.roles.includes(me.data.role))) return false;
-    // Selama entitlement belum termuat, tampilkan dulu (hindari kedipan).
-    if (!item.apps && !item.app) return true;
-    if (!apps.data) return true;
-    return licensedFor(item);
+    return true;
   });
 
-  // Grup: Umum (tanpa bundel) → 4 bundel tampilan ala dashboard.html (Talent/
-  // Workforce/Revenue/Govern Cloud). Setiap item punya tepat satu `bundle`,
-  // jadi tidak ada risiko duplikasi lintas grup seperti skema lama.
+  // Grup: Umum (tanpa kategori) → 5 kategori Opsi G. Setiap item punya
+  // tepat satu `bundle`, jadi tidak ada risiko duplikasi lintas grup.
   const groups: { label: string; accent?: string; items: NavItem[] }[] = [];
   const umum = visibleItems.filter((i) => !i.bundle);
   if (umum.length) groups.push({ label: "General", items: umum });
-  for (const bundle of BUNDLE_ORDER) {
+  for (const bundle of CATEGORY_ORDER) {
     const items = visibleItems.filter((i) => i.bundle === bundle);
     if (!items.length) continue;
-    groups.push({ label: BUNDLE_META[bundle].label, accent: BUNDLE_META[bundle].accent, items });
+    groups.push({
+      label: CATEGORY_META[bundle].label,
+      accent: CATEGORY_META[bundle].accent,
+      items,
+    });
   }
 
   const paletteItems: PaletteItem[] = [
@@ -411,9 +382,6 @@ export default function Layout() {
         to: i.to,
       }))
     ),
-    ...(showAppsMenu()
-      ? [{ id: "/apps", label: "Aplikasi", emoji: "🚀", group: "Platform", to: "/apps" }]
-      : []),
     {
       id: "theme",
       label: dark ? "Mode Terang" : "Mode Gelap",
@@ -423,7 +391,7 @@ export default function Layout() {
     },
   ];
 
-  function showAppsMenu(): boolean {
+  function isTenantUser(): boolean {
     return Boolean(getToken()) && !isPlatform && !isKaryawan;
   }
 
@@ -439,11 +407,9 @@ export default function Layout() {
 
   // --accent TIDAK pernah di-override per halaman — tetap warisi default
   // tema (:root/.dark) di semua tempat (logo, tombol primer, highlight nav
-  // aktif), persis seperti dashboard.html (selalu slate-900, tak pernah
-  // ikut warna kategori). Warna kategori (biru/violet/emerald/amber/slate)
-  // HANYA menempel di ikon grup sidebar, lewat BUNDLE_META di atas — sama
-  // seperti mockup: ikon "Talent/Workforce/Revenue/Govern Cloud" berwarna,
-  // tapi item aktif & logo tetap netral gelap.
+  // aktif). Warna kategori (ungu/biru/emerald/amber/slate) HANYA menempel
+  // di ikon grup sidebar, lewat CATEGORY_META di atas — item aktif & logo
+  // tetap netral gelap.
   return (
     <div className="min-h-screen">
       {/* ===== Topbar (lebar penuh) ===== */}
@@ -452,9 +418,9 @@ export default function Layout() {
         style={{ backgroundColor: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
       >
         <button
-          onClick={() => setLauncherOpen(true)}
+          onClick={() => navigate("/")}
           className="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--hover)]"
-          title="Buka App Launcher"
+          title="Ke Dashboard"
         >
           <span
             className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white"
@@ -519,6 +485,22 @@ export default function Layout() {
             {periodLabel}
             <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
           </button>
+          {balance.data && (
+            <button
+              onClick={() => navigate("/billing")}
+              className={`hidden cursor-pointer sm:flex pill ${
+                balance.data.state === "empty"
+                  ? "p-red"
+                  : balance.data.state === "warning"
+                    ? "p-orange"
+                    : "p-green"
+              }`}
+              title="Saldo & langganan Opsi G"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              {formatRupiah(balance.data.cycle_remaining + balance.data.credit_balance)}
+            </button>
+          )}
           <div className="relative">
             <button
               onClick={() => setInboxOpen((v) => !v)}
@@ -559,18 +541,13 @@ export default function Layout() {
           style={{ backgroundColor: "var(--sidebar)", borderRight: "1px solid var(--border)" }}
         >
           <nav className="flex-1 space-y-5 overflow-y-auto p-3">
-            {showAppsMenu() && (
-              <SidebarLink to="/apps" icon={Rocket} label="Aplikasi" active={location.pathname === "/apps"} />
-            )}
-            <PageTreeSection pathname={location.pathname} visible={showAppsMenu()} />
+            <PageTreeSection pathname={location.pathname} visible={isTenantUser()} />
             {groups.map((g) => {
-              // Bundle dengan landing page (mis. Talent Cloud) diciutkan jadi
-              // satu baris klik-in saja, persis mockup talent-cloud.html
-              // (sidebar "Aplikasi" cuma 4 baris datar, bukan tree). Sub-
-              // halamannya (Pipeline/Klien/Job Orders/dst) diakses lewat link
-              // "Lihat semua X →" di dalam landing page-nya sendiri, bukan
-              // lewat sidebar — tapi tetap ada di sini (tersembunyi) supaya
-              // tetap ikut cek lisensi & tetap muncul di hasil ⌘K.
+              // Kategori dengan landing page (mis. CRM → /talent-cloud) diciutkan
+              // jadi satu baris klik-in saja, bukan tree flat. Sub-halamannya
+              // (Pipeline/Klien/Job Orders/dst) diakses lewat link "Lihat semua
+              // X →" di dalam landing page-nya sendiri, bukan lewat sidebar —
+              // tapi tetap ada di sini (tersembunyi) supaya tetap muncul di ⌘K.
               const landing = g.items.find((i) => i.bundleLanding);
               const rowItems = landing ? [landing] : g.items;
               return (
@@ -599,10 +576,9 @@ export default function Layout() {
                         >
                           {({ isActive }) => (
                             <>
-                              {/* Ikon berwarna per kategori (biru=Sales, violet=Recruitment,
-                                  emerald=People&Ops/Payroll, amber=Finance, slate=Akunting) —
-                                  sama seperti ikon "Talent/Workforce/Revenue/Govern Cloud" di
-                                  dashboard.html; netral putih saat item aktif. */}
+                              {/* Ikon berwarna per kategori (ungu=CRM, biru=Recruitment,
+                                  emerald=Workforce, amber=Finance & Accounting, slate=
+                                  Administration); netral putih saat item aktif. */}
                               <Icon
                                 className="h-4 w-4 shrink-0"
                                 style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--text-muted)") }}
@@ -618,40 +594,6 @@ export default function Layout() {
               );
             })}
           </nav>
-
-          {/* Kartu upsell app belum terpasang */}
-          {showAppsMenu() && (() => {
-            const unlicensed = (apps.data ?? []).filter(
-              (a) => !a.licensed && a.status !== "kedaluwarsa"
-            );
-            const pick =
-              unlicensed.find((a) => a.key === "esign") ??
-              unlicensed.find((a) => a.key === "ai_addon") ??
-              unlicensed[0];
-            if (!pick) return null;
-            return (
-              <div
-                className="mx-3 mb-3 rounded-xl p-3 text-xs"
-                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
-              >
-                <b style={{ color: "var(--text)" }}>
-                  {pick.emoji} Aktifkan {pick.name}?
-                </b>
-                <p className="mt-1 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  {(pick.description ?? "").slice(0, 90)}
-                  {(pick.description ?? "").length > 90 ? "…" : ""} Gratis 14 hari.
-                </p>
-                <button
-                  onClick={() => startTrialSidebar.mutate(pick.key)}
-                  disabled={startTrialSidebar.isPending}
-                  className="mt-2 w-full cursor-pointer rounded-lg py-1.5 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ backgroundColor: "var(--accent)" }}
-                >
-                  Coba sekarang
-                </button>
-              </div>
-            );
-          })()}
 
           <div className="relative border-t p-3" style={{ borderColor: "var(--border)" }}>
             <div
@@ -722,49 +664,8 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* App Launcher modal dari workspace switcher */}
-      {launcherOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-start justify-center bg-black/35 pt-[10vh]"
-          onClick={() => setLauncherOpen(false)}
-        >
-          <div
-            className="max-h-[80vh] w-[720px] max-w-[92vw] overflow-hidden rounded-xl shadow-2xl"
-            style={{ backgroundColor: "var(--bg-elevated)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-baseline gap-2.5 px-5 pt-4">
-              <h2 className="text-lg font-bold" style={{ color: "var(--text)" }}>
-                Aplikasi
-              </h2>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {(apps.data ?? []).filter((a) => a.licensed).length} terpasang · trial 14 hari per app
-              </span>
-              <button
-                className="ml-auto flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs hover:bg-[var(--hover)]"
-                onClick={() => setLauncherOpen(false)}
-                style={{ color: "var(--text-muted)" }}
-              >
-                <X className="h-3.5 w-3.5" /> Esc
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto p-5 pt-3">
-              <AppLauncherGrid compact />
-            </div>
-            <div
-              className="flex items-center gap-2 border-t px-5 py-3 text-[12.5px]"
-              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-            >
-              <Lightbulb className="h-4 w-4 shrink-0" /> Ambil{" "}
-              <b style={{ color: "var(--text)" }}>Full Package</b> (semua aplikasi + AI) dan
-              hemat hingga 35% dibeli satuan.
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* FAB Tanya AEOS + help chip */}
-      {showAppsMenu() && location.pathname !== "/chat" && (
+      {isTenantUser() && location.pathname !== "/chat" && (
         <>
           {!helpDismissed && (
             <div
@@ -805,33 +706,6 @@ export default function Layout() {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />
     </div>
-  );
-}
-
-function SidebarLink({
-  to,
-  icon: Icon,
-  label,
-  active,
-}: {
-  to: string;
-  icon: LucideIcon;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <NavLink
-      to={to}
-      end
-      className="mb-2 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
-      style={{
-        backgroundColor: active ? "var(--accent)" : undefined,
-        color: active ? "#ffffff" : "var(--text-muted)",
-      }}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {label}
-    </NavLink>
   );
 }
 

@@ -286,7 +286,7 @@ export default function WorkforceCloudOverview() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           icon={IdCard}
-          title="Workforce Cloud"
+          title="Workforce"
           subtitle={`${totalEmployees} karyawan · ${internalCount} internal + ${outsourcingCount} outsourcing · ${overview.data?.people.bpjs_complete ?? 0} BPJS aktif.`}
         />
         <Link to="/employees" className="btn shrink-0">

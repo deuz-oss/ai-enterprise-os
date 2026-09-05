@@ -102,8 +102,8 @@ export default function Login() {
               <span className="text-white/60">satu pintu.</span>
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-white/65">
-              Talent Cloud · Workforce Cloud · Revenue Cloud · Govern Cloud — rekrutmen, HR,
-              payroll, tagihan, dan pembukuan dalam satu workspace.
+              CRM · Recruitment · Workforce · Finance & Accounting · Administration —
+              rekrutmen, HR, payroll, tagihan, dan pembukuan dalam satu workspace.
             </p>
             <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-slate-900">
               <Sparkles className="h-3.5 w-3.5 text-violet-600" /> AI Native
@@ -236,10 +236,10 @@ export default function Login() {
                 <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
                 <div className="text-xs leading-relaxed">
                   <div className="font-semibold text-amber-900 dark:text-amber-300">
-                    Akses mengikuti lisensi tenant
+                    Akses mengikuti status langganan tenant
                   </div>
                   <div className="text-amber-800 dark:text-amber-400">
-                    Jika modul terkunci, minta admin tenant mengaktifkan lewat halaman Aplikasi,
+                    Jika akses terkunci, minta admin tenant memilih paket di halaman Pembayaran,
                     atau hubungi platform admin.
                   </div>
                 </div>

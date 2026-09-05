@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.permissions import FINANCE_ROLES, PAYMENT_REQUEST_ROLES
 from app.core.security import (
     get_current_user,
-    require_any_licensed_app,
+    require_active_subscription,
     require_roles,
 )
 from app.modules.finance import service
@@ -38,7 +38,7 @@ pr_router = APIRouter(
     tags=["payment-request"],
     dependencies=[
         Depends(get_current_user),
-        Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+        Depends(require_active_subscription()),
         Depends(require_roles(*PAYMENT_REQUEST_ROLES)),
     ],
 )

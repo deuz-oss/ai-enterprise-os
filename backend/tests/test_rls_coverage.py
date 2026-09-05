@@ -10,6 +10,12 @@ berikutnya tidak bisa lolos dengan gap yang sama tanpa test ini gagal.
 Hanya berjalan kalau ada Postgres nyata (env `TEST_POSTGRES_URL`, atau
 `DATABASE_URL` kalau dialeknya postgresql) -- SQLite (default test suite)
 tidak punya konsep RLS sama sekali, jadi tidak bisa memverifikasi ini.
+
+Catatan: test di sini cuma membaca katalog `pg_policies` (policy ADA atau
+tidak) -- aman dijalankan dengan kredensial superuser. Untuk memverifikasi
+ENFORCEMENT sungguhan (baris benar-benar tersaring di query, bukan cuma
+policy-nya ada), lihat `test_platform_rls_regression.py` -- itu WAJIB
+kredensial role aplikasi (`aeos_app`), superuser selalu melewati RLS.
 """
 
 from __future__ import annotations
@@ -34,6 +40,10 @@ EXCLUDED_TABLES = {
     # bukan RLS). Lihat alembic/versions/g8h9i0j1k2l3_extend_rls_coverage.py.
     "ai_interview_responses",
     "payroll_run_tokens",
+    # Sama alasannya: webhook Xendit mencari baris ini lewat
+    # provider_invoice_id SEBELUM tenant diketahui (Fase 28). Lihat
+    # alembic/versions/e1f2a3b4c5d6_fase28_payment_intents.py.
+    "payment_intents",
     # GAP DIKETAHUI, BELUM DIPERBAIKI (lihat plan file): job_portal's
     # _resolve_placement_by_token() punya pola pre-tenant-lookup yang sama
     # tapi `placements` SUDAH RLS-covered sejak migrasi awal -- artinya
@@ -71,6 +81,7 @@ def test_semua_tabel_tenant_id_notnull_punya_rls_policy():
     import app.modules.attendance.models  # noqa: F401
     import app.modules.audit.models  # noqa: F401
     import app.modules.auth.models  # noqa: F401
+    import app.modules.billing.models  # noqa: F401
     import app.modules.blacklist.models  # noqa: F401
     import app.modules.chat.models  # noqa: F401
     import app.modules.clients.models  # noqa: F401

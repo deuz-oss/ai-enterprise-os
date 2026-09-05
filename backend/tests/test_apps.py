@@ -1,4 +1,7 @@
-"""Fase 7: registry aplikasi, lisensi per tenant, dan guard 403."""
+"""Fase 7: registry aplikasi (masih dipakai untuk pemetaan path->app_key).
+Guard akses bisnis sejak Fase 28 memakai `require_active_subscription()`
+(TenantSubscription), bukan lagi lisensi per-SKU -- lihat
+`test_guard_blocks_without_subscription_and_passes_once_active`."""
 
 from tests.conftest import _auth_header
 
@@ -50,64 +53,70 @@ def test_default_tenant_gets_full_package(client):
     assert all(a["licensed"] and a["status"] == "aktif" for a in apps)
 
 
-def test_guard_blocks_and_trial_reactivates(client):
+def _seed_active_subscription(client, tenant_id):
+    """Insert `TenantSubscription` langsung via DB -- alur nyata (Xendit
+    checkout, Milestone 7) belum ada di titik Milestone 2 ini."""
+    from uuid import UUID
+
+    from app.modules.billing.models import SubscriptionStatus, SubscriptionTier, TenantSubscription
+
+    db = client.testing_session()
+    try:
+        db.add(
+            TenantSubscription(
+                tenant_id=UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id,
+                tier=SubscriptionTier.tier1,
+                monthly_fee=500_000,
+                included_budget=500_000,
+                status=SubscriptionStatus.active,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_guard_blocks_without_subscription_and_passes_once_active(client):
+    """Fase 28: penegakan sekarang murni `TenantSubscription` aktif per
+    tenant -- keadaan `TenantAppLicense` per-SKU (Opsi F, endpoint
+    /platform/tenants/*/licenses & /apps tetap ada untuk historis per
+    ADR-0007) TIDAK lagi memengaruhi akses rute bisnis sama sekali."""
     admin = _auth_header(client)
 
-    # Cabut lisensi Sales CRM → endpoint modul sales 403, lainnya tetap lolos.
-    revoked = client.patch(
-        "/api/v1/platform/tenants/default/licenses/sales_crm",
-        headers=admin,
-    )
-    # PATCH /platform khusus platform_admin → tenant admin memang ditolak.
-    assert revoked.status_code == 403
-
-    # Endpoint lisensi hanya lewat platform admin.
     from tests.conftest import _platform_admin_header
 
     plat = _platform_admin_header(client)
     tenants = client.get("/api/v1/platform/tenants", headers=plat).json()
     default_id = next(t["id"] for t in tenants if t["slug"] == "default")
 
-    # PRD v3.0: set commercial agar guard tidak bypass (APP_MODE internal di test)
+    # PRD v3.0: set commercial agar guard tidak bypass (APP_MODE internal di test).
     client.patch(
         f"/api/v1/platform/tenants/{default_id}/billing-mode",
         headers=plat,
         json={"billing_mode": "commercial"},
     )
 
-    revoke = client.patch(
-        f"/api/v1/platform/tenants/{default_id}/licenses/sales_crm",
-        headers=plat,
-        json={"status": "kedaluwarsa"},
-    )
-    assert revoke.status_code == 200, revoke.text
-
-    blocked = client.get("/api/v1/leads", headers=admin)
-    assert blocked.status_code == 403
-    assert "belum aktif" in blocked.json()["detail"]
-
-    clients_list = client.get("/api/v1/clients", headers=admin)
-    assert clients_list.status_code == 403
-
-    # App lain di tenant yang sama tetap berjalan.
-    assert client.get("/api/v1/overview", headers=admin).status_code == 200
-
-    # Status di /apps ikut berubah; trial tidak bisa dipakai lagi (sudah pernah).
-    apps = {a["key"]: a for a in client.get("/api/v1/apps", headers=admin).json()}
-    assert apps["sales_crm"]["licensed"] is False
-    assert apps["sales_crm"]["status"] == "kedaluwarsa"
-    trial_again = client.post("/api/v1/apps/sales_crm/trial", headers=admin)
-    assert trial_again.status_code == 409
-
-    # Platform mengaktifkan kembali → akses pulih.
-    renewed = client.patch(
+    # Granting lisensi Opsi F lama TIDAK lagi cukup -- tanpa TenantSubscription, tetap 403.
+    client.patch(
         f"/api/v1/platform/tenants/{default_id}/licenses/sales_crm",
         headers=plat,
         json={"status": "aktif", "expires_at": None},
     )
-    assert renewed.status_code == 200
+    blocked = client.get("/api/v1/leads", headers=admin)
+    assert blocked.status_code == 403
+    assert "berlangganan" in blocked.json()["detail"]
+
+    # App lain (foundation, tanpa guard) tetap berjalan.
+    assert client.get("/api/v1/overview", headers=admin).status_code == 200
+
+    # Aktifkan TenantSubscription -> semua rute berguard langganan lolos sekaligus,
+    # termasuk yang app_key Opsi F-nya tidak pernah di-grant (mis. recruitment).
+    _seed_active_subscription(client, default_id)
     assert client.get("/api/v1/leads", headers=admin).status_code == 200
-    # Kembalikan billing_mode
+    assert client.get("/api/v1/clients", headers=admin).status_code == 200
+    assert client.get("/api/v1/recruitment/job-orders", headers=admin).status_code == 200
+
+    # Kembalikan billing_mode.
     client.patch(
         f"/api/v1/platform/tenants/{default_id}/billing-mode",
         headers=plat,
@@ -115,8 +124,7 @@ def test_guard_blocks_and_trial_reactivates(client):
     )
 
 
-def test_trial_flow_on_provisioned_tenant_then_expiry(client):
-    from datetime import UTC, datetime, timedelta
+def test_new_tenant_tanpa_subscription_diblokir_lalu_pulih(client):
     from uuid import UUID
 
     from tests.conftest import _platform_admin_header
@@ -132,51 +140,18 @@ def test_trial_flow_on_provisioned_tenant_then_expiry(client):
     )
     token = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-    # Tenant provisioning baru mulai tanpa lisensi → endpoint app 403
-    # (set commercial agar guard tidak bypass di test APP_MODE internal)
+    # Tenant baru mulai tanpa TenantSubscription -> 403 di rute berguard.
     client.patch(
         f"/api/v1/platform/tenants/{tenant_id}/billing-mode",
         headers=plat,
         json={"billing_mode": "commercial"},
     )
-    apps = {a["key"]: a for a in client.get("/api/v1/apps", headers=token).json()}
-    assert all(not a["licensed"] for a in apps.values())
     blocked = client.get("/api/v1/me/profile", headers=token)
     assert blocked.status_code == 403
-    assert "belum aktif" in blocked.json()["detail"]
+    assert "berlangganan" in blocked.json()["detail"]
 
-    # Trial diaktifkan mandiri oleh admin tenant → lisensi jalan (404 karena
-    # belum ada data karyawan, bukan lagi 403 lisensi).
-    trial = client.post("/api/v1/apps/people_ops/trial", headers=token)
-    assert trial.status_code == 200, trial.text
-    assert trial.json()["status"] == "trial"
-    expires = datetime.fromisoformat(trial.json()["expires_at"])
-    if expires.tzinfo is None:  # SQLite menyimpan naive
-        expires = expires.replace(tzinfo=UTC)
-    assert (expires - datetime.now(UTC)).days >= 13
+    # Berlangganan (disimulasikan langsung -- alur checkout Xendit nyata ada di Milestone 7).
+    _seed_active_subscription(client, tenant_id)
     profile = client.get("/api/v1/me/profile", headers=token)
-    assert profile.status_code == 404
-
-    # Aplikasi lain masih terkunci.
-    assert client.get("/api/v1/leads", headers=token).status_code == 403
-
-    # Trial kedua untuk aplikasi yang sama ditolak meski sudah dicabut platform.
-    client.patch(
-        f"/api/v1/platform/tenants/{tenant_id}/licenses/people_ops",
-        headers=plat,
-        json={"status": "kedaluwarsa"},
-    )
-    second = client.post("/api/v1/apps/people_ops/trial", headers=token)
-    assert second.status_code == 409
-
-    # Trial yang sudah kedaluwarsa dianggap tidak berlisensi.
-    expired = client.patch(
-        f"/api/v1/platform/tenants/{tenant_id}/licenses/recruitment",
-        headers=plat,
-        json={
-            "status": "trial",
-            "expires_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
-        },
-    )
-    assert expired.status_code == 200
-    assert client.get("/api/v1/recruitment/job-orders", headers=token).status_code == 403
+    assert profile.status_code == 404  # lolos guard; 404 karena belum ada data karyawan
+    assert client.get("/api/v1/leads", headers=token).status_code == 200

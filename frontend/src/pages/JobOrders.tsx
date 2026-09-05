@@ -578,7 +578,7 @@ export default function JobOrders() {
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[var(--text)]">
-              Hasil AI Matching — Talent Cloud
+              Hasil AI Matching
             </h2>
             {matchJoId && (
               <span className="text-xs text-[var(--text-muted)]">
@@ -587,7 +587,7 @@ export default function JobOrders() {
             )}
           </div>
           <p className="text-[11px] text-[var(--text-muted)]">
-            Matching native Talent Cloud — dikenakan 2k per pencarian job order, bukan per
+            Matching native — dikenakan Rp2.000 per pencarian job order, bukan per
             kandidat.
           </p>
           {match.isPending && (

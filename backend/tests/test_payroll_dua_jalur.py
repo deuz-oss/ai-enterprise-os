@@ -1,8 +1,9 @@
-"""Fase 9a — Payrol dua jalur + approval klien ber-token (ADR-0006)."""
+"""Fase 9a — Payrol dua jalur + approval klien ber-token (ADR-0006, guard
+lisensi per run_type-nya superseded ADR-0007/Fase 28 -- lihat test_apps.py)."""
 
 from datetime import UTC, datetime, timedelta
 
-from tests.conftest import _auth_header, _platform_admin_header
+from tests.conftest import _auth_header
 
 
 def _setup(client):
@@ -213,47 +214,6 @@ def test_expired_token_rejected(client):
         json={"approved": True, "name": "Klien"},
     )
     assert expired_dec.status_code == 410
-
-
-def test_license_guard_per_run_type(client):
-    """Revoke payroll+finance → payrol proyek diblokir,
-    internal (people_ops) tetap jalan — PRD v3.0 F."""
-    admin = _auth_header(client)
-    plat = _platform_admin_header(client)
-    tenants = client.get("/api/v1/platform/tenants", headers=plat).json()
-    default_id = next(t["id"] for t in tenants if t["slug"] == "default")
-
-    for key in ("payroll", "finance"):
-        revoke = client.patch(
-            f"/api/v1/platform/tenants/{default_id}/licenses/{key}",
-            headers=plat,
-            json={"status": "kedaluwarsa"},
-        )
-        assert revoke.status_code == 200
-
-    proyek = client.post(
-        "/api/v1/payroll/runs",
-        headers=admin,
-        json={
-            "year": 2026,
-            "month": 9,
-            "run_type": "proyek",
-            "client_id": "00000000-0000-0000-0000-00000000dead",
-        },
-    )
-    assert proyek.status_code == 403
-    assert "Revenue Cloud" in proyek.json()["detail"]
-
-    internal = client.post("/api/v1/payroll/runs", headers=admin, json={"year": 2026, "month": 10})
-    assert internal.status_code == 201
-
-    # Pulihkan
-    for key in ("payroll", "finance", "operations_billing"):
-        client.patch(
-            f"/api/v1/platform/tenants/{default_id}/licenses/{key}",
-            headers=plat,
-            json={"status": "aktif"},
-        )
 
 
 def test_proyek_generate_hanya_karyawan_klien_tersebut(client):

@@ -310,7 +310,7 @@ export default function TalentCloudOverview() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           icon={Sparkles}
-          title="Talent Cloud"
+          title="CRM & Recruitment"
           subtitle={`${(candidates.data ?? []).length} talent pool · ${activeJO.length} JO aktif · ${clientsActive.length} klien aktif.`}
         />
         <Link to="/candidates" className="btn shrink-0">

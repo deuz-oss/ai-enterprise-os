@@ -54,33 +54,6 @@ _EDITABLE_STATUSES: dict[PayrollRunType, set[PayrollRunStatus]] = {
 }
 
 
-def _assert_run_license(db: Session, tenant_id, run_type: PayrollRunType) -> None:
-    """Guard lisensi data-driven (PRD v3.0 F): internal=people_ops,
-    proyek=payroll/finance, fallback legacy."""
-    from app.modules.platform.service import is_licensed
-
-    if run_type == PayrollRunType.internal:
-        if (
-            is_licensed(db, tenant_id, "people_ops")
-            or is_licensed(db, tenant_id, "payroll")
-            or is_licensed(db, tenant_id, "hr_payroll")
-        ):
-            return
-        label = "Workforce Cloud"
-    else:
-        if (
-            is_licensed(db, tenant_id, "payroll")
-            or is_licensed(db, tenant_id, "finance")
-            or is_licensed(db, tenant_id, "operations_billing")
-        ):
-            return
-        label = "Revenue Cloud"
-    raise HTTPException(
-        status_code=403,
-        detail=f"Aplikasi {label} belum aktif untuk perusahaan Anda.",
-    )
-
-
 def _transition(run: PayrollRun, target: PayrollRunStatus) -> None:
     allowed = _ALLOWED_TRANSITIONS[run.run_type].get(run.status, set())
     if target not in allowed:
@@ -154,8 +127,7 @@ def _get_run(db: Session, run_id: str) -> PayrollRun:
     return run
 
 
-def create_run(db: Session, payload: RunCreate, tenant_id=None) -> PayrollRun:
-    _assert_run_license(db, tenant_id, payload.run_type)
+def create_run(db: Session, payload: RunCreate) -> PayrollRun:
     if payload.run_type == PayrollRunType.proyek and payload.client_id is not None:
         from app.modules.clients.models import Client
 
@@ -206,12 +178,9 @@ def list_slips(db: Session, run_id: str) -> list[Payslip]:
     return list(run.slips)
 
 
-def generate_slips(
-    db: Session, run_id: str, payload: GenerateSlipsRequest, tenant_id=None
-) -> list[Payslip]:
+def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> list[Payslip]:
     """Buat slip gaji untuk karyawan aktif; hanya lembur yang disetujui klien."""
     run = _get_run(db, run_id)
-    _assert_run_license(db, tenant_id, run.run_type)
     if run.status not in _EDITABLE_STATUSES[run.run_type]:
         raise HTTPException(
             status_code=409,
@@ -1013,9 +982,8 @@ def send_payslip_email(db: Session, run_id: str, employee_id: str) -> None:
     )
 
 
-def finalize_run(db: Session, run_id: str, tenant_id=None) -> PayrollRun:
+def finalize_run(db: Session, run_id: str) -> PayrollRun:
     run = _get_run(db, run_id)
-    _assert_run_license(db, tenant_id, run.run_type)
     if not run.slips:
         raise HTTPException(status_code=422, detail="Belum ada slip gaji untuk difinalisasi")
     _transition(run, PayrollRunStatus.final)
@@ -1085,12 +1053,9 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def submit_to_client(
-    db: Session, tenant_id, run_id: str, days: int = 14
-) -> tuple[PayrollRun, str, datetime]:
+def submit_to_client(db: Session, run_id: str, days: int = 14) -> tuple[PayrollRun, str, datetime]:
     """Kirim payrol proyek ke klien: status berubah + buat link ber-token."""
     run = _get_run(db, run_id)
-    _assert_run_license(db, tenant_id, run.run_type)
     if run.run_type != PayrollRunType.proyek:
         raise HTTPException(
             status_code=422,
@@ -1280,9 +1245,8 @@ def decide_by_token(
     }
 
 
-def start_finance_processing(db: Session, run_id: str, tenant_id=None) -> PayrollRun:
+def start_finance_processing(db: Session, run_id: str) -> PayrollRun:
     run = _get_run(db, run_id)
-    _assert_run_license(db, tenant_id, run.run_type)
     _transition(run, PayrollRunStatus.finance_processing)
     db.commit()
     db.refresh(run)

@@ -56,6 +56,30 @@ interface UsageReport {
   total_known: number;
 }
 
+interface BillingTransaction {
+  id: string;
+  type: string;
+  amount: number;
+  ref_event: string;
+  created_at: string;
+}
+
+interface BillingSummary {
+  tier: string | null;
+  subscription_status: string | null;
+  cycle_remaining: number;
+  cycle_included: number;
+  credit_balance: number;
+  state: "normal" | "warning" | "empty";
+  recent_transactions: BillingTransaction[];
+}
+
+const BILLING_STATE_CLS: Record<string, string> = {
+  normal: "pill p-green",
+  warning: "pill p-orange",
+  empty: "pill p-red",
+};
+
 function currentPeriod(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -153,6 +177,37 @@ export default function PlatformTenants() {
     }) =>
       api.patch(`/platform/tenants/${tenantId}/bundles/${bundleKey}`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["licenses"] }),
+  });
+
+  const [billingExpandedId, setBillingExpandedId] = useState<string | null>(null);
+  const { data: billingByTenant } = useQuery({
+    queryKey: ["tenant-billing-list", tenants?.map((t) => t.id).join(",")],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        (tenants ?? []).map(async (t) => {
+          try {
+            return [t.id, await api.get<BillingSummary>(`/platform/tenants/${t.id}/billing-summary`)] as const;
+          } catch {
+            return [t.id, null] as const;
+          }
+        })
+      );
+      return Object.fromEntries(entries) as Record<string, BillingSummary | null>;
+    },
+    enabled: Boolean(tenants?.length),
+  });
+  const { data: billingSummary } = useQuery({
+    queryKey: ["tenant-billing", billingExpandedId],
+    queryFn: () => api.get<BillingSummary>(`/platform/tenants/${billingExpandedId}/billing-summary`),
+    enabled: Boolean(billingExpandedId),
+  });
+  const overrideSubscription = useMutation({
+    mutationFn: ({ tenantId, tier }: { tenantId: string; tier: string }) =>
+      api.patch(`/platform/tenants/${tenantId}/subscription`, { tier }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenant-billing"] });
+      qc.invalidateQueries({ queryKey: ["tenant-billing-list"] });
+    },
   });
 
   const [usageExpandedId, setUsageExpandedId] = useState<string | null>(null);
@@ -255,6 +310,7 @@ export default function PlatformTenants() {
               <th className="th">Slug</th>
               <th className="th">Status</th>
               <th className="th">Mode Billing</th>
+              <th className="th">Tier &amp; Saldo</th>
               <th className="th">Dibuat</th>
               <th className="th">Aksi</th>
             </tr>
@@ -262,6 +318,7 @@ export default function PlatformTenants() {
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(tenants ?? []).map((t) => {
               const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
+              const tb = billingByTenant?.[t.id];
               return (
               <tr key={t.id} className="hover:bg-[var(--hover)]">
                 <td className="td font-medium">{t.name}</td>
@@ -287,6 +344,17 @@ export default function PlatformTenants() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="td">
+                  {tb ? (
+                    <span className={`badge border-0 ${BILLING_STATE_CLS[tb.state]}`}>
+                      {tb.tier ?? "foundation"} · {formatRupiah(tb.cycle_remaining + tb.credit_balance)}
+                    </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      —
+                    </span>
+                  )}
                 </td>
                 <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
                   {new Date(t.created_at).toLocaleDateString("id-ID")}
@@ -325,13 +393,25 @@ export default function PlatformTenants() {
                   >
                     {usageExpandedId === t.id ? "Tutup Tagihan" : "Estimasi Tagihan"}
                   </button>
+                  {" · "}
+                  <button
+                    className="text-xs font-medium hover:opacity-80"
+                    style={{ color: "var(--accent)" }}
+                    onClick={() => setBillingExpandedId(billingExpandedId === t.id ? null : t.id)}
+                  >
+                    {billingExpandedId === t.id ? "Tutup Billing" : "Billing Opsi G"}
+                  </button>
                 </td>
               </tr>
               );
             })}
             {(expandedId !== null) && (
               <tr>
-                <td colSpan={6} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                  <p className="mb-2 text-xs font-medium text-amber-600">
+                    Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
+                    status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
+                  </p>
                   <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
                     Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
                     supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
@@ -408,7 +488,10 @@ export default function PlatformTenants() {
             )}
             {usageExpandedId !== null && (
               <tr>
-                <td colSpan={6} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                  <p className="mb-2 text-xs font-medium text-amber-600">
+                    Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
+                  </p>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
                       Estimasi tagihan — belum menagih, hanya laporan pemakaian
@@ -472,9 +555,101 @@ export default function PlatformTenants() {
                 </td>
               </tr>
             )}
+            {billingExpandedId !== null && (
+              <tr>
+                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                  {billingSummary && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            Tier saat ini
+                          </p>
+                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                            {billingSummary.tier ?? "foundation-only"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            Sisa jatah cycle
+                          </p>
+                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                            {formatRupiah(billingSummary.cycle_remaining)} /{" "}
+                            {formatRupiah(billingSummary.cycle_included)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            Saldo top up
+                          </p>
+                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                            {formatRupiah(billingSummary.credit_balance)}
+                          </p>
+                        </div>
+                        <div className="ml-auto flex items-center gap-2">
+                          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            Override tier manual:
+                          </label>
+                          <select
+                            defaultValue=""
+                            disabled={overrideSubscription.isPending}
+                            onChange={(e) => {
+                              if (!e.target.value) return;
+                              overrideSubscription.mutate({
+                                tenantId: billingExpandedId,
+                                tier: e.target.value,
+                              });
+                              e.target.value = "";
+                            }}
+                            className="input w-auto py-1 text-xs"
+                          >
+                            <option value="">— pilih tier —</option>
+                            <option value="tier1">tier1</option>
+                            <option value="tier2">tier2</option>
+                            <option value="tier3">tier3</option>
+                          </select>
+                        </div>
+                      </div>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr style={{ color: "var(--text-muted)" }}>
+                            <th className="py-1 text-left">Waktu</th>
+                            <th className="py-1 text-left">Kejadian</th>
+                            <th className="py-1 text-right">Jumlah</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                          {billingSummary.recent_transactions.map((tx) => (
+                            <tr key={tx.id}>
+                              <td className="py-1.5" style={{ color: "var(--text-muted)" }}>
+                                {new Date(tx.created_at).toLocaleString("id-ID")}
+                              </td>
+                              <td className="py-1.5" style={{ color: "var(--text)" }}>
+                                {tx.ref_event}
+                              </td>
+                              <td className="py-1.5 text-right" style={{ color: "var(--text)" }}>
+                                {tx.amount >= 0 ? "+" : ""}
+                                {formatRupiah(tx.amount)}
+                              </td>
+                            </tr>
+                          ))}
+                          {billingSummary.recent_transactions.length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
+                                Belum ada transaksi.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            )}
             {isLoading === false && tenants?.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada tenant.
                 </td>
               </tr>

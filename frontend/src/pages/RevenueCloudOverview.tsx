@@ -197,7 +197,7 @@ export default function RevenueCloudOverview() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           icon={Receipt}
-          title="Revenue Cloud"
+          title="Finance"
           subtitle={`${overview.data?.finance.invoices_total ?? 0} invoice · ${faktorBuilt.length} e-Faktur dibuat · 13 kolom DJP, lawan NPWP tervalidasi.`}
         />
         <Link to="/finance" className="btn shrink-0">

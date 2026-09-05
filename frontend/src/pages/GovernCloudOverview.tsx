@@ -167,7 +167,7 @@ export default function GovernCloudOverview() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           icon={Scale}
-          title="Govern Cloud"
+          title="Administration"
           subtitle={`${auditLogs.data?.total ?? 0} audit log · ${activeUsers.length} user aktif · ${roleGroups.length} roles.`}
         />
         <Link to="/users" className="btn shrink-0">

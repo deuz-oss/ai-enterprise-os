@@ -471,7 +471,7 @@ export default function TalentPool() {
             if (!e.target.value) setMinMatchScore("");
           }}
           className="input w-auto"
-          title="Nilai kecocokan terhadap job order (Talent Cloud native matching)"
+          title="Nilai kecocokan terhadap job order (AI matching native)"
         >
           <option value="">Skor match: semua talent</option>
           {(jobOrders ?? []).map((jo) => (

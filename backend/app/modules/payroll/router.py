@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.permissions import PAYROLL_ROLES
 from app.core.ratelimit import get_limiter
-from app.core.security import get_current_user, require_any_licensed_app, require_roles
+from app.core.security import get_current_user, require_active_subscription, require_roles
 from app.core.tenancy import get_request_meta
 from app.modules.payroll import service
 from app.modules.payroll.schemas import (
@@ -19,14 +19,14 @@ from app.modules.payroll.schemas import (
     TaxPreviewIn,
 )
 
-# Shell OR (ADR-0006): cukup salah satu lisensi untuk masuk modul;
-# mutasi run divalidasi per run_type di service (assert lisensi per objek).
+# ADR-0006 (guard shell OR per run_type) superseded by ADR-0007: Opsi G
+# tidak lagi membedakan lisensi per-SKU, cukup satu status langganan tenant.
 router = APIRouter(
     prefix="/payroll",
     tags=["payroll"],
     dependencies=[
         Depends(get_current_user),
-        Depends(require_any_licensed_app("hr_payroll", "operations_billing")),
+        Depends(require_active_subscription()),
         Depends(require_roles(*PAYROLL_ROLES)),
     ],
 )
@@ -62,8 +62,8 @@ def list_runs(db: Session = Depends(get_db)):
 
 
 @router.post("/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)
-def create_run(payload: RunCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    return service.create_run(db, payload, tenant_id=user.tenant_id)
+def create_run(payload: RunCreate, db: Session = Depends(get_db)):
+    return service.create_run(db, payload)
 
 
 @router.post("/runs/{run_id}/generate", response_model=list[PayslipOut], status_code=201)
@@ -71,9 +71,8 @@ def generate_slips(
     run_id: str,
     payload: GenerateSlipsRequest,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
 ):
-    return service.generate_slips(db, run_id, payload, tenant_id=user.tenant_id)
+    return service.generate_slips(db, run_id, payload)
 
 
 @router.get("/runs/{run_id}", response_model=RunOut)
@@ -203,8 +202,8 @@ def send_payslip_email(run_id: str, employee_id: str, db: Session = Depends(get_
 
 
 @router.post("/runs/{run_id}/finalize", response_model=RunOut)
-def finalize_run(run_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    return service.finalize_run(db, run_id, tenant_id=user.tenant_id)
+def finalize_run(run_id: str, db: Session = Depends(get_db)):
+    return service.finalize_run(db, run_id)
 
 
 # ---------- Fase 9a: dua jalur & approval klien ber-token ----------
@@ -215,11 +214,10 @@ def submit_to_client(
     run_id: str,
     payload: ClientLinkCreate | None = None,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
 ):
     """Kirim payrol proyek ke klien; hasilkan link approval ber-token."""
     days = payload.days if payload else 14
-    run, raw, expires = service.submit_to_client(db, user.tenant_id, run_id, days=days)
+    run, raw, expires = service.submit_to_client(db, run_id, days=days)
     return {
         "status": run.status.value,
         "expires_at": expires,
@@ -229,9 +227,9 @@ def submit_to_client(
 
 
 @router.post("/runs/{run_id}/start-processing", response_model=RunOut)
-def start_processing(run_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def start_processing(run_id: str, db: Session = Depends(get_db)):
     """internal draft → finance_processing · proyek client_approved → finance_processing."""
-    return service.start_finance_processing(db, run_id, tenant_id=user.tenant_id)
+    return service.start_finance_processing(db, run_id)
 
 
 # ---------- Preview PPh 21 ----------

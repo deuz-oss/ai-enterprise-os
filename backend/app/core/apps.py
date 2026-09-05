@@ -140,14 +140,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
     )
 }
 
-# Alias untuk kompatibilitas legacy (hr_payroll/operations_billing/finance_accounting)
-LEGACY_KEY_MAP: dict[str, str] = {
-    "hr_payroll": "people_ops",
-    "operations_billing": "finance",
-    "finance_accounting": "accounting",
-    "esign": "people_ops",
-}
-
 TRIAL_DAYS = 14
 
 

@@ -1,11 +1,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.apps import APP_REGISTRY, BUNDLE_REGISTRY
 from app.core.database import get_db
 from app.core.security import get_current_user, require_platform_admin
+from app.core.tenancy import get_tenant, set_tenant
 from app.modules.apps.schemas import LicenseSetIn
 from app.modules.platform import service, usage
 from app.modules.platform.models import LicenseStatus, TenantAppLicense
@@ -166,3 +169,92 @@ def set_bundle(
         {"app_key": row.app_key, "status": row.status.value, "expires_at": row.expires_at}
         for row in rows
     ]
+
+
+# ---------- Billing Opsi G (Fase 28) ----------
+
+
+@router.post("/internal/run-cycle-charge")
+def run_cycle_charge(db: Session = Depends(get_db)):
+    """Tutup `TenantBudgetCycle` yang sudah lewat waktunya untuk SEMUA
+    tenant, mendebit biaya snapshot (talent aktif, employee aktif) dari
+    cycle baru. Dipicu scheduler OS eksternal (cron/Task Scheduler) --
+    tidak ada scheduler in-process di codebase ini (keputusan Fase 28).
+    Idempotent per tenant, aman dipanggil berulang."""
+    from app.modules.billing.cycle_close import run_cycle_charge_for_all_tenants
+
+    closed = run_cycle_charge_for_all_tenants(db)
+    return {"closed_count": len(closed), "tenant_ids": [str(t) for t in closed]}
+
+
+@router.get("/tenants/{tenant_id}/billing-summary")
+def get_tenant_billing_summary(tenant_id: UUID, db: Session = Depends(get_db)):
+    """Ringkasan tier + saldo + 5 transaksi terakhir untuk panel "Billing
+    Opsi G" di PlatformTenants.tsx (Milestone 8). Konteks tenant di-set
+    manual sebelum query tabel ber-RLS -- endpoint ini berjalan di bawah
+    platform_admin, tanpa konteks tenant aktif secara default (lihat
+    catatan RLS di `billing/cycle_close.py`)."""
+    from app.modules.billing.models import SubscriptionStatus, TenantSubscription
+    from app.modules.billing.service import get_balance_summary, list_transactions
+
+    service._get_tenant(db, tenant_id)
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        subscription = db.execute(
+            select(TenantSubscription)
+            .where(TenantSubscription.tenant_id == tenant_id)
+            .where(TenantSubscription.status == SubscriptionStatus.active)
+        ).scalar_one_or_none()
+        summary = get_balance_summary(db, tenant_id)
+        recent = list_transactions(db, tenant_id, limit=5, offset=0)
+    finally:
+        set_tenant(previous_tenant)
+    return {
+        "tier": subscription.tier.value if subscription else None,
+        "subscription_status": subscription.status.value if subscription else None,
+        **summary,
+        "recent_transactions": [
+            {
+                "id": str(t.id),
+                "type": t.type.value,
+                "amount": float(t.amount),
+                "ref_event": t.ref_event,
+                "created_at": t.created_at,
+            }
+            for t in recent
+        ],
+    }
+
+
+class SubscriptionOverrideIn(BaseModel):
+    tier: str
+
+
+@router.patch("/tenants/{tenant_id}/subscription")
+def override_subscription(
+    tenant_id: UUID, payload: SubscriptionOverrideIn, db: Session = Depends(get_db)
+):
+    """Set tier langganan tenant langsung, bypass Xendit -- dipakai script
+    migrasi one-shot (Milestone 9) dan intervensi support/manual platform
+    admin (mis. tenant yang bayar di luar sistem)."""
+    from app.modules.billing.models import TIER_MONTHLY_FEE_IDR, SubscriptionTier
+    from app.modules.billing.payment_service import _activate_subscription
+
+    try:
+        tier = SubscriptionTier(payload.tier)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Tier tidak valid; gunakan {', '.join(t.value for t in SubscriptionTier)}",
+        ) from None
+
+    service._get_tenant(db, tenant_id)
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        _activate_subscription(db, tenant_id, tier, TIER_MONTHLY_FEE_IDR[tier])
+        db.commit()
+    finally:
+        set_tenant(previous_tenant)
+    return {"status": "ok", "tier": tier.value}

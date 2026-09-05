@@ -1360,6 +1360,15 @@ def match_candidates(
             }
         )
     if billable:
+        from app.modules.billing.service import charge_metered_event
+
+        charge_metered_event(
+            db,
+            amount=2_000,
+            ref_event="recruitment.match_executed",
+            ref_entity_type="job_order",
+            ref_entity_id=str(jo.id),
+        )
         try:
             audit.log_event(
                 db,

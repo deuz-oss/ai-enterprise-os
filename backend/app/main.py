@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.bootstrap import run_bootstrap
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
-from app.core.security import require_any_licensed_app, require_licensed_app, require_roles
+from app.core.security import require_active_subscription, require_roles
 from app.core.storage import ensure_storage
 from app.core.tenancy import TenantContextMiddleware
 
@@ -66,6 +66,9 @@ def create_app() -> FastAPI:
     from app.modules.attendance.router import router as attendance_router
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
+    from app.modules.billing.router import router as billing_router
+    from app.modules.billing.router import subscribe_router as billing_subscribe_router
+    from app.modules.billing.router import webhook_router as billing_webhook_router
     from app.modules.blacklist.router import router as blacklist_router
     from app.modules.bpjs.router import router as bpjs_router
     from app.modules.chat.router import ai_router as chat_ai_router
@@ -105,88 +108,88 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
     app.include_router(platform_router, prefix="/api/v1")
-    # Guard lisensi Fase 7: endpoint aplikasi tanpa lisensi tenant → 403.
+    # Guard langganan Opsi G (Fase 28): tanpa subscription aktif → 403.
     app.include_router(
         presales_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         presales_companies_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         presales_quotation_templates_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         presales_quotations_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         presales_agreement_templates_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         presales_agreements_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         clients_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("sales_crm"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         recruitment_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("recruitment"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         blacklist_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("recruitment"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         talentpool_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("recruitment"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         talentpool_branding_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("recruitment"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         ai_interview_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("recruitment"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     # Sesi kandidat via invite_token: publik, tanpa guard lisensi/JWT (pola sama job_portal).
     app.include_router(ai_interview_public_router, prefix="/api/v1")
     app.include_router(
         ai_recruitment_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("ai_addon"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         ai_hr_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("ai_addon"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         ai_finance_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("ai_addon"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         hrd_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     # Harus didaftarkan SETELAH hrd_router: path literal seperti
     # /employees/selfservice-accounts di atas harus cocok duluan sebelum
@@ -194,31 +197,32 @@ def create_app() -> FastAPI:
     app.include_router(
         hrd_employees_view_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         ess_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         notifications_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         esign_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(esign_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
+    app.include_router(billing_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
+    app.include_router(billing_router, prefix="/api/v1")
+    app.include_router(billing_subscribe_router, prefix="/api/v1")
     app.include_router(
         payroll_router,
         prefix="/api/v1",
         dependencies=[
-            # people_ops cukup untuk run internal (Workforce Cloud); run proyek
-            # tetap disaring lebih ketat oleh _assert_run_license di service layer.
-            Depends(require_any_licensed_app("people_ops", "payroll")),
+            Depends(require_active_subscription()),
             Depends(require_roles("operations", "management", "hr")),
         ],
     )
@@ -228,28 +232,28 @@ def create_app() -> FastAPI:
     app.include_router(
         bpjs_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("people_ops"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         finance_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("finance"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     # Payment Request lintas bundle finance (PRD v2.0) — guard finance.
     app.include_router(
         payment_request_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("finance"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         accounting_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("accounting"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
         accounting_tx_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("accounting"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(apps_router, prefix="/api/v1")
     app.include_router(rates_router, prefix="/api/v1")
@@ -261,7 +265,7 @@ def create_app() -> FastAPI:
     app.include_router(
         chat_ai_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_licensed_app("ai_addon"))],
+        dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(chat_ws_router, prefix="/api/v1")
     # Absensi harian: bagian dari people_ops (PRD v2.0) — guard bundle.
@@ -269,7 +273,7 @@ def create_app() -> FastAPI:
         attendance_router,
         prefix="/api/v1",
         dependencies=[
-            Depends(require_licensed_app("people_ops")),
+            Depends(require_active_subscription()),
             Depends(require_roles("operations", "hr", "management")),
         ],
     )

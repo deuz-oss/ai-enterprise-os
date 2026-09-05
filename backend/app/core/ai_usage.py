@@ -58,6 +58,12 @@ class AIUsageEvent(TenantMixin, Base):
 # Snapshot manual, BUKAN sumber kebenaran tagihan resmi — model tak terdaftar => cost_idr None.
 _MODEL_PRICE_IDR_PER_1K: dict[str, tuple[float, float]] = {}
 
+# Tarif TENANT AI Add-on (Fase 28, PRD §4.3) -- flat per 1k token total,
+# terlepas dari model. SENGAJA terpisah dari _MODEL_PRICE_IDR_PER_1K di atas:
+# yang itu estimasi biaya VENDOR (untuk margin, boleh kosong), ini yang
+# benar-benar dipotong dari saldo tenant lewat credit_transactions.
+_TENANT_RATE_IDR_PER_1K_TOKEN = 300.0
+
 
 def _estimate_cost_idr(model: str, usage: dict | None) -> float | None:
     price = _MODEL_PRICE_IDR_PER_1K.get(model)
@@ -67,6 +73,11 @@ def _estimate_cost_idr(model: str, usage: dict | None) -> float | None:
     prompt_tokens = usage.get("prompt_tokens") or 0
     completion_tokens = usage.get("completion_tokens") or 0
     return (prompt_tokens / 1000) * prompt_price + (completion_tokens / 1000) * completion_price
+
+
+def _tenant_charge_idr(usage: dict | None) -> float:
+    total_tokens = (usage or {}).get("total_tokens") or 0
+    return (total_tokens / 1000) * _TENANT_RATE_IDR_PER_1K_TOKEN
 
 
 def record_usage(
@@ -84,25 +95,52 @@ def record_usage(
         return  # tidak ada konteks tenant (panggilan sistem/bootstrap) — lewati, bukan error
     db = SessionLocal()
     try:
-        db.add(
-            AIUsageEvent(
-                tenant_id=tenant_id,
-                user_id=get_requester_user(),
-                call_type=call_type,
-                feature=feature,
-                model=model,
-                status=status,
-                prompt_tokens=(usage or {}).get("prompt_tokens"),
-                completion_tokens=(usage or {}).get("completion_tokens"),
-                total_tokens=(usage or {}).get("total_tokens"),
-                cost_idr=_estimate_cost_idr(model, usage),
-                http_status=http_status,
-                error_detail=(error_detail or "")[:500] or None,
-            )
+        event = AIUsageEvent(
+            tenant_id=tenant_id,
+            user_id=get_requester_user(),
+            call_type=call_type,
+            feature=feature,
+            model=model,
+            status=status,
+            prompt_tokens=(usage or {}).get("prompt_tokens"),
+            completion_tokens=(usage or {}).get("completion_tokens"),
+            total_tokens=(usage or {}).get("total_tokens"),
+            cost_idr=_estimate_cost_idr(model, usage),
+            http_status=http_status,
+            error_detail=(error_detail or "")[:500] or None,
         )
+        db.add(event)
         db.commit()
     except Exception:
         logger.exception("Gagal mencatat AI usage event")
         db.rollback()
-    finally:
         db.close()
+        return
+
+    # Debit ledger (Fase 28) -- sesi terpisah SENGAJA dipertahankan (lihat
+    # docstring modul): banyak call site AI tidak punya `db` caller dalam
+    # scope, dan biaya vendor sudah terlanjur dikeluarkan begitu response
+    # diterima -- tidak ada "titik batal" untuk fail-closed di sini seperti
+    # aksi metered lain (match/invoice/faktur). Karena itu pakai
+    # `allow_negative=True`, bukan `charge_metered_event`: saldo boleh
+    # minus, direkonsiliasi lewat pembayaran berikutnya, tapi panggilan AI
+    # yang SUDAH terjadi tidak pernah ditolak pasca-fakta.
+    if status == "success":
+        try:
+            charge = _tenant_charge_idr(usage)
+            if charge > 0:
+                from app.modules.billing.service import record_credit_transaction
+
+                record_credit_transaction(
+                    db,
+                    amount=-charge,
+                    ref_event="ai_usage",
+                    ref_entity_type="ai_usage_event",
+                    ref_entity_id=str(event.id),
+                    allow_negative=True,
+                )
+                db.commit()
+        except Exception:
+            logger.exception("Gagal mencatat debit kredit AI usage")
+            db.rollback()
+    db.close()
