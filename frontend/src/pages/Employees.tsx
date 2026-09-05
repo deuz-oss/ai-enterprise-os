@@ -1,8 +1,23 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
-import { AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Phone, Tag, User } from "lucide-react";
+import {
+  AlertTriangle,
+  Award,
+  Banknote,
+  Calendar,
+  Clock,
+  Gift,
+  Home,
+  IdCard,
+  Lock,
+  Phone,
+  Tag,
+  User,
+  Users as UsersIcon,
+} from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface EmployeeRow {
@@ -300,21 +315,29 @@ export default function Employees() {
   const [showVaccineForm, setShowVaccineForm] = useState(false);
 
   const [offset, setOffset] = useState(0);
+  // Tab/Pill filter (§1.5) atas status -- backend belum expose param filter
+  // ini, jadi difilter+dipaginasi di klien dari `employeesLookup` (endpoint
+  // yang sama, sudah dipakai widget lain untuk lookup nama lintas-halaman).
+  const [statusTab, setStatusTab] = useState("");
   const pageLimit = 50;
-  // Tabel utama (satu halaman) -- dipisah dari `employeesLookup` di bawah
-  // karena beberapa widget lain (reminder kontrak, cuti, koreksi absensi)
-  // mencari NAMA karyawan lintas SEMUA karyawan, bukan cuma yang sedang
-  // tampil di halaman tabel aktif.
-  const { data: employeesPage } = useQuery({
-    queryKey: ["employees", offset],
-    queryFn: () => api.getPaged<EmployeeRow>(`/employees?limit=${pageLimit}&offset=${offset}`),
-  });
-  const employees = employeesPage?.data;
-  const employeesTotal = employeesPage?.total ?? 0;
   const { data: employeesLookup } = useQuery({
     queryKey: ["employees-lookup"],
     queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
   });
+  const allEmployees = employeesLookup ?? [];
+  const filteredEmployees = useMemo(
+    () => allEmployees.filter((e) => !statusTab || e.status === statusTab),
+    [allEmployees, statusTab]
+  );
+  const employees = filteredEmployees.slice(offset, offset + pageLimit);
+  const employeesTotal = filteredEmployees.length;
+  const statusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: allEmployees.length },
+    { key: "aktif", label: "Aktif", count: allEmployees.filter((e) => e.status === "aktif").length },
+    { key: "resign", label: "Resign", count: allEmployees.filter((e) => e.status === "resign").length },
+  ];
+  const activeCount = allEmployees.filter((e) => e.status === "aktif").length;
+  const payrollLockedCount = allEmployees.filter((e) => e.payroll_locked).length;
   // Fase 23: Ops sekarang boleh buka halaman ini (dibatasi ke karyawan
   // eksternal, lihat backend), tapi endpoint HR administratif lain di bawah
   // (kontrak, dokumen, BPJS, asuransi, cuti, TTE) masih 403 untuk role ini --
@@ -407,7 +430,6 @@ export default function Employees() {
   });
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["employees"] });
     qc.invalidateQueries({ queryKey: ["employees-lookup"] });
     qc.invalidateQueries({ queryKey: ["contracts-expiring"] });
     qc.invalidateQueries({ queryKey: ["selfservice-accounts"] });
@@ -933,6 +955,35 @@ export default function Employees() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Karyawan" value={allEmployees.length} icon={UsersIcon} iconTone="info" />
+        <KpiCard
+          label="Karyawan Aktif"
+          value={activeCount}
+          icon={UsersIcon}
+          iconTone="success"
+          context={`dari ${allEmployees.length} terdaftar`}
+        />
+        <KpiCard
+          label="Kontrak Akan Berakhir"
+          value={(expiring ?? []).length}
+          icon={Clock}
+          iconTone="warning"
+          context="Dalam 30 hari ke depan"
+          badge={(expiring ?? []).length > 0 ? { label: "Perlu Tindak Lanjut", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Payroll Terkunci" value={payrollLockedCount} icon={Lock} iconTone="neutral" />
+      </div>
+
+      <PillTabs
+        tabs={statusTabs}
+        value={statusTab}
+        onChange={(k) => {
+          setStatusTab(k);
+          setOffset(0);
+        }}
+      />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
@@ -945,7 +996,7 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(employees ?? []).map((e) => (
+            {employees.map((e) => (
               <tr
                 key={e.id}
                 onClick={() => setSelectedId(e.id === selectedId ? null : e.id)}
@@ -969,10 +1020,10 @@ export default function Employees() {
                 </td>
               </tr>
             ))}
-            {employees?.length === 0 && (
+            {employees.length === 0 && (
               <tr>
                 <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada karyawan.
+                  {allEmployees.length === 0 ? "Belum ada karyawan." : "Tidak ada karyawan untuk status ini."}
                 </td>
               </tr>
             )}
