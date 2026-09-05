@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BarChart3,
   FileText,
   Hourglass,
@@ -135,6 +137,27 @@ const DIGEST_ICON: Record<string, LucideIcon> = {
   ringkasan: BarChart3,
 };
 
+// Urgent Action Banner (§1.9) -- cuma untuk jenis digest yang genuinely
+// "butuh tindakan" (bukan `ringkasan`/`pengingat` yang selalu muncul apa
+// pun kondisinya). Domain & link tujuan di-map dari `type` yang sudah
+// tetap/dikenal backend (core/ai/collab.py::daily_digest), bukan data baru.
+const URGENT_DIGEST_DOMAIN: Record<string, string> = {
+  approval_menunggu: "Finance & Accounting",
+  payroll_klien: "Workforce",
+  sla_job_order: "Recruitment",
+  kontrak_berakhir: "Workforce",
+  invoice_overdue: "Finance & Accounting",
+  cuti_menunggu: "Workforce",
+};
+const URGENT_DIGEST_LINK: Record<string, string> = {
+  approval_menunggu: "/payment-requests",
+  payroll_klien: "/payroll",
+  sla_job_order: "/job-orders",
+  kontrak_berakhir: "/employees",
+  invoice_overdue: "/finance",
+  cuti_menunggu: "/portal-saya",
+};
+
 function pct(part: number, total: number): number {
   if (!total) return 0;
   return Math.round((part / total) * 100);
@@ -231,12 +254,53 @@ export default function Dashboard() {
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
   const recentInvoices = [...(invoices ?? [])].reverse().slice(0, 5);
+  const urgentItems = (digest?.items ?? []).filter((i) => i.type in URGENT_DIGEST_DOMAIN);
 
   const revenueShare = pct(data.finance.revenue_mtd, data.finance.revenue_mtd + data.finance.outstanding);
 
   return (
     <div className="space-y-5">
       <PageHeader icon={LayoutDashboard} title="Overview" subtitle="Ringkasan operasional hari ini" />
+
+      {urgentItems.length > 0 && (
+        <div className="rounded-xl border p-4" style={{ backgroundColor: "#FFFBEB", borderColor: "#FDE68A" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#92400E" }}>
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {urgentItems.length} Tindakan Mendesak Membutuhkan Perhatian
+            </p>
+            <span
+              className="shrink-0 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+              style={{ backgroundColor: "#92400E" }}
+            >
+              Urgent Priority
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {urgentItems.map((item, idx) => {
+              const ItemIcon = DIGEST_ICON[item.type] ?? Info;
+              return (
+                <div key={idx} className="rounded-lg border bg-white p-3" style={{ borderColor: "#FDE68A" }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "#92400E" }}>
+                    {URGENT_DIGEST_DOMAIN[item.type] ?? "Umum"}
+                  </p>
+                  <p className="mt-1 flex items-start gap-1.5 text-xs" style={{ color: "#78350F" }}>
+                    <ItemIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {item.detail}
+                  </p>
+                  <Link
+                    to={URGENT_DIGEST_LINK[item.type] ?? "#"}
+                    className="mt-2 inline-block text-xs font-medium hover:underline"
+                    style={{ color: "#92400E" }}
+                  >
+                    Lihat detail →
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Baris KPI */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
