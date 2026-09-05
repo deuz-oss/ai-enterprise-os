@@ -266,7 +266,7 @@ pengelompokan tampilan). Diganti 5 kategori berdasarkan fungsi nyata:
 | Kategori baru | Isi | Asal (§4.3 lama) |
 |---|---|---|
 | **CRM** | Pipeline, Klien, Quotation, Agreement, Lead Sourcing | Talent Cloud (sebagian) |
-| **Recruitment** | Job Orders, Kandidat, Talent Pool, AI Interview, Black Lists | Talent Cloud (sebagian) |
+| **Recruitment** | Job Orders, Talent Pool (termasuk tab Candidates per-JO), AI Interview, Black Lists | Talent Cloud (sebagian) |
 | **Workforce** | Karyawan, kontrak, BPJS+asuransi, Absensi, ESS, TTE, **Payroll** (Saltab, PPh21) | Workforce Cloud + Payroll dari Revenue Cloud |
 | **Finance & Accounting** | Invoice, e-Faktur, Kas-Bank, Pembelian, Aset Tetap, Payment Request + Tutup Buku, Jurnal, Laporan, Tanya-Laporan AI | Sisa Revenue Cloud + seluruh Govern Cloud |
 | **Administration** | Settings, **Rate Configuration** (rename dari "Tarif & Rate": tarif PPh21/BPJS/bank) | Settings lama + Tarif&Rate dari Revenue Cloud |
@@ -352,7 +352,7 @@ lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
   callout block, **command palette ⌘K** lintas aplikasi. ✅ kecuali page tree
   (ditunda — belum ada konsep page user-generated) dan emoji besar baru di sebagian halaman.
 - Aksen warna per aplikasi di atas satu design system yang sama. ✅
-- View tabel/papan: ✅ Pipeline (kanban + pindah tahap); Kandidat menyusul.
+- View tabel/papan: ✅ Pipeline (kanban + pindah tahap); *(catatan usang: rencana "Kandidat menyusul" di sini superseded 2026-09-05 — jadi tab "Candidates" di JobOrderDetail, bukan halaman/board terpisah, lihat §13)*
 - Callout block ✅ · Properti metadata ✅ (detail lead & karyawan terpilih).
 - Referensi visual: [`docs/design/mockup-notion-ui.html`](../design/mockup-notion-ui.html).
 
@@ -1401,33 +1401,57 @@ Tambahan Fase 20 (presales — lead sourcing s.d. esign, direncanakan):
 
 ## 13. Halaman & Alur Utama
 
-Shell baru (lihat mockup): sidebar workspace → grup Cloud → halaman; app
-launcher; ⌘K lintas app; tema terang/gelap. Pengelompokan halaman berikut
-mengikuti struktur 4-Cloud sejak v3.0 (§4) — nama modul kode di
-`apps.py` beda dari label produk (lihat tabel §4.3).
+Shell baru (lihat mockup): sidebar workspace → grup kategori → halaman; app
+launcher; ⌘K lintas app; tema terang/gelap. **Direvisi 2026-09-05**:
+pengelompokan halaman TIDAK LAGI mengikuti struktur 4-Cloud v3.0 —
+sejak Opsi G (§4.4.2), grouping berdasarkan 5 kategori fungsi nyata
+(CRM/Recruitment/Workforce/Finance & Accounting/Administration),
+branding "Cloud" dihapus dari UI. Nama modul kode di `apps.py` TETAP
+tidak berubah (lihat tabel §4.3) — ini murni perubahan label & grouping
+tampilan. Daftar sub-item definitif ada di
+`docs/design/component-implementation-spec.md` §3.0 — tabel di bawah
+ini ringkasannya, jangan dianggap sumber utama kalau ada beda.
 
 ```
-Login ──► Beranda (Overview, 9 widget lintas Cloud yang dilisensikan)
-  🎯🧲 Talent Cloud    : Pipeline (tabel/papan), Klien + dokumen legalitas,
-                        Job Orders (pipeline 13-tahap), Talent Pool (upload
-                        CV → auto-profil + CV standar bertemplate, AI
-                        Matching 0-100+explain), placement, jadwal interview,
-                        Lead Sourcing (Fase 20 — daftar company+contact hasil
-                        scraping/manual), Quotation (builder template visual,
-                        approval, kirim), Agreement (builder template visual,
-                        internal review, kirim untuk esign), Job Order
-                        (Fase 21 — field benefit/jam kerja, generate dokumen
-                        JO, pilih mode interview manusia/AI, offering call)
-  💼 Workforce Cloud  : Karyawan, kontrak, dokumen legal, BPJS+asuransi,
-                        Absensi, Portal Saya (ESS), TTE
-  📊 Revenue Cloud    : Saltab proyek (grid), Approval klien (token),
-                        Payment Request, Invoice + faktur DJP, Kas & Bank,
-                        Pembelian, Aset Tetap
-  🏛️ Govern Cloud     : Tutup Buku, Jurnal & Bagan Akun, Laporan (termasuk
-                        per klien), Tanya-Laporan AI
-  💬 Chat (gratis)    : Channel, DM, thread — tersambung entitas (job order,
-                        payrol, proyek); karyawan outsourcing ter-scope
-  ✨ AI Add-on        : Asisten @AEOS, RAG kontrak, forecast
+Login ──► Beranda (Overview, 9 widget lintas kategori)
+  CRM              : Pipeline (tabel/papan), Klien + dokumen legalitas,
+                      Lead Sourcing (Fase 20 — daftar company+contact hasil
+                      scraping/manual), Quotation (builder template visual,
+                      approval, kirim), Agreement (builder template visual,
+                      internal review, kirim untuk esign)
+  Recruitment      : Job Orders (pipeline 13-tahap; tab "Candidates" di
+                      dalam Job Order Detail — Kanban per-tahap
+                      PlacementStatus, MENGGANTIKAN halaman "Kandidat"
+                      terpisah yang sempat direncanakan, koreksi
+                      2026-09-05 — Talent Pool adalah satu-satunya
+                      database kandidat, bukan dua; Fase 21 — field
+                      benefit/jam kerja, generate dokumen JO, pilih mode
+                      interview manusia/AI, offering call; Fase 24 —
+                      field tambahan posisi/level/dst ala MYOHRIS),
+                      Talent Pool (upload CV → auto-profil + CV
+                      standar bertemplate, AI Matching 0-100+explain),
+                      AI Interview, Black Lists, Referral (Fase 27 —
+                      kode referral karyawan, insentif, toggle on/off)
+  Workforce        : Karyawan, kontrak, dokumen legal, BPJS+asuransi,
+                      Absensi, ESS, TTE, Payroll (Saltab, Approval klien
+                      via token, PPh21 — dipindah dari bekas Revenue
+                      Cloud; sengaja di sini karena soal karyawan)
+  Finance & Accounting : Invoice + faktur DJP, Kas & Bank, Pembelian,
+                      Aset Tetap, Payment Request (bekas Revenue Cloud)
+                      + Tutup Buku, Jurnal & Bagan Akun, Laporan
+                      (termasuk per klien), Tanya-Laporan AI (bekas
+                      Govern Cloud, digabung ke sini)
+  Administration   : Rate Configuration (rename dari "Tarif & Rate"),
+                      Billing & Saldo Credit (Fase 28 — subscription,
+                      top-up, riwayat transaksi), Settings & RBAC
+  Chat (gratis)    : Channel, DM, thread — tersambung entitas (job order,
+                      payrol, proyek); karyawan outsourcing ter-scope
+  AI Add-on        : Asisten @AEOS, RAG kontrak, forecast — cross-cutting,
+                      tidak masuk 5 kategori manapun; manifestasi konkretnya
+                      sudah tersebar sebagai fitur AI per modul (AI
+                      Interview di Recruitment, Tanya-Laporan AI di
+                      Finance & Accounting, dst) dan ditagih lewat saldo
+                      credit terpadu (§4.4), bukan lagi SKU terpisah
 
 Publik (tanpa login, per-tenant white-label):
   /careers/{tenant_slug}         : Listing lowongan publik (Job Portal, Fase 16)

@@ -102,12 +102,18 @@ dipakai di halaman yang datanya live/sinkron sistem eksternal.
   datanya tidak berkategori (mis. audit log polos), boleh skip.
 
 ### 1.6 Data Table — Pola Sel Kaya (upgrade dari v1 §1.3)
+- **Gridline vertikal WAJIB antar kolom** (border-right 0.5px
+  `var(--border)` di tiap kolom kecuali kolom terakhir) — pemisah
+  horizontal antar baris SAJA tidak cukup untuk kesan enterprise-dense,
+  harus ada garis pemisah kolom juga.
 - **Sel majemuk**: nama/ID utama di baris atas, detail sekunder (NIK/
   departemen/PIC) di baris bawah lebih kecil & muted — BUKAN kolom
   terpisah kalau infonya erat kaitannya (nama+jabatan, invoice+e-faktur).
 - **Avatar/inisial berwarna** di kolom pertama: lingkaran kecil, warna
   berbeda per baris (rotasi palet netral: biru/hijau/kuning/ungu muda)
-  — BUKAN identitas kategori (beda dari CATEGORY_META sidebar).
+  — BUKAN identitas kategori (beda dari CATEGORY_META sidebar). Hanya
+  untuk entitas berupa ORANG (kandidat, karyawan, PIC klien) — bukan
+  untuk baris non-personal (invoice, jurnal).
 - **Highlight anomali dalam sel**: kalau ada nilai yang butuh perhatian
   (PPh21 salah hitung, NPWP kadaluarsa), beri warna amber + tanda
   bintang (`Rp 1.098.000*`) dan catatan kecil di baris sub-detail
@@ -116,6 +122,33 @@ dipakai di halaman yang datanya live/sinkron sistem eksternal.
 - **Status inline**: dot warna + label pendek (bukan cuma badge pill
   polos) untuk status yang perlu deteksi cepat sambil scan tabel.
 - Kolom nominal selalu rata kanan, tabular-nums (tidak berubah dari v1).
+- **Row height 32-36px (bukan 36-40px)** — direvisi lebih ketat dari
+  `design.md` §3b setelah review implementasi nyata; versi lama masih
+  kerasa lega untuk standar enterprise-dense yang jadi target.
+
+### 1.6a Header+Action Row — WAJIB di SEMUA card, bukan cuma §1.7 (BARU)
+Setiap card/module/section di halaman manapun — bukan cuma "Kartu Info
+Baris Bawah" — WAJIB punya baris header eksplisit sebelum isinya:
+```
+[ikon kecil] Judul Section                    [tombol/dropdown aksi opsional]
+─────────────────────────────────────────────────────────────────────
+(isi card)
+```
+Card TANPA header+ikon (judul teks polos menggantung di atas isi,
+tanpa garis pemisah) dianggap TIDAK SESUAI spec — ini kesalahan paling
+sering ditemukan di implementasi awal (card "Aging", "Arus Kas" jadi
+contoh yang perlu diperbaiki).
+
+### 1.6b Kepadatan (Density) — perketat, jangan pilih ujung longgar skala
+Skala spacing 4/8/12/16/20/24px (`design.md` §3b) TETAP berlaku, tapi
+untuk kesan enterprise-dense yang jadi target, **default ke ujung
+KECIL skala ini**, bukan tengah/besar:
+- Padding internal card: **12px** (bukan 16-24px).
+- Padding sel tabel: **8px vertikal, 12px horizontal** (bukan 12-16px).
+- Gap antar KPI card dalam 1 baris: **10px** (bukan 14-16px).
+Ini bukan token baru — cuma pemilihan nilai default di ujung bawah
+skala yang sudah ada, supaya konsisten "dense" di semua halaman
+tanpa perlu keputusan ad-hoc per komponen.
 
 ### 1.7 Kartu Info Baris Bawah (3-kolom, di bawah tabel utama)
 ```
@@ -194,11 +227,36 @@ search+filter+avatar-stack row → Kanban board (§1.8) horizontal-scroll.
 
 ## 3. Mapping Halaman → Archetype (revisi)
 
+### 3.0 Daftar Item Sidebar per Kategori (referensi definitif — cek ini kalau ada item hilang/salah kategori)
+
+| Kategori | Item (urutan tidak mengikat) |
+|---|---|
+| **CRM** | Pipeline, Klien, Quotation, Agreement, Lead Sourcing |
+| **Recruitment** | Job Orders, Talent Pool, AI Interview, Black Lists, **Referral** (penempatan masuk akal — program referral karyawan→kandidat — meski awalnya tidak eksplisit diputuskan taruh di sini; konfirmasi tetap di sini kecuali ada alasan pindah) |
+| **Workforce** | Karyawan, Kontrak, BPJS & Asuransi, Absensi, ESS, TTE, **Payroll** (sengaja di sini, bukan Finance — soal karyawan bukan soal uang keluar) |
+| **Finance & Accounting** | Invoice, e-Faktur, Kas & Bank, Pembelian, Aset Tetap, Payment Request, Tutup Buku, Jurnal & Buku Besar, Laporan Keuangan, Tanya-Laporan AI |
+| **Administration** | Rate Configuration (rename dari "Tarif & Rate"), Billing & Saldo Credit, Settings & RBAC |
+
+**Koreksi 2026-09-05: "Kandidat" DIHAPUS sebagai item sidebar
+terpisah.** Sesuai intention asli (deskripsi 2 jalur sourcing
+kandidat, awal percakapan) dan referensi MYOHRIS — Talent Pool
+ADALAH database kandidat tunggal (bukan 2 database beda). Kandidat
+yang sedang berada di pipeline suatu Job Order dilihat lewat **tab
+"Candidates" (Kanban, reuse pola §1.8) DI DALAM `JobOrderDetail.tsx`**
+(archetype C) — persis pola MYOHRIS (tab "Candidates" di Job Detail,
+bukan halaman sendiri di sidebar).
+
+Kalau ada kategori yang render sebagai 1 baris tanpa sub-item (bug
+yang pernah terjadi pada CRM & Workforce, 2026-09-05) — cocokkan
+dulu ke tabel ini untuk pastikan semua item di atas benar terdaftar
+di `CATEGORY_META`/menu array `Layout.tsx`, bukan cuma sebagian.
+
+
 | Archetype | Halaman |
 |---|---|
 | A — Overview | `Dashboard.tsx` (label sidebar/UI: **"Overview"**, bukan "Dashboard" atau "Dashboard/Overview" — pola §1.9 WAJIB di sini), overview per-kategori lain jika masih dipertahankan |
-| B — List/CRUD | `Clients.tsx`, `Candidates.tsx`, `TalentPool.tsx`, `JobOrders.tsx`, `Blacklist.tsx`, `Quotations.tsx`, `Agreements.tsx`, `Employees.tsx`, `Users.tsx`, `PaymentRequests.tsx`, `Finance.tsx` (Invoice — KPI row WAJIB 4 kartu + tab filter status persis §1.5), `Rates.tsx`, `Referral.tsx`, `PlatformTenants.tsx`, `Audit.tsx` |
-| C — Detail/Profile | `JobOrderDetail.tsx`, halaman Employee Detail (cek lokasi file) |
+| B — List/CRUD | `Clients.tsx`, `TalentPool.tsx`, `JobOrders.tsx`, `Blacklist.tsx`, `Quotations.tsx`, `Agreements.tsx`, `Employees.tsx`, `Users.tsx`, `PaymentRequests.tsx`, `Finance.tsx` (Invoice — KPI row WAJIB 4 kartu + tab filter status persis §1.5), `Rates.tsx`, `Referral.tsx`, `PlatformTenants.tsx`, `Audit.tsx` |
+| C — Detail/Profile | `JobOrderDetail.tsx` (**tambah tab "Candidates" — Kanban, reuse §1.8**, menggantikan `Candidates.tsx` yang dihapus dari sidebar; kolom Kanban ikuti tahap `PlacementStatus`), halaman Employee Detail (cek lokasi file) |
 | D — Run/Process | `Payroll.tsx` (Pre-flight WAJIB persis pola §1.4, 4 KPI card, 3 kartu info bawah: Kesiapan Rekening/Kepatuhan Pajak/Jadwal Cut-off), `PayrollClientPortal.tsx`, `Accounting.tsx`, `AccountingAi.tsx`, `Billing.tsx` (Saldo Credit — widget besar §1.1 style + auto top-up toggle + riwayat transaksi tabel) |
 | E — Form/Wizard | Bagian create/edit `Quotations.tsx`/`Agreements.tsx`, `AIInterviewSession.tsx` |
 | F — Kanban Board (BARU) | `Leads.tsx` (mockup Stitch nunjukkan "Pipeline" sebagai halaman Kanban penuh — cek apakah `Leads.tsx` ini yang dimaksud atau perlu file terpisah) |

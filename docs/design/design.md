@@ -79,8 +79,11 @@ karena teal sudah dikonfirmasi lewat 2 tool desain independen.
 ## 3b. Spacing & Tinggi Baris
 
 - Skala spacing: 4/8/12/16/20/24px — jangan pakai angka di luar skala ini
-- Tinggi baris tabel standar: 36-40px (referensi eksplisit ke prinsip
-  "tabel adalah wajah produk" dari Rippling, §2)
+- Tinggi baris tabel standar: 32-36px *(direvisi dari 36-40px semula,
+  2026-09-05, setelah review implementasi nyata — lihat
+  `component-implementation-spec.md` §1.6 untuk detail & alasan;
+  prinsip dasarnya tetap sama: "tabel adalah wajah produk" dari
+  Rippling, §2)*
 - Radius: sm 4px (badge kecil), md 6px (input/button), lg 8px (card)
   — catatan: ini SEDIKIT beda dari radius yang sudah ada di
   `index.css`/Tailwind config Aeos sekarang (`rounded-lg`/`rounded-xl`
@@ -196,7 +199,9 @@ fungsi nyata (nama modul kode `apps.py` TIDAK berubah, ini murni
 label & pengelompokan UI):
 
 - **CRM** — Pipeline, Klien, Quotation, Agreement, Lead Sourcing
-- **Recruitment** — Job Orders, Kandidat, Talent Pool, AI Interview, Black Lists
+- **Recruitment** — Job Orders, Kandidat, Talent Pool, AI Interview,
+  Black Lists, **Referral** (ditambahkan 2026-09-05 — program referral
+  karyawan→kandidat, penempatan dikonfirmasi masuk akal di sini)
 - **Workforce** — Karyawan, kontrak, BPJS+asuransi, Absensi, ESS,
   TTE, **Payroll** (Saltab, PPh21 — sengaja di sini, bukan di Finance,
   karena ini soal karyawan)
