@@ -41,27 +41,51 @@ Prinsip gabungan: **Rippling/Deel untuk kerapian & kepadatan data,
 BambooHR untuk modul yang disentuh user awam, LinovHR sebagai lantai
 minimum yang harus dilewati.**
 
-## 3. Warna Aksen — STATUS: BELUM FINAL
+## 3. Warna Aksen — STATUS: FINAL (2026-09-04)
 
-Keputusan eksplisit: **tidak meniru satu referensi manapun secara
-langsung** — referensi di atas dipakai sebagai bahan, bukan cetakan.
+**Teal gelap `#0F6E56`** (+ terang `#5DCAA5`, + varian aktif/gelap
+`#0A4D3C`) — dikonfirmasi lewat 2 jalur independen: (1) hasil
+eksplorasi Claude Design/Stitch kembali ke hex yang sama persis tanpa
+diminta ulang, (2) dibandingkan terhadap identitas SPC (parent
+company, biru `#1B6FC4`+merah `#D32E36`) — beda ±45° hue, cukup jauh
+dibedakan tapi masih terasa "evolusi", bukan "berlawanan total" (lihat
+riwayat keputusan di bawah untuk konteks lengkap trade-off ini).
 
-**Kandidat sejauh ini:** teal gelap `#0F6E56` (+ terang `#5DCAA5`).
-Alasan dipilih sebagai kandidat:
-- Tidak dipakai satupun dari 4 referensi di atas (Rippling/Deel≈hitam,
-  BambooHR≈hijau, LinovHR≈biru) — beda sekilas dilihat berdampingan.
-- Dibandingkan terhadap identitas SPC (parent company: biru cobalt
-  `#1B6FC4` + merah crimson `#D32E36`, hue ≈210°) — teal di hue ≈165°,
-  beda ±45°, cukup jauh untuk dibedakan tapi masih satu keluarga besar
-  "dingin/profesional". Ini trade-off yang perlu diputuskan sadar: mau
-  produk ini kerasa "evolusi dari SPC" (teal oke) atau "berdiri sendiri
-  total" (perlu warna yang benar-benar berlawanan, mis. coral/oranye
-  hangat — belum dieksplor lebih jauh).
+**Palet lengkap (final):**
+- Aksen: `#0F6E56` (primer), `#5DCAA5` (terang/hover), `#0A4D3C` (aktif/gelap)
+- Latar: `#F8FAFC` (canvas), `#FFFFFF` (card/surface)
+- Border: `#E2E8F0` (normal), `#F1F5F9` (subtle)
+- Teks: `#0F172A` (utama), `#64748B` (muted), `#94A3B8` (subtle)
+- Status semantik (independen dari aksen, TETAP dipakai di semua kondisi):
+  Sukses `#10B981` (bg `#ECFDF5`, border `#A7F3D0`) · Warning `#F59E0B`
+  (bg `#FFFBEB`, border `#FDE68A`) · Error `#EF4444` (bg `#FEF2F2`,
+  border `#FECACA`) · Info `#3B82F6` (bg `#EFF6FF`, border `#BFDBFE`)
 
-**Belum diputuskan final** — jangan diasumsikan teal adalah keputusan
-akhir di bagian kode manapun. Begitu final, update baris `--accent` di
-`frontend/src/index.css` (satu baris) — seluruh component library
-(§4) otomatis ikut berubah tanpa disentuh.
+**Riwayat keputusan (untuk konteks, bukan status aktif):** sempat
+dibandingkan dengan opsi coral/terracotta sebagai alternatif yang
+lebih "berlawanan total" dari SPC — tidak dieksplor lebih lanjut
+karena teal sudah dikonfirmasi lewat 2 tool desain independen.
+
+## 3a. Tipografi & Skala (dikonfirmasi via Stitch, selaras Inter yang sudah dipakai Aeos)
+
+- Font: Inter (sudah jadi default Aeos di `tailwind.config.ts`, tidak berubah)
+- Skala: Judul halaman 20-24px/600 · Header section 16px/600 ·
+  Table/label 11-13px/400-500 — skala kecil-tapi-tegas ini yang
+  dimaksud "data-dense" di §2 (referensi Rippling)
+- Angka finansial: tabular-nums, rata kanan di tabel (belum ada aturan
+  eksplisit soal ini sebelumnya — sekarang wajib diterapkan di semua
+  tabel yang menampilkan nominal Rupiah)
+
+## 3b. Spacing & Tinggi Baris
+
+- Skala spacing: 4/8/12/16/20/24px — jangan pakai angka di luar skala ini
+- Tinggi baris tabel standar: 36-40px (referensi eksplisit ke prinsip
+  "tabel adalah wajah produk" dari Rippling, §2)
+- Radius: sm 4px (badge kecil), md 6px (input/button), lg 8px (card)
+  — catatan: ini SEDIKIT beda dari radius yang sudah ada di
+  `index.css`/Tailwind config Aeos sekarang (`rounded-lg`/`rounded-xl`
+  campur di banyak halaman, temuan audit awal); saat migrasi token
+  berlanjut (§5), pakai skala sm/md/lg ini sebagai acuan penyeragaman.
 
 ## 4. Component Library
 
@@ -110,3 +134,81 @@ setiap ada halaman baru yang dimigrasi.
    berubah drastis (seperti kasus `notion-ui-parity-plan.md`), tulis
    ulang bagian yang relevan di sini — jangan biarkan jadi jejak sejarah
    yang menyesatkan developer berikutnya.
+
+## 7. Perubahan Model Komersial (2026-09-04) — Dampak ke Frontend
+
+**Keputusan bisnis (detail penuh menyusul di PRD, dicatat di sini
+karena efeknya langsung ke cara UI dibangun):** Opsi F (bundle
+per-Cloud yang harus "diaktifkan" satu-satu sebelum bisa dipakai)
+digantikan model baru — **semua fitur di semua Cloud terbuka penuh**
+untuk tenant `commercial`, dimonetisasi lewat **saldo credit** yang
+diisi dari subscription bulanan (3 tier: Rp500rb/2jt/5jt) + top-up
+manual kalau habis.
+
+### Yang HILANG dari checklist frontend (jangan dibangun lagi)
+
+Sebelumnya, hampir tiap halaman/komponen perlu mikirin: *"apakah Cloud
+ini dilisensikan buat tenant ini?"* — locked-state overlay, blur,
+redirect ke halaman upgrade, dst. **Ini SUDAH TIDAK RELEVAN.** Kalau
+ada kode/desain lama yang masih melakukan pengecekan lisensi per-Cloud
+di level UI, itu perlu dihapus, bukan dipertahankan "siapa tahu
+kepakai lagi."
+
+### Yang TETAP ada — dan yang BARU
+
+Cuma 2 kategori state yang masih perlu ditangani di UI, dan
+keduanya BEDA KARAKTER, jangan dicampur jadi satu komponen:
+
+**A. Permission-denied (RBAC — tidak berubah dari sebelumnya)**
+Ini soal *siapa boleh lihat apa di dalam tenant yang sama* — sama
+sekali tidak berkaitan dengan billing/saldo. Contoh: Ops coba buka
+data karyawan internal. Harus tampil pesan eksplisit ("Anda tidak
+punya akses ke data ini"), bukan halaman kosong.
+
+**B. Indikator saldo credit (BARU — wajib ada, bukan opsional)**
+Karena semua fitur metered dan saldo bisa habis, UI WAJIB kasih tau
+posisi saldo — bukan cuma nolak transaksi pas udah kepotong nanti.
+Dua level:
+- **Indikator ringkas** di header/topbar — selalu terlihat, 3 state:
+  Normal (teal, >20% tersisa) → Peringatan (amber, ≤20%) → Habis
+  (merah, auto-reload aktif atau minta top-up manual).
+- **Halaman detail billing** — breakdown pemakaian, riwayat transaksi,
+  tombol top-up manual.
+
+Pengecualian: **Govern Cloud (Akunting)** — akses dasarnya bisa
+"gratis" (termasuk di Tier 2/3, atau bayar Rp300rb/user di Tier 1),
+TAPI fitur AI di dalamnya (OCR, rekonsiliasi, dst.) tetap motong
+saldo credit yang sama. Jangan bikin state "gratis" yang mengira
+seluruh modul termasuk AI-nya bebas biaya — cuma akses dasarnya yang
+gratis.
+
+**Kesimpulan buat siapa pun yang develop frontend ke depan:** logic
+"apakah fitur ini boleh diakses" sekarang jauh lebih sederhana —
+satu-satunya gate adalah RBAC (permission), bukan licensing per-Cloud.
+Yang perlu effort desain justru pindah ke **visibilitas saldo**
+(state B) supaya user tidak kaget di-charge.
+
+### Struktur Sidebar Final — Hilangkan Branding "Cloud" (2026-09-04)
+
+Nama "Talent Cloud", "Workforce Cloud", "Revenue Cloud", "Govern
+Cloud" **dihapus dari tampilan** — diganti 5 kategori berdasarkan
+fungsi nyata (nama modul kode `apps.py` TIDAK berubah, ini murni
+label & pengelompokan UI):
+
+- **CRM** — Pipeline, Klien, Quotation, Agreement, Lead Sourcing
+- **Recruitment** — Job Orders, Kandidat, Talent Pool, AI Interview, Black Lists
+- **Workforce** — Karyawan, kontrak, BPJS+asuransi, Absensi, ESS,
+  TTE, **Payroll** (Saltab, PPh21 — sengaja di sini, bukan di Finance,
+  karena ini soal karyawan)
+- **Finance & Accounting** — Invoice, e-Faktur, Kas-Bank, Pembelian,
+  Aset Tetap, Payment Request, Tutup Buku, Jurnal, Laporan,
+  Tanya-Laporan AI (gabungan bekas Revenue Cloud + seluruh Govern Cloud)
+- **Administration** — Settings, **Rate Configuration** (rename dari
+  "Tarif & Rate": tarif PPh21/BPJS/bank yang dipakai Payroll)
+
+Asumsi kerja (koreksi bila salah): Chat tetap top-level di luar 5
+kategori ini; dashboard/pengaturan saldo credit masuk Administration.
+
+Detail lengkap model komersial di baliknya (tier, model data,
+payment gateway) ada di PRD §4.4 (Opsi G) — tidak diulang di sini,
+dokumen ini fokus ke implikasi visual/struktural saja.

@@ -1,8 +1,15 @@
 # ADR-0006 Guard Lisensi Payrol per Jenis Payrol (run_type)
 
-- Status: Accepted
+- Status: **Superseded by ADR-0007** (2026-09-04) — lihat catatan di bawah
 - Date: 2026-08-25
 - Deciders: Brian (Product), Platform Engineering
+
+> **Catatan supersedensi (2026-09-04):** keputusan bisnis Opsi G (PRD
+> §4.4) menghapus model lisensi per-SKU secara keseluruhan, sehingga
+> guard `assert_run_license` yang dirancang ADR ini tidak lagi
+> berlaku. Isi ADR ini TIDAK diedit/dihapus — dipertahankan utuh
+> sebagai catatan sejarah keputusan pada masanya. Lihat **ADR-0007**
+> untuk keputusan pengganti.
 
 ## Context
 

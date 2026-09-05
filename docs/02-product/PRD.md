@@ -129,6 +129,7 @@ Mekari):
 | 9 | *(baru)* Detail Job Order (benefit, jam kerja) numpang di teks bebas `description`/`requirements`, tidak ada dokumen JO ter-generate dari sistem, jadwal interview tidak tersinkron ke kalender kandidat/rekruter | Detail JO gampang terlewat/salah kutip ke offering letter, double-booking jadwal interview, kandidat lupa jadwal karena tidak ada reminder kalender |
 | 10 | *(baru)* Role Operations tidak bisa akses modul karyawan sama sekali (bukan cuma dibatasi ke eksternal); tidak ada pencatatan riwayat surat peringatan; pengiriman Saltab ke klien manual tanpa jejak sistem | Ops harus minta HR tiap butuh data karyawan eksternal untuk kerja sehari-hari; riwayat SP karyawan tidak terpusat; tidak ada audit trail kapan/ke siapa Saltab dikirim |
 | 11 | *(baru)* Dibanding tool existing SPC (MYOHRIS): field Job Order & Talent Pool kurang detail (klasifikasi posisi/level, riwayat kerja terstruktur, dst.), kontrak karyawan masih upload manual tanpa template, halaman Employee belum ada riwayat mutasi/vaksin/kontak darurat, dan belum ada program referral karyawan | Data kandidat/karyawan kurang terklasifikasi untuk pelaporan, pembuatan kontrak lambat & rawan salah kutip, riwayat karyawan tersebar/tidak tercatat, sourcing kandidat kehilangan jalur rujukan internal |
+| 12 | *(baru)* Model bundle-gating (Opsi F) menghambat UX (tenant harus commit beli sebelum coba) dan development frontend (cek lisensi per-Cloud tersebar di banyak halaman); Govern Cloud di-price 15-20x lebih mahal dari produk acuannya sendiri (Accurate Online) tanpa validasi pasar | Adopsi produk lambat, kompleksitas kode tidak perlu, risiko ditolak calon klien yang familiar harga pasar akunting |
 
 ## 3. Pengguna & Peran
 
@@ -157,6 +158,13 @@ dihitung oleh HR                     dihitung oleh Operations
 HR tidak otomatis melihat payrol proyek, dan sebaliknya (RBAC per jenis run).
 
 ## 4. Portofolio Aplikasi & Packaging — 4 Cloud Metered *(v3.0, menggantikan bundle 6-aplikasi v1.4/v2.0/v2.1)* ✅
+
+> **⚠️ DIGANTIKAN OLEH OPSI G (§4.4), keputusan 2026-09-04 — belum
+> diimplementasikan.** Isi §4.1-4.3 di bawah ini masih ✅ **berjalan di
+> production sekarang** (jangan dihapus/dianggap tidak berlaku sampai
+> migrasi Fase 28 selesai) — tapi ini status TRANSISI, bukan arah
+> jangka panjang. Baca §4.4 dulu untuk memahami ke mana arahnya,
+> §4.1-4.3 di bawah ini untuk memahami kondisi saat ini.
 
 Sejak v3.0 (2026-08-30), packaging direstrukturisasi dari 7 aplikasi berlisensi
 independen menjadi **Foundation gratis + 4 SKU metered ("Cloud") + AI Add-on**
@@ -208,6 +216,113 @@ baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
 | Enterprise | Scale + Govern | ~Rp 10,09jt |
 
 Trial 14 hari per SKU (base Rp 1jt untuk Revenue Cloud tetap berlaku saat trial). Upsell in-product: nav menyembunyikan Cloud nonaktif, halaman menampilkan ajakan install/trial.
+
+### 4.4 Opsi G — Model Komersial Baru *(keputusan 2026-09-04, direncanakan — lihat Fase 28)*
+
+**Masalah dengan Opsi F (§4.1-4.3) yang memicu perubahan ini:** (1)
+bundle-gating menghambat UX — tenant harus commit beli dulu sebelum
+bisa coba; (2) menghambat development frontend — hampir tiap
+halaman/komponen perlu logic "apakah Cloud ini dilisensikan"; (3)
+Govern Cloud di-price flat Rp5-7jt/bulan padahal produk acuannya
+sendiri (Accurate Online) dijual retail ~Rp300rb/bulan — gap 15-20x
+yang belum pernah diuji pasar.
+
+**Prinsip inti:** semua fitur di semua kategori (§4.4.2) terbuka
+penuh untuk tenant `commercial` — **tidak ada lagi gate per-SKU**.
+Monetisasi lewat **saldo credit** dari subscription bulanan + top-up
+manual, mirip pola Claude Pro/Max.
+
+#### 4.4.1 Tiga Tier Subscription
+
+| Tier | Subscription/bulan | Saldo credit/bulan | Akunting |
+|---|---|---|---|
+| 1 | Rp 500rb | Rp 500rb | Tidak termasuk — Rp 300rb/user tambahan bila diminta |
+| 2 | Rp 2jt | Rp 2jt | Gratis 1 user |
+| 3 | Rp 5jt | Rp 5jt | Gratis s.d. 5 user — user ke-6 dst. Rp 300rb/user |
+
+Rp 300rb/user = harga retail asli Accurate Online (pass-through,
+tidak di-markup — margin dari value tambahan AI & integrasi
+lintas-modul). "Gratis" hanya berlaku untuk **akses dasar** akunting
+(CoA, jurnal, laporan) — fitur AI di dalamnya (OCR, rekonsiliasi,
+asisten tutup buku, NL→SQL, narasi eksekutif, prediksi pembayaran,
+deteksi anomali) tetap motong saldo credit yang sama, tarif token
+sama dengan AI Add-on (Rp 300/1k token, §4.3).
+
+Saldo dari subscription **reset tiap bulan** (tidak rollover). Saldo
+dari **top-up manual TIDAK reset**, disimpan terpisah. Prinsip harga:
+pay-per-metered di baliknya untuk semua tier — tier cuma menentukan
+saldo awal & bonus, bukan tarif metered dasar.
+
+**Auto-reload**: Rp 100rb per trigger, **tanpa `monthly_reload_cap`**
+(unlimited) — keputusan sadar, tidak ada titik otomatis yang memaksa
+cek manual pemakaian tak wajar.
+
+#### 4.4.2 Restrukturisasi Kategori — Hilangkan Branding "Cloud"
+
+Nama "Talent/Workforce/Revenue/Govern Cloud" **dihapus dari UI**
+(nama modul kode `apps.py` TIDAK berubah — murni perubahan label &
+pengelompokan tampilan). Diganti 5 kategori berdasarkan fungsi nyata:
+
+| Kategori baru | Isi | Asal (§4.3 lama) |
+|---|---|---|
+| **CRM** | Pipeline, Klien, Quotation, Agreement, Lead Sourcing | Talent Cloud (sebagian) |
+| **Recruitment** | Job Orders, Kandidat, Talent Pool, AI Interview, Black Lists | Talent Cloud (sebagian) |
+| **Workforce** | Karyawan, kontrak, BPJS+asuransi, Absensi, ESS, TTE, **Payroll** (Saltab, PPh21) | Workforce Cloud + Payroll dari Revenue Cloud |
+| **Finance & Accounting** | Invoice, e-Faktur, Kas-Bank, Pembelian, Aset Tetap, Payment Request + Tutup Buku, Jurnal, Laporan, Tanya-Laporan AI | Sisa Revenue Cloud + seluruh Govern Cloud |
+| **Administration** | Settings, **Rate Configuration** (rename dari "Tarif & Rate": tarif PPh21/BPJS/bank) | Settings lama + Tarif&Rate dari Revenue Cloud |
+
+Asumsi kerja (koreksi bila salah): Chat tetap top-level di luar 5
+kategori; dashboard saldo credit (§4.4.4) masuk Administration.
+
+#### 4.4.3 Dampak ke Frontend & Desain
+
+Detail lengkap sudah diterapkan ke `docs/design/design.md` §7. Inti:
+checklist "cek lisensi per-Cloud" di setiap halaman **dihapus**
+seluruhnya. Yang tersisa cuma 2 kategori state: permission-denied
+(RBAC, tidak berubah) dan indikator saldo credit (BARU, wajib —
+header + halaman detail, 3 state Normal/Peringatan/Habis).
+
+#### 4.4.4 Model Data Baru
+
+```
+TenantSubscription: tier, monthly_fee, included_budget, cycle_start_day, auto_renew
+TenantBudgetCycle (reset bulanan): included_budget, consumed, remaining
+TenantCreditAccount (TIDAK reset): balance, auto_reload_enabled,
+  auto_reload_threshold, auto_reload_amount(=100rb), monthly_reload_cap(=null/unlimited)
+CreditTransaction (ledger): type, amount, ref_event, balance_after
+```
+Urutan potong saat event metered: `TenantBudgetCycle.remaining` →
+`TenantCreditAccount.balance` → trigger auto-reload → kalau semua
+buntu, blokir transaksi metered berikutnya.
+
+Halaman detail billing: breakdown **per-fitur** (Quotation Rp X,
+E-signature Rp Y, AI OCR Rp Z), bukan per-kategori.
+
+#### 4.4.5 Halaman Pembayaran & Payment Gateway
+
+Self-service (tenant urus sendiri, bukan manual oleh Sales/Ops Aeos).
+**Gateway: Xendit** (untuk sementara — produk Subscriptions bawaan
+cocok untuk fixed+usage-based billing sekaligus, dunning/retry lebih
+matang dari Midtrans).
+
+**Kendala teknis**: auto-reload cuma jalan untuk tenant dengan
+kartu/GoPay ter-tokenisasi — QRIS/VA/e-wallet lain sekali-bayar,
+tidak mendukung penarikan otomatis. Tenant QRIS/VA-only harus top-up
+manual tiap kali habis; UI wajib jelaskan syarat ini di depan.
+
+**Kebijakan kegagalan pembayaran (2 skenario beda keparahan):**
+
+| Skenario | Kondisi | Efek |
+|---|---|---|
+| Subscription jatuh tempo gagal | Perpanjangan bulanan ditolak | **Berhenti total** — tanpa akses sampai dibayar |
+| Auto-reload gagal | Subscription masih aktif, cuma kuota ekstra gagal ditarik | **Cuma fitur metered diblokir** — data & fitur dasar tetap bisa diakses |
+
+Opsi bayar tahunan dengan diskon: perlu ada (besaran diskon belum
+diputuskan — sengaja ditunda, bukan blocker). Kwitansi format resmi
+diperlukan (kewajiban pajak Aeos sendiri sebagai penjual jasa SaaS,
+beda dari e-Faktur yang untuk klien Aeos menagih ke klien MEREKA).
+Platform admin melihat status pembayaran semua tenant dengan
+**memperluas `PlatformTenants.tsx` yang sudah ada**, bukan halaman baru.
 
 ## 5. Ruang Lingkup per Fase
 
@@ -921,6 +1036,34 @@ cukup dihitung on-the-fly saat query ATAU via scheduled job harian
 dihapus), tapi kandidat baru yang masuk lewat kode itu selama
 program nonaktif TIDAK menghasilkan `ReferralReward` baru — riwayat
 reward lama tetap utuh.
+
+### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) *(direncanakan, belum dimulai)*
+
+Implementasi penuh dari keputusan Opsi G (§4.4). Ini migrasi
+infrastruktur billing yang SUDAH BERJALAN production (§4.1-4.3 ✅),
+bukan fitur baru dari nol — perlu kehati-hatian ekstra karena
+menyentuh tenant yang sudah aktif berbayar.
+
+1. **Model data baru** (§4.4.4): `TenantSubscription`,
+   `TenantBudgetCycle`, `TenantCreditAccount`, `CreditTransaction`.
+2. **Hapus guard lisensi per-SKU** dari router (`core/security.py`
+   §4.1) — ganti dengan cek tunggal "apakah tenant punya subscription
+   aktif", bukan per-Cloud lagi.
+3. **Restrukturisasi sidebar** (§4.4.2) — label & pengelompokan
+   frontend saja, TIDAK mengubah nama modul kode (`apps.py`).
+4. **Indikator saldo credit** — komponen header (3 state) + halaman
+   detail billing (breakdown per-fitur).
+5. **Integrasi Xendit** — Subscriptions API untuk tagihan
+   bulanan/tahunan, tokenisasi kartu/GoPay untuk auto-reload.
+6. **Halaman pembayaran self-service** (§4.4.5) — kelola metode
+   bayar, kwitansi resmi, pilih/upgrade tier, riwayat transaksi.
+7. **Perluas `PlatformTenants.tsx`** — visibilitas status pembayaran
+   semua tenant untuk platform admin.
+
+**Perlu strategi migrasi untuk tenant existing** yang sudah aktif di
+Opsi F (§4.1-4.3) — belum dirancang di sini, perlu dibahas terpisah
+sebelum eksekusi (apakah auto-convert ke tier terdekat, atau tenant
+existing pilih manual).
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
