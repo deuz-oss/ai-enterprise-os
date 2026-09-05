@@ -1,11 +1,18 @@
-"""Laporan estimasi pemakaian & tagihan per tenant — PRD v3.0 §2 (Opsi F metered).
+"""SUPERSEDED (Fase 28): laporan estimasi Opsi F, dipertahankan untuk
+riwayat/rujukan platform-admin (ADR-0007 poin 3) -- bukan lagi sumber
+penagihan aktif. Ledger nyata sekarang `credit_transactions`, ditulis
+real-time oleh `billing/service.py::record_credit_transaction` (event-based)
+dan `billing/cycle_close.py` (periodik), bukan dihitung ulang tiap panggilan.
+
+Laporan estimasi pemakaian & tagihan per tenant — PRD v3.0 §2 (Opsi F metered).
 
 Read-only: tidak menagih, tidak menyimpan riwayat, tidak terhubung ke
 pembayaran. Dihitung ulang tiap panggilan untuk periode yang diminta.
 
 Berjalan di bawah /platform (platform_admin, tanpa konteks tenant aktif) —
-sama seperti platform/service.py, filter tenant otomatis TIDAK berlaku di
-sini sehingga setiap query harus eksplisit `tenant_id == ...`.
+setiap query eksplisit `tenant_id == ...` DAN `compute_usage()` men-set
+konteks tenant secara manual sebelum query (wajib untuk Postgres RLS,
+bukan cuma filter ORM -- lihat docstring `compute_usage()`).
 
 Belum tercakup (lihat diskusi PRD v3.0 §2):
 - Shadow billing talent nonaktif >180 hari (butuh field `last_match_at`
@@ -129,7 +136,26 @@ def compute_usage(db: Session, tenant_id: UUID, period: str | None = None) -> di
 
     Hanya menyertakan baris untuk SKU yang benar-benar berlisensi (aktif/trial)
     — SKU yang tidak dipakai tidak muncul sebagai baris nol.
+
+    Dipanggil dari konteks platform_admin (tanpa tenant aktif) untuk
+    tenant_id ARBITRARY lewat path param -- `set_tenant()` WAJIB di sini
+    walau setiap query di bawah sudah eksplisit `.where(tenant_id == ...)`,
+    karena itu cuma cukup untuk filter ORM otomatis, BUKAN untuk Postgres
+    RLS (server-side, independen dari klausa WHERE manapun di query itu
+    sendiri). Tanpa ini, di Postgres+RLS semua query di bawah pulang KOSONG
+    (bug ditemukan &amp; diperbaiki bareng audit Fase 28, 2026-09-05).
     """
+    from app.core.tenancy import get_tenant, set_tenant
+
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        return _compute_usage_locked(db, tenant_id, period)
+    finally:
+        set_tenant(previous_tenant)
+
+
+def _compute_usage_locked(db: Session, tenant_id: UUID, period: str | None) -> dict:
     tenant = _get_tenant(db, tenant_id)
     period_str, start, end = _period_bounds(period)
     licensed = _licensed_keys(db, tenant_id)

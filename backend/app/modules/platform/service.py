@@ -214,13 +214,24 @@ def activate_trial(db: Session, tenant_id: UUID, app_key: str) -> TenantAppLicen
 
 
 def list_tenant_licenses(db: Session, tenant_id: UUID) -> list[TenantAppLicense]:
-    return list(
-        db.execute(
-            select(TenantAppLicense)
-            .where(TenantAppLicense.tenant_id == tenant_id)
-            .order_by(TenantAppLicense.app_key)
-        ).scalars()
-    )
+    """Dipanggil dari konteks platform_admin (tanpa tenant aktif) untuk
+    tenant_id arbitrary -- `set_tenant()` wajib di sini untuk Postgres RLS,
+    filter `.where(tenant_id == ...)` di bawah cuma cukup untuk ORM (bug
+    ditemukan & diperbaiki bareng audit Fase 28, 2026-09-05)."""
+    from app.core.tenancy import get_tenant, set_tenant
+
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        return list(
+            db.execute(
+                select(TenantAppLicense)
+                .where(TenantAppLicense.tenant_id == tenant_id)
+                .order_by(TenantAppLicense.app_key)
+            ).scalars()
+        )
+    finally:
+        set_tenant(previous_tenant)
 
 
 def set_license_status(
@@ -230,24 +241,36 @@ def set_license_status(
     status: LicenseStatus,
     expires_at=None,
 ) -> TenantAppLicense:
-    """Platform admin mengatur lisensi: aktifkan/perpanjang/cabut/trial."""
+    """Platform admin mengatur lisensi: aktifkan/perpanjang/cabut/trial.
+
+    Sama seperti `list_tenant_licenses`: `set_tenant()` wajib -- tanpanya,
+    SELECT di bawah pulang kosong (duplikat baris tak sengaja) DAN
+    INSERT/UPDATE ditolak Postgres RLS (WITH CHECK gagal untuk tenant_id
+    yang bukan konteks aktif)."""
     from app.core.apps import APP_REGISTRY
+    from app.core.tenancy import get_tenant, set_tenant
 
     if app_key not in APP_REGISTRY:
         raise HTTPException(status_code=404, detail="Aplikasi tidak dikenal")
-    license_row = db.execute(
-        select(TenantAppLicense)
-        .where(TenantAppLicense.tenant_id == tenant_id)
-        .where(TenantAppLicense.app_key == app_key)
-    ).scalar_one_or_none()
-    if license_row is None:
-        license_row = TenantAppLicense(tenant_id=tenant_id, app_key=app_key)
-        db.add(license_row)
-    license_row.status = status
-    license_row.expires_at = expires_at
-    db.commit()
-    db.refresh(license_row)
-    return license_row
+
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        license_row = db.execute(
+            select(TenantAppLicense)
+            .where(TenantAppLicense.tenant_id == tenant_id)
+            .where(TenantAppLicense.app_key == app_key)
+        ).scalar_one_or_none()
+        if license_row is None:
+            license_row = TenantAppLicense(tenant_id=tenant_id, app_key=app_key)
+            db.add(license_row)
+        license_row.status = status
+        license_row.expires_at = expires_at
+        db.commit()
+        db.refresh(license_row)
+        return license_row
+    finally:
+        set_tenant(previous_tenant)
 
 
 def set_bundle_status(
