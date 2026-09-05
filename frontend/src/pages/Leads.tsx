@@ -67,6 +67,18 @@ interface Activity {
   created_at: string;
 }
 
+// Badge tipe di kartu Kanban (§1.8) -- Lead/Company belum punya field
+// "tipe layanan" outsourcing sungguhan (mis. Payroll Only/Full
+// Outsourcing), cuma `industry` (sektor bisnis klien, teks bebas). Warna
+// di-hash deterministik dari string industri supaya tetap konsisten per
+// klien tanpa mengarang kategori baru yang tidak ada datanya.
+const INDUSTRY_BADGE_CLASSES = ["p-blue", "p-violet", "p-green", "p-orange", "p-yellow", "p-indigo", "p-red", "p-gray"];
+function industryBadgeClass(industry: string): string {
+  let hash = 0;
+  for (let i = 0; i < industry.length; i++) hash = (hash * 31 + industry.charCodeAt(i)) >>> 0;
+  return INDUSTRY_BADGE_CLASSES[hash % INDUSTRY_BADGE_CLASSES.length];
+}
+
 export default function Leads() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -416,6 +428,11 @@ export default function Leads() {
                       onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
                       title={lead.industry ?? undefined}
                     >
+                      {lead.industry && (
+                        <span className={`pill ${industryBadgeClass(lead.industry)} mb-1.5 text-[10px]`}>
+                          {lead.industry}
+                        </span>
+                      )}
                       <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                         {lead.company_name}
                       </p>
