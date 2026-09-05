@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-05
+**Terakhir diperbarui:** 2026-09-04
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -53,7 +53,7 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 >   batal/pengganti), **Govern Cloud** (flat Rp 5-7jt, accounting Accurate.id
 >   lokal — tetap §8, tidak berubah). Mode operasi per-tenant
 >   (`tenants.billing_mode inherit|internal|commercial`) supaya deployment
->   yang sama bisa jalan internal & komersial berbarengan. Dashboard 9 widget
+>   yang sama bisa jalan internal & komersial berbarengan. Overview 9 widget
 >   cross-bundle. Sales CRM: klien `prospek→aktif` otomatis saat placement
 >   pertama. Mobile dapat tab Chat baru. Semua ✅ selesai & sinkron kode.
 > - **v2.1 & v2.0 (2026-08-27/28)** — draft transisi menuju struktur v3.0 di
@@ -141,7 +141,7 @@ Mekari):
 | HR | Personalia | **Karyawan internal**: kontrak, dokumen pegawai, absensi internal, **payrol internal** |
 | Operations | Operasional proyek | **Karyawan outsourcing**: monitoring penempatan, absensi outsourcing, **Saltab/payrol proyek**, approval klien, **Payment Request proyek** |
 | Finance | Keuangan | Eksekusi PR, invoice, pajak, aging/overdue, cash flow |
-| Management | Direksi | Dashboard ringkasan + **approver rantai PR** (configurable per tenant; contoh: COO) |
+| Management | Direksi | Overview ringkasan + **approver rantai PR** (configurable per tenant; contoh: COO) |
 | Karyawan (ESS) | Internal & outsourcing | Portal Saya: slip gaji, absensi/cuti, profil, **chat ter-scope proyek** |
 | Tenant Admin *(baru)* | Pemilik/admin perusahaan outsourcing pelanggan SaaS | Kelola lisensi aplikasi, user, billing tenant sendiri |
 
@@ -192,7 +192,7 @@ baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
 
 | Kapabilitas | Isi |
 |---|---|
-| Dashboard Umum | `GET /overview` (+ `/overview/personal` role-aware) — 9 widget lintas Cloud, lihat §8 |
+| Overview | `GET /overview` (+ `/overview/personal` role-aware) — 9 widget lintas Cloud, lihat §8 |
 | Chat Workspace | Channel/DM/thread ala Slack (§9) — gratis di semua paket, platform capability untuk engagement |
 | Pages | Notion-style docs (`/pages`) |
 
@@ -461,7 +461,7 @@ Detail bisnis penuh di §4. Highlight teknis:
   `dibatalkan`/`pengganti`), NPWP+nama+alamat lawan transaksi, DPP, kode
   transaksi, no seri unik per tenant per tahun, QR, payload TEXT tersimpan;
   simulasi lokal tanpa hit DJP kalau `efaktur_provider` kosong.
-- **Dashboard Umum 9 widget** lintas Cloud + `GET /overview/personal`
+- **Overview 9 widget** lintas Cloud + `GET /overview/personal`
   role-aware; **Mode Operasi per-tenant** (§4.1); klien `prospek→aktif`
   otomatis saat placement pertama (idempoten, audit).
 - **Mobile**: tab Chat baru di aplikasi Flutter (talent tetap desktop-only).
@@ -1060,27 +1060,10 @@ menyentuh tenant yang sudah aktif berbayar.
 7. **Perluas `PlatformTenants.tsx`** — visibilitas status pembayaran
    semua tenant untuk platform admin.
 
-**Strategi migrasi tenant existing** (keputusan 2026-09-05, dibahas
-terpisah dari desain teknis di atas sebelum eksekusi dimulai — jumlah
-tenant `commercial` aktif di Opsi F saat ini masih sangat sedikit,
-jadi migrasi dirancang sebagai **one-shot script**, bukan rollout
-bertahap per-cohort):
-
-8. **Auto-convert tier berdasar jumlah bundle aktif saat cutover** —
-   baca `TenantAppLicense` aktif tiap tenant `commercial`, hitung
-   jumlah bundle unik (dari `BUNDLE_REGISTRY`: Talent/Workforce/
-   Revenue/Govern), lalu petakan: **1 bundle → Tier 1** (Rp500rb),
-   **2 bundle → Tier 2** (Rp2jt), **3-4 bundle → Tier 3** (Rp5jt).
-   Tenant tanpa bundle aktif sama sekali saat cutover (baru
-   trial/belum bayar) **TIDAK di-auto-assign tier** — tetap
-   foundation-only sampai tenant memilih tier sendiri lewat halaman
-   pembayaran self-service (poin 6).
-9. **Tidak ada periode grandfathering harga** — cutover langsung ke
-   harga/akses Opsi G penuh di tanggal migrasi berjalan, tidak ada
-   masa transisi dengan harga/akses lama. Konsekuensi: setelah script
-   migrasi jalan, guard lisensi per-SKU (poin 2) langsung dihapus
-   untuk seluruh tenant `commercial` sekaligus, bukan per-tenant
-   bertahap.
+**Perlu strategi migrasi untuk tenant existing** yang sudah aktif di
+Opsi F (§4.1-4.3) — belum dirancang di sini, perlu dibahas terpisah
+sebelum eksekusi (apakah auto-convert ke tier terdekat, atau tenant
+existing pilih manual).
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
@@ -1424,7 +1407,7 @@ mengikuti struktur 4-Cloud sejak v3.0 (§4) — nama modul kode di
 `apps.py` beda dari label produk (lihat tabel §4.3).
 
 ```
-Login ──► Beranda (Dashboard Umum, 9 widget lintas Cloud yang dilisensikan)
+Login ──► Beranda (Overview, 9 widget lintas Cloud yang dilisensikan)
   🎯🧲 Talent Cloud    : Pipeline (tabel/papan), Klien + dokumen legalitas,
                         Job Orders (pipeline 13-tahap), Talent Pool (upload
                         CV → auto-profil + CV standar bertemplate, AI
