@@ -1,8 +1,8 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSignature, Send, ThumbsDown, ThumbsUp } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileSignature, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
-import { Badge, Button, Card } from "../components/ui";
+import { Badge, Button, Card, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
 
@@ -79,6 +79,25 @@ export default function Quotations() {
     queryKey: ["quotations"],
     queryFn: () => api.get<Quotation[]>("/quotations"),
   });
+  const [statusTab, setStatusTab] = useState("");
+  const filteredQuotations = useMemo(
+    () => (quotations ?? []).filter((q) => !statusTab || q.status === statusTab),
+    [quotations, statusTab]
+  );
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = quotations ?? [];
+    return [
+      { key: "", label: "Semua", count: all.length },
+      ...Object.keys(STATUS_LABEL).map((s) => ({
+        key: s,
+        label: STATUS_LABEL[s],
+        count: all.filter((q) => q.status === s).length,
+      })),
+    ];
+  }, [quotations]);
+  const pendingApprovalCount = (quotations ?? []).filter((q) => q.status === "pending_approval").length;
+  const sentCount = (quotations ?? []).filter((q) => q.status === "sent").length;
+  const acceptedCount = (quotations ?? []).filter((q) => q.status === "accepted_by_client").length;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["quotations"] });
 
@@ -202,6 +221,21 @@ export default function Quotations() {
         </Card>
       )}
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Quotation" value={(quotations ?? []).length} icon={FileSignature} iconTone="info" />
+        <KpiCard
+          label="Menunggu Approval"
+          value={pendingApprovalCount}
+          icon={Clock}
+          iconTone="warning"
+          badge={pendingApprovalCount > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Terkirim" value={sentCount} icon={Send} iconTone="accent" />
+        <KpiCard label="Diterima Klien" value={acceptedCount} icon={CheckCircle2} iconTone="success" />
+      </div>
+
+      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--hover)" }}>
@@ -213,7 +247,7 @@ export default function Quotations() {
             </tr>
           </thead>
           <tbody style={{ borderTop: "1px solid var(--border)" }}>
-            {(quotations ?? []).map((q) => (
+            {filteredQuotations.map((q) => (
               <tr
                 key={q.id}
                 onClick={() => setSelectedId(q.id === selectedId ? null : q.id)}
@@ -271,10 +305,10 @@ export default function Quotations() {
                 </td>
               </tr>
             ))}
-            {(quotations ?? []).length === 0 && (
+            {filteredQuotations.length === 0 && (
               <tr>
                 <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada quotation.
+                  {(quotations ?? []).length === 0 ? "Belum ada quotation." : "Tidak ada quotation untuk status ini."}
                 </td>
               </tr>
             )}

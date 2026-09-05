@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
-import { Ban } from "lucide-react";
+import { Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
 
@@ -49,10 +50,33 @@ export default function Blacklist() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: entries } = useQuery({
-    queryKey: ["blacklist-entries", tab],
-    queryFn: () => api.get<BlacklistEntry[]>(`/blacklist/entries?status=${tab}`),
+  // Tab/Pill filter (§1.5) butuh count tiap status sekaligus -- endpoint
+  // yang sama (`/blacklist/entries?status=`) sudah dipakai, cuma sekarang
+  // di-fetch untuk ketiga status secara paralel (bukan cuma tab aktif)
+  // supaya count-nya selalu akurat.
+  const pending = useQuery({
+    queryKey: ["blacklist-entries", "menunggu_review"],
+    queryFn: () => api.get<BlacklistEntry[]>("/blacklist/entries?status=menunggu_review"),
   });
+  const approved = useQuery({
+    queryKey: ["blacklist-entries", "disetujui"],
+    queryFn: () => api.get<BlacklistEntry[]>("/blacklist/entries?status=disetujui"),
+  });
+  const rejected = useQuery({
+    queryKey: ["blacklist-entries", "ditolak"],
+    queryFn: () => api.get<BlacklistEntry[]>("/blacklist/entries?status=ditolak"),
+  });
+  const byTab: Record<string, BlacklistEntry[] | undefined> = {
+    menunggu_review: pending.data,
+    disetujui: approved.data,
+    ditolak: rejected.data,
+  };
+  const entries = byTab[tab];
+  const statusTabs: PillTab[] = TABS.map((t) => ({
+    key: t.key,
+    label: t.label,
+    count: (byTab[t.key] ?? []).length,
+  }));
   const { data: candidates } = useQuery({
     queryKey: ["candidates-lite"],
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates"),
@@ -128,22 +152,19 @@ export default function Blacklist() {
         </form>
       )}
 
-      <div className="flex gap-2 border-b" style={{ borderColor: "var(--border)" }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`px-3 py-2 text-sm ${
-              tab === t.key
-                ? "border-b-2 font-medium text-[var(--text)]"
-                : "text-[var(--text-muted)]"
-            }`}
-            style={tab === t.key ? { borderColor: "var(--accent)" } : undefined}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard
+          label="Menunggu Review"
+          value={(pending.data ?? []).length}
+          icon={Clock}
+          iconTone="warning"
+          badge={(pending.data ?? []).length > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Blacklist Aktif" value={(approved.data ?? []).length} icon={CheckCircle2} iconTone="danger" />
+        <KpiCard label="Ditolak" value={(rejected.data ?? []).length} icon={XCircle} iconTone="neutral" />
       </div>
+
+      <PillTabs tabs={statusTabs} value={tab} onChange={setTab} />
 
       <div className="card space-y-0 p-0">
         {(entries ?? []).length === 0 && (

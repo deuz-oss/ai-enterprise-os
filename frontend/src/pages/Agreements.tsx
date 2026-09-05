@@ -1,8 +1,8 @@
-import { Fragment, FormEvent, useState } from "react";
+import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileCheck2, Send, ThumbsDown, ThumbsUp } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileCheck2, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
-import { Badge, Button, Card } from "../components/ui";
+import { Badge, Button, Card, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
 
@@ -81,6 +81,25 @@ export default function Agreements() {
     queryKey: ["agreements"],
     queryFn: () => api.get<Agreement[]>("/agreements"),
   });
+  const [statusTab, setStatusTab] = useState("");
+  const filteredAgreements = useMemo(
+    () => (agreements ?? []).filter((a) => !statusTab || a.status === statusTab),
+    [agreements, statusTab]
+  );
+  const statusTabs: PillTab[] = useMemo(() => {
+    const all = agreements ?? [];
+    return [
+      { key: "", label: "Semua", count: all.length },
+      ...Object.keys(STATUS_LABEL).map((s) => ({
+        key: s,
+        label: STATUS_LABEL[s],
+        count: all.filter((a) => a.status === s).length,
+      })),
+    ];
+  }, [agreements]);
+  const reviewCount = (agreements ?? []).filter((a) => a.status === "internal_review").length;
+  const awaitingSignCount = (agreements ?? []).filter((a) => a.status === "sent").length;
+  const signedCount = (agreements ?? []).filter((a) => a.status === "signed").length;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["agreements"] });
 
@@ -224,6 +243,21 @@ export default function Agreements() {
         </Card>
       )}
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Agreement" value={(agreements ?? []).length} icon={FileCheck2} iconTone="info" />
+        <KpiCard
+          label="Review Internal"
+          value={reviewCount}
+          icon={Clock}
+          iconTone="warning"
+          badge={reviewCount > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
+        />
+        <KpiCard label="Menunggu TTD" value={awaitingSignCount} icon={Send} iconTone="accent" />
+        <KpiCard label="Ditandatangani" value={signedCount} icon={CheckCircle2} iconTone="success" />
+      </div>
+
+      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--hover)" }}>
@@ -235,7 +269,7 @@ export default function Agreements() {
             </tr>
           </thead>
           <tbody style={{ borderTop: "1px solid var(--border)" }}>
-            {(agreements ?? []).map((a) => (
+            {filteredAgreements.map((a) => (
               <Fragment key={a.id}>
                 <tr
                   onClick={() => setSelectedId(a.id === selectedId ? null : a.id)}
@@ -320,10 +354,10 @@ export default function Agreements() {
                 )}
               </Fragment>
             ))}
-            {(agreements ?? []).length === 0 && (
+            {filteredAgreements.length === 0 && (
               <tr>
                 <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada agreement.
+                  {(agreements ?? []).length === 0 ? "Belum ada agreement." : "Tidak ada agreement untuk status ini."}
                 </td>
               </tr>
             )}
