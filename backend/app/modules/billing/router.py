@@ -48,6 +48,12 @@ class TopupIn(BaseModel):
     amount: float = Field(gt=0)
 
 
+class AutoReloadSettingsIn(BaseModel):
+    enabled: bool
+    threshold: float | None = Field(default=None, ge=0)
+    amount: float = Field(gt=0)
+
+
 @router.get("/balance-summary")
 def balance_summary(db: Session = Depends(get_db), user=Depends(get_current_user)):
     tenant_id: UUID = user.tenant_id
@@ -80,6 +86,27 @@ def topup(payload: TopupIn, db: Session = Depends(get_db), user=Depends(get_curr
         description="Top up saldo kredit",
     )
     return {"intent_id": str(intent.id), "checkout_url": checkout_url}
+
+
+@router.get("/auto-reload-settings")
+def auto_reload_settings(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Preferensi auto-reload SAJA -- lihat docstring
+    `service.get_auto_reload_settings` untuk batasan (belum ada eksekusi
+    charge otomatis di baliknya)."""
+    return service.get_auto_reload_settings(db, user.tenant_id)
+
+
+@router.put("/auto-reload-settings")
+def update_auto_reload_settings(
+    payload: AutoReloadSettingsIn, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.update_auto_reload_settings(
+        db,
+        user.tenant_id,
+        enabled=payload.enabled,
+        threshold=payload.threshold,
+        amount=payload.amount,
+    )
 
 
 @router.get("/transactions")

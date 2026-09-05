@@ -22,6 +22,12 @@ interface Transaction {
   created_at: string;
 }
 
+interface AutoReloadSettings {
+  enabled: boolean;
+  threshold: number | null;
+  amount: number;
+}
+
 const TIERS: { key: string; label: string; fee: number; blurb: string }[] = [
   { key: "tier1", label: "Tier 1", fee: 500_000, blurb: "Untuk tenant baru — pemakaian ringan." },
   { key: "tier2", label: "Tier 2", fee: 2_000_000, blurb: "Jatah bulanan lebih besar untuk tim aktif." },
@@ -36,6 +42,7 @@ export default function Billing() {
   const [tab, setTab] = useState<"tier" | "topup" | "history">(initialTab);
   const [topupAmount, setTopupAmount] = useState("100000");
   const [error, setError] = useState<string | null>(null);
+  const [autoReloadError, setAutoReloadError] = useState<string | null>(null);
 
   const balance = useQuery({
     queryKey: ["billing-balance"],
@@ -46,6 +53,11 @@ export default function Billing() {
     queryKey: ["billing-transactions"],
     queryFn: () => api.get<Transaction[]>("/billing/transactions"),
     enabled: tab === "history",
+  });
+  const autoReload = useQuery({
+    queryKey: ["billing-auto-reload"],
+    queryFn: () => api.get<AutoReloadSettings>("/billing/auto-reload-settings"),
+    enabled: tab === "topup",
   });
 
   const subscribe = useMutation({
@@ -63,6 +75,15 @@ export default function Billing() {
       if (res.checkout_url) window.location.href = res.checkout_url;
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Gagal membuat top up"),
+  });
+  const saveAutoReload = useMutation({
+    mutationFn: (body: { enabled: boolean; threshold: number | null; amount: number }) =>
+      api.put<AutoReloadSettings>("/billing/auto-reload-settings", body),
+    onSuccess: () => {
+      setAutoReloadError(null);
+      void autoReload.refetch();
+    },
+    onError: (e) => setAutoReloadError(e instanceof Error ? e.message : "Gagal menyimpan pengaturan"),
   });
 
   return (
@@ -171,9 +192,78 @@ export default function Billing() {
           >
             Top Up Sekarang
           </button>
+        </div>
+      )}
+
+      {tab === "topup" && (
+        <div className="card max-w-sm space-y-3">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            Pengaturan Auto-Reload
+          </h3>
+          <form
+            key={
+              autoReload.data
+                ? `${autoReload.data.enabled}-${autoReload.data.threshold}-${autoReload.data.amount}`
+                : "loading"
+            }
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              saveAutoReload.mutate({
+                enabled: form.get("enabled") === "on",
+                threshold: form.get("threshold") ? Number(form.get("threshold")) : null,
+                amount: Number(form.get("amount")) || 100_000,
+              });
+            }}
+            className="space-y-3"
+          >
+            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text)" }}>
+              <input
+                name="enabled"
+                type="checkbox"
+                defaultChecked={autoReload.data?.enabled ?? false}
+                className="h-4 w-4"
+              />
+              Aktifkan auto-reload saat saldo menipis
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                Ambang batas (Rp)
+                <input
+                  name="threshold"
+                  type="number"
+                  min={0}
+                  step={10_000}
+                  placeholder="mis. 200000"
+                  defaultValue={autoReload.data?.threshold ?? ""}
+                  className="input mt-1 w-full"
+                />
+              </label>
+              <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                Jumlah reload (Rp)
+                <input
+                  name="amount"
+                  type="number"
+                  min={10_000}
+                  step={10_000}
+                  defaultValue={autoReload.data?.amount ?? 100_000}
+                  className="input mt-1 w-full"
+                />
+              </label>
+            </div>
+            <button className="btn-secondary w-full" disabled={saveAutoReload.isPending}>
+              {saveAutoReload.isPending ? "Menyimpan..." : "Simpan Pengaturan"}
+            </button>
+            {saveAutoReload.isSuccess && !autoReloadError && (
+              <p className="text-xs text-emerald-600">Pengaturan tersimpan.</p>
+            )}
+            {autoReloadError && <p className="text-xs text-red-600">{autoReloadError}</p>}
+          </form>
           <CalloutBlock icon={Info} tone="info">
-            Auto-reload saldo (kartu/GoPay tersimpan) belum tersedia — top up saat ini manual
-            per transaksi. Pembayaran QRIS/Virtual Account juga hanya mendukung top up manual.
+            Ini baru menyimpan <b>pengaturan</b> -- eksekusi otomatisnya (charge kartu/GoPay
+            tersimpan) belum tersedia karena belum ada penyimpanan metode pembayaran berulang.
+            Sampai fitur itu aktif, top up tetap perlu dilakukan manual (di atas) walau auto-reload
+            diaktifkan.
           </CalloutBlock>
         </div>
       )}

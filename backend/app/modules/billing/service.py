@@ -92,6 +92,39 @@ def _get_or_create_credit_account(db: Session, tenant_id: UUID) -> TenantCreditA
     return account
 
 
+def get_auto_reload_settings(db: Session, tenant_id: UUID) -> dict:
+    """Preferensi auto-reload -- CUMA disimpan, TIDAK ada eksekusi charge
+    otomatis di belakangnya (belum ada penyimpanan token kartu/GoPay atau
+    integrasi Xendit recurring, lihat docstring `TenantCreditAccount`).
+    Konsumen (frontend) wajib menampilkan ini sebagai "pengaturan", bukan
+    fitur yang sudah aktif jalan.
+    """
+    account = _get_or_create_credit_account(db, tenant_id)
+    return {
+        "enabled": account.auto_reload_enabled,
+        "threshold": float(account.auto_reload_threshold)
+        if account.auto_reload_threshold is not None
+        else None,
+        "amount": float(account.auto_reload_amount),
+    }
+
+
+def update_auto_reload_settings(
+    db: Session,
+    tenant_id: UUID,
+    *,
+    enabled: bool,
+    threshold: float | None,
+    amount: float,
+) -> dict:
+    account = _get_or_create_credit_account(db, tenant_id)
+    account.auto_reload_enabled = enabled
+    account.auto_reload_threshold = threshold
+    account.auto_reload_amount = amount
+    db.commit()
+    return get_auto_reload_settings(db, tenant_id)
+
+
 def record_credit_transaction(
     db: Session,
     *,

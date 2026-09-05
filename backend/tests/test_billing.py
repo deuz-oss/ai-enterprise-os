@@ -447,6 +447,31 @@ def test_balance_summary_three_states(client):
     assert empty.json()["state"] == "empty"
 
 
+def test_auto_reload_settings_persist_but_do_not_execute(client):
+    """Preferensi auto-reload cuma disimpan (§0 -- tidak ada data/perilaku
+    fiktif): endpoint ini TIDAK memicu charge apa pun, cuma baca/tulis 3
+    kolom `TenantCreditAccount.auto_reload_*`."""
+    admin = _auth_header(client)
+    tenant_id = _default_tenant_id(client)
+    _set_commercial(client, tenant_id)
+    _seed_subscription_and_cycle(client, tenant_id, cycle_included=1_000_000)
+
+    default = client.get("/api/v1/billing/auto-reload-settings", headers=admin)
+    assert default.status_code == 200, default.text
+    assert default.json() == {"enabled": False, "threshold": None, "amount": 100_000}
+
+    updated = client.put(
+        "/api/v1/billing/auto-reload-settings",
+        headers=admin,
+        json={"enabled": True, "threshold": 200_000, "amount": 500_000},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json() == {"enabled": True, "threshold": 200_000, "amount": 500_000}
+
+    refetched = client.get("/api/v1/billing/auto-reload-settings", headers=admin)
+    assert refetched.json() == {"enabled": True, "threshold": 200_000, "amount": 500_000}
+
+
 def test_platform_billing_summary_and_subscription_override(client):
     """Milestone 8: panel platform-admin -- ringkasan tier+saldo+riwayat,
     dan override tier manual (bypass Xendit, untuk migrasi/support)."""
