@@ -105,7 +105,11 @@ function SaltabTable({ runId }: { runId: string | null }) {
       qc.invalidateQueries({ queryKey: ["slips", runId] });
     },
   });
-  const err = saveAmount.error as Error | null;
+  const sendPayslip = useMutation({
+    mutationFn: (employeeId: string) =>
+      api.post(`/payroll/runs/${runId}/employees/${employeeId}/send-payslip-email`),
+  });
+  const err = (saveAmount.error ?? sendPayslip.error) as Error | null;
 
   if (!runId)
     return (
@@ -121,16 +125,27 @@ function SaltabTable({ runId }: { runId: string | null }) {
         <div key={row.payslip_id} className="px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{row.employee_name}</p>
-            <button
-              onClick={() =>
-                downloadFile(`/payroll/runs/${runId}/bukti-potong/${row.employee_id}/pdf`)
-              }
-              className="cursor-pointer text-xs font-medium hover:opacity-80"
-              style={{ color: "var(--accent)" }}
-              title="Unduh Bukti Potong PPh 21 karyawan ini"
-            >
-              Bukti Potong PPh 21
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() =>
+                  downloadFile(`/payroll/runs/${runId}/bukti-potong/${row.employee_id}/pdf`)
+                }
+                className="cursor-pointer text-xs font-medium hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+                title="Unduh Bukti Potong PPh 21 karyawan ini"
+              >
+                Bukti Potong PPh 21
+              </button>
+              <button
+                onClick={() => sendPayslip.mutate(row.employee_id)}
+                disabled={sendPayslip.isPending}
+                className="cursor-pointer text-xs font-medium hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+                title="Kirim payslip ke email karyawan ini"
+              >
+                Kirim Payslip
+              </button>
+            </div>
           </div>
           <table className="mt-1 w-full text-xs">
             <tbody>
@@ -300,6 +315,12 @@ export default function Payroll() {
   const createPr = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<{ pr_number: string }>("/payment-requests", body),
+  });
+  const [showSendSaltab, setShowSendSaltab] = useState(false);
+  const sendSaltabToClient = useMutation({
+    mutationFn: ({ runId, recipientEmail }: { runId: string; recipientEmail: string }) =>
+      api.post(`/payroll/runs/${runId}/send-to-client`, { recipient_email: recipientEmail }),
+    onSuccess: () => setShowSendSaltab(false),
   });
 
   const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -611,7 +632,7 @@ export default function Payroll() {
             Saltab (Grid Komponen) — Run terpilih
           </h2>
           {selectedRunId && (
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 className="btn-secondary text-xs"
                 onClick={() => downloadFile(`/payroll/runs/${selectedRunId}/saltab/export`)}
@@ -631,9 +652,49 @@ export default function Payroll() {
               >
                 PDF
               </button>
+              <button
+                className="btn-secondary text-xs"
+                onClick={() => setShowSendSaltab(!showSendSaltab)}
+                title="Kirim Saltab manual ke email klien"
+              >
+                {showSendSaltab ? "Batal" : "Kirim ke Klien"}
+              </button>
             </div>
           )}
         </div>
+        {showSendSaltab && selectedRunId && (
+          <form
+            className="flex flex-wrap items-center gap-2 border-b p-4"
+            style={{ borderColor: "var(--border)" }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const recipientEmail = String(form.get("recipient_email") || "").trim();
+              if (recipientEmail) {
+                sendSaltabToClient.mutate({ runId: selectedRunId, recipientEmail });
+              }
+            }}
+          >
+            <input
+              name="recipient_email"
+              type="email"
+              required
+              placeholder="Email PIC klien"
+              className="input w-64"
+            />
+            <button className="btn text-xs" disabled={sendSaltabToClient.isPending}>
+              {sendSaltabToClient.isPending ? "Mengirim..." : "Kirim"}
+            </button>
+            {sendSaltabToClient.isSuccess && (
+              <span className="text-xs text-emerald-600">Terkirim.</span>
+            )}
+            {sendSaltabToClient.error && (
+              <span className="text-xs text-red-600">
+                {(sendSaltabToClient.error as Error).message}
+              </span>
+            )}
+          </form>
+        )}
         <SaltabTable runId={selectedRunId} />
       </div>
 

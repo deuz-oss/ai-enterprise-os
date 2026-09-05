@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Bot,
+  Briefcase,
+  Building2,
   Calendar,
   Clock,
   CircleDollarSign,
@@ -12,6 +14,7 @@ import {
   Gift,
   Magnet,
   MapPin,
+  Package,
   Phone,
   Users,
   User as UserIcon,
@@ -66,6 +69,7 @@ const PIPELINE_STEPS: { key: string; label: string }[] = [
   { key: "ojt", label: "OJT" },
   { key: "diusulkan", label: "Diusulkan" },
   { key: "disetujui_klien", label: "Disetujui" },
+  { key: "hired", label: "Hired" },
   { key: "onboarded", label: "Onboarded" },
 ];
 const TERMINAL_STATUS_LABEL: Record<string, string> = { gagal: "Gagal", dibatalkan: "Dibatalkan" };
@@ -186,6 +190,18 @@ export default function JobOrderDetail() {
           </PropertyRow>
           <PropertyRow icon={Gift} label="Benefit">
             {jo.benefits.length ? jo.benefits.join(", ") : "—"}
+          </PropertyRow>
+          <PropertyRow icon={Building2} label="Lokasi Kerja">
+            {jo.remote ? "Remote" : jo.office_address ?? "—"}
+          </PropertyRow>
+          <PropertyRow icon={Briefcase} label="Posisi / Level">
+            {[jo.position, jo.level, jo.industry].filter(Boolean).join(" · ") || "—"}
+          </PropertyRow>
+          <PropertyRow icon={Clock} label="Detail Kontrak">
+            {[jo.contract_detail, jo.experience_level].filter(Boolean).join(" · ") || "—"}
+          </PropertyRow>
+          <PropertyRow icon={Package} label="Paket Benefit">
+            {jo.package_detail ?? "—"}
           </PropertyRow>
         </PropertiesPanel>
       </Card>

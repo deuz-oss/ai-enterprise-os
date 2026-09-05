@@ -36,6 +36,14 @@ export interface JobOrder {
   working_hours_end: string | null;
   has_generated_document: boolean;
   generated_document_at: string | null;
+  remote: boolean;
+  office_address: string | null;
+  experience_level: string | null;
+  contract_detail: string | null;
+  industry: string | null;
+  position: string | null;
+  level: string | null;
+  package_detail: string | null;
 }
 
 interface ScreeningQuestion {
@@ -186,6 +194,14 @@ export default function JobOrders() {
       working_days: workingDays,
       working_hours_start: form.get("working_hours_start") || null,
       working_hours_end: form.get("working_hours_end") || null,
+      remote: form.get("remote") === "on",
+      office_address: form.get("office_address") || null,
+      experience_level: form.get("experience_level") || null,
+      contract_detail: form.get("contract_detail") || null,
+      industry: form.get("industry") || null,
+      position: form.get("position") || null,
+      level: form.get("level") || null,
+      package_detail: form.get("package_detail") || null,
     });
   }
 
@@ -319,6 +335,23 @@ export default function JobOrders() {
               defaultValue={extracted?.mandatory_criteria?.join("; ") ?? ""}
               className="input sm:col-span-3"
             />
+
+            {/* Fase 24 — field tambahan hasil audit MYOHRIS. */}
+            <div className="sm:col-span-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <label className="input flex items-center gap-2 text-sm">
+                <input name="remote" type="checkbox" className="h-4 w-4" />
+                Remote
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <input name="office_address" placeholder="Alamat kantor" className="input" />
+                <input name="experience_level" placeholder="Level pengalaman (mis. 1-3 tahun)" className="input" />
+                <input name="contract_detail" placeholder="Full Time / Part Time" className="input" />
+                <input name="industry" placeholder="Industri" className="input" />
+                <input name="position" placeholder="Posisi (klasifikasi)" className="input" />
+                <input name="level" placeholder="Level (mis. Junior/Senior)" className="input" />
+                <input name="package_detail" placeholder="Paket benefit" className="input sm:col-span-3" />
+              </div>
+            </div>
 
             {/* Fase 21 item 1 — field terstruktur benefit & jam kerja, bukan
                 lagi numpang di teks bebas description/requirements. */}

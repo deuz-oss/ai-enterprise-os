@@ -43,6 +43,22 @@ interface Placement {
   status: string;
 }
 
+interface CandidateExperience {
+  id: string;
+  company: string;
+  position: string;
+  start_date: string | null;
+  end_date: string | null;
+  description: string | null;
+}
+
+interface ActivityLogEntry {
+  id: string;
+  action: string;
+  detail: unknown;
+  created_at: string;
+}
+
 const STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
 
 // B1: pill palet hex (index.css).
@@ -74,6 +90,7 @@ export default function Candidates() {
   const [interviewCandidateId, setInterviewCandidateId] = useState<string | null>(null);
   const [onboardCandidateId, setOnboardCandidateId] = useState<string | null>(null);
   const [offeringCandidateId, setOfferingCandidateId] = useState<string | null>(null);
+  const [historyCandidateId, setHistoryCandidateId] = useState<string | null>(null);
   const cvRef = useRef<HTMLInputElement>(null);
   const [offset, setOffset] = useState(0);
   const [q, setQ] = useState("");
@@ -153,6 +170,33 @@ export default function Candidates() {
     },
   });
 
+  const experiences = useQuery({
+    queryKey: ["candidate-experiences", historyCandidateId],
+    queryFn: () =>
+      api.get<CandidateExperience[]>(`/recruitment/candidates/${historyCandidateId}/experiences`),
+    enabled: !!historyCandidateId,
+  });
+
+  const activityLog = useQuery({
+    queryKey: ["candidate-activity-log", historyCandidateId],
+    queryFn: () =>
+      api.get<ActivityLogEntry[]>(`/recruitment/candidates/${historyCandidateId}/activity-log`),
+    enabled: !!historyCandidateId,
+  });
+
+  const createExperience = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post(`/recruitment/candidates/${id}/experiences`, body),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["candidate-experiences", historyCandidateId] }),
+  });
+
+  const deleteExperience = useMutation({
+    mutationFn: (id: string) => api.delete(`/recruitment/candidates/experiences/${id}`),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["candidate-experiences", historyCandidateId] }),
+  });
+
   const interviews = useQuery({
     queryKey: ["interviews"],
     queryFn: () => api.get<Interview[]>("/recruitment/interviews"),
@@ -218,6 +262,30 @@ export default function Candidates() {
         education: form.get("education") || null,
         expected_salary: Number(form.get("expected_salary")) || null,
         source: form.get("source") || null,
+        referral_code: form.get("referral_code") || null,
+        skills: form.get("skills") || null,
+        skills_list: String(form.get("skills_list") || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        gender: form.get("gender") || null,
+        current_position: form.get("current_position") || null,
+        birthdate: form.get("birthdate") || null,
+        birthplace: form.get("birthplace") || null,
+        address: form.get("address") || null,
+        ktp_no: form.get("ktp_no") || null,
+        marital_status: form.get("marital_status") || null,
+        blood_type: form.get("blood_type") || null,
+        religion: form.get("religion") || null,
+        languages: String(form.get("languages") || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        description: form.get("description") || null,
+        position_pool: form.get("position_pool") || null,
+        job_level: form.get("job_level") || null,
+        school: form.get("school") || null,
+        education_level: form.get("education_level") || null,
       },
       cv: cvRef.current?.files?.[0] ?? null,
     });
@@ -259,7 +327,57 @@ export default function Candidates() {
           <input name="education" placeholder="Pendidikan terakhir" className="input" />
           <input name="expected_salary" type="number" placeholder="Ekspektasi gaji (Rp)" className="input" />
           <input name="source" placeholder="Sumber (referral/loker/dll)" className="input" />
+          <input name="referral_code" placeholder="Kode referral (jika ada)" className="input" />
+          <input name="skills" placeholder="Skill (teks bebas)" className="input" />
+          <input
+            name="skills_list"
+            placeholder="Skill terstruktur (pisah koma, mis. excel, forklift)"
+            className="input sm:col-span-2"
+          />
           <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" />
+
+          {/* Fase 24 — field tambahan hasil audit MYOHRIS, dikelompokkan
+              biar form utama tidak kebanjiran ~15 field sekaligus. */}
+          <details className="sm:col-span-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+            <summary className="cursor-pointer text-sm font-medium" style={{ color: "var(--text)" }}>
+              Detail Tambahan (opsional)
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <select name="gender" defaultValue="" className="input">
+                <option value="">Jenis kelamin</option>
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+              <input name="current_position" placeholder="Posisi saat ini" className="input" />
+              <input name="birthdate" type="date" placeholder="Tanggal lahir" className="input" />
+              <input name="birthplace" placeholder="Tempat lahir" className="input" />
+              <input name="ktp_no" placeholder="No. KTP" className="input" />
+              <select name="marital_status" defaultValue="" className="input">
+                <option value="">Status pernikahan</option>
+                <option value="tk">Belum menikah</option>
+                <option value="k">Menikah</option>
+              </select>
+              <select name="blood_type" defaultValue="" className="input">
+                <option value="">Golongan darah</option>
+                {["A", "B", "AB", "O"].map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+              <input name="religion" placeholder="Agama" className="input" />
+              <input name="school" placeholder="Sekolah/kampus" className="input" />
+              <input name="education_level" placeholder="Jenjang pendidikan" className="input" />
+              <input name="job_level" placeholder="Level posisi" className="input" />
+              <input name="position_pool" placeholder="Kategori posisi diminati" className="input" />
+              <input
+                name="languages"
+                placeholder="Bahasa (pisah koma, mis. Indonesia, Inggris)"
+                className="input"
+              />
+              <input name="address" placeholder="Alamat" className="input sm:col-span-3" />
+              <textarea name="description" placeholder="Bio singkat" className="input sm:col-span-3" rows={2} />
+            </div>
+          </details>
+
           <button
             type="submit"
             disabled={createCandidate.isPending}
@@ -418,9 +536,102 @@ export default function Candidates() {
                     >
                       Onboard
                     </button>
+                    <button
+                      className={`py-1 text-xs ${historyCandidateId === c.id ? "btn" : "btn-secondary"}`}
+                      onClick={() =>
+                        setHistoryCandidateId(historyCandidateId === c.id ? null : c.id)
+                      }
+                    >
+                      Riwayat
+                    </button>
                   </div>
                 </td>
               </tr>
+                {historyCandidateId === c.id && (
+                  <tr>
+                    <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <span className="text-sm font-semibold text-[var(--text)]">
+                            Riwayat Pengalaman
+                          </span>
+                          <form
+                            className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const form = new FormData(e.currentTarget);
+                              createExperience.mutate({
+                                id: c.id,
+                                body: {
+                                  company: form.get("company"),
+                                  position: form.get("position"),
+                                  start_date: form.get("start_date") || null,
+                                  end_date: form.get("end_date") || null,
+                                },
+                              });
+                              e.currentTarget.reset();
+                            }}
+                          >
+                            <input name="company" required placeholder="Perusahaan" className="input py-1 text-xs" />
+                            <input name="position" required placeholder="Posisi" className="input py-1 text-xs" />
+                            <input name="start_date" type="date" className="input py-1 text-xs" />
+                            <input name="end_date" type="date" className="input py-1 text-xs" />
+                            <button disabled={createExperience.isPending} className="btn-secondary py-1 text-xs sm:col-span-2">
+                              + Tambah Pengalaman
+                            </button>
+                          </form>
+                          <ul className="mt-2 space-y-1.5">
+                            {(experiences.data ?? []).map((exp) => (
+                              <li
+                                key={exp.id}
+                                className="flex items-center justify-between rounded p-2 text-xs"
+                                style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                              >
+                                <div>
+                                  <p className="font-medium" style={{ color: "var(--text)" }}>
+                                    {exp.position} · {exp.company}
+                                  </p>
+                                  <p style={{ color: "var(--text-muted)" }}>
+                                    {exp.start_date ?? "?"} s/d {exp.end_date ?? "sekarang"}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => deleteExperience.mutate(exp.id)}
+                                  className="text-rose-600 hover:text-rose-800"
+                                >
+                                  Hapus
+                                </button>
+                              </li>
+                            ))}
+                            {experiences.data?.length === 0 && (
+                              <li className="text-xs" style={{ color: "var(--text-muted)" }}>
+                                Belum ada riwayat pengalaman.
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-[var(--text)]">
+                            Aktivitas Terbaru
+                          </span>
+                          <ul className="mt-2 space-y-1">
+                            {(activityLog.data ?? []).map((a) => (
+                              <li key={a.id} className="text-xs" style={{ color: "var(--text-muted)" }}>
+                                <span style={{ color: "var(--text)" }}>{a.action}</span>{" "}
+                                · {new Date(a.created_at).toLocaleString("id-ID")}
+                              </li>
+                            ))}
+                            {activityLog.data?.length === 0 && (
+                              <li className="text-xs" style={{ color: "var(--text-muted)" }}>
+                                Belum ada aktivitas tercatat.
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {offeringCandidateId === c.id && (
                   <tr>
                     <td colSpan={7} className="bg-[var(--hover)]/60 px-4 py-4">

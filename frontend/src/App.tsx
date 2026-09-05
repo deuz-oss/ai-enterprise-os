@@ -29,6 +29,7 @@ import Payroll from "./pages/Payroll";
 import PlatformTenants from "./pages/PlatformTenants";
 import Quotations from "./pages/Quotations";
 import Rates from "./pages/Rates";
+import Referral from "./pages/Referral";
 import ResetPassword from "./pages/ResetPassword";
 import TalentCloudOverview from "./pages/TalentCloudOverview";
 import TalentPool from "./pages/TalentPool";
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/job-orders/:id" element={<JobOrderDetail />} />
             <Route path="/candidates" element={<Candidates />} />
+            <Route path="/referral" element={<Referral />} />
             <Route path="/talent-pool" element={<TalentPool />} />
             <Route path="/ai-interview" element={<AIInterview />} />
             <Route path="/blacklist" element={<Blacklist />} />

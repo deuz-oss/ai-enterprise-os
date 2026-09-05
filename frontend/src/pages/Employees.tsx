@@ -1,7 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
-import { Banknote, Calendar, IdCard, Phone, Tag, User } from "lucide-react";
+import { AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Phone, Tag, User } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 import { Pagination } from "../components/Pagination";
 
@@ -24,6 +24,16 @@ export interface EmployeeRow {
   bpjs_ketenagakerjaan_valid_until: string | null;
   bpjs_kesehatan_card_key: string | null;
   bpjs_ketenagakerjaan_card_key: string | null;
+  grade: string | null;
+  level: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_relation: string | null;
+  emergency_contact_phone: string | null;
+  citizen_address: Record<string, string>;
+  residential_address: Record<string, string>;
+  payroll_locked: boolean;
+  payroll_locked_at: string | null;
+  referral_code: string | null;
 }
 
 interface InsuranceRow {
@@ -98,6 +108,21 @@ interface ContractRow {
   sign_status: string;
   signed_at: string | null;
   file_name: string | null;
+  template_id: string | null;
+}
+
+interface ContractTemplateField {
+  key: string;
+  label: string;
+  type: string;
+  list_style?: string;
+}
+
+interface ContractTemplateT {
+  id: string;
+  name: string;
+  field_schema: ContractTemplateField[];
+  is_active: boolean;
 }
 
 interface ExpiringContract {
@@ -116,6 +141,39 @@ interface HrDoc {
   version: number;
   file_name: string;
   file_size: number;
+}
+
+interface WarningLetterRow {
+  id: string;
+  letter_type: string;
+  reason: string;
+  issued_at: string;
+  valid_until: string | null;
+  is_active: boolean;
+  file_name: string | null;
+}
+
+interface EmployeeMovementRow {
+  id: string;
+  movement_type: string;
+  previous_grade: string | null;
+  new_grade: string | null;
+  previous_level: string | null;
+  new_level: string | null;
+  previous_division: string | null;
+  new_division: string | null;
+  previous_position: string | null;
+  new_position: string | null;
+  effective_date: string;
+  notes: string | null;
+}
+
+interface VaccineRecordRow {
+  id: string;
+  vaccine_name: string;
+  dose_number: number;
+  vaccinated_at: string;
+  location: string | null;
 }
 
 interface IndexedContract {
@@ -164,7 +222,7 @@ const ESIGN_STATUS_BADGES: Record<string, string> = {
   gagal: "pill p-red",
 };
 
-const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "lainnya"];
+const DOC_TYPES = ["ktp", "npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan", "skck", "lainnya"];
 
 // BPJS + Asuransi — PRD v3.0 §5 Workforce Cloud.
 const BPJS_STATUS_BADGES: Record<string, string> = {
@@ -204,8 +262,20 @@ const TYPE_LABELS: Record<string, string> = {
   npwp: "NPWP",
   bpjs_kesehatan: "BPJS Kesehatan",
   bpjs_ketenagakerjaan: "BPJS Ketenagakerjaan",
+  skck: "SKCK",
   lainnya: "Lainnya",
 };
+
+// Fase 23 butir 3 — Surat Peringatan.
+const WARNING_LETTER_TYPES = ["sp1", "sp2", "sp3"];
+const WARNING_LETTER_LABELS: Record<string, string> = {
+  sp1: "SP 1",
+  sp2: "SP 2",
+  sp3: "SP 3",
+};
+
+// Fase 26 — Movements.
+const MOVEMENT_TYPES = ["mutasi", "promosi", "demosi", "lainnya"];
 
 export default function Employees() {
   const qc = useQueryClient();
@@ -222,6 +292,12 @@ export default function Employees() {
   const bpjsKesehatanFileRef = useRef<HTMLInputElement>(null);
   const bpjsKetenagakerjaanFileRef = useRef<HTMLInputElement>(null);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
+  const [showWarningLetterForm, setShowWarningLetterForm] = useState(false);
+  const warningLetterFileRef = useRef<HTMLInputElement>(null);
+  const [generateForContractId, setGenerateForContractId] = useState<string | null>(null);
+  const [generateTemplateId, setGenerateTemplateId] = useState("");
+  const [showMovementForm, setShowMovementForm] = useState(false);
+  const [showVaccineForm, setShowVaccineForm] = useState(false);
 
   const [offset, setOffset] = useState(0);
   const pageLimit = 50;
@@ -239,42 +315,57 @@ export default function Employees() {
     queryKey: ["employees-lookup"],
     queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
   });
+  // Fase 23: Ops sekarang boleh buka halaman ini (dibatasi ke karyawan
+  // eksternal, lihat backend), tapi endpoint HR administratif lain di bawah
+  // (kontrak, dokumen, BPJS, asuransi, cuti, TTE) masih 403 untuk role ini --
+  // guard query + JSX-nya lewat `isOpsOnly` biar tidak menampilkan section
+  // yang pasti gagal.
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ role: string }>("/auth/me"),
+  });
+  const isOpsOnly = me?.role === "operations";
   const { data: contracts } = useQuery({
     queryKey: ["employee-contracts", selectedId],
     queryFn: () => api.get<ContractRow[]>(`/employees/${selectedId}/contracts`),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !isOpsOnly,
   });
   const { data: documents } = useQuery({
     queryKey: ["employee-docs", selectedId],
     queryFn: () => api.get<HrDoc[]>(`/employees/${selectedId}/documents`),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !isOpsOnly,
   });
   const { data: expiring } = useQuery({
     queryKey: ["contracts-expiring"],
     queryFn: () =>
       api.get<ExpiringContract[]>("/employees/contracts/expiring?within_days=30"),
+    enabled: !isOpsOnly,
   });
   const { data: indexed } = useQuery({
     queryKey: ["ai-indexed"],
     queryFn: () => api.get<IndexedContract[]>("/ai/contracts/indexed"),
+    enabled: !isOpsOnly,
   });
   const { data: esignConfig } = useQuery({
     queryKey: ["esign-config"],
     queryFn: () => api.get<EsignConfig>("/esign/config"),
+    enabled: !isOpsOnly,
   });
   const { data: esignRequests } = useQuery({
     queryKey: ["esign-requests"],
     queryFn: () => api.get<EsignRequestRow[]>("/esign/requests"),
-    enabled: Boolean(esignConfig?.provider),
+    enabled: Boolean(esignConfig?.provider) && !isOpsOnly,
   });
   const { data: selfserviceAccounts } = useQuery({
     queryKey: ["selfservice-accounts"],
     queryFn: () =>
       api.get<SelfserviceAccount[]>("/employees/selfservice-accounts"),
+    enabled: !isOpsOnly,
   });
   const { data: leaveRequests } = useQuery({
     queryKey: ["leave-requests"],
     queryFn: () => api.get<LeaveRequestRow[]>("/employees/leave-requests"),
+    enabled: !isOpsOnly,
   });
   const { data: selectedBalance } = useQuery({
     queryKey: ["leave-balance", selectedId],
@@ -282,16 +373,37 @@ export default function Employees() {
       api.get<LeaveBalanceRow | null>(
         `/employees/${selectedId}/leave-balance?year=${new Date().getFullYear()}`
       ),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !isOpsOnly,
   });
   const { data: attendanceCorrections } = useQuery({
     queryKey: ["attendance-corrections"],
     queryFn: () => api.get<AttendanceCorrectionRow[]>("/employees/attendance-corrections"),
+    enabled: !isOpsOnly,
   });
   const { data: insurances } = useQuery({
     queryKey: ["employee-insurances", selectedId],
     queryFn: () => api.get<InsuranceRow[]>(`/employees/${selectedId}/insurances`),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedId) && !isOpsOnly,
+  });
+  const { data: warningLetters } = useQuery({
+    queryKey: ["employee-warning-letters", selectedId],
+    queryFn: () => api.get<WarningLetterRow[]>(`/employees/${selectedId}/warning-letters`),
+    enabled: Boolean(selectedId) && !isOpsOnly,
+  });
+  const { data: contractTemplates } = useQuery({
+    queryKey: ["contract-templates"],
+    queryFn: () => api.get<ContractTemplateT[]>("/employees/contract-templates"),
+    enabled: !isOpsOnly,
+  });
+  const { data: movements } = useQuery({
+    queryKey: ["employee-movements", selectedId],
+    queryFn: () => api.get<EmployeeMovementRow[]>(`/employees/${selectedId}/movements`),
+    enabled: Boolean(selectedId) && !isOpsOnly,
+  });
+  const { data: vaccineRecords } = useQuery({
+    queryKey: ["employee-vaccine-records", selectedId],
+    queryFn: () => api.get<VaccineRecordRow[]>(`/employees/${selectedId}/vaccine-records`),
+    enabled: Boolean(selectedId) && !isOpsOnly,
   });
 
   const invalidate = () => {
@@ -381,6 +493,62 @@ export default function Employees() {
       qc.invalidateQueries({ queryKey: ["employee-docs", selectedId] });
       if (fileRef.current) fileRef.current.value = "";
     },
+  });
+
+  const createWarningLetter = useMutation({
+    mutationFn: ({ id, formData }: { id: string; formData: FormData }) =>
+      api.upload(`/employees/${id}/warning-letters`, formData),
+    onSuccess: () => {
+      setShowWarningLetterForm(false);
+      qc.invalidateQueries({ queryKey: ["employee-warning-letters", selectedId] });
+    },
+  });
+
+  const generateContractDocument = useMutation({
+    mutationFn: ({
+      contractId,
+      templateId,
+      fieldValues,
+    }: {
+      contractId: string;
+      templateId: string;
+      fieldValues: Record<string, string | string[]>;
+    }) =>
+      api.post(`/employees/contracts/${contractId}/generate-document`, {
+        template_id: templateId,
+        field_values: fieldValues,
+      }),
+    onSuccess: () => {
+      setGenerateForContractId(null);
+      setGenerateTemplateId("");
+      qc.invalidateQueries({ queryKey: ["employee-contracts", selectedId] });
+    },
+  });
+
+  const createMovement = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post(`/employees/${id}/movements`, body),
+    onSuccess: () => {
+      setShowMovementForm(false);
+      qc.invalidateQueries({ queryKey: ["employee-movements", selectedId] });
+    },
+  });
+
+  const createVaccineRecord = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post(`/employees/${id}/vaccine-records`, body),
+    onSuccess: () => {
+      setShowVaccineForm(false);
+      qc.invalidateQueries({ queryKey: ["employee-vaccine-records", selectedId] });
+    },
+  });
+
+  const setPayrollLock = useMutation({
+    mutationFn: ({ id, locked }: { id: string; locked: boolean }) =>
+      locked
+        ? api.post(`/employees/${id}/payroll-lock`)
+        : api.delete(`/employees/${id}/payroll-lock`),
+    onSuccess: invalidate,
   });
 
   const indexContract = useMutation({
@@ -511,6 +679,7 @@ export default function Employees() {
         </CalloutBlock>
       )}
 
+      {!isOpsOnly && (
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Tanya Kontrak (AI)</h2>
@@ -568,8 +737,9 @@ export default function Employees() {
           </div>
         )}
       </div>
+      )}
 
-      {(attendanceCorrections ?? []).length > 0 && (
+      {!isOpsOnly && (attendanceCorrections ?? []).length > 0 && (
         <div className="card overflow-x-auto p-0">
           <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Koreksi Absensi (Portal)</h2>
@@ -825,6 +995,9 @@ export default function Employees() {
               <PropertyRow icon={IdCard} label="No. Induk">
                 <span className="font-mono text-xs">{selected.employee_no}</span>
               </PropertyRow>
+              <PropertyRow icon={Gift} label="Kode Referral">
+                <span className="font-mono text-xs">{selected.referral_code ?? "—"}</span>
+              </PropertyRow>
               <PropertyRow icon={Phone} label="Telepon">
                 {selected.phone ?? "—"}
               </PropertyRow>
@@ -839,37 +1012,179 @@ export default function Employees() {
                 >
                   {selected.status}
                 </span>
+                {!isOpsOnly && (
+                  <>
+                    {selected.payroll_locked && (
+                      <span className="badge pill p-yellow ml-2">Payroll Terkunci</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPayrollLock.mutate({
+                          id: selected.id,
+                          locked: !selected.payroll_locked,
+                        })
+                      }
+                      disabled={setPayrollLock.isPending}
+                      className="btn-secondary ml-2 py-0.5 text-xs"
+                    >
+                      {selected.payroll_locked ? "Buka Kunci Payroll" : "Kunci Payroll"}
+                    </button>
+                  </>
+                )}
               </PropertyRow>
               <PropertyRow icon={Banknote} label="Gaji Pokok">
-                <form
-                  className="flex items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = new FormData(e.currentTarget);
-                    updateBpjsStatus.mutate({
-                      id: selectedId,
-                      body: { base_salary: Number(form.get("base_salary")) || 0 },
-                    });
-                  }}
-                >
-                  <input
-                    name="base_salary"
-                    type="number"
-                    min="0"
-                    defaultValue={selected.base_salary}
-                    className="input w-auto py-1 text-xs"
-                  />
-                  <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
-                    Simpan
-                  </button>
+                {isOpsOnly ? (
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                     {formatRupiah(selected.base_salary)}/bulan
                   </span>
-                </form>
+                ) : (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      updateBpjsStatus.mutate({
+                        id: selectedId,
+                        body: { base_salary: Number(form.get("base_salary")) || 0 },
+                      });
+                    }}
+                  >
+                    <input
+                      name="base_salary"
+                      type="number"
+                      min="0"
+                      defaultValue={selected.base_salary}
+                      className="input w-auto py-1 text-xs"
+                    />
+                    <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
+                      Simpan
+                    </button>
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      {formatRupiah(selected.base_salary)}/bulan
+                    </span>
+                  </form>
+                )}
               </PropertyRow>
+              {!isOpsOnly && (
+                <>
+                  <PropertyRow icon={Award} label="Grade / Level">
+                    <form
+                      className="flex flex-wrap items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = new FormData(e.currentTarget);
+                        updateBpjsStatus.mutate({
+                          id: selectedId,
+                          body: {
+                            grade: form.get("grade") || null,
+                            level: form.get("level") || null,
+                          },
+                        });
+                      }}
+                    >
+                      <input
+                        name="grade"
+                        defaultValue={selected.grade ?? ""}
+                        placeholder="Grade"
+                        className="input w-auto py-1 text-xs"
+                      />
+                      <input
+                        name="level"
+                        defaultValue={selected.level ?? ""}
+                        placeholder="Level"
+                        className="input w-auto py-1 text-xs"
+                      />
+                      <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
+                        Simpan
+                      </button>
+                    </form>
+                  </PropertyRow>
+                  <PropertyRow icon={AlertTriangle} label="Kontak Darurat">
+                    <form
+                      className="flex flex-wrap items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = new FormData(e.currentTarget);
+                        updateBpjsStatus.mutate({
+                          id: selectedId,
+                          body: {
+                            emergency_contact_name: form.get("emergency_contact_name") || null,
+                            emergency_contact_relation:
+                              form.get("emergency_contact_relation") || null,
+                            emergency_contact_phone: form.get("emergency_contact_phone") || null,
+                          },
+                        });
+                      }}
+                    >
+                      <input
+                        name="emergency_contact_name"
+                        defaultValue={selected.emergency_contact_name ?? ""}
+                        placeholder="Nama"
+                        className="input w-auto py-1 text-xs"
+                      />
+                      <input
+                        name="emergency_contact_relation"
+                        defaultValue={selected.emergency_contact_relation ?? ""}
+                        placeholder="Hubungan"
+                        className="input w-auto py-1 text-xs"
+                      />
+                      <input
+                        name="emergency_contact_phone"
+                        defaultValue={selected.emergency_contact_phone ?? ""}
+                        placeholder="Telepon"
+                        className="input w-auto py-1 text-xs"
+                      />
+                      <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs">
+                        Simpan
+                      </button>
+                    </form>
+                  </PropertyRow>
+                  {(
+                    [
+                      { key: "citizen_address", label: "Alamat KTP", value: selected.citizen_address },
+                      { key: "residential_address", label: "Alamat Domisili", value: selected.residential_address },
+                    ] as const
+                  ).map((addr) => (
+                    <PropertyRow key={addr.key} icon={Home} label={addr.label}>
+                      <form
+                        className="grid grid-cols-2 gap-2 sm:grid-cols-5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const form = new FormData(e.currentTarget);
+                          updateBpjsStatus.mutate({
+                            id: selectedId,
+                            body: {
+                              [addr.key]: {
+                                province: form.get("province") || undefined,
+                                city: form.get("city") || undefined,
+                                district: form.get("district") || undefined,
+                                postal_code: form.get("postal_code") || undefined,
+                                detail: form.get("detail") || undefined,
+                              },
+                            },
+                          });
+                        }}
+                      >
+                        <input name="province" defaultValue={addr.value?.province ?? ""} placeholder="Provinsi" className="input py-1 text-xs" />
+                        <input name="city" defaultValue={addr.value?.city ?? ""} placeholder="Kota/Kab." className="input py-1 text-xs" />
+                        <input name="district" defaultValue={addr.value?.district ?? ""} placeholder="Kecamatan" className="input py-1 text-xs" />
+                        <input name="postal_code" defaultValue={addr.value?.postal_code ?? ""} placeholder="Kode Pos" className="input py-1 text-xs" />
+                        <input name="detail" defaultValue={addr.value?.detail ?? ""} placeholder="Detail" className="input py-1 text-xs" />
+                        <button disabled={updateBpjsStatus.isPending} className="btn-secondary py-1 text-xs sm:col-span-5">
+                          Simpan
+                        </button>
+                      </form>
+                    </PropertyRow>
+                  ))}
+                </>
+              )}
             </PropertiesPanel>
           </div>
         )}
+
+        {!isOpsOnly && (
+        <>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="card">
@@ -897,12 +1212,16 @@ export default function Employees() {
               {(contracts ?? []).map((c) => {
                 const req = (esignRequests ?? []).find((r) => r.contract_id === c.id);
                 const active = req && ["terkirim", "dilihat"].includes(req.status);
+                const selectedContractTemplate = contractTemplates?.find(
+                  (t) => t.id === generateTemplateId
+                );
                 return (
                   <li
                     key={c.id}
-                    className="flex items-center justify-between rounded-lg p-3 text-sm"
+                    className="rounded-lg p-3 text-sm"
                     style={{ backgroundColor: "var(--hover)" }}
                   >
+                  <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium" style={{ color: "var(--text)" }}>{c.contract_no}</p>
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -982,6 +1301,102 @@ export default function Employees() {
                         </span>
                       )}
                     </div>
+                  </div>
+
+                  {!c.template_id && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        className="text-xs font-medium hover:opacity-80"
+                        style={{ color: "var(--accent)" }}
+                        onClick={() => {
+                          setGenerateForContractId(
+                            generateForContractId === c.id ? null : c.id
+                          );
+                          setGenerateTemplateId("");
+                        }}
+                      >
+                        {generateForContractId === c.id ? "Tutup" : "Generate dari Template"}
+                      </button>
+                      {generateForContractId === c.id && (
+                        <div className="mt-2 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                          <select
+                            value={generateTemplateId}
+                            onChange={(e) => setGenerateTemplateId(e.target.value)}
+                            className="input w-auto py-1 text-xs"
+                          >
+                            <option value="">-- Pilih template --</option>
+                            {(contractTemplates ?? []).map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                          {contractTemplates?.length === 0 && (
+                            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                              Belum ada template kontrak aktif. Buat template dulu lewat API
+                              /employees/contract-templates.
+                            </p>
+                          )}
+                          {selectedContractTemplate && (
+                            <form
+                              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const form = new FormData(e.currentTarget);
+                                const fieldValues: Record<string, string | string[]> = {};
+                                for (const f of selectedContractTemplate.field_schema) {
+                                  if (f.type === "list") {
+                                    fieldValues[f.key] = String(form.get(f.key) ?? "")
+                                      .split(",")
+                                      .map((v) => v.trim())
+                                      .filter(Boolean);
+                                  } else {
+                                    fieldValues[f.key] = String(form.get(f.key) ?? "");
+                                  }
+                                }
+                                generateContractDocument.mutate({
+                                  contractId: c.id,
+                                  templateId: selectedContractTemplate.id,
+                                  fieldValues,
+                                });
+                              }}
+                            >
+                              {selectedContractTemplate.field_schema.map((f) => (
+                                <input
+                                  key={f.key}
+                                  name={f.key}
+                                  placeholder={
+                                    f.type === "list" ? `${f.label} (pisah koma)` : f.label
+                                  }
+                                  className="input py-1 text-xs"
+                                  type={
+                                    f.type === "number"
+                                      ? "number"
+                                      : f.type === "date"
+                                        ? "date"
+                                        : "text"
+                                  }
+                                />
+                              ))}
+                              <button
+                                type="submit"
+                                disabled={generateContractDocument.isPending}
+                                className="btn py-1 text-xs sm:col-span-2"
+                              >
+                                {generateContractDocument.isPending ? "Membuat..." : "Generate Dokumen"}
+                              </button>
+                              {generateContractDocument.error && (
+                                <p className="text-xs text-red-600 sm:col-span-2">
+                                  {(generateContractDocument.error as Error).message}
+                                </p>
+                              )}
+                            </form>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   </li>
                 );
               })}
@@ -1096,6 +1511,226 @@ export default function Employees() {
               )}
             </ul>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Surat Peringatan</h2>
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => setShowWarningLetterForm(!showWarningLetterForm)}
+            >
+              {showWarningLetterForm ? "Tutup" : "+ Tambah SP"}
+            </button>
+          </div>
+          {showWarningLetterForm && (
+            <form
+              className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedId) return;
+                const form = new FormData(e.currentTarget);
+                const file = warningLetterFileRef.current?.files?.[0];
+                if (file) form.set("file", file);
+                createWarningLetter.mutate({ id: selectedId, formData: form });
+              }}
+            >
+              <select name="letter_type" defaultValue="sp1" className="input">
+                {WARNING_LETTER_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {WARNING_LETTER_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <input name="issued_at" type="date" placeholder="Tanggal terbit" className="input" />
+              <input
+                name="reason"
+                required
+                placeholder="Alasan"
+                className="input sm:col-span-2"
+              />
+              <input ref={warningLetterFileRef} type="file" className="input sm:col-span-3" />
+              <button disabled={createWarningLetter.isPending} className="btn">
+                Simpan
+              </button>
+              {createWarningLetter.error && (
+                <p className="text-sm text-red-600 sm:col-span-4">
+                  {(createWarningLetter.error as Error).message}
+                </p>
+              )}
+            </form>
+          )}
+          <ul className="mt-3 space-y-2">
+            {(warningLetters ?? []).map((w) => (
+              <li
+                key={w.id}
+                className="flex items-center justify-between rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--hover)" }}
+              >
+                <div>
+                  <p className="font-medium" style={{ color: "var(--text)" }}>
+                    {WARNING_LETTER_LABELS[w.letter_type] ?? w.letter_type} — {w.reason}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    Terbit {w.issued_at} · berlaku s/d {w.valid_until ?? "-"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`badge ${w.is_active ? "pill p-yellow" : "pill p-gray"}`}>
+                    {w.is_active ? "berlaku" : "kedaluwarsa"}
+                  </span>
+                  {w.file_name && (
+                    <button
+                      onClick={async () => {
+                        const { url } = await api.get<{ url: string }>(
+                          `/employees/warning-letters/${w.id}/download-url`
+                        );
+                        window.open(url, "_blank");
+                      }}
+                      className="text-xs font-medium hover:opacity-80"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      Unduh
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+            {warningLetters?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada SP.</li>
+            )}
+          </ul>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Riwayat Mutasi</h2>
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => setShowMovementForm(!showMovementForm)}
+            >
+              {showMovementForm ? "Tutup" : "+ Tambah Mutasi"}
+            </button>
+          </div>
+          {showMovementForm && (
+            <form
+              className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedId) return;
+                const form = new FormData(e.currentTarget);
+                createMovement.mutate({
+                  id: selectedId,
+                  body: {
+                    movement_type: form.get("movement_type"),
+                    previous_grade: form.get("previous_grade") || null,
+                    new_grade: form.get("new_grade") || null,
+                    previous_level: form.get("previous_level") || null,
+                    new_level: form.get("new_level") || null,
+                    previous_division: form.get("previous_division") || null,
+                    new_division: form.get("new_division") || null,
+                    previous_position: form.get("previous_position") || null,
+                    new_position: form.get("new_position") || null,
+                    effective_date: form.get("effective_date"),
+                    notes: form.get("notes") || null,
+                  },
+                });
+              }}
+            >
+              <select name="movement_type" defaultValue="mutasi" className="input">
+                {MOVEMENT_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <input name="effective_date" type="date" required className="input" />
+              <input name="notes" placeholder="Catatan" className="input" />
+              <input name="previous_grade" placeholder="Grade lama" className="input" />
+              <input name="new_grade" placeholder="Grade baru" className="input" />
+              <input name="previous_level" placeholder="Level lama" className="input" />
+              <input name="new_level" placeholder="Level baru" className="input" />
+              <input name="previous_division" placeholder="Divisi lama" className="input" />
+              <input name="new_division" placeholder="Divisi baru" className="input" />
+              <input name="previous_position" placeholder="Posisi lama" className="input" />
+              <input name="new_position" placeholder="Posisi baru" className="input" />
+              <button disabled={createMovement.isPending} className="btn sm:col-span-3">
+                Simpan
+              </button>
+            </form>
+          )}
+          <ul className="mt-3 space-y-2">
+            {(movements ?? []).map((m) => (
+              <li key={m.id} className="rounded-lg p-3 text-sm" style={{ backgroundColor: "var(--hover)" }}>
+                <p className="font-medium capitalize" style={{ color: "var(--text)" }}>
+                  {m.movement_type} · {m.effective_date}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {[
+                    m.previous_grade || m.new_grade ? `Grade: ${m.previous_grade ?? "-"} → ${m.new_grade ?? "-"}` : null,
+                    m.previous_level || m.new_level ? `Level: ${m.previous_level ?? "-"} → ${m.new_level ?? "-"}` : null,
+                    m.previous_division || m.new_division ? `Divisi: ${m.previous_division ?? "-"} → ${m.new_division ?? "-"}` : null,
+                    m.previous_position || m.new_position ? `Posisi: ${m.previous_position ?? "-"} → ${m.new_position ?? "-"}` : null,
+                  ].filter(Boolean).join(" · ") || m.notes || "-"}
+                </p>
+              </li>
+            ))}
+            {movements?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada riwayat mutasi.</li>
+            )}
+          </ul>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Vaksinasi</h2>
+            <button
+              className="btn-secondary text-xs"
+              onClick={() => setShowVaccineForm(!showVaccineForm)}
+            >
+              {showVaccineForm ? "Tutup" : "+ Tambah Vaksinasi"}
+            </button>
+          </div>
+          {showVaccineForm && (
+            <form
+              className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedId) return;
+                const form = new FormData(e.currentTarget);
+                createVaccineRecord.mutate({
+                  id: selectedId,
+                  body: {
+                    vaccine_name: form.get("vaccine_name"),
+                    dose_number: Number(form.get("dose_number")) || 1,
+                    vaccinated_at: form.get("vaccinated_at"),
+                    location: form.get("location") || null,
+                  },
+                });
+              }}
+            >
+              <input name="vaccine_name" required placeholder="Nama vaksin" className="input" />
+              <input name="dose_number" type="number" min={1} defaultValue={1} placeholder="Dosis ke-" className="input" />
+              <input name="vaccinated_at" type="date" required className="input" />
+              <input name="location" placeholder="Lokasi" className="input" />
+              <button disabled={createVaccineRecord.isPending} className="btn sm:col-span-4">
+                Simpan
+              </button>
+            </form>
+          )}
+          <ul className="mt-3 space-y-2">
+            {(vaccineRecords ?? []).map((v) => (
+              <li key={v.id} className="rounded-lg p-3 text-sm" style={{ backgroundColor: "var(--hover)" }}>
+                <p className="font-medium" style={{ color: "var(--text)" }}>
+                  {v.vaccine_name} · dosis {v.dose_number}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {v.vaccinated_at} {v.location ? `· ${v.location}` : ""}
+                </p>
+              </li>
+            ))}
+            {vaccineRecords?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada catatan vaksinasi.</li>
+            )}
+          </ul>
         </div>
 
         <div className="card">
@@ -1457,6 +2092,8 @@ export default function Employees() {
             </p>
           )}
         </div>
+        </>
+        )}
         </>
       )}
     </div>
