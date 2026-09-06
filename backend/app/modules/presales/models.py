@@ -239,6 +239,10 @@ class Lead(TenantMixin, Base):
         return self.company.industry if self.company else None
 
     @property
+    def company_source(self) -> str:
+        return self.company.source if self.company else "manual"
+
+    @property
     def primary_contact(self) -> "Contact | None":
         if not self.company or not self.company.contacts:
             return None

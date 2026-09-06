@@ -683,7 +683,7 @@ browser + server ber-GPU tetap menunggu (catatan "Yang BELUM
 divalidasi" di atas masih berlaku apa adanya — bukan berarti fitur
 belum jalan, cuma validasi kualitas-di-kondisi-nyata yang tertunda).
 
-### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign — ✅ Item 1-4 Selesai (2026-09-04), Item 5 belum dimulai
+### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign — ✅ Selesai (2026-09-07, Item 5 direvisi)
 
 Menutup gap di §2 baris 8 — memperdalam tahap presales sebelum `Lead`
 existing (§Fase 15 dst. asumsikan lead sudah ada). Urutan pembangunan
@@ -720,21 +720,27 @@ bukan cuma kemudahan teknis:
    (offering kandidat). Tambah kolom `agreement_id` (nullable, exclusive
    terhadap 2 lainnya) — reuse penuh adapter, webhook, dan status
    tracking yang sudah ada, tidak perlu dibangun ulang.
-5. ⬜ *(belum dimulai)* **Lead sourcing via scraping (LinkedIn)** — sumber pertama yang
-   ditarget adalah LinkedIn (keputusan eksplisit, risiko tertinggi dari
-   opsi yang dipertimbangkan — dibanding scraping website resmi
-   perusahaan atau direktori bisnis publik yang lebih aman tapi datanya
-   lebih terbatas). Dikerjakan PALING TERAKHIR karena dua alasan
-   independen dari kesiapan teknis fitur lain: (a) **risiko teknis**
-   — LinkedIn aktif mendeteksi & memblokir scraping otomatis (rate
-   limit, CAPTCHA, ban akun/IP), perlu strategi headless browser +
-   delay manusiawi + akun scraping terpisah dari akun bisnis; (b)
-   **risiko hukum** — kontak individu (nama+jabatan+email/telp
-   spesifik orang) adalah data pribadi di bawah UU PDP, perlu
-   konsultasi tim legal SPC untuk dasar hukum pemrosesan sebelum
-   go-live, bukan asumsi "legitimate interest" otomatis aman. Butir
-   1-4 tidak bergantung ke ini — bisa dipakai dengan data lead manual
-   sambil scraper dan kepastian hukumnya disiapkan paralel.
+5. ✅ *(direvisi 2026-09-07)* **Lead sourcing via impor CSV massal**
+   (bukan scraping LinkedIn) — rencana awal butir ini adalah scraping
+   LinkedIn, tapi itu **tidak dikerjakan**: risiko hukumnya (kontak
+   individu adalah data pribadi di bawah UU PDP, butuh dasar hukum
+   pemrosesan yang belum dikonsultasikan ke tim legal SPC) dan risiko
+   ToS-nya (LinkedIn eksplisit melarang scraping) dinilai terlalu
+   tinggi untuk dibangun tanpa sign-off legal lebih dulu. Sebagai
+   gantinya: `POST /companies/import` (multipart CSV, delimiter `;`
+   atau `,` auto-detect, pola sama seperti `attendance.import_csv`) —
+   staf impor lead massal dari sumber yang sudah legal/manual (hasil
+   pameran dagang, direktori bisnis publik, daftar prospek yang sudah
+   dikumpulkan sendiri). Company dicocokkan case-insensitive by nama
+   (dedup), baris gagal dilaporkan tanpa menghentikan baris lain.
+   `Company.source` (kolom yang sudah ada sejak butir 1, sebelumnya
+   selalu `"manual"`) sekarang terisi `"csv_import"` untuk company baru
+   dari jalur ini, dan `LeadOut.company_source` mengeksposnya ke UI
+   (badge "Impor CSV" vs "Manual" di tabel Pipeline). Opsi scraping
+   (LinkedIn atau sumber lain yang lebih aman seperti website resmi
+   perusahaan) tetap bisa ditambah belakangan sebagai sumber impor
+   tambahan kalau tim legal SPC sudah memberi dasar hukum yang jelas —
+   tidak butuh perubahan skema, cukup `Company.source` value baru.
 
 **Model bisnis (diputuskan)**: Quotation generator dan Agreement
 generator **gratis**, dibundel ke Talent Cloud (§4.3) — cost Aeos untuk

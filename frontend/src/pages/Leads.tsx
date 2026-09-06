@@ -1,6 +1,6 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatRupiah } from "../api/client";
+import { api, downloadFile, formatRupiah } from "../api/client";
 import {
   Briefcase,
   Building2,
@@ -14,12 +14,14 @@ import {
   Users,
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { KpiCard } from "../components/ui";
+import { Badge, KpiCard } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface Lead {
   id: string;
+  company_id: string;
   company_name: string;
+  company_source: string;
   industry: string | null;
   contact_name: string | null;
   contact_email: string | null;
@@ -31,6 +33,26 @@ export interface Lead {
   owner_name: string | null;
   created_at: string;
 }
+
+interface LeadImportRowFailure {
+  row: number;
+  company_name: string;
+  error: string;
+}
+
+interface LeadImportResult {
+  companies_created: number;
+  leads_created: number;
+  failed: LeadImportRowFailure[];
+}
+
+// Fase 20 item 5 (revisi) -- alternatif aman dari scraping LinkedIn: impor
+// CSV manual/legal, bukan scraping otomatis. Label sumber ditampilkan di
+// tabel supaya staf tahu asal tiap lead.
+const SOURCE_LABEL: Record<string, string> = {
+  manual: "Manual",
+  csv_import: "Impor CSV",
+};
 
 interface UserOption {
   id: string;
@@ -83,6 +105,9 @@ function industryBadgeClass(industry: string): string {
 export default function Leads() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importResult, setImportResult] = useState<LeadImportResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [offset, setOffset] = useState(0);
@@ -145,6 +170,15 @@ export default function Leads() {
     mutationFn: (body: Record<string, unknown>) => api.post("/leads", body),
     onSuccess: () => {
       setShowForm(false);
+      invalidate();
+    },
+  });
+
+  const importLeads = useMutation({
+    mutationFn: (formData: FormData) => api.upload<LeadImportResult>("/companies/import", formData),
+    onSuccess: (data) => {
+      setImportResult(data);
+      if (importFileRef.current) importFileRef.current.value = "";
       invalidate();
     },
   });
@@ -230,11 +264,76 @@ export default function Leads() {
               </button>
             ))}
           </div>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setShowImport(!showImport);
+              setImportResult(null);
+            }}
+          >
+            {showImport ? "Tutup" : "Impor CSV"}
+          </button>
           <button className="btn" onClick={() => setShowForm(!showForm)}>
             {showForm ? "Tutup" : "+ Lead Baru"}
           </button>
         </div>
       </div>
+
+      {showImport && (
+        <div className="card space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Impor lead massal dari CSV (mis. hasil pameran dagang atau daftar prospek yang
+              sudah dikumpulkan manual/legal) — bukan scraping otomatis.
+            </p>
+            <button
+              type="button"
+              className="text-xs font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+              onClick={() => downloadFile("/companies/import/template")}
+            >
+              Unduh Template CSV
+            </button>
+          </div>
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const file = importFileRef.current?.files?.[0];
+              if (!file) return;
+              const fd = new FormData();
+              fd.append("file", file);
+              importLeads.mutate(fd);
+            }}
+          >
+            <input ref={importFileRef} type="file" accept=".csv" required className="input w-auto" />
+            <button className="btn-secondary" disabled={importLeads.isPending}>
+              {importLeads.isPending ? "Mengimpor..." : "Impor"}
+            </button>
+          </form>
+          {importLeads.error && (
+            <p className="text-sm text-red-600">{(importLeads.error as Error).message}</p>
+          )}
+          {importResult && (
+            <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "var(--hover)" }}>
+              <p style={{ color: "var(--text)" }}>
+                {importResult.leads_created} lead dibuat ({importResult.companies_created} perusahaan
+                baru).
+                {importResult.failed.length > 0 && ` ${importResult.failed.length} baris gagal.`}
+              </p>
+              {importResult.failed.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {importResult.failed.map((f) => (
+                    <li key={f.row}>
+                      Baris {f.row} ({f.company_name}): {f.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -311,6 +410,7 @@ export default function Leads() {
           >
             <tr>
               <th className="th">Perusahaan</th>
+              <th className="th">Sumber</th>
               <th className="th">PIC</th>
               <th className="th">Est. TKI</th>
               <th className="th">Nilai Potensi</th>
@@ -331,6 +431,11 @@ export default function Leads() {
                 }}
               >
                 <td className="td font-medium">{lead.company_name}</td>
+                <td className="td">
+                  <Badge tone={lead.company_source === "csv_import" ? "info" : "neutral"}>
+                    {SOURCE_LABEL[lead.company_source] ?? lead.company_source}
+                  </Badge>
+                </td>
                 <td className="td">{lead.contact_name ?? "-"}</td>
                 <td className="td">{lead.estimated_headcount ?? "-"}</td>
                 <td className="td">{formatRupiah(lead.estimated_value)}</td>
@@ -355,7 +460,7 @@ export default function Leads() {
             ))}
             {leadsTable?.length === 0 && (
               <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada lead.
                 </td>
               </tr>

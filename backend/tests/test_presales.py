@@ -102,6 +102,78 @@ def test_create_lead_without_company_id_or_name_rejected(client):
     assert resp.status_code == 422
 
 
+def test_lead_source_default_manual(client):
+    """Fase 20 item 5 (revisi) -- `company_source` di `LeadOut` default
+    "manual" untuk lead yang dibuat lewat form biasa (bukan impor CSV)."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Manual Saja")
+    assert lead["company_source"] == "manual"
+
+
+def test_leads_import_template_csv(client):
+    headers = _auth_header(client)
+    resp = client.get("/api/v1/companies/import/template", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert "company_name" in resp.text
+    assert "PT Contoh Sejahtera" in resp.text
+
+
+def test_import_leads_csv_creates_companies_and_leads(client):
+    """Alternatif aman dari scraping LinkedIn (PRD Fase 20 butir 5) -- impor
+    CSV massal. Baris kedua sengaja pakai casing beda ("pt impor jaya" vs
+    "PT Impor Jaya") untuk pastikan dedup company case-insensitive."""
+    headers = _auth_header(client)
+    csv_text = (
+        "company_name;industry;size;contact_name;department;email;phone;"
+        "estimated_headcount;estimated_value;notes\n"
+        "PT Impor Jaya;Manufaktur;50-100;Sinta;HR;sinta@imporjaya.co.id;"
+        "081200000001;60;100000000;Prospek pameran dagang\n"
+        "pt impor jaya;Manufaktur;50-100;Dedi;Procurement;dedi@imporjaya.co.id;"
+        "081200000002;;;Kontak kedua perusahaan yang sama\n"
+    )
+    resp = client.post(
+        "/api/v1/companies/import",
+        headers=headers,
+        files={"file": ("leads.csv", csv_text.encode(), "text/csv")},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["companies_created"] == 1
+    assert body["leads_created"] == 2
+    assert body["failed"] == []
+
+    leads = client.get("/api/v1/leads", headers=headers).json()
+    imported = [lead for lead in leads if lead["company_name"].lower() == "pt impor jaya"]
+    assert len(imported) == 2
+    assert all(lead["company_source"] == "csv_import" for lead in imported)
+    assert imported[0]["company_id"] == imported[1]["company_id"]
+
+    company = client.get(f"/api/v1/companies/{imported[0]['company_id']}", headers=headers).json()
+    assert company["source"] == "csv_import"
+    assert len(company["contacts"]) == 2
+    primary = [c for c in company["contacts"] if c["is_primary"]]
+    assert len(primary) == 1
+    assert primary[0]["name"] == "Sinta"
+
+
+def test_import_leads_csv_reports_row_failures(client):
+    headers = _auth_header(client)
+    csv_text = "company_name;industry\n" "PT Baris Sukses;Jasa\n" ";Tanpa Nama Perusahaan\n"
+    resp = client.post(
+        "/api/v1/companies/import",
+        headers=headers,
+        files={"file": ("leads.csv", csv_text.encode(), "text/csv")},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["companies_created"] == 1
+    assert body["leads_created"] == 1
+    assert len(body["failed"]) == 1
+    assert body["failed"][0]["row"] == 3
+    assert "kosong" in body["failed"][0]["error"]
+
+
 def test_contact_crud(client):
     headers = _auth_header(client)
     company = client.post("/api/v1/companies", headers=headers, json={"name": "PT Kontak"}).json()

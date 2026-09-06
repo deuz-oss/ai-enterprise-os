@@ -1,8 +1,11 @@
+import csv
+import io
 import json
+import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -33,11 +36,15 @@ from app.modules.presales.schemas import (
     FunnelStage,
     FunnelStats,
     LeadCreate,
+    LeadImportResultOut,
+    LeadImportRowFailure,
     LeadUpdate,
     QuotationCreate,
     QuotationTemplateCreate,
     QuotationTemplateUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _get(db: Session, lead_id: str) -> Lead:
@@ -65,7 +72,13 @@ def _get_contact(db: Session, contact_id: str) -> Contact:
 
 
 def create_company(db: Session, payload: CompanyCreate) -> Company:
-    company = Company(id=uuid4(), name=payload.name, industry=payload.industry, size=payload.size)
+    company = Company(
+        id=uuid4(),
+        name=payload.name,
+        industry=payload.industry,
+        size=payload.size,
+        source=payload.source,
+    )
     db.add(company)
     db.commit()
     db.refresh(company)
@@ -699,6 +712,133 @@ def create_lead(db: Session, payload: LeadCreate) -> Lead:
     db.commit()
     db.refresh(lead)
     return lead
+
+
+LEAD_IMPORT_HEADER = [
+    "company_name",
+    "industry",
+    "size",
+    "contact_name",
+    "department",
+    "email",
+    "phone",
+    "estimated_headcount",
+    "estimated_value",
+    "notes",
+]
+
+
+def leads_import_template_csv() -> str:
+    """Fase 20 item 5 (revisi) -- alternatif aman dari scraping LinkedIn:
+    impor massal lead dari CSV (mis. hasil ekspor pameran dagang, direktori
+    bisnis publik, atau daftar prospek yang sudah dikumpulkan manual/legal)."""
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(LEAD_IMPORT_HEADER)
+    writer.writerow(
+        [
+            "PT Contoh Sejahtera",
+            "Manufaktur",
+            "50-100",
+            "Budi Setiawan",
+            "HR",
+            "budi@contohsejahtera.co.id",
+            "081234567890",
+            80,
+            150_000_000,
+            "Tertarik outsourcing security",
+        ]
+    )
+    return buffer.getvalue()
+
+
+async def import_leads_csv(db: Session, file: UploadFile) -> LeadImportResultOut:
+    """Impor CSV lead massal; baris gagal dilaporkan tanpa menghentikan
+    lainnya (pola sama seperti `attendance.service.import_csv`). Company
+    dicocokkan case-insensitive by nama -- kalau belum ada, dibuat baru
+    dengan `source="csv_import"` supaya asal lead tetap terlacak (beda dari
+    lead yang diketik manual satu-satu lewat form, `source="manual"`)."""
+    raw = await file.read()
+    text = raw.decode("utf-8-sig")
+    sample = text.splitlines()[0] if text.splitlines() else ""
+    delimiter = ";" if sample.count(";") >= sample.count(",") else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+    result = LeadImportResultOut(companies_created=0, leads_created=0, failed=[])
+    companies_cache: dict[str, Company] = {}
+
+    for idx, row in enumerate(reader, start=2):  # baris 1 = header
+        company_name = (row.get("company_name") or "").strip()
+        try:
+            if not company_name:
+                raise ValueError("company_name kosong")
+
+            cache_key = company_name.lower()
+            company = companies_cache.get(cache_key)
+            company_is_new = False
+            if company is None:
+                company = db.execute(
+                    select(Company).where(func.lower(Company.name) == cache_key)
+                ).scalar_one_or_none()
+            if company is None:
+                company = Company(
+                    id=uuid4(),
+                    name=company_name,
+                    industry=(row.get("industry") or "").strip() or None,
+                    size=(row.get("size") or "").strip() or None,
+                    source="csv_import",
+                )
+                db.add(company)
+                result.companies_created += 1
+                company_is_new = True
+            companies_cache[cache_key] = company
+
+            contact_name = (row.get("contact_name") or "").strip()
+            email = (row.get("email") or "").strip() or None
+            phone = (row.get("phone") or "").strip() or None
+            if contact_name or email or phone:
+                db.add(
+                    Contact(
+                        id=uuid4(),
+                        company_id=company.id,
+                        name=contact_name or company_name,
+                        department=(row.get("department") or "").strip() or None,
+                        email=email,
+                        phone=phone,
+                        is_primary=company_is_new,
+                    )
+                )
+
+            headcount_raw = (row.get("estimated_headcount") or "").strip()
+            value_raw = (row.get("estimated_value") or "").strip()
+            lead = Lead(
+                id=uuid4(),
+                company_id=company.id,
+                estimated_headcount=int(headcount_raw) if headcount_raw else None,
+                estimated_value=float(value_raw) if value_raw else None,
+                notes=(row.get("notes") or "").strip() or None,
+            )
+            db.add(lead)
+            result.leads_created += 1
+        except (ValueError, TypeError) as exc:
+            result.failed.append(
+                LeadImportRowFailure(row=idx, company_name=company_name or "-", error=str(exc))
+            )
+
+    db.commit()
+    if result.failed:
+        logger.warning("Impor lead: %d baris gagal", len(result.failed))
+    audit.log_event(
+        db,
+        action="lead.imported",
+        entity_type="lead",
+        detail={
+            "companies_created": result.companies_created,
+            "leads_created": result.leads_created,
+            "failed_rows": len(result.failed),
+        },
+    )
+    return result
 
 
 def list_leads(
