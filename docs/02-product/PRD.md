@@ -669,12 +669,17 @@ semua butuh server ber-GPU + pengujian manusia sungguhan. **Kualitas
 suara TTS**, sebaliknya, sudah bisa dinilai manusia sekarang (tidak
 butuh GPU untuk didengar) — OpenAI dipilih persis karena ini.
 
-**Status**: kode ditulis, wiring end-to-end TERBUKTI benar via Docker
-sungguhan DUA KALI (sebelum & sesudah ganti TTS) — token mint, agent
-dispatch, room join, sesi WebRTC nyata, dan sintesis TTS semuanya
-dikonfirmasi jalan dengan stack final (STT self-hosted + LLM & TTS
-OpenAI). Latensi/turn-taking real menunggu akses server ber-GPU + uji
-manusia. Belum di-commit (menunggu instruksi eksplisit).
+**Status — ✅ Selesai & di-commit (2026-09-02)**: kode ditulis, wiring
+end-to-end TERBUKTI benar via Docker sungguhan DUA KALI (sebelum &
+sesudah ganti TTS) — token mint, agent dispatch, room join, sesi WebRTC
+nyata, dan sintesis TTS semuanya dikonfirmasi jalan dengan stack final
+(STT self-hosted + LLM & TTS OpenAI). Landed lewat 2 commit terpisah
+("Add AI Interview Fase 2: self-hosted real-time voice interview" lalu
+"Switch AI Interview voice TTS from self-hosted to OpenAI"), sama hari.
+Latensi/turn-taking real dengan uji manusia sungguhan lewat mikrofon
+browser + server ber-GPU tetap menunggu (catatan "Yang BELUM
+divalidasi" di atas masih berlaku apa adanya — bukan berarti fitur
+belum jalan, cuma validasi kualitas-di-kondisi-nyata yang tertunda).
 
 ### Fase 20 — Presales: Lead Sourcing, Quotation, Agreement, Perluasan Esign — ✅ Item 1-4 Selesai (2026-09-04), Item 5 belum dimulai
 
@@ -841,7 +846,7 @@ badge, progress tracker Placement, tombol offering).
   ditemukan bypass token di audit awal BELUM disentuh di fase ini;
   migrasi lanjutan dilakukan bertahap, bukan sekaligus.
 
-### Fase 23 — Employee: RBAC Ops, SKCK, Warning Letter, Kirim Saltab *(direncanakan, belum dimulai)*
+### Fase 23 — Employee: RBAC Ops, SKCK, Warning Letter, Kirim Saltab — ✅ Selesai (2026-09-04)
 
 Audit lintas modul `hrd`/`payroll`/`esign`/`attendance` (2026-09-03)
 menunjukkan alur inti sudah dibangun lengkap — dokumen legal karyawan
@@ -897,7 +902,7 @@ terpisah dari 3 lainnya — ini perbaikan keamanan, bukan penambahan
 fitur, sebaiknya tidak menunggu prioritas fitur lain. Butir 2, 3, 4
 saling independen, urutan bebas.
 
-### Fase 24 — Job Order & Talent Pool: Perluasan Field ala MYOHRIS *(direncanakan, belum dimulai)*
+### Fase 24 — Job Order & Talent Pool: Perluasan Field ala MYOHRIS — ✅ Selesai (2026-09-04)
 
 Review langsung terhadap MYOHRIS (tool existing SPC, 2026-09-04)
 dibandingkan ke `JobOrder` dan `Candidate` — sebagian besar berupa
@@ -946,7 +951,7 @@ mengikuti istilah MYOHRIS:
     → hired (BARU) → onboarded
 ```
 
-### Fase 25 — Employee Contract Generator (template engine terpisah dari Fase 20) *(direncanakan, belum dimulai)*
+### Fase 25 — Employee Contract Generator (template engine terpisah dari Fase 20) — ✅ Selesai (2026-09-04)
 
 Ditemukan dari alur "Create Employee" 8-langkah MYOHRIS (Select
 Candidate → Personal → Employment → Payroll → Additional → Preview →
@@ -973,7 +978,7 @@ berbeda, meski pola dasarnya (field_schema JSON + tipe list + alur
 download-edit-upload-ulang) sama-sama berlaku independen di
 keduanya.
 
-### Fase 26 — Employee Detail: Movements, Vaccine, Emergency Contact, Lock Payroll, Payslip Email *(direncanakan, belum dimulai)*
+### Fase 26 — Employee Detail: Movements, Vaccine, Emergency Contact, Lock Payroll, Payslip Email — ✅ Selesai (2026-09-04)
 
 Perluasan Fase 23 dari review halaman Employee Detail MYOHRIS.
 **Struktur tab acuan**: Summary → Timesheet → Payroll
@@ -998,7 +1003,7 @@ Employee Level dan Employee Grade adalah 2 konsep hierarki terpisah
 → Kabupaten → Kecamatan → Kode Pos) untuk Citizen Address DAN
 Residential Address secara terpisah.
 
-### Fase 27 — Program Referral Karyawan *(direncanakan, belum dimulai)*
+### Fase 27 — Program Referral Karyawan — ✅ Selesai (2026-09-04)
 
 Fitur baru (2026-09-04, tidak pernah dibahas sebelumnya): setiap
 karyawan punya kode referral unik untuk melacak kandidat yang masuk
@@ -1037,7 +1042,7 @@ dihapus), tapi kandidat baru yang masuk lewat kode itu selama
 program nonaktif TIDAK menghasilkan `ReferralReward` baru — riwayat
 reward lama tetap utuh.
 
-### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) *(direncanakan, belum dimulai)*
+### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) — ✅ Selesai (2026-09-05), kecuali sebagian item 5
 
 Implementasi penuh dari keputusan Opsi G (§4.4). Ini migrasi
 infrastruktur billing yang SUDAH BERJALAN production (§4.1-4.3 ✅),
@@ -1055,15 +1060,26 @@ menyentuh tenant yang sudah aktif berbayar.
    detail billing (breakdown per-fitur).
 5. **Integrasi Xendit** — Subscriptions API untuk tagihan
    bulanan/tahunan, tokenisasi kartu/GoPay untuk auto-reload.
+   **Status: SEBAGIAN.** Checkout invoice manual (subscribe/topup)
+   sudah jalan penuh via Xendit. Auto-reload SEBATAS preferensi
+   tersimpan (toggle on/off + threshold + nominal) di
+   `Billing.tsx`/`GET·PUT /billing/auto-reload-settings` — belum ada
+   penyimpanan token kartu/GoPay maupun eksekusi charge otomatis
+   sungguhan saat saldo menipis. UI-nya sudah eksplisit menjelaskan
+   batasan ini ke tenant, bukan berpura-pura fitur penuh aktif.
 6. **Halaman pembayaran self-service** (§4.4.5) — kelola metode
    bayar, kwitansi resmi, pilih/upgrade tier, riwayat transaksi.
 7. **Perluas `PlatformTenants.tsx`** — visibilitas status pembayaran
    semua tenant untuk platform admin.
 
-**Perlu strategi migrasi untuk tenant existing** yang sudah aktif di
-Opsi F (§4.1-4.3) — belum dirancang di sini, perlu dibahas terpisah
-sebelum eksekusi (apakah auto-convert ke tier terdekat, atau tenant
-existing pilih manual).
+**Strategi migrasi untuk tenant existing** yang sudah aktif di Opsi F
+(§4.1-4.3) — diputuskan terpisah (didokumentasikan commit "Decide Fase
+28 migration strategy for existing Opsi F tenants"): one-shot script
+`backend/scripts/fase28_migrate_opsi_f_to_g.py`, tier di-assign
+otomatis dari jumlah bundle aktif (1 bundle→Tier 1, 2→Tier 2, 3-4→Tier
+3), tenant 0-bundle tetap foundation-only sampai pilih sendiri, tidak
+ada grandfathering. Default `--dry-run`, harus pakai `--apply` eksplisit
+untuk menulis.
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
@@ -1492,14 +1508,16 @@ Publik (tanpa login, per-tenant white-label):
   yang berpotensi dipakai volume tinggi). Jangan generalisasi keputusan ini
   ke fitur AI lain tanpa instruksi eksplisit — default tetap "bayar untuk
   performa" di atas.
-- **Job Order tanpa cascade guard (gap diketahui, belum diperbaiki)**:
-  `DELETE /job-orders/{id}` mengembalikan 500 kalau JO masih punya
-  `Placement`/`InterviewSchedule` terkait. Dicatat sebagai temuan, bukan
-  disengaja — perlu guard/cascade eksplisit sebelum jadi masalah produksi.
-- **AI Interview Fase 2 (voice real-time) belum punya kode** — keputusan
-  stack sudah diambil (lihat penutup §5), implementasi belum dimulai;
-  jangan diasumsikan tersedia sampai benar-benar diimplementasikan. Mode
-  teks (Fase 19) sudah live dan bisa dipakai.
+- **Job Order cascade guard — ✅ Selesai**: `DELETE /job-orders/{id}`
+  sekarang lempar 422 dengan pesan jelas (`assert_not_referenced`,
+  `core/database.py`) kalau JO masih punya `Placement`/`InterviewSchedule`
+  terkait, bukan 500 mentah lagi. (Bullet ini tadinya mencatat gap —
+  dikoreksi karena sudah diperbaiki, bukan dihapus begitu saja, supaya
+  jejaknya tetap ada.)
+- **AI Interview Fase 2 (voice real-time) — ✅ Selesai, kode ada** (lihat
+  penutup §5, 2026-09-02) — jangan lagi diasumsikan belum tersedia. Mode
+  teks (Fase 19) dan mode voice sama-sama live; validasi latensi/uji
+  manusia dengan server ber-GPU yang masih tertunda (lihat detail di §5).
 - **Lead sourcing via scraping LinkedIn (Fase 20, keputusan sadar
   2026-09-03)**: risiko diketahui dan diterima secara eksplisit, bukan
   luput dari perhatian — (1) teknis: LinkedIn aktif mendeteksi/memblokir
