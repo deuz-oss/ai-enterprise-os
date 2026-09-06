@@ -471,7 +471,7 @@ def unlock_employee_payroll(employee_id: str, db: Session = Depends(get_db)):
     return service.set_employee_payroll_lock(db, employee_id, False)
 
 
-# ---------- Asuransi one-to-many — PRD v3.0 Workforce Cloud ----------
+# ---------- Asuransi one-to-many — PRD v3.0 Workforce ----------
 
 
 @router.get("/{employee_id}/insurances", response_model=list[InsuranceOut])

@@ -243,7 +243,7 @@ def create_placement(payload: PlacementCreate, db: Session = Depends(get_db)):
 
 @router.get("/placements/offering-summary", response_model=OfferingSummaryOut)
 def get_offering_summary(db: Session = Depends(get_db)):
-    """Ringkasan pipeline offering — widget "Offering" Talent Cloud."""
+    """Ringkasan pipeline offering — widget "Offering" di Recruitment."""
     return service.offering_summary(db)
 
 
@@ -273,7 +273,7 @@ def record_offering_call(placement_id: str, db: Session = Depends(get_db)):
     return service.record_offering_call(db, placement_id)
 
 
-# ---------- Interviews — PRD v3.0 Talent Cloud ----------
+# ---------- Interviews — PRD v3.0 Recruitment ----------
 
 
 @router.get("/interviews", response_model=list[InterviewScheduleOut])
@@ -297,7 +297,7 @@ def update_interview(
     return service.update_interview(db, interview_id, payload)
 
 
-# ---------- AI Matching Native — PRD v3.0 Talent Cloud ----------
+# ---------- AI Matching Native — PRD v3.0 Recruitment ----------
 
 
 @router.post("/job-orders/{jo_id}/match", response_model=list[MatchResult])

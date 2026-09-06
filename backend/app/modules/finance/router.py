@@ -159,7 +159,7 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
     return service.update_invoice(db, invoice_id, payload)
 
 
-# ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
+# ---------- Faktur Pajak DJP — PRD v3.0 Finance & Accounting ----------
 
 
 @router.put("/invoices/{invoice_id}/tax-invoice", response_model=InvoiceOut)

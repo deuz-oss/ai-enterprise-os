@@ -83,6 +83,38 @@ interface InvoiceRow {
   no_seri_faktur: string | null;
 }
 
+// Kategori navigasi Opsi G (Fase 28) -- SAMA persis dengan `CATEGORY_META`
+// di `components/Layout.tsx` (label + aksen), supaya section Overview dan
+// grup sidebar terbaca sebagai satu taksonomi, bukan dua pengelompokan
+// berbeda. Kalau salah satu berubah, ubah keduanya.
+const CATEGORY: Record<string, { label: string; accent: string; to: string }> = {
+  crm: { label: "CRM", accent: "#7c3aed", to: "/leads" },
+  recruitment: { label: "Recruitment", accent: "#2563eb", to: "/job-orders" },
+  workforce: { label: "Workforce", accent: "#059669", to: "/employees" },
+  finance_accounting: { label: "Finance & Accounting", accent: "#d97706", to: "/finance" },
+};
+
+// Tahapan lead -- urutan & nilai mengikuti `LeadStage` backend
+// (presales/models.py), sama dengan konstanta `STAGES` di Leads.tsx.
+const LEAD_STAGE_ORDER = [
+  "lead",
+  "kontak",
+  "presentasi",
+  "penawaran",
+  "negosiasi",
+  "deal",
+  "gagal",
+];
+const LEAD_STAGE_LABELS: Record<string, string> = {
+  lead: "Lead",
+  kontak: "Kontak",
+  presentasi: "Presentasi",
+  penawaran: "Penawaran",
+  negosiasi: "Negosiasi",
+  deal: "Deal",
+  gagal: "Gagal",
+};
+
 const JO_STAGE_LABELS: Record<string, string> = {
   open: "Open",
   screening: "Screening",
@@ -109,6 +141,16 @@ const CANDIDATE_STATUS_LABELS: Record<string, string> = {
   placed: "Placed",
   gagal: "Gagal",
   arsip: "Arsip",
+};
+
+// Bucket payroll dari backend (dashboard/router.py `_PAYROLL_STATUS_BUCKET`)
+// -- 6 status PayrollRun asli dipetakan ke 4 bucket ini di server.
+const PAYROLL_BUCKET_ORDER = ["draft", "submitted", "approved", "finalized"];
+const PAYROLL_BUCKET_LABELS: Record<string, string> = {
+  draft: "Draft",
+  submitted: "Ke Klien",
+  approved: "Disetujui",
+  finalized: "Final",
 };
 
 const INVOICE_STATUS_PILL: Record<string, string> = {
@@ -163,7 +205,7 @@ function pct(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
-/** Kartu KPI baris atas ala dashboard.html: label, angka besar, hint, progress bar tipis. */
+/** Kartu KPI baris atas: label, angka besar, hint, progress bar tipis. */
 function KpiCard({
   label,
   value,
@@ -202,36 +244,69 @@ function KpiCard({
   );
 }
 
+/** Kartu section ber-kategori: strip aksen + label kategori di kepala kartu,
+ * warnanya mengikuti grup sidebar yang sama supaya mudah dilacak balik. */
 function SectionCard({
+  category,
   title,
   subtitle,
   children,
 }: {
+  category: keyof typeof CATEGORY;
   title: string;
   subtitle?: string;
   children: ReactNode;
 }) {
+  const meta = CATEGORY[category];
   return (
     <div className="card">
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-          {title}
-        </h2>
-        {subtitle && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {subtitle}
-          </p>
-        )}
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span
+            className="text-[10px] font-bold uppercase tracking-wide"
+            style={{ color: meta.accent }}
+          >
+            {meta.label}
+          </span>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <Link
+          to={meta.to}
+          className="shrink-0 text-xs font-medium hover:underline"
+          style={{ color: meta.accent }}
+        >
+          Buka →
+        </Link>
       </div>
       {children}
     </div>
   );
 }
 
-/// Dashboard — ringkasan lintas modul (mockup referensi awal sudah dihapus
-/// dari repo setelah implementasi selesai; data 100% dari /overview +
-/// /chat/digest + /finance/invoices yang sudah ada, tanpa badge harga/SKU
-/// komersial — sesuai arahan prioritas trial internal).
+/** Baris statistik ringkas (label kiri, angka kanan) untuk blok tanpa grafik. */
+function StatRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span className="font-mono font-medium" style={{ color: "var(--text)" }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/// Overview — ringkasan operasional lintas modul. Section dikelompokkan
+/// mengikuti 5 kategori navigasi Opsi G (Fase 28) yang dipakai sidebar,
+/// BUKAN branding "Cloud" (Talent/Workforce/Revenue/Govern) dari Opsi F
+/// yang sudah digantikan. Data 100% dari /overview + /chat/digest +
+/// /finance/invoices yang sudah ada.
 export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ["overview"],
@@ -258,6 +333,9 @@ export default function Dashboard() {
   const urgentItems = (digest?.items ?? []).filter((i) => i.type in URGENT_DIGEST_DOMAIN);
 
   const revenueShare = pct(data.finance.revenue_mtd, data.finance.revenue_mtd + data.finance.outstanding);
+  const leadsActive = data.leads.total - (data.leads.by_stage.deal ?? 0) - (data.leads.by_stage.gagal ?? 0);
+  const leadFunnelMax = Math.max(...LEAD_STAGE_ORDER.map((s) => data.leads.by_stage[s] ?? 0), 1);
+  const payrollTotal = PAYROLL_BUCKET_ORDER.reduce((sum, b) => sum + (data.payroll[b] ?? 0), 0);
 
   return (
     <div className="space-y-5">
@@ -303,28 +381,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Baris KPI */}
+      {/* Baris KPI lintas kategori */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Headcount Aktif"
           value={data.people.active_employees}
           hint={`dari ${data.people.total_employees} karyawan terdaftar`}
           barPct={pct(data.people.active_employees, data.people.total_employees)}
-          barColor="#059669"
+          barColor={CATEGORY.workforce.accent}
         />
+        {/* "Aktif" = belum filled/closed (backend: status notin [filled, closed]),
+            sengaja BUKAN "Terbuka" -- "open" itu satu tahap tersendiri di
+            breakdown Recruitment di bawah, dulu dua angka ini terbaca
+            kontradiktif ("Job Order Terbuka: 2" di atas "0 Open"). */}
         <KpiCard
-          label="Job Order Terbuka"
+          label="Job Order Aktif"
           value={data.job_orders.open}
           hint={`${data.job_orders.filled} filled · ${data.candidates.total} kandidat`}
           barPct={pct(data.job_orders.filled, data.job_orders.open + data.job_orders.filled)}
-          barColor="#7c3aed"
+          barColor={CATEGORY.recruitment.accent}
         />
         <KpiCard
           label="Revenue MTD"
           value={formatRupiah(data.finance.revenue_mtd)}
           hint={`${data.finance.invoices_total} invoice tercatat`}
           barPct={revenueShare}
-          barColor="#d97706"
+          barColor={CATEGORY.finance_accounting.accent}
         />
         <KpiCard
           label="Outstanding & Faktur"
@@ -338,7 +420,56 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Kolom kiri */}
         <div className="space-y-5 lg:col-span-2">
-          <SectionCard title="Recruitment & AI Matching" subtitle="Progres tahap job order & status kandidat">
+          <SectionCard
+            category="crm"
+            title="Pipeline Calon Klien"
+            subtitle={`${leadsActive} lead aktif · ${data.leads.won} deal menang · ${data.clients} klien · ${data.documents} dokumen legal`}
+          >
+            {data.leads.total > 0 ? (
+              <div className="space-y-1.5">
+                {LEAD_STAGE_ORDER.map((stage) => {
+                  const count = data.leads.by_stage[stage] ?? 0;
+                  return (
+                    <div key={stage} className="flex items-center gap-2">
+                      <span className="w-20 shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {LEAD_STAGE_LABELS[stage] ?? stage}
+                      </span>
+                      <div className="h-2 flex-1 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${pct(count, leadFunnelMax)}%`,
+                            backgroundColor:
+                              stage === "gagal"
+                                ? "#dc2626"
+                                : stage === "deal"
+                                  ? "#059669"
+                                  : CATEGORY.crm.accent,
+                          }}
+                        />
+                      </div>
+                      <span
+                        className="w-6 shrink-0 text-right font-mono text-xs font-medium"
+                        style={{ color: "var(--text)" }}
+                      >
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Belum ada lead tercatat.
+              </p>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            category="recruitment"
+            title="Job Order & Kandidat"
+            subtitle="Progres tahap job order & status kandidat"
+          >
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium" style={{ color: "var(--text)" }}>
                 Tahap Job Order
@@ -386,7 +517,11 @@ export default function Dashboard() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Finance & e-Faktur" subtitle="Invoice terbaru">
+          <SectionCard
+            category="finance_accounting"
+            title="Invoice & e-Faktur"
+            subtitle="Invoice terbaru"
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -422,6 +557,46 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
+
+            <div className="mt-4 space-y-1.5 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: "var(--text)" }}>
+                Kesehatan Pembukuan
+              </p>
+              <StatRow label="Periode akuntansi tercatat" value={data.accounting.period_closed} />
+              <StatRow label="Jurnal memorial belum diposting" value={data.accounting.memorial_unposted} />
+            </div>
+
+            <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: "var(--text)" }}>
+                Margin per Klien (bulan berjalan)
+              </p>
+              {data.operations.profit_by_client.length > 0 ? (
+                <div className="space-y-2">
+                  {data.operations.profit_by_client.slice(0, 6).map((row) => {
+                    const marginPct = row.revenue > 0 ? Math.round((row.margin / row.revenue) * 100) : 0;
+                    return (
+                      <div key={row.client} className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
+                            {row.client}
+                          </p>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            {formatRupiah(row.revenue)}
+                          </p>
+                        </div>
+                        <span className={`pill ${marginPct >= 15 ? "p-green" : marginPct >= 0 ? "p-yellow" : "p-red"}`}>
+                          {marginPct}% margin
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Belum ada data margin per klien.
+                </p>
+              )}
+            </div>
           </SectionCard>
         </div>
 
@@ -451,7 +626,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <SectionCard title="People & Compliance">
+          <SectionCard category="workforce" title="Karyawan & Kepatuhan">
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs">
@@ -494,31 +669,42 @@ export default function Dashboard() {
             )}
           </SectionCard>
 
-          <SectionCard title="Client Profit Margin" subtitle="Laba per klien bulan berjalan">
-            {data.operations.profit_by_client.length > 0 ? (
-              <div className="space-y-2.5">
-                {data.operations.profit_by_client.slice(0, 6).map((row) => {
-                  const marginPct = row.revenue > 0 ? Math.round((row.margin / row.revenue) * 100) : 0;
-                  return (
-                    <div key={row.client} className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
-                          {row.client}
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                          {formatRupiah(row.revenue)}
-                        </p>
-                      </div>
-                      <span className={`pill ${marginPct >= 15 ? "p-green" : marginPct >= 0 ? "p-yellow" : "p-red"}`}>
-                        {marginPct}% margin
-                      </span>
-                    </div>
-                  );
-                })}
+          <SectionCard
+            category="workforce"
+            title="Payroll Run"
+            subtitle={payrollTotal > 0 ? `${payrollTotal} run tercatat` : undefined}
+          >
+            {payrollTotal > 0 ? (
+              <div className="space-y-1.5">
+                {PAYROLL_BUCKET_ORDER.map((bucket) => (
+                  <StatRow
+                    key={bucket}
+                    label={PAYROLL_BUCKET_LABELS[bucket] ?? bucket}
+                    value={data.payroll[bucket] ?? 0}
+                  />
+                ))}
               </div>
             ) : (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Belum ada data margin per klien.
+                Belum ada payroll run.
+              </p>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            category="workforce"
+            title="Penempatan Aktif"
+            subtitle="Karyawan onboarded per klien"
+          >
+            {data.operations.active_placements_by_client.length > 0 ? (
+              <div className="space-y-1.5">
+                {data.operations.active_placements_by_client.slice(0, 6).map((row) => (
+                  <StatRow key={row.client} label={row.client} value={row.active_placements} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Belum ada penempatan aktif.
               </p>
             )}
           </SectionCard>

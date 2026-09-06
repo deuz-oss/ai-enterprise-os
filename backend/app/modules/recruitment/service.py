@@ -965,7 +965,7 @@ def record_offering_call(db: Session, placement_id: str) -> Placement:
 
 
 def offering_summary(db: Session) -> dict:
-    """Ringkasan pipeline offering — dipakai widget "Offering" Talent Cloud.
+    """Ringkasan pipeline offering — dipakai widget "Offering" di Recruitment.
 
     "Aktif" = surat penawaran sudah dibuat (`offering_letter_object_key` terisi).
     "Menunggu ttd" = permintaan TTE-nya masih berstatus terkirim/dilihat (belum
@@ -1014,7 +1014,7 @@ def offering_summary(db: Session) -> dict:
     return {"total_active": len(items), "awaiting_signature": awaiting, "items": items}
 
 
-# ---------- Interview Schedules — PRD v3.0 Talent Cloud ----------
+# ---------- Interview Schedules — PRD v3.0 Recruitment ----------
 
 
 def create_interview(
@@ -1175,7 +1175,7 @@ def update_interview(
     return sched
 
 
-# ---------- AI Matching Native — PRD v3.0 Talent Cloud ----------
+# ---------- AI Matching Native — PRD v3.0 Recruitment ----------
 
 
 def _candidate_profile(db: Session, candidate: Candidate) -> dict:

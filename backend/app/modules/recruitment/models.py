@@ -95,7 +95,7 @@ class InterviewType(str, enum.Enum):
 
 
 class InterviewSchedule(TenantMixin, Base):
-    """Jadwal interview — PRD v3.0 Talent Cloud."""
+    """Jadwal interview — PRD v3.0 Recruitment."""
 
     __tablename__ = "interview_schedules"
 

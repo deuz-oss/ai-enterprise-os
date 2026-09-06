@@ -44,40 +44,52 @@ sesungguhnya). Kalau menambah/mengubah daftar di bawah, cek juga apakah
 dengan siapa yang benar-benar boleh akses.
 """
 
-# ---------- Talent Cloud (sales_crm + recruitment) ----------
+# Pengelompokan di bawah mengikuti 5 kategori navigasi Opsi G (Fase 28) yang
+# dipakai sidebar (`Layout.tsx`, `CATEGORY_ORDER`) — menggantikan judul lama
+# bergaya "Talent/Workforce/Revenue/Govern Cloud" (paket komersial Opsi F)
+# yang sudah tidak dipakai lagi dan bikin salah baca arsitektur aktif.
+# Pengelompokan ini murni penataan/dokumentasi: tidak ada satu pun daftar role
+# yang isinya berubah.
+
+# ---------- CRM ----------
 
 CLIENTS_ROLES = ("business_dev", "management")
 PRESALES_ROLES = ("business_dev", "management")
+
+# ---------- Recruitment ----------
+
 RECRUITMENT_ROLES = ("recruiter", "management")
 TALENTPOOL_ROLES = ("recruiter", "operations", "hr", "management")
 TALENTPOOL_BRANDING_ROLES = ("admin", "management")
 AI_RECRUITMENT_ROLES = ("recruiter", "management")
 
-# ---------- Workforce Cloud (people_ops) ----------
+# ---------- Workforce ----------
+# Payroll ada di sini (bukan Finance & Accounting) mengikuti keputusan
+# Fase 28 — lihat komentar pada item `/payroll` di `NAV_ITEMS` Layout.tsx.
 
 HRD_ROLES = ("hr", "management")
 ESIGN_ROLES = ("hr", "management")
 BPJS_ROLES = ("operations", "hr", "finance", "management")
 ATTENDANCE_SELFIE_ROLES = ("admin", "hr", "operations", "management")
 AI_HR_ROLES = ("hr", "management")
-
-# ---------- Revenue Cloud (payroll + finance) ----------
-
 PAYROLL_ROLES = ("operations", "management", "hr")
+
+# ---------- Finance & Accounting ----------
+
 FINANCE_ROLES = ("finance", "management")
 PAYMENT_REQUEST_ROLES = ("operations", "hr", "finance", "management")
 AI_FINANCE_ROLES = ("finance", "management")
-RATES_ROLES = ("admin", "finance", "management")
-
-# ---------- Govern Cloud (accounting + audit + users) ----------
-
 ACCOUNTING_ROLES = ("finance", "management")
 ACCOUNTING_TRANSACTIONS_ROLES = ("finance", "management")
+
+# ---------- Administration ----------
+
+RATES_ROLES = ("admin", "finance", "management")
 AUDIT_ROLES = ("management",)
 # Kosong disengaja: HANYA admin yang lolos, murni lewat bypass admin
 # `require_roles` (lihat poin 1 di docstring atas) — bukan lupa isi.
 AUTH_ADMIN_ONLY_ROLES: tuple[str, ...] = ()
 
-# ---------- Lintas-bundle ----------
+# ---------- Lintas-kategori ----------
 
 APPS_TRIAL_ROLES = ("admin", "management")

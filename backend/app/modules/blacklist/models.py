@@ -1,5 +1,5 @@
 """Black Lists (riset arsitektur MyOHRIS §2, lihat plan file sesi ini) —
-kapabilitas baru di bawah Talent Cloud, terhubung ke `Candidate` yang sudah
+kapabilitas baru di bawah Recruitment, terhubung ke `Candidate` yang sudah
 ada.
 
 Pola request->approve, BUKAN langsung tandai kandidat "blacklisted" begitu

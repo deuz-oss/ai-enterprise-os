@@ -409,7 +409,7 @@ export default function TalentPool() {
   });
   const visibleFields = (fieldSettings?.fields ?? []).filter((f) => f.visible);
 
-  // Skor matching native Talent Cloud (PRD v3.0 §4) — hanya diambil saat JO dipilih.
+  // Skor matching native (PRD v3.0 §4) — hanya diambil saat JO dipilih.
   const { data: matchScores } = useQuery({
     queryKey: ["talentpool-match-scores", matchJobOrderId, minMatchScore],
     queryFn: () =>

@@ -1,4 +1,4 @@
-"""AI Interview (PRD v3.1 Patch 4) — kapabilitas baru di bawah Talent Cloud.
+"""AI Interview (PRD v3.1 Patch 4) — kapabilitas baru di bawah Recruitment.
 
 Definisi interview (`AIInterviewTemplate`: pertanyaan+kriteria) terpisah dari
 instance/jawaban (`AIInterviewResponse`) — pola dari riset arsitektur (FoloUp/
