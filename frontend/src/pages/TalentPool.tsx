@@ -30,6 +30,47 @@ interface TpRow {
   // ada di kolom "Proses" (job order + status Placement) di bawah.
   status: string;
   cv_file_name: string | null;
+  address: string | null;
+  gender: string | null;
+  birthdate: string | null;
+  birthplace: string | null;
+  ktp_no: string | null;
+  marital_status: string | null;
+  blood_type: string | null;
+  religion: string | null;
+  education: string | null;
+  education_level: string | null;
+  school: string | null;
+  experience_years: number | null;
+  current_company: string | null;
+  current_position: string | null;
+  position_pool: string | null;
+  job_level: string | null;
+  languages: string | null;
+  reference: string | null;
+  source: string | null;
+  description: string | null;
+}
+
+interface CandidateFieldConfig {
+  key: string;
+  label: string;
+  group: string;
+  visible: boolean;
+}
+
+function formatFieldValue(key: string, row: TpRow): string {
+  const value = row[key as keyof TpRow];
+  if (value === null || value === undefined || value === "") return "-";
+  if (key === "birthdate") {
+    return new Date(value as string).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  if (key === "expected_salary") return formatRupiah(value as number);
+  return String(value);
 }
 
 interface PlacementRow {
@@ -600,6 +641,100 @@ function BrandingCard() {
   );
 }
 
+function FieldSettingsCard() {
+  const qc = useQueryClient();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
+  });
+  const canEdit = me.data?.role === "admin" || me.data?.role === "management";
+  const settings = useQuery({
+    queryKey: ["talentpool-field-settings"],
+    queryFn: () => api.get<{ fields: CandidateFieldConfig[] }>("/talentpool/field-settings"),
+  });
+  const [checked, setChecked] = useState<Set<string> | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (visible_fields: string[]) =>
+      api.put("/talentpool/field-settings", { visible_fields }),
+    onSuccess: () => {
+      setChecked(null);
+      void qc.invalidateQueries({ queryKey: ["talentpool-field-settings"] });
+    },
+  });
+
+  const fields = settings.data?.fields ?? [];
+  if (!settings.data) return null;
+  const active = checked ?? new Set(fields.filter((f) => f.visible).map((f) => f.key));
+  const groups = Array.from(new Set(fields.map((f) => f.group)));
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+        style={{ color: "var(--text-muted)" }}
+      >
+        <Palette className="h-3.5 w-3.5" /> Pengaturan Field Kandidat
+      </button>
+    );
+  }
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <Palette className="h-4 w-4" /> Field Kandidat di Tabel
+        </h3>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-xs font-medium hover:underline"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Tutup
+        </button>
+      </div>
+      {groups.map((group) => (
+        <div key={group}>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+            {group}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {fields
+              .filter((f) => f.group === group)
+              .map((f) => (
+                <label key={f.key} className="inline-flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={active.has(f.key)}
+                    disabled={!canEdit}
+                    onChange={(e) => {
+                      const next = new Set(active);
+                      if (e.target.checked) next.add(f.key);
+                      else next.delete(f.key);
+                      setChecked(next);
+                    }}
+                  />
+                  {f.label}
+                </label>
+              ))}
+          </div>
+        </div>
+      ))}
+      {canEdit && (
+        <button
+          onClick={() => save.mutate(Array.from(active))}
+          disabled={save.isPending || checked === null}
+          className="btn-secondary disabled:opacity-40"
+        >
+          Simpan
+        </button>
+      )}
+      {save.error && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+    </div>
+  );
+}
+
 export default function TalentPool() {
   const qc = useQueryClient();
   const [q, setQ] = useState("");
@@ -633,6 +768,12 @@ export default function TalentPool() {
     queryKey: ["job-orders"],
     queryFn: () => api.get<JobOrder[]>("/recruitment/job-orders"),
   });
+
+  const { data: fieldSettings } = useQuery({
+    queryKey: ["talentpool-field-settings"],
+    queryFn: () => api.get<{ fields: CandidateFieldConfig[] }>("/talentpool/field-settings"),
+  });
+  const visibleFields = (fieldSettings?.fields ?? []).filter((f) => f.visible);
 
   // Skor matching native Talent Cloud (PRD v3.0 §4) — hanya diambil saat JO dipilih.
   const { data: matchScores } = useQuery({
@@ -774,7 +915,10 @@ export default function TalentPool() {
           title="Talent Pool"
           subtitle="Database kandidat terpusat: input manual atau unggah CV → data terstandar → CV Standar siap diekspor"
         />
-        <BrandingCard />
+        <div className="flex flex-col items-end gap-1.5">
+          <BrandingCard />
+          <FieldSettingsCard />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -948,10 +1092,12 @@ export default function TalentPool() {
           <thead style={{ backgroundColor: "var(--hover)" }}>
             <tr>
               <th className="th">Kandidat</th>
-              <th className="th">Domisili</th>
-              <th className="th">Skill</th>
+              {visibleFields.map((f) => (
+                <th key={f.key} className="th">
+                  {f.label}
+                </th>
+              ))}
               <th className="th">Kesiapan</th>
-              <th className="th">Ekspektasi</th>
               <th className="th">Status TP</th>
               <th className="th">Proses</th>
               <th className="th">CV Standar</th>
@@ -962,15 +1108,17 @@ export default function TalentPool() {
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {visibleRows.map((r) => {
               const match = scoreByCandidate.get(r.candidate_id);
-              const colSpan = matchJobOrderId ? 10 : 9;
+              const colSpan = (matchJobOrderId ? 7 : 6) + visibleFields.length;
               return (
               <Fragment key={r.candidate_id}>
                 <tr>
                   <td className="td font-medium">{r.full_name}</td>
-                  <td className="td">{r.city ?? "-"}</td>
-                  <td className="td max-w-[180px] truncate">{r.skills ?? "-"}</td>
+                  {visibleFields.map((f) => (
+                    <td key={f.key} className="td max-w-[180px] truncate">
+                      {formatFieldValue(f.key, r)}
+                    </td>
+                  ))}
                   <td className="td">{r.readiness ? READINESS_LABELS[r.readiness] ?? r.readiness : "-"}</td>
-                  <td className="td">{r.expected_salary ? formatRupiah(r.expected_salary) : "-"}</td>
                   <td className="td">
                     <span className="pill p-gray">{r.tp_status}</span>
                     {r.needs_review_count > 0 && (
@@ -1088,7 +1236,11 @@ export default function TalentPool() {
             })}
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={matchJobOrderId ? 10 : 9} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                <td
+                  colSpan={(matchJobOrderId ? 7 : 6) + visibleFields.length}
+                  className="td py-8 text-center"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   {matchJobOrderId
                     ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
                     : tpStatusTab

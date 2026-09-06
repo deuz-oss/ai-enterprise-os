@@ -4,7 +4,17 @@ from uuid import UUID, uuid4
 
 from app.core.database import Base
 from app.core.tenancy import TenantMixin
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -111,3 +121,14 @@ class TenantCvBranding(TenantMixin, Base):
     footer_text: Mapped[str] = mapped_column(String(255), default="")
     show_photo: Mapped[bool] = mapped_column(Boolean, default=False)
     logo_object_key: Mapped[str | None] = mapped_column(String(500), default=None)
+
+
+class TalentPoolFieldSettings(TenantMixin, Base):
+    """Konfigurasi field kandidat yang ditampilkan di tabel Talent Pool (per tenant)."""
+
+    __tablename__ = "talentpool_field_settings"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    visible_fields_json: Mapped[str] = mapped_column(
+        Text, default='["city","skills","expected_salary"]'
+    )

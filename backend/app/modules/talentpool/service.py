@@ -21,11 +21,17 @@ from app.core.database import parse_uuid
 from app.core.llm import chat_completion, vision_completion
 from app.modules import audit
 from app.modules.recruitment.models import Candidate
+from app.modules.talentpool.field_catalog import (
+    CANDIDATE_FIELD_CATALOG,
+    CANDIDATE_FIELD_KEYS,
+    DEFAULT_VISIBLE_FIELDS,
+)
 from app.modules.talentpool.models import (
     CvDocKind,
     CvIntake,
     IntakeStatus,
     StandardCvVersion,
+    TalentPoolFieldSettings,
     TalentPoolStatus,
     TenantCvBranding,
 )
@@ -791,6 +797,26 @@ def list_talentpool(
                 "cv_file_name": c.cv_file_name,
                 "expected_salary": float(c.expected_salary) if c.expected_salary else None,
                 "skills": c.skills,
+                "address": c.address,
+                "gender": c.gender,
+                "birthdate": c.birthdate.isoformat() if c.birthdate else None,
+                "birthplace": c.birthplace,
+                "ktp_no": c.ktp_no,
+                "marital_status": c.marital_status,
+                "blood_type": c.blood_type,
+                "religion": c.religion,
+                "education": c.education,
+                "education_level": c.education_level,
+                "school": c.school,
+                "experience_years": c.experience_years,
+                "current_company": c.current_company,
+                "current_position": c.current_position,
+                "position_pool": c.position_pool,
+                "job_level": c.job_level,
+                "languages": ", ".join(c.languages) if c.languages else None,
+                "reference": c.reference,
+                "source": c.source,
+                "description": c.description,
                 "readiness": intake.readiness if intake else None,
                 "tp_status": intake.tp_status.value if intake else TalentPoolStatus.baru.value,
                 "intake_status": intake.status.value if intake else None,
@@ -989,6 +1015,50 @@ def serialize_branding(branding: TenantCvBranding) -> dict:
             "/api/v1/talentpool/branding/logo/download" if branding.logo_object_key else None
         ),
     }
+
+
+# ---------- Field kandidat yang ditampilkan di tabel Talent Pool (per tenant) ----------
+
+
+def get_field_settings(db: Session) -> TalentPoolFieldSettings:
+    settings = db.execute(select(TalentPoolFieldSettings)).scalars().first()
+    if settings is None:
+        settings = TalentPoolFieldSettings(tenant_id=None)  # tenant diisi listener
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+def update_field_settings(
+    db: Session, *, user, visible_fields: list[str]
+) -> TalentPoolFieldSettings:
+    unknown = [k for k in visible_fields if k not in CANDIDATE_FIELD_KEYS]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Field tidak dikenal: {', '.join(unknown)}")
+    settings = get_field_settings(db)
+    # dedupe, pertahankan urutan katalog agar tampilan kolom konsisten
+    chosen = set(visible_fields)
+    settings.visible_fields_json = json.dumps(
+        [f["key"] for f in CANDIDATE_FIELD_CATALOG if f["key"] in chosen]
+    )
+    db.commit()
+    audit.log_event(
+        db,
+        action="talentpool.field_settings_updated",
+        entity_type="talentpool_field_settings",
+        entity_id=settings.id,
+        detail={"by": getattr(user, "email", "?"), "visible_fields": visible_fields},
+    )
+    return settings
+
+
+def serialize_field_settings(settings: TalentPoolFieldSettings) -> dict:
+    try:
+        visible = set(json.loads(settings.visible_fields_json))
+    except (TypeError, ValueError):
+        visible = set(DEFAULT_VISIBLE_FIELDS)
+    return {"fields": [{**f, "visible": f["key"] in visible} for f in CANDIDATE_FIELD_CATALOG]}
 
 
 # ---------- Render CV standar (reportlab, §10.3) ----------

@@ -170,6 +170,11 @@ def get_branding(db: Session = Depends(get_db)):
     return service.serialize_branding(service.get_branding(db))
 
 
+@router.get("/field-settings")
+def get_field_settings(db: Session = Depends(get_db)):
+    return service.serialize_field_settings(service.get_field_settings(db))
+
+
 @router.get("/branding/logo/download")
 def download_logo(db: Session = Depends(get_db)):
     """Unduh logo branding (dipakai <img> preview & render PDF)."""
@@ -198,6 +203,16 @@ branding_admin_router = APIRouter(
 def update_branding(payload: dict, db: Session = Depends(get_db), user=Depends(get_current_user)):
     b = service.update_branding(db, user=user, payload=payload or {})
     return service.serialize_branding(b)
+
+
+@branding_admin_router.put("/field-settings")
+def update_field_settings(
+    payload: dict, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    settings = service.update_field_settings(
+        db, user=user, visible_fields=list(payload.get("visible_fields") or [])
+    )
+    return service.serialize_field_settings(settings)
 
 
 @branding_admin_router.post("/branding/logo", status_code=201)

@@ -2,7 +2,7 @@
 
 import io
 
-from tests.conftest import _auth_header
+from tests.conftest import _auth_header, _login_header, _seed_user_idempotent
 
 
 def _minimal_pdf_bytes(text: str = "Budi Santoso CV") -> bytes:
@@ -284,6 +284,132 @@ def test_branding_default_dan_update(client):
         json={"accent_color": "merah"},
     )
     assert bad.status_code == 422
+
+
+def _recruiter_header(client) -> dict[str, str]:
+    """Role dengan akses Talent Pool biasa (bukan admin/management)."""
+    from app.core.bootstrap import ensure_default_tenant
+    from app.modules.auth.schemas import UserCreate
+
+    db = client.testing_session()
+    try:
+        tenant = ensure_default_tenant(db)
+        _seed_user_idempotent(
+            db,
+            UserCreate(
+                email="dina.recruiter@outsourcing.co.id",
+                full_name="Dina",
+                password="rahasia-123",
+                role="recruiter",
+            ),
+            tenant_id=tenant.id,
+        )
+    finally:
+        db.close()
+    return _login_header(client, "dina.recruiter@outsourcing.co.id", "rahasia-123")
+
+
+def test_field_settings_default_visible_fields(client):
+    headers = _auth_header(client)
+    resp = client.get("/api/v1/talentpool/field-settings", headers=headers)
+    assert resp.status_code == 200
+    fields = resp.json()["fields"]
+    by_key = {f["key"]: f for f in fields}
+    assert by_key["city"]["visible"] is True
+    assert by_key["skills"]["visible"] is True
+    assert by_key["expected_salary"]["visible"] is True
+    assert by_key["religion"]["visible"] is False
+    # full_name bukan bagian katalog (selalu kolom tetap)
+    assert "full_name" not in by_key
+
+
+def test_field_settings_update_tercermin_di_get(client):
+    admin = _auth_header(client)
+    upd = client.put(
+        "/api/v1/talentpool/field-settings",
+        headers=admin,
+        json={"visible_fields": ["religion", "job_level", "city"]},
+    )
+    assert upd.status_code == 200
+    visible_keys = {f["key"] for f in upd.json()["fields"] if f["visible"]}
+    assert visible_keys == {"religion", "job_level", "city"}
+
+    again = client.get("/api/v1/talentpool/field-settings", headers=admin).json()
+    assert {f["key"] for f in again["fields"] if f["visible"]} == {
+        "religion",
+        "job_level",
+        "city",
+    }
+
+
+def test_field_settings_tolak_key_tidak_dikenal(client):
+    admin = _auth_header(client)
+    resp = client.put(
+        "/api/v1/talentpool/field-settings",
+        headers=admin,
+        json={"visible_fields": ["not_a_real_field"]},
+    )
+    assert resp.status_code == 422
+
+
+def test_field_settings_update_ditolak_untuk_role_biasa(client):
+    recruiter = _recruiter_header(client)
+    resp = client.put(
+        "/api/v1/talentpool/field-settings",
+        headers=recruiter,
+        json={"visible_fields": ["religion"]},
+    )
+    assert resp.status_code == 403
+    # GET tetap boleh untuk role Talent Pool biasa
+    get_resp = client.get("/api/v1/talentpool/field-settings", headers=recruiter)
+    assert get_resp.status_code == 200
+
+
+def test_list_talentpool_menyertakan_semua_field_katalog(client, monkeypatch):
+    from app.modules.talentpool import service
+
+    monkeypatch.setattr(service, "extract_profile", lambda db, data, kind: _fake_profile())
+    headers = _auth_header(client)
+    pdf = _minimal_pdf_bytes()
+    created = client.post(
+        "/api/v1/talentpool/intake",
+        headers=headers,
+        files={"file": ("cv.pdf", io.BytesIO(pdf), "application/pdf")},
+        data={"consent": "true"},
+    ).json()
+    fin = client.post(f"/api/v1/talentpool/intake/{created['id']}/finalize", headers=headers)
+    assert fin.status_code == 200, fin.text
+
+    rows = client.get("/api/v1/talentpool", headers=headers).json()
+    row = next(r for r in rows if r["full_name"] == "Budi Santoso")
+    for key in (
+        "phone",
+        "email",
+        "city",
+        "address",
+        "gender",
+        "birthdate",
+        "birthplace",
+        "ktp_no",
+        "marital_status",
+        "blood_type",
+        "religion",
+        "education",
+        "education_level",
+        "school",
+        "experience_years",
+        "current_company",
+        "current_position",
+        "position_pool",
+        "job_level",
+        "skills",
+        "languages",
+        "reference",
+        "expected_salary",
+        "source",
+        "description",
+    ):
+        assert key in row
 
 
 _PNG_1PX = bytes.fromhex(
