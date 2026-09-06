@@ -449,7 +449,10 @@ def serialize_intake(db: Session, intake: CvIntake) -> dict:
                 "seq": v.seq,
                 "is_locked": v.is_locked,
                 "created_at": v.created_at.isoformat(),
-                "download_url": f"/api/v1/talentpool/cv-versions/{v.id}/download",
+                # Path relatif TANPA prefix /api/v1 -- frontend `downloadFile()`
+                # sudah menambahkannya sendiri (sama seperti semua panggilan
+                # api.* lain); dulu double-prefix di sini bikin unduhan 404.
+                "download_url": f"/talentpool/cv-versions/{v.id}/download",
             }
             for v in versions
         ],
@@ -611,6 +614,104 @@ def download_version(db: Session, version_id: str) -> tuple[bytes, str]:
     return data, name
 
 
+def _candidate_profile_dict(candidate: Candidate) -> dict:
+    """Bangun dict `profile` (skema sama seperti `intake.extracted`) langsung
+    dari field Candidate + CandidateExperience -- untuk kandidat yang tidak
+    lewat jalur unggah-CV/ekstraksi AI sama sekali (dibuat manual di Talent
+    Pool). Hanya memetakan field yang benar-benar ada; TIDAK mengarang
+    `readiness`/`contract_preference`/`willing_locations` yang murni konsep
+    hasil ekstraksi AI tanpa padanan di data manual.
+    """
+    profile: dict = {
+        "full_name": candidate.full_name,
+        "phone": candidate.phone,
+        "email": candidate.email,
+        "domisili": candidate.city,
+        "expected_salary": float(candidate.expected_salary) if candidate.expected_salary else None,
+        "summary": candidate.description,
+        "skills": candidate.skills_list,
+        "languages": [{"bahasa": lang} for lang in candidate.languages],
+    }
+    if candidate.birthdate:
+        profile["birth_date"] = candidate.birthdate.isoformat()
+    if candidate.education:
+        profile["education"] = [{"jenjang": candidate.education}]
+    profile["experience"] = [
+        {
+            "posisi": exp.position,
+            "perusahaan": exp.company,
+            "periode": (
+                f"{exp.start_date} – {exp.end_date or 'sekarang'}" if exp.start_date else None
+            ),
+            "ringkasan": exp.description,
+        }
+        for exp in candidate.experiences
+    ]
+    return profile
+
+
+def generate_standard_cv_from_candidate(
+    db: Session, *, user, candidate_id: str
+) -> StandardCvVersion:
+    """Generate CV Standar langsung dari data Candidate saat ini, tanpa perlu
+    lewat CvIntake -- untuk kandidat yang dibuat manual (tanpa CV) atau untuk
+    regenerasi versi terbaru kapan saja setelah datanya berubah (mis. setelah
+    menambah Riwayat Pengalaman).
+    """
+    candidate = db.get(Candidate, parse_uuid(candidate_id))
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+
+    profile = _candidate_profile_dict(candidate)
+    branding = get_branding(db)
+    photo_bytes = candidate_photo_bytes(db, candidate) if branding.show_photo else None
+    pdf_bytes = render_standard_cv(db, profile, branding, photo_bytes=photo_bytes)
+
+    version_key = storage.new_object_key(
+        f"talentpool/{candidate.id}/standard-cv",
+        f"cv-standar-{candidate.id}.pdf",
+    )
+    storage.put_object(version_key, pdf_bytes, "application/pdf")
+
+    last_seq = db.scalar(
+        select(StandardCvVersion.seq)
+        .where(StandardCvVersion.candidate_id == candidate.id)
+        .order_by(StandardCvVersion.seq.desc())
+        .limit(1)
+    )
+    version = StandardCvVersion(
+        tenant_id=candidate.tenant_id,
+        candidate_id=candidate.id,
+        intake_id=None,
+        seq=(last_seq or 0) + 1,
+        object_key=version_key,
+        file_size=len(pdf_bytes),
+        created_by_id=user.id,
+    )
+    db.add(version)
+    db.commit()
+    db.refresh(version)
+    audit.log_event(
+        db,
+        action="talentpool.standard_cv_generated",
+        entity_type="candidate",
+        entity_id=candidate.id,
+        object_key=version_key,
+        detail={"version_seq": version.seq},
+    )
+    return version
+
+
+def list_standard_cv_versions(db: Session, candidate_id: str) -> list[StandardCvVersion]:
+    return list(
+        db.execute(
+            select(StandardCvVersion)
+            .where(StandardCvVersion.candidate_id == parse_uuid(candidate_id))
+            .order_by(StandardCvVersion.seq.desc())
+        ).scalars()
+    )
+
+
 def lock_version_for_placement(db: Session, *, candidate_id, placement_id) -> None:
     """Snapshot submission (§10.3): kunci versi CV terbaru saat kandidat diusulkan."""
     version = (
@@ -660,8 +761,11 @@ def list_talentpool(
         for i in db.execute(select(CvIntake).order_by(CvIntake.created_at.desc())).scalars()
     }
     locked_counts: dict = {}
+    latest_version_id: dict = {}
     for v in db.execute(select(StandardCvVersion)).scalars():
-        locked_counts[v.candidate_id] = max(locked_counts.get(v.candidate_id, 0), v.seq)
+        if v.seq > locked_counts.get(v.candidate_id, 0):
+            locked_counts[v.candidate_id] = v.seq
+            latest_version_id[v.candidate_id] = v.id
 
     rows: list[dict] = []
     for c in candidates:
@@ -695,6 +799,9 @@ def list_talentpool(
                     len(json.loads(intake.needs_review)) if intake and intake.needs_review else 0
                 ),
                 "latest_cv_version": locked_counts.get(c.id),
+                "latest_cv_version_id": (
+                    str(latest_version_id[c.id]) if c.id in latest_version_id else None
+                ),
             }
         )
     return rows
@@ -1051,9 +1158,13 @@ def render_standard_cv(
                 cert_line += f" ({cert['tahun']})"
             story.append(Paragraph("• " + cert_line, body))
         if profile.get("languages"):
-            langs = ", ".join(
-                f"{lang.get('bahasa')} ({lang.get('tingkat')})" for lang in profile["languages"]
-            )
+
+            def _lang_line(lang: dict) -> str:
+                if lang.get("tingkat"):
+                    return f"{lang.get('bahasa')} ({lang['tingkat']})"
+                return str(lang.get("bahasa"))
+
+            langs = ", ".join(_lang_line(lang) for lang in profile["languages"])
             story.append(Paragraph("<b>Bahasa:</b> " + esc(langs), body))
 
     story.append(Paragraph("Data Penempatan", section))

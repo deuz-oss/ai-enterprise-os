@@ -90,6 +90,23 @@ def reprocess_intake(intake_id: str, db: Session = Depends(get_db)):
     return service.serialize_intake(db, intake)
 
 
+@router.post("/candidates/{candidate_id}/standard-cv", status_code=201)
+def generate_standard_cv(
+    candidate_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Generate CV Standar langsung dari data kandidat saat ini -- untuk
+    kandidat yang tidak lewat jalur unggah-CV/ekstraksi AI, atau untuk
+    regenerasi versi terbaru kapan saja."""
+    version = service.generate_standard_cv_from_candidate(db, user=user, candidate_id=candidate_id)
+    return {"id": str(version.id), "seq": version.seq, "created_at": version.created_at}
+
+
+@router.get("/candidates/{candidate_id}/standard-cv-versions")
+def list_standard_cv_versions(candidate_id: str, db: Session = Depends(get_db)):
+    versions = service.list_standard_cv_versions(db, candidate_id)
+    return [{"id": str(v.id), "seq": v.seq, "created_at": v.created_at} for v in versions]
+
+
 @router.get("/cv-versions/{version_id}/download")
 def download_version(version_id: str, db: Session = Depends(get_db)):
     data, name = service.download_version(db, version_id)

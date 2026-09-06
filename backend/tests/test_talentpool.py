@@ -421,3 +421,60 @@ def test_foto_kandidat_toggle_show_photo(client, monkeypatch):
     rm = client.delete(f"/api/v1/talentpool/candidates/{candidate_id}/photo", headers=admin)
     assert rm.status_code == 200
     assert rm.json()["has_photo"] is False
+
+
+def test_generate_standard_cv_untuk_kandidat_manual_tanpa_intake(client):
+    """Kandidat dibuat manual di Talent Pool (tanpa CV/intake sama sekali)
+    tetap harus bisa dapat CV Standar -- gap yang diperbaiki 2026-09-06."""
+    headers = _auth_header(client)
+
+    created = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={
+            "full_name": "Kandidat Manual",
+            "city": "Bandung",
+            "phone": "0812",
+            "expected_salary": 4_500_000,
+        },
+    )
+    assert created.status_code == 201, created.text
+    candidate_id = created.json()["id"]
+
+    client.post(
+        f"/api/v1/recruitment/candidates/{candidate_id}/experiences",
+        headers=headers,
+        json={"company": "PT Contoh", "position": "Staff Admin", "start_date": "2020-01-01"},
+    )
+
+    gen = client.post(f"/api/v1/talentpool/candidates/{candidate_id}/standard-cv", headers=headers)
+    assert gen.status_code == 201, gen.text
+    assert gen.json()["seq"] == 1
+
+    versions = client.get(
+        f"/api/v1/talentpool/candidates/{candidate_id}/standard-cv-versions", headers=headers
+    )
+    assert len(versions.json()) == 1
+    version_id = versions.json()[0]["id"]
+
+    dl = client.get(f"/api/v1/talentpool/cv-versions/{version_id}/download", headers=headers)
+    assert dl.status_code == 200
+    assert dl.content[:5] == b"%PDF-"
+
+    pool_rows = client.get("/api/v1/talentpool", headers=headers).json()
+    row = next(r for r in pool_rows if r["candidate_id"] == candidate_id)
+    assert row["latest_cv_version"] == 1
+    assert row["latest_cv_version_id"] == version_id
+
+    # Generate lagi -> nomor versi lanjut (bukan reset ke 1)
+    gen2 = client.post(f"/api/v1/talentpool/candidates/{candidate_id}/standard-cv", headers=headers)
+    assert gen2.json()["seq"] == 2
+
+
+def test_generate_standard_cv_kandidat_tidak_ditemukan(client):
+    headers = _auth_header(client)
+    resp = client.post(
+        "/api/v1/talentpool/candidates/00000000-0000-0000-0000-000000000000/standard-cv",
+        headers=headers,
+    )
+    assert resp.status_code == 404

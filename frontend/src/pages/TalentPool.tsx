@@ -1,9 +1,10 @@
 import { Fragment, FormEvent, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 import { AiResultCard, ScoreBadge } from "../components/Ai";
 import type { Screening } from "../components/Ai";
-import { CheckCircle2, Clock, Dna, FileCheck2, Palette } from "lucide-react";
+import { CheckCircle2, Clock, Dna, FileCheck2, Palette, Sparkles } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
 import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import type { JobOrder } from "./JobOrders";
@@ -22,12 +23,41 @@ interface TpRow {
   latest_intake_id: string | null;
   needs_review_count: number;
   latest_cv_version: number;
-  // Status funnel rekrutmen keseluruhan (bukan status pemrosesan CV di atas)
-  // -- dipindahkan dari Candidates.tsx (dihapus 2026-09-06, Talent Pool jadi
-  // satu-satunya database kandidat).
+  latest_cv_version_id: string | null;
+  // Status funnel rekrutmen keseluruhan (turunan otomatis dari Placement,
+  // lihat update_placement_status di backend) -- tidak lagi ditampilkan/
+  // diedit manual di sini sejak 2026-09-06; representasi akurat & bisa-aksi
+  // ada di kolom "Proses" (job order + status Placement) di bawah.
   status: string;
   cv_file_name: string | null;
 }
+
+interface PlacementRow {
+  id: string;
+  candidate_id: string;
+  job_order_id: string;
+  status: string;
+}
+
+// Label+warna tahap PlacementStatus -- duplikat kecil dari JobOrderDetail.tsx
+// (pola yang sudah lazim di codebase, mis. dulu TalentCloudOverview.tsx vs
+// Candidates.tsx) supaya pill "Proses" di sini konsisten dengan Kanban.
+const PLACEMENT_STAGE_LABEL: Record<string, { label: string; dot: string }> = {
+  disourcing: { label: "Sourcing", dot: "#9f9f9f" },
+  screening: { label: "Screening", dot: "#2383e2" },
+  interview_rekruter: { label: "Interview Internal", dot: "#5b5bd6" },
+  disubmit: { label: "Disubmit", dot: "#8b5cf6" },
+  dikirim_ke_klien: { label: "Kirim Klien", dot: "#9065b0" },
+  screening_klien: { label: "Screening Klien", dot: "#0ea5e9" },
+  interview_klien: { label: "Interview Klien", dot: "#cb912f" },
+  ojt: { label: "OJT", dot: "#d97706" },
+  diusulkan: { label: "Diusulkan", dot: "#059669" },
+  disetujui_klien: { label: "Disetujui", dot: "#10b981" },
+  hired: { label: "Hired", dot: "#0f7b6c" },
+  onboarded: { label: "Onboarded", dot: "#0f172a" },
+  gagal: { label: "Gagal", dot: "#e03e3e" },
+  dibatalkan: { label: "Dibatalkan", dot: "#e03e3e" },
+};
 
 interface CandidateExperience {
   id: string;
@@ -44,18 +74,6 @@ interface ActivityLogEntry {
   detail: unknown;
   created_at: string;
 }
-
-// Status funnel rekrutmen (Candidate.status) -- pindahan dari Candidates.tsx.
-const RECRUIT_STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
-const RECRUIT_BADGE: Record<string, string> = {
-  baru: "pill p-gray",
-  screening: "pill p-blue",
-  interview: "pill p-indigo",
-  offered: "pill p-yellow",
-  placed: "pill p-green",
-  gagal: "pill p-red",
-  arsip: "pill p-gray",
-};
 
 interface IntakeDetail {
   id: string;
@@ -453,6 +471,10 @@ function BrandingCard() {
   const [footer, setFooter] = useState<string | null>(null);
   const [accent, setAccent] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Pengaturan tenant (logo/warna/footer template PDF), bukan aksi per-kandidat
+  // -- disembunyikan default supaya tidak terlihat seperti "kartu upload
+  // ketiga" di samping Tambah Kandidat / Unggah CV (feedback 2026-09-06).
+  const [open, setOpen] = useState(false);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ["cv-branding"] });
 
@@ -484,11 +506,31 @@ function BrandingCard() {
 
   const b = branding.data;
   if (!b) return null;
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+        style={{ color: "var(--text-muted)" }}
+      >
+        <Palette className="h-3.5 w-3.5" /> Pengaturan CV Standar
+      </button>
+    );
+  }
   return (
     <div className="card space-y-2 p-4">
-      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-        <Palette className="h-4 w-4" /> Branding CV Standar
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <Palette className="h-4 w-4" /> Branding CV Standar
+        </h3>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-xs font-medium hover:underline"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Tutup
+        </button>
+      </div>
       <div className="flex flex-wrap items-center gap-3 text-xs">
         {b.has_logo && b.logo_url && (
           <img
@@ -621,18 +663,24 @@ export default function TalentPool() {
     })),
   ];
 
-  // Filter kedua, independen dari tp_status di atas: status funnel
-  // rekrutmen keseluruhan kandidat (pindahan dari Candidates.tsx).
-  const [recruitStatusTab, setRecruitStatusTab] = useState("");
-  const visibleRows = tpFilteredRows.filter((r) => !recruitStatusTab || r.status === recruitStatusTab);
-  const recruitStatusTabs: PillTab[] = [
-    { key: "", label: "Semua", count: tpFilteredRows.length },
-    ...RECRUIT_STATUSES.map((s) => ({
-      key: s,
-      label: s[0].toUpperCase() + s.slice(1),
-      count: tpFilteredRows.filter((r) => r.status === s).length,
-    })),
-  ];
+  const visibleRows = tpFilteredRows;
+
+  // Talent Pool cuma database kandidat -- "sedang diproses di Job Order mana"
+  // ditunjukkan dari Placement langsung (bukan Candidate.status yang cuma
+  // funnel turunan), feedback 2026-09-06. Fetch tanpa filter (pola sama
+  // seperti dulu di Candidates.tsx yang sudah dihapus) lalu dikelompokkan
+  // per kandidat di klien.
+  const { data: placements } = useQuery({
+    queryKey: ["placements-all"],
+    queryFn: () => api.get<PlacementRow[]>("/recruitment/placements"),
+  });
+  const placementsByCandidate = new Map<string, PlacementRow[]>();
+  for (const p of placements ?? []) {
+    const list = placementsByCandidate.get(p.candidate_id) ?? [];
+    list.push(p);
+    placementsByCandidate.set(p.candidate_id, list);
+  }
+  const jobOrderTitle = (id: string) => (jobOrders ?? []).find((j) => j.id === id)?.title ?? id;
 
   // KPI row (§1.3) -- dari data talent pool yang sudah di-fetch (`pool.data`).
   const needsReviewCount = matchFilteredRows.filter((r) => r.needs_review_count > 0).length;
@@ -673,9 +721,9 @@ export default function TalentPool() {
     },
   });
 
-  const changeRecruitStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/recruitment/candidates/${id}`, { status }),
+  const generateStandardCv = useMutation({
+    mutationFn: (candidateId: string) =>
+      api.post(`/talentpool/candidates/${candidateId}/standard-cv`, {}),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["talentpool"] }),
   });
 
@@ -721,13 +769,14 @@ export default function TalentPool() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        icon={Dna}
-        title="Talent Pool"
-        subtitle="CV terstandar otomatis: unggah → ekstraksi AI → review recruiter → CV standar berversi (PRD §10)"
-      />
-
-      <BrandingCard />
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <PageHeader
+          icon={Dna}
+          title="Talent Pool"
+          subtitle="Database kandidat terpusat: input manual atau unggah CV → data terstandar → CV Standar siap diekspor"
+        />
+        <BrandingCard />
+      </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total Talent" value={matchFilteredRows.length} icon={Dna} iconTone="info" />
@@ -743,19 +792,54 @@ export default function TalentPool() {
       </div>
 
       <PillTabs tabs={tpStatusTabs} value={tpStatusTab} onChange={setTpStatusTab} />
-      <PillTabs tabs={recruitStatusTabs} value={recruitStatusTab} onChange={setRecruitStatusTab} />
 
-      <div className="card space-y-2 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Tambah Kandidat Manual</h3>
-          <button className="btn-secondary text-xs" onClick={() => setShowCreateForm((v) => !v)}>
-            {showCreateForm ? "Tutup" : "+ Kandidat Manual"}
-          </button>
+      <div className="card space-y-3 p-4">
+        <h3 className="text-sm font-semibold">Tambah Kandidat</h3>
+
+        <div className="space-y-2">
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Punya CV? Unggah di sini — sistem membaca datanya otomatis (PDF, hasil scan, DOCX,
+            atau foto). File asli tersimpan sebagai bukti sumber.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx,image/png,image/jpeg,image/webp"
+              className="input w-auto"
+            />
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              Persetujuan pemrosesan data pribadi (UU PDP)
+            </label>
+            <button
+              onClick={() => {
+                const f = fileRef.current?.files?.[0];
+                if (f) intake.mutate(f);
+              }}
+              disabled={!consent || intake.isPending}
+              className="btn disabled:opacity-40"
+            >
+              {intake.isPending ? "Memproses…" : "Proses dengan AI"}
+            </button>
+          </div>
+          {!consent && (
+            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              Centang persetujuan untuk mengaktifkan tombol.
+            </p>
+          )}
+          {intake.error && <p className="text-xs text-red-600">{(intake.error as Error).message}</p>}
         </div>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Untuk kandidat yang belum punya CV (mis. sumber telepon/walk-in) — CV bisa
-          diunggah belakangan lewat "Unggah CV Kandidat" di bawah.
-        </p>
+
+        <div className="flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+          <span className="text-[11px]">atau isi manual kalau belum ada CV</span>
+          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+        </div>
+
+        <button className="btn-secondary text-xs" onClick={() => setShowCreateForm((v) => !v)}>
+          {showCreateForm ? "Tutup form manual" : "+ Kandidat Manual"}
+        </button>
         {showCreateForm && (
           <form onSubmit={handleCreateCandidate} className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
             <input name="full_name" required placeholder="Nama lengkap *" className="input" />
@@ -819,32 +903,6 @@ export default function TalentPool() {
         )}
       </div>
 
-      <div className="card space-y-2 p-4">
-        <h3 className="text-sm font-semibold">Unggah CV Kandidat</h3>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          PDF (teks atau hasil scan), DOCX, atau foto. File asli tersimpan sebagai bukti sumber.
-        </p>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <input ref={fileRef} type="file" accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="input w-auto" />
-          <label className="inline-flex items-center gap-1">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            Persetujuan pemrosesan data pribadi (UU PDP)
-          </label>
-          <button
-            onClick={() => {
-              const f = fileRef.current?.files?.[0];
-              if (f) intake.mutate(f);
-            }}
-            disabled={!consent || intake.isPending}
-            className="btn-secondary disabled:opacity-40"
-          >
-            {intake.isPending ? "Memproses…" : "Proses CV"}
-          </button>
-        </div>
-        {!consent && <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Centang persetujuan untuk mengaktifkan tombol.</p>}
-        {intake.error && <p className="text-xs text-red-600">{(intake.error as Error).message}</p>}
-      </div>
-
       <form onSubmit={handleFilter} className="card flex flex-wrap items-center gap-2 p-4 text-xs">
         <input placeholder="Cari nama…" value={q} onChange={(e) => setQ(e.target.value)} className="input w-40" />
         <input placeholder="Domisili" value={domisili} onChange={(e) => setDomisili(e.target.value)} className="input w-32" />
@@ -896,7 +954,7 @@ export default function TalentPool() {
               <th className="th">Kesiapan</th>
               <th className="th">Ekspektasi</th>
               <th className="th">Status TP</th>
-              <th className="th">Status Rekrutmen</th>
+              <th className="th">Proses</th>
               <th className="th">CV Standar</th>
               {matchJobOrderId && <th className="th">Skor Match</th>}
               <th className="th"></th>
@@ -921,17 +979,54 @@ export default function TalentPool() {
                     )}
                   </td>
                   <td className="td">
-                    <select
-                      value={r.status}
-                      onChange={(e) => changeRecruitStatus.mutate({ id: r.candidate_id, status: e.target.value })}
-                      className={`cursor-pointer border-0 ${RECRUIT_BADGE[r.status] ?? "pill p-gray"}`}
-                    >
-                      {RECRUIT_STATUSES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                    <div className="flex flex-wrap gap-1">
+                      {(placementsByCandidate.get(r.candidate_id) ?? []).map((p) => {
+                        const stage = PLACEMENT_STAGE_LABEL[p.status];
+                        return (
+                          <Link
+                            key={p.id}
+                            to={`/job-orders/${p.job_order_id}`}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium hover:underline"
+                            style={{ backgroundColor: "var(--hover)", color: "var(--text)" }}
+                            title={`${jobOrderTitle(p.job_order_id)} · ${stage?.label ?? p.status}`}
+                          >
+                            <span
+                              className="inline-block h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: stage?.dot ?? "#9f9f9f" }}
+                            />
+                            <span className="max-w-[90px] truncate">{jobOrderTitle(p.job_order_id)}</span>
+                            <span style={{ color: "var(--text-muted)" }}>{stage?.label ?? p.status}</span>
+                          </Link>
+                        );
+                      })}
+                      {(placementsByCandidate.get(r.candidate_id) ?? []).length === 0 && (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+                      )}
+                    </div>
                   </td>
-                  <td className="td">{r.latest_cv_version ? `v${r.latest_cv_version}` : "—"}</td>
+                  <td className="td">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      {r.latest_cv_version_id ? (
+                        <button
+                          onClick={() => void downloadFile(`/talentpool/cv-versions/${r.latest_cv_version_id}/download`)}
+                          className="font-medium text-blue-600 hover:text-blue-800"
+                        >
+                          Unduh v{r.latest_cv_version}
+                        </button>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)" }}>—</span>
+                      )}
+                      <button
+                        onClick={() => generateStandardCv.mutate(r.candidate_id)}
+                        disabled={generateStandardCv.isPending}
+                        className="inline-flex items-center gap-1 btn-secondary py-0.5 text-[11px] disabled:opacity-40"
+                        title="Generate CV Standar dari data kandidat saat ini"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        {r.latest_cv_version_id ? "Perbarui" : "Generate"}
+                      </button>
+                    </div>
+                  </td>
                   {matchJobOrderId && (
                     <td className="td" title={match?.explain}>
                       {match ? <ScoreBadge score={match.match_score} /> : "-"}
@@ -997,7 +1092,7 @@ export default function TalentPool() {
                 <td colSpan={matchJobOrderId ? 10 : 9} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   {matchJobOrderId
                     ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
-                    : tpStatusTab || recruitStatusTab
+                    : tpStatusTab
                       ? "Tidak ada talent dengan status ini."
                       : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
                 </td>
