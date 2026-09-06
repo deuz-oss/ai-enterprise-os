@@ -1,4 +1,7 @@
+import hashlib
 import json
+import logging
+import secrets
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
@@ -20,6 +23,9 @@ from app.modules.hrd.models import (
     EmploymentContractTemplate,
     EmploymentType,
     HrDocumentType,
+    OnboardingDocument,
+    OnboardingInvite,
+    OnboardingInviteStatus,
     VaccineRecord,
     WarningLetter,
     WarningLetterType,
@@ -33,10 +39,13 @@ from app.modules.hrd.schemas import (
     EmploymentContractTemplateCreate,
     EmploymentContractTemplateUpdate,
     OnboardCreate,
+    OnboardingSubmitIn,
     VaccineRecordCreate,
 )
 from app.modules.recruitment.models import Placement, PlacementStatus
 from app.modules.recruitment.service import update_placement_status
+
+logger = logging.getLogger(__name__)
 
 
 def _get_employee(db: Session, employee_id: str) -> Employee:
@@ -248,6 +257,366 @@ def onboard_from_placement(db: Session, payload: OnboardCreate) -> Employee:
     update_placement_status(db, str(placement.id), PlacementStatus.onboarded)
     db.refresh(employee)
     return employee
+
+
+# ---------- Onboarding self-service (link ber-token, PRD gap #4) ----------
+
+
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _get_onboarding_invite(db: Session, invite_id: str) -> OnboardingInvite:
+    invite = db.get(OnboardingInvite, parse_uuid(invite_id))
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Undangan onboarding tidak ditemukan")
+    return invite
+
+
+def create_onboarding_invite(
+    db: Session, *, user, placement_id: str, days: int = 14
+) -> tuple[OnboardingInvite, str]:
+    """Buat link self-service onboarding untuk kandidat (belum tentu sudah
+    jadi Employee -- `apply_onboarding_invite` yang membuatnya kalau perlu).
+    Jalur ini independen dari `onboard_from_placement` manual, bukan
+    pengganti -- tidak semua kandidat bisa isi form sendiri."""
+    placement = db.get(Placement, parse_uuid(placement_id))
+    if placement is None:
+        raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
+    if placement.status == PlacementStatus.cancelled:
+        raise HTTPException(
+            status_code=422, detail="Placement yang dibatalkan tidak bisa dikirimi link onboarding"
+        )
+    if not 1 <= days <= 90:
+        raise HTTPException(status_code=422, detail="Masa berlaku link 1-90 hari")
+
+    # Cabut invite lama yang belum di-apply untuk placement yang sama --
+    # pola sama payroll/service.py::submit_to_client mencabut token lama.
+    stale = db.execute(
+        select(OnboardingInvite).where(
+            OnboardingInvite.placement_id == placement.id,
+            OnboardingInvite.status != OnboardingInviteStatus.applied,
+        )
+    ).scalars()
+    for s in stale:
+        db.delete(s)
+
+    raw = secrets.token_urlsafe(24)
+    invite = OnboardingInvite(
+        placement_id=placement.id,
+        token_hash=_hash_token(raw),
+        expires_at=datetime.now(UTC) + timedelta(days=days),
+        created_by=getattr(user, "id", None),
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    audit.log_event(
+        db,
+        action="onboarding.invite_created",
+        entity_type="onboarding_invite",
+        entity_id=invite.id,
+        detail={"placement_id": str(placement.id), "by": getattr(user, "email", "?")},
+    )
+    _send_onboarding_invite_email(placement, raw)
+    return invite, raw
+
+
+def _send_onboarding_invite_email(placement: Placement, raw_token: str) -> None:
+    """Kirim link onboarding ke email kandidat, best-effort -- BEDA dari
+    `send_quotation_email` yang gagal loudly (422) kalau SMTP belum
+    dikonfigurasi. Di sini email cuma SALAH SATU kanal pengiriman link
+    (HR tetap dapat linknya dari respons endpoint utk dibagikan manual,
+    mis. WhatsApp), bukan aksi utama yang wajib berhasil."""
+    from app.core.config import get_settings
+
+    candidate_email = (placement.candidate.email or "").strip() if placement.candidate else ""
+    if not candidate_email or not get_settings().email_enabled:
+        return
+    try:
+        from app.modules.notifications.service import send_raw_email
+
+        base = (
+            get_settings().cors_origin_list[0].rstrip("/")
+            if get_settings().cors_origin_list
+            else ""
+        )
+        link = f"{base}/onboarding/{raw_token}"
+        send_raw_email(
+            candidate_email,
+            "Lengkapi Data Onboarding Anda",
+            f"Selamat! Silakan lengkapi data onboarding Anda lewat link berikut:\n{link}",
+        )
+    except Exception:  # noqa: BLE001 - email tidak boleh gagalkan pembuatan link
+        logger.exception("Gagal kirim email undangan onboarding ke %s", candidate_email)
+
+
+def list_onboarding_invites(
+    db: Session, *, placement_id: str | None = None
+) -> list[OnboardingInvite]:
+    stmt = select(OnboardingInvite).order_by(OnboardingInvite.created_at.desc())
+    if placement_id:
+        stmt = stmt.where(OnboardingInvite.placement_id == parse_uuid(placement_id))
+    return list(db.execute(stmt).scalars())
+
+
+def get_onboarding_invite_detail(db: Session, invite_id: str) -> dict:
+    """Detail undangan untuk direview HR -- termasuk link unduh tiap dokumen
+    yang sudah diunggah kandidat."""
+    invite = _get_onboarding_invite(db, invite_id)
+    documents = list(
+        db.execute(
+            select(OnboardingDocument).where(OnboardingDocument.invite_id == invite.id)
+        ).scalars()
+    )
+    return {
+        "invite": invite,
+        "submitted_data": json.loads(invite.submitted_data_json)
+        if invite.submitted_data_json
+        else {},
+        "documents": [
+            {
+                "id": str(d.id),
+                "document_type": d.document_type.value,
+                "file_name": d.file_name,
+                "file_size": d.file_size,
+                "uploaded_at": d.uploaded_at,
+                "download_url": storage.presigned_get_url(d.object_key),
+            }
+            for d in documents
+        ],
+    }
+
+
+def apply_onboarding_invite(db: Session, *, user, invite_id: str) -> Employee:
+    """Terapkan submission kandidat ke record Employee resmi -- baru boleh
+    dipanggil setelah HR review (invite berstatus `submitted`). Employee
+    dibuat kalau belum ada (logika sama `onboard_from_placement`), lalu
+    field yang disubmit di-pipa lewat `update_employee` yang sudah ada
+    (bukan tulis manual satu-satu) supaya jalur update Employee tetap satu
+    pintu. Dokumen (`OnboardingDocument`) disalin jadi `EmployeeDocument`
+    resmi, reuse `object_key` yang sama tanpa upload ulang."""
+    invite = _get_onboarding_invite(db, invite_id)
+    if invite.status != OnboardingInviteStatus.submitted:
+        raise HTTPException(
+            status_code=409, detail="Undangan ini belum disubmit kandidat atau sudah diterapkan"
+        )
+    placement = db.get(Placement, invite.placement_id)
+    if placement is None:
+        raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
+
+    employee = db.execute(
+        select(Employee).where(Employee.placement_id == placement.id)
+    ).scalar_one_or_none()
+    if employee is None:
+        employee = onboard_from_placement(db, OnboardCreate(placement_id=placement.id))
+
+    submitted = json.loads(invite.submitted_data_json) if invite.submitted_data_json else {}
+    submitted.pop("consent", None)
+    employee = update_employee(db, str(employee.id), EmployeeUpdate(**submitted))
+
+    documents = list(
+        db.execute(
+            select(OnboardingDocument).where(OnboardingDocument.invite_id == invite.id)
+        ).scalars()
+    )
+    for doc in documents:
+        db.add(
+            EmployeeDocument(
+                employee_id=employee.id,
+                document_type=doc.document_type,
+                title=doc.document_type.value,
+                object_key=doc.object_key,
+                file_name=doc.file_name,
+                mime_type=doc.mime_type,
+                file_size=doc.file_size,
+                uploaded_by=None,
+            )
+        )
+
+    invite.status = OnboardingInviteStatus.applied
+    invite.applied_at = datetime.now(UTC)
+    invite.applied_by = getattr(user, "id", None)
+    db.commit()
+    db.refresh(employee)
+    audit.log_event(
+        db,
+        action="onboarding.applied",
+        entity_type="onboarding_invite",
+        entity_id=invite.id,
+        detail={"employee_id": str(employee.id), "by": getattr(user, "email", "?")},
+    )
+    return employee
+
+
+def revoke_onboarding_invite(db: Session, *, user, invite_id: str) -> OnboardingInvite:
+    """Matikan link permanen -- buat kasus link salah kirim/kompromi.
+    Beda dari `request_onboarding_resubmission` yang tetap membiarkan
+    kandidat isi ulang di link yang sama."""
+    invite = _get_onboarding_invite(db, invite_id)
+    if invite.status == OnboardingInviteStatus.applied:
+        raise HTTPException(
+            status_code=409, detail="Undangan yang sudah diterapkan tidak bisa dibatalkan"
+        )
+    invite.status = OnboardingInviteStatus.revoked
+    db.commit()
+    db.refresh(invite)
+    audit.log_event(
+        db,
+        action="onboarding.revoked",
+        entity_type="onboarding_invite",
+        entity_id=invite.id,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return invite
+
+
+def request_onboarding_resubmission(db: Session, *, user, invite_id: str) -> OnboardingInvite:
+    """Tolak submission kandidat & minta isi ulang -- token TETAP berfungsi
+    dan `submitted_data_json` TIDAK dihapus (jadi referensi/prefill saat
+    kandidat balik ke link yang sama)."""
+    invite = _get_onboarding_invite(db, invite_id)
+    if invite.status != OnboardingInviteStatus.submitted:
+        raise HTTPException(status_code=409, detail="Undangan ini belum disubmit kandidat")
+    invite.status = OnboardingInviteStatus.invited
+    db.commit()
+    db.refresh(invite)
+    audit.log_event(
+        db,
+        action="onboarding.resubmission_requested",
+        entity_type="onboarding_invite",
+        entity_id=invite.id,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return invite
+
+
+# ---------- Onboarding self-service -- publik (tanpa akun, via token) ----------
+# Guard lisensi/tenant TIDAK berlaku di sini -- akses dikontrol token +
+# kedaluwarsa, pola sama `payroll/service.py::decide_by_token`.
+
+ONBOARDING_DOC_ALLOWED_MIME = ("application/pdf", "image/png", "image/jpeg")
+ONBOARDING_DOC_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _find_invite_by_token(db: Session, raw_token: str) -> OnboardingInvite:
+    invite = db.execute(
+        select(OnboardingInvite).where(OnboardingInvite.token_hash == _hash_token(raw_token))
+    ).scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Link onboarding tidak valid")
+    if invite.status == OnboardingInviteStatus.revoked:
+        raise HTTPException(status_code=409, detail="Link onboarding ini sudah dibatalkan")
+    if invite.status == OnboardingInviteStatus.applied:
+        raise HTTPException(status_code=409, detail="Data onboarding ini sudah diterapkan")
+    expires = invite.expires_at
+    now = datetime.now(UTC)
+    if expires.tzinfo is None:
+        now = now.replace(tzinfo=None)
+    if expires < now:
+        raise HTTPException(status_code=410, detail="Link onboarding sudah kedaluwarsa")
+    return invite
+
+
+def onboarding_invite_public_view(db: Session, raw_token: str) -> dict:
+    """Ringkasan untuk kandidat: nama (prefill), status, data yang pernah
+    disubmit (buat resume kalau balik lagi), dan dokumen yang sudah ada."""
+    from app.core.tenancy import get_tenant, set_tenant
+
+    invite = _find_invite_by_token(db, raw_token)
+    prev_tenant = get_tenant()
+    set_tenant(invite.tenant_id)
+    try:
+        placement = db.get(Placement, invite.placement_id)
+        documents = list(
+            db.execute(
+                select(OnboardingDocument).where(OnboardingDocument.invite_id == invite.id)
+            ).scalars()
+        )
+        return {
+            "candidate_name": placement.candidate.full_name if placement else None,
+            "status": invite.status.value,
+            "expires_at": invite.expires_at,
+            "submitted_data": (
+                json.loads(invite.submitted_data_json) if invite.submitted_data_json else {}
+            ),
+            "documents": [
+                {"document_type": d.document_type.value, "file_name": d.file_name}
+                for d in documents
+            ],
+        }
+    finally:
+        set_tenant(prev_tenant)
+
+
+def submit_onboarding_data(db: Session, raw_token: str, payload: OnboardingSubmitIn) -> dict:
+    from app.core.tenancy import get_tenant, set_tenant
+
+    invite = _find_invite_by_token(db, raw_token)
+    if not payload.consent:
+        raise HTTPException(
+            status_code=422, detail="Persetujuan pemrosesan data pribadi (UU PDP) wajib dicentang"
+        )
+    prev_tenant = get_tenant()
+    set_tenant(invite.tenant_id)
+    try:
+        data = payload.model_dump(exclude={"consent"})
+        invite.submitted_data_json = json.dumps(data, default=str)
+        invite.consent = True
+        invite.status = OnboardingInviteStatus.submitted
+        invite.submitted_at = datetime.now(UTC)
+        db.commit()
+    finally:
+        set_tenant(prev_tenant)
+    return {"status": invite.status.value, "submitted_at": invite.submitted_at}
+
+
+async def upload_onboarding_document(
+    db: Session, raw_token: str, document_type: HrDocumentType, file: UploadFile
+) -> dict:
+    from app.core.tenancy import get_tenant, set_tenant
+
+    invite = _find_invite_by_token(db, raw_token)
+    mime = file.content_type or ""
+    if mime not in ONBOARDING_DOC_ALLOWED_MIME:
+        raise HTTPException(status_code=422, detail="Format dokumen harus PDF, PNG, atau JPEG")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="File kosong")
+    if len(data) > ONBOARDING_DOC_MAX_BYTES:
+        raise HTTPException(status_code=422, detail="Ukuran dokumen maksimal 10 MB")
+
+    prev_tenant = get_tenant()
+    set_tenant(invite.tenant_id)
+    try:
+        # Ganti (bukan versioning) -- unggah ulang jenis yang sama menimpa yang lama.
+        existing = list(
+            db.execute(
+                select(OnboardingDocument).where(
+                    OnboardingDocument.invite_id == invite.id,
+                    OnboardingDocument.document_type == document_type,
+                )
+            ).scalars()
+        )
+        for old in existing:
+            db.delete(old)
+        file_name = file.filename or f"{document_type.value}.pdf"
+        object_key = storage.new_object_key(f"onboarding/{invite.id}", file_name)
+        storage.put_object(object_key, data, mime)
+        document = OnboardingDocument(
+            invite_id=invite.id,
+            document_type=document_type,
+            object_key=object_key,
+            file_name=file_name,
+            mime_type=mime,
+            file_size=len(data),
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+    finally:
+        set_tenant(prev_tenant)
+    return {"document_type": document.document_type.value, "file_name": document.file_name}
 
 
 # ---------- Contracts ----------

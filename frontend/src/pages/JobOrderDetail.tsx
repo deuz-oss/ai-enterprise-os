@@ -48,6 +48,35 @@ interface Placement {
   offering_signed_at: string | null;
 }
 
+interface OnboardingInvite {
+  id: string;
+  placement_id: string;
+  status: "invited" | "submitted" | "applied" | "revoked";
+  submitted_at: string | null;
+  expires_at: string;
+  applied_at: string | null;
+}
+
+interface OnboardingInviteDetail {
+  invite: OnboardingInvite;
+  submitted_data: Record<string, unknown>;
+  documents: {
+    id: string;
+    document_type: string;
+    file_name: string;
+    file_size: number;
+    uploaded_at: string;
+    download_url: string;
+  }[];
+}
+
+const ONBOARDING_INVITE_STATUS_LABEL: Record<string, string> = {
+  invited: "Diundang",
+  submitted: "Disubmit",
+  applied: "Diterapkan",
+  revoked: "Dibatalkan",
+};
+
 interface Candidate {
   id: string;
   full_name: string;
@@ -123,6 +152,7 @@ export default function JobOrderDetail() {
   const [showAddCandidate, setShowAddCandidate] = useState(false);
   const [showOfferingForm, setShowOfferingForm] = useState(false);
   const [showOnboardForm, setShowOnboardForm] = useState(false);
+  const [showOnboardingInviteReview, setShowOnboardingInviteReview] = useState(false);
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
 
   const { data: jo } = useQuery({
@@ -157,8 +187,23 @@ export default function JobOrderDetail() {
     queryFn: () => api.get<Interview[]>("/recruitment/interviews"),
     enabled: tab === "candidates",
   });
+  const { data: onboardingInvites } = useQuery({
+    queryKey: ["onboarding-invites", selectedPlacementId],
+    queryFn: () =>
+      api.get<OnboardingInvite[]>(`/employees/onboarding-invites?placement_id=${selectedPlacementId}`),
+    enabled: Boolean(selectedPlacementId),
+  });
+  const currentInvite = onboardingInvites?.[0];
+  const { data: onboardingInviteDetail } = useQuery({
+    queryKey: ["onboarding-invite-detail", currentInvite?.id],
+    queryFn: () =>
+      api.get<OnboardingInviteDetail>(`/employees/onboarding-invites/${currentInvite!.id}`),
+    enabled: Boolean(currentInvite?.id) && showOnboardingInviteReview,
+  });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["placements", id] });
+  const invalidateOnboardingInvites = () =>
+    qc.invalidateQueries({ queryKey: ["onboarding-invites", selectedPlacementId] });
 
   const scheduleInterview = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/recruitment/interviews", body),
@@ -195,6 +240,39 @@ export default function JobOrderDetail() {
     onSuccess: () => {
       setShowOnboardForm(false);
       invalidate();
+    },
+  });
+  const createOnboardingInvite = useMutation({
+    mutationFn: (placementId: string) =>
+      api.post<{ invite: OnboardingInvite; onboarding_url: string }>(
+        "/employees/onboarding-invites",
+        { placement_id: placementId }
+      ),
+    onSuccess: invalidateOnboardingInvites,
+  });
+  const applyOnboardingInvite = useMutation({
+    mutationFn: (inviteId: string) =>
+      api.post(`/employees/onboarding-invites/${inviteId}/apply`, {}),
+    onSuccess: () => {
+      setShowOnboardingInviteReview(false);
+      invalidateOnboardingInvites();
+      invalidate();
+    },
+  });
+  const requestOnboardingResubmission = useMutation({
+    mutationFn: (inviteId: string) =>
+      api.post(`/employees/onboarding-invites/${inviteId}/request-resubmission`, {}),
+    onSuccess: () => {
+      setShowOnboardingInviteReview(false);
+      invalidateOnboardingInvites();
+    },
+  });
+  const revokeOnboardingInvite = useMutation({
+    mutationFn: (inviteId: string) =>
+      api.post(`/employees/onboarding-invites/${inviteId}/revoke`, {}),
+    onSuccess: () => {
+      setShowOnboardingInviteReview(false);
+      invalidateOnboardingInvites();
     },
   });
   const createPlacement = useMutation({
@@ -605,7 +683,116 @@ export default function JobOrderDetail() {
               <Button size="sm" variant="secondary" onClick={() => setShowOnboardForm((v) => !v)}>
                 Onboard jadi Karyawan
               </Button>
+              {!currentInvite || currentInvite.status === "revoked" ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={createOnboardingInvite.isPending}
+                  onClick={() => createOnboardingInvite.mutate(p.id)}
+                >
+                  <Mail className="h-3.5 w-3.5" /> Kirim Link Onboarding
+                </Button>
+              ) : (
+                <>
+                  <Badge tone={currentInvite.status === "applied" ? "success" : "info"}>
+                    Onboarding: {ONBOARDING_INVITE_STATUS_LABEL[currentInvite.status]}
+                  </Badge>
+                  {currentInvite.status === "submitted" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowOnboardingInviteReview((v) => !v)}
+                    >
+                      Review Submission
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
+
+            {createOnboardingInvite.data && (
+              <CalloutBlock tone="success">
+                Link onboarding dibuat (email otomatis terkirim ke kandidat kalau alamat emailnya
+                ada). Bagikan juga secara manual kalau perlu (mis. WhatsApp):
+                <br />
+                <code className="text-xs">{createOnboardingInvite.data.onboarding_url}</code>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="ml-2"
+                  onClick={() =>
+                    navigator.clipboard.writeText(createOnboardingInvite.data!.onboarding_url)
+                  }
+                >
+                  Salin Link
+                </Button>
+              </CalloutBlock>
+            )}
+
+            {showOnboardingInviteReview && currentInvite && onboardingInviteDetail && (
+              <div className="mt-3 space-y-3 rounded-lg p-3" style={{ backgroundColor: "var(--hover)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+                  Review Data Onboarding
+                </p>
+                <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                  {Object.entries(onboardingInviteDetail.submitted_data).map(([k, v]) => (
+                    <div key={k}>
+                      <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                      <dd style={{ color: "var(--text)" }}>
+                        {typeof v === "object" ? JSON.stringify(v) : String(v ?? "-")}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {onboardingInviteDetail.documents.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {onboardingInviteDetail.documents.map((d) => (
+                      <a
+                        key={d.id}
+                        href={d.download_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="pill p-gray text-xs hover:underline"
+                      >
+                        <Download className="h-3 w-3" /> {d.document_type}: {d.file_name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    loading={applyOnboardingInvite.isPending}
+                    onClick={() => applyOnboardingInvite.mutate(currentInvite.id)}
+                  >
+                    Terapkan
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={requestOnboardingResubmission.isPending}
+                    onClick={() => requestOnboardingResubmission.mutate(currentInvite.id)}
+                  >
+                    Tolak, Minta Ulang
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    loading={revokeOnboardingInvite.isPending}
+                    onClick={() => revokeOnboardingInvite.mutate(currentInvite.id)}
+                  >
+                    Batalkan Link
+                  </Button>
+                </div>
+                {(applyOnboardingInvite.error || requestOnboardingResubmission.error) && (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {(
+                      (applyOnboardingInvite.error || requestOnboardingResubmission.error) as Error
+                    ).message}
+                  </p>
+                )}
+              </div>
+            )}
 
             {interviewModeFor === p.id && (
               <div className="mt-3 space-y-3 rounded-lg p-3" style={{ backgroundColor: "var(--hover)" }}>

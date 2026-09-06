@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
     from app.modules.finance.router import pr_router as payment_request_router
     from app.modules.finance.router import router as finance_router
     from app.modules.hrd.router import employees_view_router as hrd_employees_view_router
+    from app.modules.hrd.router import onboarding_public_router
     from app.modules.hrd.router import router as hrd_router
     from app.modules.job_portal.router import router as job_portal_router
     from app.modules.notifications.router import router as notifications_router
@@ -229,6 +230,8 @@ def create_app() -> FastAPI:
     # Link approval klien ber-token: publik, dikontrol token + kedaluwarsa (ADR/PRD Fase 9).
     app.include_router(payroll_public_router, prefix="/api/v1")
     app.include_router(job_portal_router, prefix="/api/v1")
+    # Link self-service onboarding kandidat ber-token: publik, sama pola.
+    app.include_router(onboarding_public_router, prefix="/api/v1")
     app.include_router(
         bpjs_router,
         prefix="/api/v1",

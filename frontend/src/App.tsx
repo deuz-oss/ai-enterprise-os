@@ -18,6 +18,7 @@ import Employees from "./pages/Employees";
 import Finance from "./pages/Finance";
 import ForgotPassword from "./pages/ForgotPassword";
 import JobOrderDetail from "./pages/JobOrderDetail";
+import OnboardingSelfService from "./pages/OnboardingSelfService";
 import JobOrders from "./pages/JobOrders";
 import Leads from "./pages/Leads";
 import Login from "./pages/Login";
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/careers/:tenantSlug/:jobId" element={<CareerDetail />} />
           <Route path="/careers/:tenantSlug" element={<CareerListing />} />
           <Route path="/payroll/client/:token" element={<PayrollClientPortal />} />
+          <Route path="/onboarding/:token" element={<OnboardingSelfService />} />
           <Route path="/ai-interview/session/:token" element={<AIInterviewSession />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />

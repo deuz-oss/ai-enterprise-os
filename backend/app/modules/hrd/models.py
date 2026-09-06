@@ -400,3 +400,63 @@ class VaccineRecord(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee: Mapped[Employee] = relationship(back_populates="vaccine_records")
+
+
+class OnboardingInviteStatus(str, enum.Enum):
+    invited = "invited"
+    submitted = "submitted"
+    applied = "applied"
+    revoked = "revoked"
+
+
+class OnboardingInvite(TenantMixin, Base):
+    """Link self-service onboarding ber-token untuk kandidat (tanpa akun User).
+
+    Token disimpan sebagai hash SHA-256 (pola sama `PayrollRunToken`) --
+    nilai mentah cuma muncul sekali saat HR generate link. Data yang
+    disubmit kandidat DI-STAGING di `submitted_data_json`, TIDAK langsung
+    menulis ke `Employee` -- HR wajib review & `apply` dulu (lihat
+    `service.apply_onboarding_invite`). SENGAJA TIDAK di-RLS (lihat
+    migrasinya) -- dicari lewat token sebelum tenant diketahui, sama
+    seperti `PayrollRunToken`/`payment_intents`.
+    """
+
+    __tablename__ = "onboarding_invites"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    placement_id: Mapped[UUID] = mapped_column(ForeignKey("placements.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    status: Mapped[OnboardingInviteStatus] = mapped_column(
+        Enum(OnboardingInviteStatus, native_enum=False, length=20),
+        default=OnboardingInviteStatus.invited,
+    )
+    submitted_data_json: Mapped[str | None] = mapped_column(Text, default=None)
+    consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    applied_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OnboardingDocument(TenantMixin, Base):
+    """Dokumen (KTP/NPWP/SKCK) yang diunggah kandidat, sebelum jadi `EmployeeDocument`
+    resmi lewat `service.apply_onboarding_invite`. Unggah ulang jenis yang sama
+    mengganti baris lama -- tidak versioning di tahap staging ini (versioning
+    baru berlaku setelah jadi EmployeeDocument)."""
+
+    __tablename__ = "onboarding_documents"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    invite_id: Mapped[UUID] = mapped_column(ForeignKey("onboarding_invites.id"), index=True)
+    document_type: Mapped[HrDocumentType] = mapped_column(
+        Enum(HrDocumentType, native_enum=False, length=50)
+    )
+    object_key: Mapped[str] = mapped_column(String(500))
+    file_name: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(120))
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

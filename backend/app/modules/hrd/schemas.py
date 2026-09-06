@@ -11,6 +11,7 @@ from app.modules.hrd.models import (
     HrDocumentType,
     MaritalStatus,
     MovementType,
+    OnboardingInviteStatus,
     WarningLetterType,
 )
 
@@ -158,6 +159,58 @@ class OnboardCreate(BaseModel):
     employee_no: str | None = None
     join_date: date | None = None
     phone: str | None = None
+
+
+class OnboardingInviteCreate(BaseModel):
+    placement_id: UUID
+    days: int = 14
+
+
+class OnboardingSubmitIn(BaseModel):
+    """Subset field Employee yang boleh diisi kandidat sendiri lewat link
+    self-service -- SENGAJA TIDAK termasuk employee_no/base_salary/grade/
+    level/employment_type/join_date (ranah HR/perusahaan, bukan data
+    pribadi kandidat)."""
+
+    phone: str | None = None
+    ktp_no: str | None = None
+    npwp_no: str | None = None
+    bpjs_kesehatan_no: str | None = None
+    bpjs_ketenagakerjaan_no: str | None = None
+    bank_name: str | None = None
+    bank_account: str | None = None
+    marital_status: MaritalStatus | None = None
+    dependents: int = 0
+    emergency_contact_name: str | None = None
+    emergency_contact_relation: str | None = None
+    emergency_contact_phone: str | None = None
+    citizen_address: dict = {}
+    residential_address: dict = {}
+    consent: bool
+
+
+class OnboardingInviteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    placement_id: UUID
+    status: OnboardingInviteStatus
+    consent: bool
+    submitted_at: datetime | None
+    expires_at: datetime
+    applied_at: datetime | None
+    created_at: datetime
+
+
+class OnboardingDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    document_type: HrDocumentType
+    file_name: str
+    mime_type: str
+    file_size: int
+    uploaded_at: datetime
 
 
 class ContractCreate(BaseModel):

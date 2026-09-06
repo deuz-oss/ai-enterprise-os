@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.permissions import HRD_ROLES
+from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_roles
+from app.core.tenancy import get_request_meta
 from app.modules.ess import service as ess_service
 from app.modules.ess.models import LeaveStatus
 from app.modules.ess.schemas import (
@@ -34,6 +37,9 @@ from app.modules.hrd.schemas import (
     InsuranceOut,
     InsuranceUpdate,
     OnboardCreate,
+    OnboardingInviteCreate,
+    OnboardingInviteOut,
+    OnboardingSubmitIn,
     VaccineRecordCreate,
     VaccineRecordOut,
     WarningLetterOut,
@@ -88,6 +94,62 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
 def onboard_employee(payload: OnboardCreate, db: Session = Depends(get_db)):
     """Angkat kandidat hasil placement menjadi karyawan aktif."""
     return service.onboard_from_placement(db, payload)
+
+
+# ---------- Onboarding self-service: link ber-token (statis, sebelum /{employee_id}) ----------
+
+
+@router.post("/onboarding-invites", status_code=201)
+def create_onboarding_invite(
+    payload: OnboardingInviteCreate, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    invite, raw = service.create_onboarding_invite(
+        db, user=user, placement_id=str(payload.placement_id), days=payload.days
+    )
+    settings = get_settings()
+    base = settings.cors_origin_list[0].rstrip("/") if settings.cors_origin_list else ""
+    return {
+        "invite": OnboardingInviteOut.model_validate(invite),
+        "onboarding_url": f"{base}/onboarding/{raw}",
+    }
+
+
+@router.get("/onboarding-invites", response_model=list[OnboardingInviteOut])
+def list_onboarding_invites(placement_id: str | None = Query(None), db: Session = Depends(get_db)):
+    return service.list_onboarding_invites(db, placement_id=placement_id)
+
+
+@router.get("/onboarding-invites/{invite_id}")
+def get_onboarding_invite(invite_id: str, db: Session = Depends(get_db)):
+    detail = service.get_onboarding_invite_detail(db, invite_id)
+    return {
+        "invite": OnboardingInviteOut.model_validate(detail["invite"]),
+        "submitted_data": detail["submitted_data"],
+        "documents": detail["documents"],
+    }
+
+
+@router.post("/onboarding-invites/{invite_id}/apply", response_model=EmployeeOut)
+def apply_onboarding_invite(
+    invite_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.apply_onboarding_invite(db, user=user, invite_id=invite_id)
+
+
+@router.post("/onboarding-invites/{invite_id}/revoke", response_model=OnboardingInviteOut)
+def revoke_onboarding_invite(
+    invite_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.revoke_onboarding_invite(db, user=user, invite_id=invite_id)
+
+
+@router.post(
+    "/onboarding-invites/{invite_id}/request-resubmission", response_model=OnboardingInviteOut
+)
+def request_onboarding_resubmission(
+    invite_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.request_onboarding_resubmission(db, user=user, invite_id=invite_id)
 
 
 # ---------- Portal self-service: akun & cuti (statis, sebelum /{employee_id}) ----------
@@ -488,3 +550,56 @@ async def upload_bpjs_card(
 @router.get("/{employee_id}/bpjs-card/{bpjs_type}/download-url")
 def bpjs_card_download(employee_id: str, bpjs_type: str, db: Session = Depends(get_db)):
     return {"url": service.bpjs_card_url(db, employee_id, bpjs_type)}
+
+
+# ---------- Publik (tanpa akun): onboarding self-service via link ber-token ----------
+# Guard lisensi/HRD_ROLES TIDAK berlaku di sini -- akses dikontrol token +
+# kedaluwarsa, pola sama payroll.router.public_router.
+
+onboarding_public_router = APIRouter(prefix="/onboarding", tags=["onboarding-public"])
+
+_ONBOARDING_RATE_MAX = 30
+_ONBOARDING_RATE_WINDOW_SEC = 3600
+
+
+def _check_onboarding_rate_limit(db: Session) -> None:
+    from fastapi import HTTPException
+
+    ip, _ = get_request_meta()
+    limiter = get_limiter("onboarding_public_token")
+    key = ip or "unknown"
+    allowed, retry_after = limiter.check(
+        db, key, max_attempts=_ONBOARDING_RATE_MAX, window_seconds=_ONBOARDING_RATE_WINDOW_SEC
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Terlalu banyak percobaan dari lokasi ini. Coba lagi nanti.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    limiter.hit(db, key, window_seconds=_ONBOARDING_RATE_WINDOW_SEC)
+
+
+@onboarding_public_router.get("/{token}")
+def onboarding_public_view(token: str, db: Session = Depends(get_db)):
+    _check_onboarding_rate_limit(db)
+    return service.onboarding_invite_public_view(db, token)
+
+
+@onboarding_public_router.post("/{token}")
+def onboarding_public_submit(
+    token: str, payload: OnboardingSubmitIn, db: Session = Depends(get_db)
+):
+    _check_onboarding_rate_limit(db)
+    return service.submit_onboarding_data(db, token, payload)
+
+
+@onboarding_public_router.post("/{token}/documents")
+async def onboarding_public_upload_document(
+    token: str,
+    file: UploadFile = File(...),
+    document_type: HrDocumentType = Form(...),
+    db: Session = Depends(get_db),
+):
+    _check_onboarding_rate_limit(db)
+    return await service.upload_onboarding_document(db, token, document_type, file)
