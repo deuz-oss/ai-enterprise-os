@@ -5,7 +5,7 @@
 /* ============================================================
    Token desain SaaS-admin bersih (arah baru menggantikan tema workspace lama).
    Layout dasar (Inter, palet slate/putih, kartu rounded-xl berbatas tipis)
-   dari docs/design/mockups/dashboard.html; warna --accent sendiri mengikuti
+   dari mockup referensi awal (sudah dihapus dari repo); warna --accent sendiri mengikuti
    keputusan final teal di docs/design/design.md §3. --accent SELALU tema
    global (teal terang / teal muda gelap), TIDAK pernah di-override per
    halaman — persis mockup: logo & highlight nav aktif selalu netral.

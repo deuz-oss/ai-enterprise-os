@@ -354,7 +354,9 @@ lihat [FEATURE_ROADMAP](FEATURE_ROADMAP.md). Lanjutan:
 - Aksen warna per aplikasi di atas satu design system yang sama. ✅
 - View tabel/papan: ✅ Pipeline (kanban + pindah tahap); *(catatan usang: rencana "Kandidat menyusul" di sini superseded 2026-09-05 — jadi tab "Candidates" di JobOrderDetail, bukan halaman/board terpisah, lihat §13)*
 - Callout block ✅ · Properti metadata ✅ (detail lead & karyawan terpilih).
-- Referensi visual: [`docs/design/mockup-notion-ui.html`](../design/mockup-notion-ui.html).
+- Referensi visual: `docs/design/mockup-notion-ui.html` (mockup statis, dihapus
+  dari repo setelah implementasi selesai — sudah tidak diperlukan sebagai
+  referensi, desain final ada di kode `frontend/src/`).
 
 ### Fase 8 — Absensi — ✅ Selesai (2026-08-25)
 

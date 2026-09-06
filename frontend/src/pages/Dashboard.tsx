@@ -228,9 +228,10 @@ function SectionCard({
   );
 }
 
-/// Dashboard — ringkasan lintas modul, layout ala docs/design/mockups/dashboard.html
-/// (data 100% dari /overview + /chat/digest + /finance/invoices yang sudah ada,
-/// tanpa badge harga/SKU komersial — sesuai arahan prioritas trial internal).
+/// Dashboard — ringkasan lintas modul (mockup referensi awal sudah dihapus
+/// dari repo setelah implementasi selesai; data 100% dari /overview +
+/// /chat/digest + /finance/invoices yang sudah ada, tanpa badge harga/SKU
+/// komersial — sesuai arahan prioritas trial internal).
 export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ["overview"],
