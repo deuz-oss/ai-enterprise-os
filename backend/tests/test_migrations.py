@@ -92,3 +92,31 @@ def test_seeded_rows_readable_via_orm(tmp_path):
             assert all(lic.status.name == "active" for lic in licenses)
     finally:
         engine.dispose()
+
+
+def test_upgrade_tidak_mematikan_logger_aplikasi_lain(tmp_path):
+    """Regresi: `alembic/env.py` memanggil `fileConfig(alembic.ini)` --
+    default `disable_existing_loggers=True` mematikan PERMANEN
+    (`Logger.disabled = True`) semua logger aplikasi yang sudah ada
+    (mis. `app.modules.recruitment.service`) begitu `command.upgrade()`
+    dipanggil programatik di proses yang sama (bukan CLI sekali-jalan).
+    `caplog.at_level` pytest cuma mereset level/global-disable-threshold,
+    BUKAN flag `.disabled` ini -- efeknya, tiap test yang mengandalkan
+    `caplog` untuk logger `app.*` gagal senyap (records selalu kosong)
+    kalau berjalan setelah test migrasi manapun. Ditemukan lewat
+    `test_recruitment.py::test_interview_ics_invite_failure_dicatat_ke_log_bukan_dibungkam`
+    yang konsisten gagal di full suite/CI tapi lolos sendirian."""
+    import logging
+
+    probe_logger = logging.getLogger("app.modules.recruitment.service")
+    assert probe_logger.disabled is False
+
+    db_path = tmp_path / "logger_regression.db"
+    url = _sqlite_url(db_path)
+    engine = create_engine(url)
+    try:
+        command.upgrade(_alembic_config(url), "head")
+        assert probe_logger.disabled is False
+        assert probe_logger.isEnabledFor(logging.ERROR)
+    finally:
+        engine.dispose()
