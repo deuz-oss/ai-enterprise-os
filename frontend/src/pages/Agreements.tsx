@@ -1,6 +1,6 @@
 import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Download, FileCheck2, Send, ThumbsDown, ThumbsUp } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileCheck2, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
 import { Badge, Button, Card, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { PageHeader } from "../components/workspace";
@@ -68,6 +68,7 @@ export default function Agreements() {
   const [templateId, setTemplateId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendFormId, setSendFormId] = useState<string | null>(null);
+  const [emailFormId, setEmailFormId] = useState<string | null>(null);
 
   const { data: leads } = useQuery({
     queryKey: ["leads-lookup"],
@@ -140,6 +141,14 @@ export default function Agreements() {
       invalidate();
     },
   });
+  const sendEmail = useMutation({
+    mutationFn: ({ id, to_email }: { id: string; to_email: string }) =>
+      api.post(`/agreements/${id}/send-email`, { to_email }),
+    onSuccess: () => {
+      setEmailFormId(null);
+      invalidate();
+    },
+  });
 
   const selectedTemplate = templates?.find((t) => t.id === templateId);
 
@@ -166,6 +175,12 @@ export default function Agreements() {
       signer_name: String(form.get("signer_name") ?? ""),
       signer_email: String(form.get("signer_email") ?? ""),
     });
+  }
+
+  function handleSendEmail(e: FormEvent<HTMLFormElement>, id: string) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    sendEmail.mutate({ id, to_email: String(form.get("to_email") ?? "") });
   }
 
   async function openDownload(id: string) {
@@ -318,9 +333,18 @@ export default function Agreements() {
                         </Button>
                       )}
                       {(a.status === "sent" || a.status === "signed") && (
-                        <Button size="sm" variant="secondary" onClick={() => openDownload(a.id)}>
-                          <Download className="h-3.5 w-3.5" /> Unduh
-                        </Button>
+                        <>
+                          <Button size="sm" variant="secondary" onClick={() => openDownload(a.id)}>
+                            <Download className="h-3.5 w-3.5" /> Unduh
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setEmailFormId(emailFormId === a.id ? null : a.id)}
+                          >
+                            <Mail className="h-3.5 w-3.5" /> Email
+                          </Button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -348,6 +372,33 @@ export default function Agreements() {
                         <Button type="submit" size="sm" loading={sendEsign.isPending}>
                           Kirim
                         </Button>
+                      </form>
+                    </td>
+                  </tr>
+                )}
+                {emailFormId === a.id && (
+                  <tr onClick={(e) => e.stopPropagation()}>
+                    <td colSpan={4} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                      <form
+                        onSubmit={(e) => handleSendEmail(e, a.id)}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <input
+                          name="to_email"
+                          type="email"
+                          required
+                          defaultValue={leads?.find((l) => l.id === a.lead_id)?.contact_email ?? ""}
+                          placeholder="Email penerima *"
+                          className="input w-auto py-1 text-xs"
+                        />
+                        <Button type="submit" size="sm" loading={sendEmail.isPending}>
+                          Kirim
+                        </Button>
+                        {sendEmail.error && sendEmail.variables?.id === a.id && (
+                          <p className="text-xs text-red-600">
+                            {(sendEmail.error as Error).message}
+                          </p>
+                        )}
                       </form>
                     </td>
                   </tr>

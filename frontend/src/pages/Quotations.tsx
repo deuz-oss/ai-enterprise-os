@@ -1,6 +1,6 @@
-import { FormEvent, useMemo, useState } from "react";
+import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Download, FileSignature, Send, ThumbsDown, ThumbsUp } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileSignature, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
 import { Badge, Button, Card, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { PageHeader } from "../components/workspace";
@@ -66,6 +66,7 @@ export default function Quotations() {
   const [leadId, setLeadId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [emailFormId, setEmailFormId] = useState<string | null>(null);
 
   const { data: leads } = useQuery({
     queryKey: ["leads-lookup"],
@@ -128,11 +129,25 @@ export default function Quotations() {
     mutationFn: (id: string) => api.post(`/quotations/${id}/send`, {}),
     onSuccess: invalidate,
   });
+  const sendEmail = useMutation({
+    mutationFn: ({ id, to_email }: { id: string; to_email: string }) =>
+      api.post(`/quotations/${id}/send-email`, { to_email }),
+    onSuccess: () => {
+      setEmailFormId(null);
+      invalidate();
+    },
+  });
 
   const selectedTemplate = templates?.find((t) => t.id === templateId);
 
   function leadName(id: string) {
     return leads?.find((l) => l.id === id)?.company_name ?? "—";
+  }
+
+  function handleSendEmail(e: FormEvent<HTMLFormElement>, id: string) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    sendEmail.mutate({ id, to_email: String(form.get("to_email") ?? "") });
   }
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -248,62 +263,99 @@ export default function Quotations() {
           </thead>
           <tbody style={{ borderTop: "1px solid var(--border)" }}>
             {filteredQuotations.map((q) => (
-              <tr
-                key={q.id}
-                onClick={() => setSelectedId(q.id === selectedId ? null : q.id)}
-                className="cursor-pointer transition-colors"
-                style={{
-                  backgroundColor: selectedId === q.id ? "var(--accent-tint)" : undefined,
-                }}
-              >
-                <td className="td font-medium">{leadName(q.lead_id)}</td>
-                <td className="td">
-                  <Badge tone={STATUS_TONE[q.status] ?? "neutral"}>
-                    {STATUS_LABEL[q.status] ?? q.status}
-                  </Badge>
-                </td>
-                <td className="td">{new Date(q.created_at).toLocaleDateString("id-ID")}</td>
-                <td className="td" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {q.status === "draft" && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => submitApproval.mutate(q.id)}
-                      >
-                        Ajukan Approval
-                      </Button>
-                    )}
-                    {q.status === "pending_approval" && (
-                      <>
-                        <Button size="sm" onClick={() => approve.mutate(q.id)}>
-                          <ThumbsUp className="h-3.5 w-3.5" /> Setuju
-                        </Button>
+              <Fragment key={q.id}>
+                <tr
+                  onClick={() => setSelectedId(q.id === selectedId ? null : q.id)}
+                  className="cursor-pointer transition-colors"
+                  style={{
+                    backgroundColor: selectedId === q.id ? "var(--accent-tint)" : undefined,
+                  }}
+                >
+                  <td className="td font-medium">{leadName(q.lead_id)}</td>
+                  <td className="td">
+                    <Badge tone={STATUS_TONE[q.status] ?? "neutral"}>
+                      {STATUS_LABEL[q.status] ?? q.status}
+                    </Badge>
+                  </td>
+                  <td className="td">{new Date(q.created_at).toLocaleDateString("id-ID")}</td>
+                  <td className="td" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {q.status === "draft" && (
                         <Button
                           size="sm"
-                          variant="danger"
-                          onClick={() => {
-                            const note = window.prompt("Catatan penolakan (wajib):");
-                            if (note) reject.mutate({ id: q.id, note });
-                          }}
+                          variant="secondary"
+                          onClick={() => submitApproval.mutate(q.id)}
                         >
-                          <ThumbsDown className="h-3.5 w-3.5" /> Tolak
+                          Ajukan Approval
                         </Button>
-                      </>
-                    )}
-                    {q.status === "approved" && (
-                      <Button size="sm" onClick={() => send.mutate(q.id)}>
-                        <Send className="h-3.5 w-3.5" /> Kirim
-                      </Button>
-                    )}
-                    {(q.status === "sent" || q.status === "accepted_by_client") && (
-                      <Button size="sm" variant="secondary" onClick={() => openDownload(q.id)}>
-                        <Download className="h-3.5 w-3.5" /> Unduh
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
+                      )}
+                      {q.status === "pending_approval" && (
+                        <>
+                          <Button size="sm" onClick={() => approve.mutate(q.id)}>
+                            <ThumbsUp className="h-3.5 w-3.5" /> Setuju
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => {
+                              const note = window.prompt("Catatan penolakan (wajib):");
+                              if (note) reject.mutate({ id: q.id, note });
+                            }}
+                          >
+                            <ThumbsDown className="h-3.5 w-3.5" /> Tolak
+                          </Button>
+                        </>
+                      )}
+                      {q.status === "approved" && (
+                        <Button size="sm" onClick={() => send.mutate(q.id)}>
+                          <Send className="h-3.5 w-3.5" /> Kirim
+                        </Button>
+                      )}
+                      {(q.status === "sent" || q.status === "accepted_by_client") && (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={() => openDownload(q.id)}>
+                            <Download className="h-3.5 w-3.5" /> Unduh
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setEmailFormId(emailFormId === q.id ? null : q.id)}
+                          >
+                            <Mail className="h-3.5 w-3.5" /> Email
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {emailFormId === q.id && (
+                  <tr onClick={(e) => e.stopPropagation()}>
+                    <td colSpan={4} className="td" style={{ backgroundColor: "var(--hover)" }}>
+                      <form
+                        onSubmit={(e) => handleSendEmail(e, q.id)}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <input
+                          name="to_email"
+                          type="email"
+                          required
+                          defaultValue={leads?.find((l) => l.id === q.lead_id)?.contact_email ?? ""}
+                          placeholder="Email penerima *"
+                          className="input w-auto py-1 text-xs"
+                        />
+                        <Button type="submit" size="sm" loading={sendEmail.isPending}>
+                          Kirim
+                        </Button>
+                        {sendEmail.error && sendEmail.variables?.id === q.id && (
+                          <p className="text-xs text-red-600">
+                            {(sendEmail.error as Error).message}
+                          </p>
+                        )}
+                      </form>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {filteredQuotations.length === 0 && (
               <tr>

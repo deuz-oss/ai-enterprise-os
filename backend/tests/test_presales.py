@@ -6,18 +6,17 @@ from app.modules.presales.rendering import render_document_docx, render_document
 from tests.conftest import _auth_header
 
 
-def _create_lead(client, headers, name="PT Maju Jaya"):
-    resp = client.post(
-        "/api/v1/leads",
-        headers=headers,
-        json={
-            "company_name": name,
-            "industry": "manufaktur",
-            "contact_name": "Budi",
-            "estimated_headcount": 50,
-            "estimated_value": 250_000_000,
-        },
-    )
+def _create_lead(client, headers, name="PT Maju Jaya", contact_email=None):
+    payload = {
+        "company_name": name,
+        "industry": "manufaktur",
+        "contact_name": "Budi",
+        "estimated_headcount": 50,
+        "estimated_value": 250_000_000,
+    }
+    if contact_email is not None:
+        payload["contact_email"] = contact_email
+    resp = client.post("/api/v1/leads", headers=headers, json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -241,6 +240,90 @@ def test_quotation_full_lifecycle_draft_to_sent(client):
     assert dl.json()["url"]
 
 
+def _drive_quotation_to_sent(client, headers, lead_id=None):
+    quotation = _create_quotation(client, headers, lead_id)
+    client.post(f"/api/v1/quotations/{quotation['id']}/submit-approval", headers=headers)
+    client.post(f"/api/v1/quotations/{quotation['id']}/approve", headers=headers)
+    sent = client.post(f"/api/v1/quotations/{quotation['id']}/send", headers=headers)
+    assert sent.status_code == 200, sent.text
+    return sent.json()
+
+
+def test_quotation_send_email_gagal_tanpa_smtp(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Email", contact_email="pic@emailklien.co.id")
+    quotation = _drive_quotation_to_sent(client, headers, lead["id"])
+
+    resp = client.post(f"/api/v1/quotations/{quotation['id']}/send-email", headers=headers, json={})
+    assert resp.status_code == 422
+    assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
+
+
+def test_quotation_send_email_sukses_pakai_default_recipient(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Email Sukses", contact_email="pic@emailklien.co.id")
+    quotation = _drive_quotation_to_sent(client, headers, lead["id"])
+
+    calls = []
+
+    def _fake_send(to, subject, body, **kwargs):
+        calls.append({"to": to, "subject": subject, **kwargs})
+
+    settings = get_settings()
+    with patch.object(settings, "smtp_host", "smtp.test.local"):
+        with patch(
+            "app.modules.notifications.service.send_raw_email_with_attachment",
+            side_effect=_fake_send,
+        ):
+            resp = client.post(
+                f"/api/v1/quotations/{quotation['id']}/send-email", headers=headers, json={}
+            )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["sent_to"] == "pic@emailklien.co.id"
+    assert len(calls) == 1
+    assert calls[0]["to"] == "pic@emailklien.co.id"
+    assert calls[0]["attachment_subtype"] == "pdf"
+
+
+def test_quotation_send_email_override_recipient(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Email Override", contact_email="pic@emailklien.co.id")
+    quotation = _drive_quotation_to_sent(client, headers, lead["id"])
+
+    settings = get_settings()
+    with patch.object(settings, "smtp_host", "smtp.test.local"):
+        with patch("app.modules.notifications.service.send_raw_email_with_attachment") as mocked:
+            resp = client.post(
+                f"/api/v1/quotations/{quotation['id']}/send-email",
+                headers=headers,
+                json={"to_email": "lain@klien.co.id"},
+            )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["sent_to"] == "lain@klien.co.id"
+    assert mocked.call_args[0][0] == "lain@klien.co.id"
+
+
+def test_quotation_send_email_tanpa_recipient_manapun_ditolak(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Tanpa Email")
+    quotation = _drive_quotation_to_sent(client, headers, lead["id"])
+
+    settings = get_settings()
+    with patch.object(settings, "smtp_host", "smtp.test.local"):
+        resp = client.post(
+            f"/api/v1/quotations/{quotation['id']}/send-email", headers=headers, json={}
+        )
+    assert resp.status_code == 422
+    assert "Email penerima tidak diketahui" in resp.json()["detail"]
+
+
+def test_quotation_send_email_sebelum_dikirim_ditolak(client):
+    headers = _auth_header(client)
+    quotation = _create_quotation(client, headers)
+    resp = client.post(f"/api/v1/quotations/{quotation['id']}/send-email", headers=headers, json={})
+    assert resp.status_code == 404
+
+
 def test_quotation_reject_requires_note(client):
     headers = _auth_header(client)
     quotation = _create_quotation(client, headers)
@@ -431,3 +514,64 @@ def test_agreement_full_lifecycle_draft_to_signed_via_esign(client):
     final = client.get(f"/api/v1/agreements/{agreement['id']}", headers=headers).json()
     assert final["status"] == "signed"
     assert final["signed_at"] is not None
+
+
+def _drive_agreement_to_sent(client, headers, lead_id=None):
+    agreement = _create_agreement(client, headers, lead_id)
+    client.post(f"/api/v1/agreements/{agreement['id']}/submit-review", headers=headers)
+    client.post(f"/api/v1/agreements/{agreement['id']}/approve", headers=headers)
+    settings = get_settings()
+    with patch.object(settings, "esign_provider", "sandbox"):
+        sent = client.post(
+            f"/api/v1/agreements/{agreement['id']}/send-esign",
+            headers=headers,
+            json={"signer_name": "Budi", "signer_email": "budi@klien.co.id"},
+        )
+    assert sent.status_code == 200, sent.text
+    return sent.json()
+
+
+def test_agreement_send_email_gagal_tanpa_smtp(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Agreement Email", contact_email="pic@emailklien.co.id")
+    agreement = _drive_agreement_to_sent(client, headers, lead["id"])
+
+    resp = client.post(f"/api/v1/agreements/{agreement['id']}/send-email", headers=headers, json={})
+    assert resp.status_code == 422
+    assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
+
+
+def test_agreement_send_email_sukses(client):
+    headers = _auth_header(client)
+    lead = _create_lead(
+        client, headers, "PT Agreement Email Sukses", contact_email="pic@emailklien.co.id"
+    )
+    agreement = _drive_agreement_to_sent(client, headers, lead["id"])
+
+    calls = []
+
+    def _fake_send(to, subject, body, **kwargs):
+        calls.append({"to": to, "subject": subject, **kwargs})
+
+    settings = get_settings()
+    with patch.object(settings, "smtp_host", "smtp.test.local"):
+        with patch(
+            "app.modules.notifications.service.send_raw_email_with_attachment",
+            side_effect=_fake_send,
+        ):
+            resp = client.post(
+                f"/api/v1/agreements/{agreement['id']}/send-email", headers=headers, json={}
+            )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["sent_to"] == "pic@emailklien.co.id"
+    assert len(calls) == 1
+    assert calls[0]["attachment_subtype"] == (
+        "vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+def test_agreement_send_email_sebelum_dikirim_ditolak(client):
+    headers = _auth_header(client)
+    agreement = _create_agreement(client, headers)
+    resp = client.post(f"/api/v1/agreements/{agreement['id']}/send-email", headers=headers, json={})
+    assert resp.status_code == 404

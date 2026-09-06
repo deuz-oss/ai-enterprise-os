@@ -22,6 +22,7 @@ export interface Lead {
   company_name: string;
   industry: string | null;
   contact_name: string | null;
+  contact_email: string | null;
   estimated_headcount: number | null;
   estimated_value: number | null;
   stage: string;

@@ -336,6 +336,58 @@ def quotation_download_url(db: Session, quotation_id: str) -> str:
     return presigned_get_url(quotation.object_key)
 
 
+def send_quotation_email(
+    db: Session, *, user, quotation_id: str, to_email: str | None = None
+) -> dict:
+    """Kirim salinan PDF quotation yang sudah digenerate ke email klien.
+
+    Beda dari `send_raw_email_with_attachment` yang no-op senyap bila SMTP
+    belum dikonfigurasi (dipakai di alur best-effort seperti invite .ics
+    interview) -- di sini aksi dipicu langsung oleh klik staf yang
+    mengharapkan hasil pasti, jadi `email_enabled` dicek dulu dan gagal
+    lempar 422 kalau belum aktif, supaya tidak ada toast sukses palsu."""
+    from app.core.config import get_settings
+    from app.core.storage import get_object
+    from app.modules.notifications.service import send_raw_email_with_attachment
+
+    quotation = _get_quotation(db, quotation_id)
+    if not quotation.object_key:
+        raise HTTPException(status_code=404, detail="Quotation ini belum digenerate/dikirim")
+    lead = quotation.lead
+    recipient = (to_email or "").strip() or lead.contact_email
+    if not recipient:
+        raise HTTPException(
+            status_code=422,
+            detail="Email penerima tidak diketahui -- isi email kontak lead atau masukkan manual",
+        )
+    if not get_settings().email_enabled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "SMTP belum dikonfigurasi -- hubungi admin platform untuk "
+                "mengaktifkan pengiriman email"
+            ),
+        )
+    pdf_bytes = get_object(quotation.object_key)
+    send_raw_email_with_attachment(
+        recipient,
+        f"Penawaran Harga -- {lead.company_name}",
+        f"Terlampir dokumen penawaran harga untuk {lead.company_name}.",
+        attachment_bytes=pdf_bytes,
+        attachment_filename=f"quotation-{quotation.id}.pdf",
+        attachment_maintype="application",
+        attachment_subtype="pdf",
+    )
+    audit.log_event(
+        db,
+        action="quotation.emailed",
+        entity_type="quotation",
+        entity_id=quotation.id,
+        detail={"to": recipient, "by": getattr(user, "email", "?")},
+    )
+    return {"sent_to": recipient}
+
+
 # ---------------- Agreement template (Fase 20 item 3) ----------------
 
 
@@ -558,6 +610,56 @@ def agreement_download_url(db: Session, agreement_id: str) -> str:
         object_key=agreement.object_key,
     )
     return presigned_get_url(agreement.object_key)
+
+
+def send_agreement_email(
+    db: Session, *, user, agreement_id: str, to_email: str | None = None
+) -> dict:
+    """Kirim salinan .docx agreement yang sudah digenerate ke email klien.
+
+    Terpisah dari `send_agreement_for_signature` (yang mengundang klien
+    e-sign lewat provider TTE) -- ini cuma kanal tambahan untuk membagikan
+    salinan dokumen, sama pola/alasan dengan `send_quotation_email`."""
+    from app.core.config import get_settings
+    from app.core.storage import get_object
+    from app.modules.notifications.service import send_raw_email_with_attachment
+
+    agreement = _get_agreement(db, agreement_id)
+    if not agreement.object_key:
+        raise HTTPException(status_code=404, detail="Agreement ini belum digenerate/dikirim")
+    lead = agreement.lead
+    recipient = (to_email or "").strip() or lead.contact_email
+    if not recipient:
+        raise HTTPException(
+            status_code=422,
+            detail="Email penerima tidak diketahui -- isi email kontak lead atau masukkan manual",
+        )
+    if not get_settings().email_enabled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "SMTP belum dikonfigurasi -- hubungi admin platform untuk "
+                "mengaktifkan pengiriman email"
+            ),
+        )
+    docx_bytes = get_object(agreement.object_key)
+    send_raw_email_with_attachment(
+        recipient,
+        f"Perjanjian Kerja Sama -- {lead.company_name}",
+        f"Terlampir dokumen perjanjian kerja sama untuk {lead.company_name}.",
+        attachment_bytes=docx_bytes,
+        attachment_filename=f"agreement-{agreement.id}.docx",
+        attachment_maintype="application",
+        attachment_subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    audit.log_event(
+        db,
+        action="agreement.emailed",
+        entity_type="agreement",
+        entity_id=agreement.id,
+        detail={"to": recipient, "by": getattr(user, "email", "?")},
+    )
+    return {"sent_to": recipient}
 
 
 # ---------------- Lead ----------------

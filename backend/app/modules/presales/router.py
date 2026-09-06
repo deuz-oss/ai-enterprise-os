@@ -12,6 +12,7 @@ from app.modules.presales.schemas import (
     ActivityOut,
     AgreementCreate,
     AgreementDeclineIn,
+    AgreementEmailIn,
     AgreementOut,
     AgreementSendIn,
     AgreementTemplateCreate,
@@ -28,6 +29,7 @@ from app.modules.presales.schemas import (
     LeadOut,
     LeadUpdate,
     QuotationCreate,
+    QuotationEmailIn,
     QuotationOut,
     QuotationRejectIn,
     QuotationTemplateCreate,
@@ -199,6 +201,18 @@ def quotation_download_url(quotation_id: str, db: Session = Depends(get_db)):
     return {"url": service.quotation_download_url(db, quotation_id)}
 
 
+@quotations_router.post("/{quotation_id}/send-email")
+def send_quotation_email(
+    quotation_id: str,
+    payload: QuotationEmailIn,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    return service.send_quotation_email(
+        db, user=user, quotation_id=quotation_id, to_email=payload.to_email
+    )
+
+
 # Fase 20 item 3 — template visual Agreement.
 agreement_templates_router = APIRouter(
     prefix="/agreement-templates",
@@ -297,6 +311,18 @@ def send_agreement_for_signature(
 @agreements_router.get("/{agreement_id}/download-url")
 def agreement_download_url(agreement_id: str, db: Session = Depends(get_db)):
     return {"url": service.agreement_download_url(db, agreement_id)}
+
+
+@agreements_router.post("/{agreement_id}/send-email")
+def send_agreement_email(
+    agreement_id: str,
+    payload: AgreementEmailIn,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    return service.send_agreement_email(
+        db, user=user, agreement_id=agreement_id, to_email=payload.to_email
+    )
 
 
 @router.get("", response_model=list[LeadOut])

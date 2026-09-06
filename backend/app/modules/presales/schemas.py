@@ -204,6 +204,14 @@ class AgreementSendIn(BaseModel):
     signer_email: str
 
 
+class QuotationEmailIn(BaseModel):
+    to_email: str | None = None
+
+
+class AgreementEmailIn(BaseModel):
+    to_email: str | None = None
+
+
 class LeadCreate(BaseModel):
     # Salah satu wajib: `company_id` (perusahaan sudah ada) ATAU
     # `company_name` (buat perusahaan baru inline -- kasus paling umum).
