@@ -15,6 +15,7 @@ import { CareerDetail, CareerListing, CareerTrack } from "./pages/CareerPortal";
 import PayrollClientPortal from "./pages/PayrollClientPortal";
 import Chat from "./pages/Chat";
 import Employees from "./pages/Employees";
+import EmployeeDetail from "./pages/EmployeeDetail";
 import Finance from "./pages/Finance";
 import ForgotPassword from "./pages/ForgotPassword";
 import JobOrderDetail from "./pages/JobOrderDetail";
@@ -71,6 +72,7 @@ export default function App() {
             <Route path="/pages" element={<Pages />} />
             <Route path="/pages/:id" element={<Pages />} />
             <Route path="/employees" element={<Employees />} />
+            <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/payment-requests" element={<PaymentRequests />} />

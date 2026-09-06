@@ -671,6 +671,34 @@ def list_salary_holds(db: Session, employee_id: str, status: str | None = None) 
     return list(db.execute(stmt).scalars())
 
 
+def list_employee_payslips(db: Session, employee_id: str) -> list[dict]:
+    """Riwayat slip gaji satu karyawan lintas periode, untuk tab Payroll di
+    halaman detail karyawan -- beda dari `ess.service.list_payslips` (self
+    service) karena tidak difilter status final saja (HR/admin boleh lihat
+    draft/proses) dan menyertakan `run_id` untuk tombol preview/kirim email."""
+    emp_id = parse_uuid(employee_id)
+    rows = db.execute(
+        select(Payslip, PayrollRun)
+        .join(PayrollRun, Payslip.run_id == PayrollRun.id)
+        .where(Payslip.employee_id == emp_id)
+        .order_by(PayrollRun.year.desc(), PayrollRun.month.desc())
+    ).all()
+    return [
+        {
+            "id": str(slip.id),
+            "run_id": str(run.id),
+            "run_status": run.status.value,
+            "year": run.year,
+            "month": run.month,
+            "base_salary": slip.base_salary,
+            "gross": slip.gross,
+            "tax_pph21": slip.tax_pph21,
+            "net_pay": slip.net_pay,
+        }
+        for slip, run in rows
+    ]
+
+
 def release_salary_hold(db: Session, user, hold_id: str, target_payslip_id: str) -> SalaryHold:
     hold = db.get(SalaryHold, parse_uuid(hold_id))
     if hold is None:

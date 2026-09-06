@@ -12,6 +12,7 @@ from app.modules.payroll.schemas import (
     AttendanceUpsert,
     ClientDecisionIn,
     ClientLinkCreate,
+    EmployeePayslipOut,
     GenerateSlipsRequest,
     PayslipOut,
     RunCreate,
@@ -178,6 +179,13 @@ def list_salary_holds(
     db: Session = Depends(get_db),
 ):
     return service.list_salary_holds(db, employee_id, status_filter)
+
+
+@router.get("/employees/{employee_id}/payslips", response_model=list[EmployeePayslipOut])
+def list_employee_payslips(employee_id: str, db: Session = Depends(get_db)):
+    """Riwayat slip gaji satu karyawan lintas periode, dipakai tab Payroll
+    di halaman detail karyawan (`/employees/:id`)."""
+    return service.list_employee_payslips(db, employee_id)
 
 
 @router.post("/slips/{payslip_id}/holds/{hold_id}/release", response_model=SalaryHoldOut)
