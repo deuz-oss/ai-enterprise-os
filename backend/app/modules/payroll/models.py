@@ -134,6 +134,43 @@ class PayslipComponent(TenantMixin, Base):
     payslip = relationship("Payslip", back_populates="components")
 
 
+class SalaryHoldStatus(str, enum.Enum):
+    held = "held"
+    released = "released"
+
+
+class SalaryHold(TenantMixin, Base):
+    """Gaji karyawan yang ditahan sementara (mis. pending kelengkapan
+    dokumen/aset perusahaan), dicairkan di slip periode berikutnya.
+
+    Menahan mencatat satu `PayslipComponent` deduction "Tahan Gaji" di
+    `held_payslip_id`; mencairkan mencatat satu `PayslipComponent` earnings
+    "Pencairan Gaji Ditahan" di `released_payslip_id` -- dua jejak terpisah
+    supaya THP tiap periode tetap akurat & bisa diaudit kapan ditahan/dicairkan.
+    """
+
+    __tablename__ = "salary_holds"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    held_payslip_id: Mapped[UUID] = mapped_column(ForeignKey("payslips.id"), index=True)
+    released_payslip_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("payslips.id"), default=None
+    )
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    reason: Mapped[str] = mapped_column(String(500))
+    status: Mapped[SalaryHoldStatus] = mapped_column(
+        Enum(SalaryHoldStatus, native_enum=False, length=20),
+        default=SalaryHoldStatus.held,
+        index=True,
+    )
+    held_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_by_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+
+    employee = relationship("Employee", lazy="selectin")
+
+
 class PayrollRunToken(TenantMixin, Base):
     """Token approval payrol proyek untuk klien (link tanpa akun).
 

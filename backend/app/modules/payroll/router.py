@@ -16,6 +16,9 @@ from app.modules.payroll.schemas import (
     PayslipOut,
     RunCreate,
     RunOut,
+    SalaryHoldCreate,
+    SalaryHoldOut,
+    SaltabComponentCreate,
     TaxPreviewIn,
 )
 
@@ -117,6 +120,76 @@ def override_saltab_component(
         "gross": float(slip.gross),
         "net_pay": float(slip.net_pay),
     }
+
+
+@router.post("/slips/{payslip_id}/components", status_code=status.HTTP_201_CREATED)
+def add_saltab_component(
+    payslip_id: str,
+    payload: SaltabComponentCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Tambah komponen baru ke satu slip (Bonus/Insentif/THR/Kompensasi
+    UUCK/Reimbursement/Perdin/Kasbon/dll)."""
+    comp = service.add_saltab_component(
+        db,
+        user,
+        payslip_id,
+        ctype=payload.ctype,
+        code=payload.code,
+        name=payload.name,
+        amount=payload.amount,
+    )
+    return {
+        "id": str(comp.id),
+        "ctype": comp.ctype.value,
+        "code": comp.code,
+        "name": comp.name,
+        "amount": float(comp.amount),
+        "source": comp.source,
+    }
+
+
+@router.delete("/saltab/components/{component_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_saltab_component(
+    component_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    service.delete_saltab_component(db, user, component_id)
+
+
+@router.post("/slips/{payslip_id}/holds", response_model=SalaryHoldOut, status_code=201)
+def create_salary_hold(
+    payslip_id: str,
+    payload: SalaryHoldCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Tahan sebagian gaji karyawan pada slip ini — dicairkan belakangan di
+    slip periode berikutnya lewat `POST .../holds/{hold_id}/release`."""
+    return service.create_salary_hold(
+        db, user, payslip_id, amount=payload.amount, reason=payload.reason
+    )
+
+
+@router.get("/employees/{employee_id}/holds", response_model=list[SalaryHoldOut])
+def list_salary_holds(
+    employee_id: str,
+    status_filter: str | None = Query(None, alias="status"),
+    db: Session = Depends(get_db),
+):
+    return service.list_salary_holds(db, employee_id, status_filter)
+
+
+@router.post("/slips/{payslip_id}/holds/{hold_id}/release", response_model=SalaryHoldOut)
+def release_salary_hold(
+    payslip_id: str,
+    hold_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Cairkan gaji tertahan ke slip `payslip_id` ini (biasanya slip periode
+    berjalan yang sedang dibuka HR)."""
+    return service.release_salary_hold(db, user, hold_id, payslip_id)
 
 
 @router.get("/runs/{run_id}/saltab/export")

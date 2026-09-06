@@ -363,3 +363,140 @@ def test_send_payslip_email_requires_linked_account(client):
         headers=headers,
     )
     assert resp.status_code == 400
+
+
+# ---------- Komponen Saltab tambahan (Bonus/THR/dst) & Tahan-Cairkan Gaji ----------
+
+
+def _saltab_row(client, headers, run_id, employee_id) -> dict:
+    rows = client.get(f"/api/v1/payroll/runs/{run_id}/saltab", headers=headers).json()
+    return next(r for r in rows if r["employee_id"] == employee_id)
+
+
+def test_add_and_delete_saltab_component(client):
+    """Gap 2026-09-06 -- grid Saltab dulu cuma bisa edit komponen yang sudah
+    ada, tidak bisa menambah Bonus/Insentif/THR/dst sama sekali."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Dedi Bonus", salary=6_000_000)
+    run = _create_run(client, headers, year=2026, month=10)
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+
+    row = _saltab_row(client, headers, run["id"], emp["id"])
+    thp_before = row["total_earnings"] - row["total_deductions"]
+
+    added = client.post(
+        f"/api/v1/payroll/slips/{row['payslip_id']}/components",
+        headers=headers,
+        json={"ctype": "earnings", "code": "bonus", "name": "Bonus", "amount": 500_000},
+    )
+    assert added.status_code == 201, added.text
+    comp_id = added.json()["id"]
+
+    row2 = _saltab_row(client, headers, run["id"], emp["id"])
+    thp_after = row2["total_earnings"] - row2["total_deductions"]
+    assert thp_after == thp_before + 500_000
+    assert any(c["code"] == "bonus" and c["source"] == "manual" for c in row2["components"])
+
+    deleted = client.delete(f"/api/v1/payroll/saltab/components/{comp_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    row3 = _saltab_row(client, headers, run["id"], emp["id"])
+    thp_final = row3["total_earnings"] - row3["total_deductions"]
+    assert thp_final == thp_before
+    assert not any(c["code"] == "bonus" for c in row3["components"])
+
+
+def test_cannot_delete_auto_generated_component(client):
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Wati Gaji Pokok")
+    run = _create_run(client, headers, year=2026, month=11)
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+
+    row = _saltab_row(client, headers, run["id"], emp["id"])
+    gaji_pokok_id = next(c["id"] for c in row["components"] if c["code"] == "gaji_pokok")
+
+    resp = client.delete(f"/api/v1/payroll/saltab/components/{gaji_pokok_id}", headers=headers)
+    assert resp.status_code == 409, resp.text
+
+
+def test_cannot_delete_tahan_gaji_component_directly(client):
+    """Harus dicairkan lewat endpoint release, bukan dihapus langsung dari
+    grid — kalau tidak, `SalaryHold` jadi "held" selamanya tanpa jejak."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Nina Tahan Gaji")
+    run = _create_run(client, headers, year=2026, month=10)
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    row = _saltab_row(client, headers, run["id"], emp["id"])
+
+    held = client.post(
+        f"/api/v1/payroll/slips/{row['payslip_id']}/holds",
+        headers=headers,
+        json={"amount": 100_000, "reason": "Uji coba"},
+    )
+    assert held.status_code == 201, held.text
+
+    row2 = _saltab_row(client, headers, run["id"], emp["id"])
+    tahan_id = next(c["id"] for c in row2["components"] if c["code"] == "tahan_gaji")
+
+    resp = client.delete(f"/api/v1/payroll/saltab/components/{tahan_id}", headers=headers)
+    assert resp.status_code == 409, resp.text
+
+
+def test_salary_hold_then_release_to_next_period(client):
+    """Alur Tahan Gaji -> Cairkan (Fase payroll gap, 2026-09-06) -- ditahan di
+    satu slip, dicairkan di slip periode berikutnya, status ter-track."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Joko Tahan Gaji", salary=6_000_000)
+
+    run1 = _create_run(client, headers, year=2026, month=10)
+    client.post(f"/api/v1/payroll/runs/{run1['id']}/generate", headers=headers, json={})
+    row1 = _saltab_row(client, headers, run1["id"], emp["id"])
+    thp1_before = row1["total_earnings"] - row1["total_deductions"]
+
+    held = client.post(
+        f"/api/v1/payroll/slips/{row1['payslip_id']}/holds",
+        headers=headers,
+        json={"amount": 300_000, "reason": "Menunggu pengembalian laptop kantor"},
+    )
+    assert held.status_code == 201, held.text
+    hold = held.json()
+    assert hold["status"] == "held"
+
+    row1b = _saltab_row(client, headers, run1["id"], emp["id"])
+    thp1_after = row1b["total_earnings"] - row1b["total_deductions"]
+    assert thp1_after == thp1_before - 300_000
+
+    holds = client.get(
+        f"/api/v1/payroll/employees/{emp['id']}/holds", headers=headers, params={"status": "held"}
+    ).json()
+    assert len(holds) == 1 and holds[0]["id"] == hold["id"]
+
+    # Periode berikutnya -- cairkan ke sini.
+    run2 = _create_run(client, headers, year=2026, month=11)
+    client.post(f"/api/v1/payroll/runs/{run2['id']}/generate", headers=headers, json={})
+    row2 = _saltab_row(client, headers, run2["id"], emp["id"])
+    thp2_before = row2["total_earnings"] - row2["total_deductions"]
+
+    released = client.post(
+        f"/api/v1/payroll/slips/{row2['payslip_id']}/holds/{hold['id']}/release",
+        headers=headers,
+    )
+    assert released.status_code == 200, released.text
+    assert released.json()["status"] == "released"
+
+    row2b = _saltab_row(client, headers, run2["id"], emp["id"])
+    thp2_after = row2b["total_earnings"] - row2b["total_deductions"]
+    assert thp2_after == thp2_before + 300_000
+    assert any(c["code"] == "pencairan_gaji_ditahan" for c in row2b["components"])
+
+    # Tidak bisa dicairkan dua kali.
+    again = client.post(
+        f"/api/v1/payroll/slips/{row2['payslip_id']}/holds/{hold['id']}/release",
+        headers=headers,
+    )
+    assert again.status_code == 409
+
+    still_held = client.get(
+        f"/api/v1/payroll/employees/{emp['id']}/holds", headers=headers, params={"status": "held"}
+    ).json()
+    assert still_held == []

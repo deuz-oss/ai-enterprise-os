@@ -18,6 +18,10 @@ from app.modules.payroll.models import (
     PayrollRunToken,
     PayrollRunType,
     Payslip,
+    PayslipComponent,
+    PayslipComponentType,
+    SalaryHold,
+    SalaryHoldStatus,
 )
 from app.modules.payroll.schemas import (
     AttendanceUpsert,
@@ -457,16 +461,7 @@ def saltab_view(db: Session, run_id: str, tenant_id=None) -> list[dict]:
     return rows
 
 
-def update_saltab_component(db: Session, user, component_id: str, amount: float):
-    """Override manual komponen (grid Saltab); agregat slip dihitung ulang."""
-    from app.modules.payroll.models import PayslipComponent, PayslipComponentType
-
-    comp = db.get(PayslipComponent, parse_uuid(component_id))
-    if comp is None:
-        raise HTTPException(status_code=404, detail="Komponen tidak ditemukan")
-    slip = db.get(Payslip, comp.payslip_id)
-    if slip is None:
-        raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
+def _check_slip_editable(db: Session, slip: Payslip) -> None:
     run = _get_run(db, str(slip.run_id))
     if run.status not in _EDITABLE_STATUSES[run.run_type]:
         raise HTTPException(
@@ -476,11 +471,11 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
     if employee is not None and employee.payroll_locked:
         raise HTTPException(status_code=409, detail="Payroll karyawan ini terkunci")
 
-    old = float(comp.amount)
-    comp.amount = amount
-    comp.source = "manual"
-    comp.notes = f"Override manual oleh {user.email}"
 
+def _recompute_slip_aggregates(slip: Payslip) -> None:
+    """Hitung ulang gross/deductions/net_pay slip dari `slip.components` --
+    satu-satunya sumber kebenaran (PRD §6), dipakai tiap kali komponen
+    ditambah/diubah/dihapus supaya agregat tidak pernah "nol selisih"."""
     earnings_total = 0.0
     deductions_excl_tax = 0.0
     tax_amount = float(slip.tax_pph21)
@@ -496,6 +491,24 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
     slip.gross = round(earnings_total)
     slip.deductions = round(deductions_excl_tax)
     slip.net_pay = round(earnings_total) - round(tax_amount) - round(deductions_excl_tax)
+
+
+def update_saltab_component(db: Session, user, component_id: str, amount: float):
+    """Override manual komponen (grid Saltab); agregat slip dihitung ulang."""
+    comp = db.get(PayslipComponent, parse_uuid(component_id))
+    if comp is None:
+        raise HTTPException(status_code=404, detail="Komponen tidak ditemukan")
+    slip = db.get(Payslip, comp.payslip_id)
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
+    _check_slip_editable(db, slip)
+
+    old = float(comp.amount)
+    comp.amount = amount
+    comp.source = "manual"
+    comp.notes = f"Override manual oleh {user.email}"
+
+    _recompute_slip_aggregates(slip)
 
     db.commit()
     db.refresh(slip)
@@ -514,6 +527,202 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
         },
     )
     return comp, slip
+
+
+def add_saltab_component(
+    db: Session, user, payslip_id: str, *, ctype: str, code: str, name: str, amount: float
+) -> PayslipComponent:
+    """Tambah komponen baru ke satu slip (Bonus/Insentif/THR/Kompensasi UUCK/
+    Reimbursement/Perdin/Kasbon/dll) -- beda dari `update_saltab_component`
+    yang cuma mengubah komponen yang sudah ada."""
+    slip = db.get(Payslip, parse_uuid(payslip_id))
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
+    _check_slip_editable(db, slip)
+    if ctype not in (PayslipComponentType.earnings.value, PayslipComponentType.deduction.value):
+        raise HTTPException(status_code=422, detail="Jenis komponen harus earnings atau deduction")
+
+    comp = PayslipComponent(
+        payslip_id=slip.id,
+        ctype=PayslipComponentType(ctype),
+        code=code,
+        name=name,
+        amount=amount,
+        source="manual",
+        notes=f"Ditambahkan oleh {user.email}",
+    )
+    db.add(comp)
+    db.flush()
+    slip.components.append(comp)
+    _recompute_slip_aggregates(slip)
+    db.commit()
+    db.refresh(comp)
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="saltab.component_added",
+        entity_type="payslip_component",
+        entity_id=comp.id,
+        detail={"code": code, "name": name, "amount": amount, "employee_id": str(slip.employee_id)},
+    )
+    return comp
+
+
+_UNDELETABLE_COMPONENT_CODES = {"tahan_gaji", "pencairan_gaji_ditahan"}
+
+
+def delete_saltab_component(db: Session, user, component_id: str) -> None:
+    """Hapus komponen manual dari grid Saltab -- komponen `source=auto`
+    (gaji pokok/PPh21/dst hasil generate) TIDAK boleh dihapus lewat sini,
+    biar rekonstruksi slip lewat "Generate Slip Ulang" tetap konsisten.
+    Komponen tahan/cairkan gaji juga tidak boleh dihapus langsung -- akan
+    meninggalkan `SalaryHold` "held" tanpa komponen pasangannya; pakai
+    endpoint release untuk mencairkan, bukan hapus komponennya."""
+    comp = db.get(PayslipComponent, parse_uuid(component_id))
+    if comp is None:
+        raise HTTPException(status_code=404, detail="Komponen tidak ditemukan")
+    if comp.source != "manual":
+        raise HTTPException(status_code=409, detail="Hanya komponen manual yang bisa dihapus")
+    if comp.code in _UNDELETABLE_COMPONENT_CODES:
+        raise HTTPException(
+            status_code=409,
+            detail="Komponen tahan/cairkan gaji tidak bisa dihapus langsung — pakai alur Cairkan",
+        )
+    slip = db.get(Payslip, comp.payslip_id)
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
+    _check_slip_editable(db, slip)
+
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="saltab.component_deleted",
+        entity_type="payslip_component",
+        entity_id=comp.id,
+        detail={
+            "code": comp.code,
+            "name": comp.name,
+            "amount": float(comp.amount),
+            "employee_id": str(slip.employee_id),
+            "by": user.email,
+        },
+    )
+    slip.components.remove(comp)
+    db.delete(comp)
+    _recompute_slip_aggregates(slip)
+    db.commit()
+
+
+# ---------- Tahan Gaji -> Cairkan (hold salary release later) ----------
+
+
+def create_salary_hold(
+    db: Session, user, payslip_id: str, *, amount: float, reason: str
+) -> SalaryHold:
+    slip = db.get(Payslip, parse_uuid(payslip_id))
+    if slip is None:
+        raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
+    _check_slip_editable(db, slip)
+
+    hold = SalaryHold(
+        employee_id=slip.employee_id,
+        held_payslip_id=slip.id,
+        amount=amount,
+        reason=reason,
+        status=SalaryHoldStatus.held,
+        created_by_id=getattr(user, "id", None),
+    )
+    db.add(hold)
+    comp = PayslipComponent(
+        payslip_id=slip.id,
+        ctype=PayslipComponentType.deduction,
+        code="tahan_gaji",
+        name="Tahan Gaji",
+        amount=amount,
+        source="manual",
+        notes=reason,
+    )
+    db.add(comp)
+    db.flush()
+    slip.components.append(comp)
+    _recompute_slip_aggregates(slip)
+    db.commit()
+    db.refresh(hold)
+
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="payroll.salary_held",
+        entity_type="salary_hold",
+        entity_id=hold.id,
+        detail={"employee_id": str(slip.employee_id), "amount": amount, "reason": reason},
+    )
+    return hold
+
+
+def list_salary_holds(db: Session, employee_id: str, status: str | None = None) -> list[SalaryHold]:
+    stmt = select(SalaryHold).where(SalaryHold.employee_id == parse_uuid(employee_id))
+    if status:
+        stmt = stmt.where(SalaryHold.status == SalaryHoldStatus(status))
+    stmt = stmt.order_by(SalaryHold.held_at.desc())
+    return list(db.execute(stmt).scalars())
+
+
+def release_salary_hold(db: Session, user, hold_id: str, target_payslip_id: str) -> SalaryHold:
+    hold = db.get(SalaryHold, parse_uuid(hold_id))
+    if hold is None:
+        raise HTTPException(status_code=404, detail="Data gaji tertahan tidak ditemukan")
+    if hold.status != SalaryHoldStatus.held:
+        raise HTTPException(status_code=409, detail="Gaji tertahan ini sudah dicairkan")
+
+    target_slip = db.get(Payslip, parse_uuid(target_payslip_id))
+    if target_slip is None:
+        raise HTTPException(status_code=404, detail="Slip tujuan pencairan tidak ditemukan")
+    if target_slip.employee_id != hold.employee_id:
+        raise HTTPException(
+            status_code=422, detail="Slip tujuan pencairan harus milik karyawan yang sama"
+        )
+    _check_slip_editable(db, target_slip)
+
+    comp = PayslipComponent(
+        payslip_id=target_slip.id,
+        ctype=PayslipComponentType.earnings,
+        code="pencairan_gaji_ditahan",
+        name="Pencairan Gaji Ditahan",
+        amount=float(hold.amount),
+        source="manual",
+        notes=f"Pencairan dari tahan gaji {hold.held_at:%d/%m/%Y} — {hold.reason}",
+    )
+    db.add(comp)
+    db.flush()
+    target_slip.components.append(comp)
+    _recompute_slip_aggregates(target_slip)
+
+    hold.status = SalaryHoldStatus.released
+    hold.released_at = datetime.now(UTC)
+    hold.released_payslip_id = target_slip.id
+
+    db.commit()
+    db.refresh(hold)
+
+    from app.modules import audit
+
+    audit.log_event(
+        db,
+        action="payroll.salary_released",
+        entity_type="salary_hold",
+        entity_id=hold.id,
+        detail={
+            "employee_id": str(hold.employee_id),
+            "amount": float(hold.amount),
+            "target_payslip_id": str(target_slip.id),
+            "by": user.email,
+        },
+    )
+    return hold
 
 
 def saltab_export_csv(db: Session, run_id: str) -> tuple[str, str]:

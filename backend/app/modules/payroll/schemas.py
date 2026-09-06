@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.payroll.models import PayrollRunStatus, PayrollRunType
+from app.modules.payroll.models import PayrollRunStatus, PayrollRunType, SalaryHoldStatus
 
 
 class AttendanceUpsert(BaseModel):
@@ -159,3 +159,50 @@ class SaltabComponentUpdate(BaseModel):
         if v < 0:
             raise ValueError("Nominal komponen tidak boleh negatif")
         return v
+
+
+class SaltabComponentCreate(BaseModel):
+    """Tambah komponen baru ke satu slip (Bonus/Insentif/THR/Kompensasi UUCK/
+    Reimbursement/Perdin/Kasbon/dll) — beda dari override yang cuma
+    mengubah komponen yang sudah ada."""
+
+    ctype: str
+    code: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    amount: float
+
+    @field_validator("amount")
+    @classmethod
+    def _non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Nominal komponen tidak boleh negatif")
+        return v
+
+    @field_validator("ctype")
+    @classmethod
+    def _valid_ctype(cls, v: str) -> str:
+        if v not in ("earnings", "deduction"):
+            raise ValueError("Jenis komponen harus earnings atau deduction")
+        return v
+
+
+# ---------- Tahan Gaji -> Cairkan ----------
+
+
+class SalaryHoldCreate(BaseModel):
+    amount: float = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class SalaryHoldOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    held_payslip_id: UUID
+    released_payslip_id: UUID | None
+    amount: float
+    reason: str
+    status: SalaryHoldStatus
+    held_at: datetime
+    released_at: datetime | None

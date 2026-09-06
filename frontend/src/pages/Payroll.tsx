@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertCircle, Landmark, ShieldAlert, Users, Wallet } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
-import { KpiCard, PreflightAlert } from "../components/ui";
+import { Button, KpiCard, PreflightAlert } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -92,9 +92,105 @@ interface SaltabRow {
   total_passthrough: number;
 }
 
+interface SalaryHold {
+  id: string;
+  employee_id: string;
+  held_payslip_id: string;
+  released_payslip_id: string | null;
+  amount: number;
+  reason: string;
+  status: "held" | "released";
+  held_at: string;
+  released_at: string | null;
+}
+
+// Preset komponen Saltab tambahan (Bonus/Insentif/THR/dst, gap 2026-09-06) --
+// murni bantuan dropdown, backend terima ctype/code/name apa saja.
+const SALTAB_COMPONENT_PRESETS: { code: string; name: string; ctype: "earnings" | "deduction" }[] = [
+  { code: "bonus", name: "Bonus", ctype: "earnings" },
+  { code: "insentif", name: "Insentif", ctype: "earnings" },
+  { code: "thr", name: "THR", ctype: "earnings" },
+  { code: "kompensasi_uuck", name: "Kompensasi UUCK", ctype: "earnings" },
+  { code: "reimbursement", name: "Reimbursement", ctype: "earnings" },
+  { code: "perdin", name: "Perjalanan Dinas", ctype: "earnings" },
+  { code: "kasbon", name: "Kasbon (Cash Advance)", ctype: "deduction" },
+  { code: "lainnya", name: "", ctype: "earnings" },
+];
+
+// Kode komponen yang tombol hapusnya TIDAK boleh muncul: hasil `generate_slips`
+// (bukan dari "+ Tambah Komponen", walau `source`-nya terlanjur "manual"
+// akibat pernah di-override lewat tombol "edit") DAN komponen tahan/cairkan
+// gaji (harus lewat alur "Cairkan" di badge, bukan dihapus langsung --
+// menghapusnya langsung akan meninggalkan SalaryHold "held" tanpa jejak).
+const _CORE_COMPONENT_CODES = new Set([
+  "gaji_pokok",
+  "tunjangan",
+  "lembur",
+  "pph21",
+  "potongan_lain",
+  "admin_bank",
+  "bpjs_kesehatan_py",
+  "jht_py",
+  "jp_py",
+  "bpjs_employer",
+  "tahan_gaji",
+  "pencairan_gaji_ditahan",
+]);
+
+/** Badge "gaji tertahan" + tombol cairkan — satu query per karyawan (wajar,
+ * jumlah karyawan per run tidak besar), dipakai di dalam baris SaltabTable. */
+function HeldSalaryBadge({
+  employeeId,
+  targetPayslipId,
+  runId,
+}: {
+  employeeId: string;
+  targetPayslipId: string;
+  runId: string | null;
+}) {
+  const qc = useQueryClient();
+  const { data: holds } = useQuery({
+    queryKey: ["salary-holds", employeeId, "held"],
+    queryFn: () =>
+      api.get<SalaryHold[]>(`/payroll/employees/${employeeId}/holds?status=held`),
+  });
+  const release = useMutation({
+    mutationFn: (holdId: string) =>
+      api.post(`/payroll/slips/${targetPayslipId}/holds/${holdId}/release`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["salary-holds", employeeId, "held"] });
+      qc.invalidateQueries({ queryKey: ["saltab", runId] });
+      qc.invalidateQueries({ queryKey: ["slips", runId] });
+    },
+  });
+  if (!holds || holds.length === 0) return null;
+  return (
+    <>
+      {holds.map((h) => (
+        <span key={h.id} className="pill p-yellow inline-flex items-center gap-1">
+          Gaji tertahan: {formatRupiah(h.amount)}
+          <button
+            onClick={() => release.mutate(h.id)}
+            disabled={release.isPending}
+            className="ml-1 font-medium underline hover:opacity-80"
+            title={h.reason}
+          >
+            Cairkan
+          </button>
+        </span>
+      ))}
+      {release.error && (
+        <span className="text-red-600">{(release.error as Error).message}</span>
+      )}
+    </>
+  );
+}
+
 function SaltabTable({ runId }: { runId: string | null }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<string | null>(null);
+  const [addingComponentFor, setAddingComponentFor] = useState<string | null>(null);
+  const [holdingFor, setHoldingFor] = useState<string | null>(null);
   const { data: rows, isLoading } = useQuery({
     queryKey: ["saltab", runId],
     queryFn: () => api.get<SaltabRow[]>(`/payroll/runs/${runId}/saltab`),
@@ -109,11 +205,60 @@ function SaltabTable({ runId }: { runId: string | null }) {
       qc.invalidateQueries({ queryKey: ["slips", runId] });
     },
   });
+  const addComponent = useMutation({
+    mutationFn: ({
+      payslipId,
+      ctype,
+      code,
+      name,
+      amount,
+    }: {
+      payslipId: string;
+      ctype: string;
+      code: string;
+      name: string;
+      amount: number;
+    }) => api.post(`/payroll/slips/${payslipId}/components`, { ctype, code, name, amount }),
+    onSuccess: () => {
+      setAddingComponentFor(null);
+      qc.invalidateQueries({ queryKey: ["saltab", runId] });
+      qc.invalidateQueries({ queryKey: ["slips", runId] });
+    },
+  });
+  const deleteComponent = useMutation({
+    mutationFn: (componentId: string) =>
+      api.delete(`/payroll/saltab/components/${componentId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["saltab", runId] });
+      qc.invalidateQueries({ queryKey: ["slips", runId] });
+    },
+  });
+  const createHold = useMutation({
+    mutationFn: ({
+      payslipId,
+      amount,
+      reason,
+    }: {
+      payslipId: string;
+      amount: number;
+      reason: string;
+    }) => api.post(`/payroll/slips/${payslipId}/holds`, { amount, reason }),
+    onSuccess: () => {
+      setHoldingFor(null);
+      qc.invalidateQueries({ queryKey: ["saltab", runId] });
+      qc.invalidateQueries({ queryKey: ["slips", runId] });
+      qc.invalidateQueries({ queryKey: ["salary-holds"] });
+    },
+  });
   const sendPayslip = useMutation({
     mutationFn: (employeeId: string) =>
       api.post(`/payroll/runs/${runId}/employees/${employeeId}/send-payslip-email`),
   });
-  const err = (saveAmount.error ?? sendPayslip.error) as Error | null;
+  const err = (saveAmount.error ??
+    addComponent.error ??
+    deleteComponent.error ??
+    createHold.error ??
+    sendPayslip.error) as Error | null;
 
   if (!runId)
     return (
@@ -127,9 +272,32 @@ function SaltabTable({ runId }: { runId: string | null }) {
     <div className="divide-y" style={{ borderColor: "var(--border)" }}>
       {(rows ?? []).map((row) => (
         <div key={row.payslip_id} className="px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{row.employee_name}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{row.employee_name}</p>
+              <HeldSalaryBadge
+                employeeId={row.employee_id}
+                targetPayslipId={row.payslip_id}
+                runId={runId}
+              />
+            </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() =>
+                  setAddingComponentFor(addingComponentFor === row.payslip_id ? null : row.payslip_id)
+                }
+                className="cursor-pointer text-xs font-medium hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+              >
+                + Tambah Komponen
+              </button>
+              <button
+                onClick={() => setHoldingFor(holdingFor === row.payslip_id ? null : row.payslip_id)}
+                className="cursor-pointer text-xs font-medium hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+              >
+                Tahan Gaji
+              </button>
               <button
                 onClick={() =>
                   downloadFile(`/payroll/runs/${runId}/bukti-potong/${row.employee_id}/pdf`)
@@ -167,7 +335,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                   <td className="w-40 py-0.5 text-right font-mono">
                     {editing === c.id ? null : formatRupiah(c.amount)}
                   </td>
-                  <td className="w-24 py-0.5 pl-2 text-right">
+                  <td className="w-32 py-0.5 pl-2 text-right">
                     {editing === c.id ? (
                       <form
                         className="flex justify-end gap-1"
@@ -189,14 +357,25 @@ function SaltabTable({ runId }: { runId: string | null }) {
                         <button className="btn-secondary px-1.5 py-0.5">✓</button>
                       </form>
                     ) : (
-                      <button
-                        onClick={() => setEditing(c.id)}
-                        style={{ color: "var(--accent)" }}
-                        className="hover:opacity-80"
-                        title="Override manual"
-                      >
-                        edit
-                      </button>
+                      <span className="inline-flex gap-2">
+                        <button
+                          onClick={() => setEditing(c.id)}
+                          style={{ color: "var(--accent)" }}
+                          className="hover:opacity-80"
+                          title="Override manual"
+                        >
+                          edit
+                        </button>
+                        {c.source === "manual" && !_CORE_COMPONENT_CODES.has(c.code) && (
+                          <button
+                            onClick={() => deleteComponent.mutate(c.id)}
+                            disabled={deleteComponent.isPending}
+                            className="text-rose-600 hover:text-rose-800"
+                          >
+                            hapus
+                          </button>
+                        )}
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -220,6 +399,108 @@ function SaltabTable({ runId }: { runId: string | null }) {
               )}
             </tbody>
           </table>
+
+          {addingComponentFor === row.payslip_id && (
+            <form
+              className="mt-2 flex flex-wrap items-end gap-2 rounded-lg p-2"
+              style={{ backgroundColor: "var(--hover)" }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                const presetCode = String(f.get("preset") || "");
+                const preset = SALTAB_COMPONENT_PRESETS.find((p) => p.code === presetCode);
+                if (!preset) return;
+                const name = presetCode === "lainnya" ? String(f.get("custom_name") || "") : preset.name;
+                if (!name) return;
+                addComponent.mutate({
+                  payslipId: row.payslip_id,
+                  ctype: String(f.get("ctype") || preset.ctype),
+                  code: presetCode,
+                  name,
+                  amount: Number(f.get("amount") || 0),
+                });
+              }}
+            >
+              <select name="preset" defaultValue="" required className="input py-1 text-xs">
+                <option value="" disabled>
+                  -- Pilih komponen --
+                </option>
+                {SALTAB_COMPONENT_PRESETS.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.code === "lainnya" ? "Lainnya (nama bebas)" : p.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                name="custom_name"
+                placeholder="Nama komponen (kalau pilih Lainnya)"
+                className="input py-1 text-xs"
+              />
+              <select name="ctype" defaultValue="earnings" className="input py-1 text-xs">
+                <option value="earnings">Earnings (menambah THP)</option>
+                <option value="deduction">Deduction (mengurangi THP)</option>
+              </select>
+              <input
+                name="amount"
+                type="number"
+                required
+                placeholder="Nominal"
+                className="input w-32 py-1 text-xs"
+              />
+              <Button size="sm" type="submit" loading={addComponent.isPending}>
+                Tambah
+              </Button>
+              <button
+                type="button"
+                onClick={() => setAddingComponentFor(null)}
+                className="text-xs"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Batal
+              </button>
+            </form>
+          )}
+
+          {holdingFor === row.payslip_id && (
+            <form
+              className="mt-2 flex flex-wrap items-end gap-2 rounded-lg p-2"
+              style={{ backgroundColor: "var(--hover)" }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                createHold.mutate({
+                  payslipId: row.payslip_id,
+                  amount: Number(f.get("amount") || 0),
+                  reason: String(f.get("reason") || ""),
+                });
+              }}
+            >
+              <input
+                name="amount"
+                type="number"
+                required
+                placeholder="Nominal ditahan"
+                className="input w-32 py-1 text-xs"
+              />
+              <input
+                name="reason"
+                required
+                placeholder="Alasan (mis. menunggu pengembalian aset)"
+                className="input flex-1 py-1 text-xs"
+              />
+              <Button size="sm" type="submit" loading={createHold.isPending}>
+                Tahan
+              </Button>
+              <button
+                type="button"
+                onClick={() => setHoldingFor(null)}
+                className="text-xs"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Batal
+              </button>
+            </form>
+          )}
         </div>
       ))}
       {rows?.length === 0 && (

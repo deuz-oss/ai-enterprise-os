@@ -168,6 +168,17 @@ interface WarningLetterRow {
   file_name: string | null;
 }
 
+interface SalaryHoldRow {
+  id: string;
+  held_payslip_id: string;
+  released_payslip_id: string | null;
+  amount: number;
+  reason: string;
+  status: "held" | "released";
+  held_at: string;
+  released_at: string | null;
+}
+
 interface EmployeeMovementRow {
   id: string;
   movement_type: string;
@@ -412,6 +423,11 @@ export default function Employees() {
     queryKey: ["employee-warning-letters", selectedId],
     queryFn: () => api.get<WarningLetterRow[]>(`/employees/${selectedId}/warning-letters`),
     enabled: Boolean(selectedId) && !isOpsOnly,
+  });
+  const { data: salaryHolds } = useQuery({
+    queryKey: ["salary-holds", selectedId],
+    queryFn: () => api.get<SalaryHoldRow[]>(`/payroll/employees/${selectedId}/holds`),
+    enabled: Boolean(selectedId),
   });
   const { data: contractTemplates } = useQuery({
     queryKey: ["contract-templates"],
@@ -1649,6 +1665,41 @@ export default function Employees() {
             ))}
             {warningLetters?.length === 0 && (
               <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada SP.</li>
+            )}
+          </ul>
+        </div>
+
+        <div className="card">
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Gaji Tertahan</h2>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Riwayat gaji yang ditahan/dicairkan lewat grid Saltab di halaman Payroll.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {(salaryHolds ?? []).map((h) => (
+              <li
+                key={h.id}
+                className="flex items-center justify-between rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--hover)" }}
+              >
+                <div>
+                  <p className="font-medium" style={{ color: "var(--text)" }}>
+                    {formatRupiah(h.amount)} — {h.reason}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    Ditahan {new Date(h.held_at).toLocaleDateString("id-ID")}
+                    {h.released_at &&
+                      ` · Dicairkan ${new Date(h.released_at).toLocaleDateString("id-ID")}`}
+                  </p>
+                </div>
+                <span className={`pill ${h.status === "held" ? "p-yellow" : "p-green"}`}>
+                  {h.status === "held" ? "ditahan" : "dicairkan"}
+                </span>
+              </li>
+            ))}
+            {salaryHolds?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>
+                Belum ada riwayat gaji tertahan.
+              </li>
             )}
           </ul>
         </div>
