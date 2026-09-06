@@ -40,8 +40,7 @@ interface PlacementRow {
 }
 
 // Label+warna tahap PlacementStatus -- duplikat kecil dari JobOrderDetail.tsx
-// (pola yang sudah lazim di codebase, mis. dulu TalentCloudOverview.tsx vs
-// Candidates.tsx) supaya pill "Proses" di sini konsisten dengan Kanban.
+// supaya pill "Proses" di sini konsisten dengan Kanban.
 const PLACEMENT_STAGE_LABEL: Record<string, { label: string; dot: string }> = {
   disourcing: { label: "Sourcing", dot: "#9f9f9f" },
   screening: { label: "Screening", dot: "#2383e2" },

@@ -30,7 +30,6 @@ import {
   PartyPopper,
   Plus,
   Receipt,
-  Scale,
   Search,
   Shield,
   Sparkles,
@@ -84,11 +83,6 @@ const CATEGORY_ORDER: Category[] = [
 // sebenarnya beda dgn apa yang backend izinkan).
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", end: true },
-  // Ringkasan gabungan Sales CRM + Recruitment (halaman lama, isinya lintas
-  // dua kategori baru) — diletakkan di bawah "crm" saja (keputusan
-  // implementasi Fase 28: satu landing bersama lebih murah daripada
-  // membelah jadi dua halaman ringkasan terpisah sekarang).
-  { to: "/talent-cloud", label: "Ringkasan", bundle: "crm", end: true },
   { to: "/leads", label: "Pipeline", bundle: "crm" },
   { to: "/clients", label: "Klien", bundle: "crm" },
   { to: "/quotations", label: "Quotation", bundle: "crm" },
@@ -113,7 +107,6 @@ const NAV_ITEMS: NavItem[] = [
     bundle: "recruitment",
     roles: ["admin", "recruiter", "management"],
   },
-  { to: "/workforce-cloud", label: "Ringkasan", bundle: "workforce", end: true },
   { to: "/employees", label: "Karyawan", bundle: "workforce" },
   { to: "/attendance", label: "Absensi", bundle: "workforce" },
   { to: "/chat", label: "Chat" },
@@ -125,7 +118,6 @@ const NAV_ITEMS: NavItem[] = [
   // Payment Request ada di Finance & Accounting sesuai referensi definitif
   // component-implementation-spec.md §3.0 -- sebelumnya salah taruh di
   // Workforce tanpa alasan terdokumentasi (temuan 2026-09-06).
-  { to: "/revenue-cloud", label: "Ringkasan Finance", bundle: "finance_accounting", end: true },
   {
     to: "/payment-requests",
     label: "Payment Request",
@@ -134,15 +126,6 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: "/finance", label: "Finance", bundle: "finance_accounting" },
   { to: "/accounting", label: "Akunting", bundle: "finance_accounting" },
-  // Landing kategori administration -- isinya audit log + users + roles,
-  // konten halaman ini sebenarnya sudah pas di sini sejak awal.
-  {
-    to: "/govern-cloud",
-    label: "Ringkasan",
-    roles: ["admin", "management"],
-    bundle: "administration",
-    end: true,
-  },
   // Kelola rate ber-versi — role finance ke atas.
   {
     to: "/rates",
@@ -172,7 +155,6 @@ const NAV_ITEMS: NavItem[] = [
 // masih pakai emoji, jadi daftar ini tetap ada utk item quick-nav di sana).
 const PAGE_EMOJI: Record<string, string> = {
   "/": "🏠",
-  "/talent-cloud": "✨",
   "/leads": "🎯",
   "/clients": "🎯",
   "/quotations": "📝",
@@ -183,16 +165,13 @@ const PAGE_EMOJI: Record<string, string> = {
   "/ai-interview": "🎙️",
   "/blacklist": "🚫",
   "/pages": "📄",
-  "/workforce-cloud": "🪪",
   "/employees": "💼",
   "/attendance": "📅",
   "/chat": "💬",
   "/payment-requests": "🧾",
-  "/revenue-cloud": "🧾",
   "/payroll": "💼",
   "/portal-saya": "🙋",
   "/finance": "🏗️",
-  "/govern-cloud": "⚖️",
   "/accounting": "📊",
   "/rates": "🧮",
   "/billing": "💳",
@@ -206,7 +185,6 @@ const PAGE_EMOJI: Record<string, string> = {
 // emoji, beda jauh dari garis vektor bersih di mockup).
 const PAGE_ICON: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
-  "/talent-cloud": Sparkles,
   "/leads": Briefcase,
   "/clients": Building2,
   "/quotations": FileSignature,
@@ -217,16 +195,13 @@ const PAGE_ICON: Record<string, LucideIcon> = {
   "/ai-interview": MessagesSquare,
   "/blacklist": Ban,
   "/pages": FileText,
-  "/workforce-cloud": IdCard,
   "/employees": IdCard,
   "/attendance": Calendar,
   "/chat": MessageCircle,
   "/payment-requests": ClipboardList,
-  "/revenue-cloud": Receipt,
   "/payroll": Wallet,
   "/portal-saya": UserCircle,
   "/finance": Receipt,
-  "/govern-cloud": Scale,
   "/accounting": BarChart3,
   "/rates": Calculator,
   "/billing": CreditCard,

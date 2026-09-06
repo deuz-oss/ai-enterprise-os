@@ -114,8 +114,8 @@ export function PropertiesPanel({
   );
 }
 
-/** Badge ikon berwarna ala mockup talent-cloud.html/workforce-cloud.html (mis.
- * ikon "Klien Aktif" emerald, "Leads" violet, dst) — "accent" pakai token
+/** Badge ikon berwarna ala mockup referensi awal (sudah dihapus dari repo;
+ * mis. ikon "Klien Aktif" emerald, "Leads" violet, dst) — "accent" pakai token
  * tema (--accent/--accent-tint) yang sama dengan PageHeader supaya tetap
  * ganti warna otomatis kalau tenant override warna aksennya. */
 export function IconBadge({
