@@ -50,13 +50,6 @@ interface NavItem {
   end?: boolean;
   roles?: string[];
   bundle?: Category;
-  // Item ini adalah landing page kategori-nya (mis. /talent-cloud) — kalau
-  // sebuah grup kategori punya item dengan flag ini, sidebar HANYA menampilkan
-  // satu baris tunggal (nama kategori, ikon landing) alih-alih tree flat semua
-  // item. Item lain di kategori itu tetap ada (tetap muncul di ⌘K), cuma
-  // disembunyikan dari daftar sidebar — navigasi ke sana dilakukan lewat
-  // link "Lihat semua X →" di dalam landing page itu sendiri.
-  bundleLanding?: boolean;
 }
 
 // 5 kategori sidebar Opsi G (Fase 28), menggantikan branding "Cloud"
@@ -95,13 +88,7 @@ const NAV_ITEMS: NavItem[] = [
   // dua kategori baru) — diletakkan di bawah "crm" saja (keputusan
   // implementasi Fase 28: satu landing bersama lebih murah daripada
   // membelah jadi dua halaman ringkasan terpisah sekarang).
-  {
-    to: "/talent-cloud",
-    label: "Ringkasan",
-    bundle: "crm",
-    end: true,
-    bundleLanding: true,
-  },
+  { to: "/talent-cloud", label: "Ringkasan", bundle: "crm", end: true },
   { to: "/leads", label: "Pipeline", bundle: "crm" },
   { to: "/clients", label: "Klien", bundle: "crm" },
   { to: "/quotations", label: "Quotation", bundle: "crm" },
@@ -126,32 +113,25 @@ const NAV_ITEMS: NavItem[] = [
     bundle: "recruitment",
     roles: ["admin", "recruiter", "management"],
   },
-  {
-    to: "/workforce-cloud",
-    label: "Ringkasan",
-    bundle: "workforce",
-    end: true,
-    bundleLanding: true,
-  },
+  { to: "/workforce-cloud", label: "Ringkasan", bundle: "workforce", end: true },
   { to: "/employees", label: "Karyawan", bundle: "workforce" },
   { to: "/attendance", label: "Absensi", bundle: "workforce" },
   { to: "/chat", label: "Chat" },
-  {
-    to: "/payment-requests",
-    label: "Payment Request",
-    bundle: "workforce",
-    roles: ["admin", "operations", "hr", "finance", "management"],
-  },
   // Payroll sengaja di Workforce, bukan Finance & Accounting -- keputusan
   // desain Fase 28 (docs/design/design.md §7), beda dari pengelompokan
   // Opsi F lama yang menyatukan payroll dengan Revenue Cloud.
   { to: "/payroll", label: "Payroll", bundle: "workforce" },
   { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], bundle: "workforce" },
-  // "Ringkasan Finance" jadi entri biasa (bukan bundleLanding) karena
-  // /govern-cloud di bawah sudah jadi landing kategori administration --
-  // isinya audit+users+roles, cocoknya di sana, bukan di Finance & Accounting
-  // seperti pengelompokan Opsi F lama.
-  { to: "/revenue-cloud", label: "Ringkasan Finance", bundle: "finance_accounting" },
+  // Payment Request ada di Finance & Accounting sesuai referensi definitif
+  // component-implementation-spec.md §3.0 -- sebelumnya salah taruh di
+  // Workforce tanpa alasan terdokumentasi (temuan 2026-09-06).
+  { to: "/revenue-cloud", label: "Ringkasan Finance", bundle: "finance_accounting", end: true },
+  {
+    to: "/payment-requests",
+    label: "Payment Request",
+    bundle: "finance_accounting",
+    roles: ["admin", "operations", "hr", "finance", "management"],
+  },
   { to: "/finance", label: "Finance", bundle: "finance_accounting" },
   { to: "/accounting", label: "Akunting", bundle: "finance_accounting" },
   // Landing kategori administration -- isinya audit log + users + roles,
@@ -162,7 +142,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["admin", "management"],
     bundle: "administration",
     end: true,
-    bundleLanding: true,
   },
   // Kelola rate ber-versi — role finance ke atas.
   {
@@ -560,57 +539,46 @@ export default function Layout() {
         >
           <nav className="flex-1 space-y-5 overflow-y-auto p-3">
             <PageTreeSection pathname={location.pathname} visible={isTenantUser()} />
-            {groups.map((g) => {
-              // Kategori dengan landing page (mis. CRM → /talent-cloud) diciutkan
-              // jadi satu baris klik-in saja, bukan tree flat. Sub-halamannya
-              // (Pipeline/Klien/Job Orders/dst) diakses lewat link "Lihat semua
-              // X →" di dalam landing page-nya sendiri, bukan lewat sidebar —
-              // tapi tetap ada di sini (tersembunyi) supaya tetap muncul di ⌘K.
-              const landing = g.items.find((i) => i.bundleLanding);
-              const rowItems = landing ? [landing] : g.items;
-              return (
-                <div key={g.label}>
-                  {!landing && (
-                    <p
-                      className="px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-widest"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      {g.label}
-                    </p>
-                  )}
-                  <div className="space-y-0.5">
-                    {rowItems.map((item) => {
-                      const Icon = PAGE_ICON[item.to] ?? FileText;
-                      return (
-                        <NavLink
-                          key={item.to}
-                          to={item.to}
-                          end={item.end}
-                          className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
-                          style={({ isActive }) => ({
-                            backgroundColor: isActive ? "var(--accent)" : undefined,
-                            color: isActive ? "#ffffff" : "var(--text-muted)",
-                          })}
-                        >
-                          {({ isActive }) => (
-                            <>
-                              {/* Ikon berwarna per kategori (ungu=CRM, biru=Recruitment,
-                                  emerald=Workforce, amber=Finance & Accounting, slate=
-                                  Administration); netral putih saat item aktif. */}
-                              <Icon
-                                className="h-4 w-4 shrink-0"
-                                style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--text-muted)") }}
-                              />
-                              {landing ? g.label : item.label}
-                            </>
-                          )}
-                        </NavLink>
-                      );
-                    })}
-                  </div>
+            {groups.map((g) => (
+              <div key={g.label}>
+                <p
+                  className="px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-widest"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {g.label}
+                </p>
+                <div className="space-y-0.5">
+                  {g.items.map((item) => {
+                    const Icon = PAGE_ICON[item.to] ?? FileText;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.end}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
+                        style={({ isActive }) => ({
+                          backgroundColor: isActive ? "var(--accent)" : undefined,
+                          color: isActive ? "#ffffff" : "var(--text-muted)",
+                        })}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {/* Ikon berwarna per kategori (ungu=CRM, biru=Recruitment,
+                                emerald=Workforce, amber=Finance & Accounting, slate=
+                                Administration); netral putih saat item aktif. */}
+                            <Icon
+                              className="h-4 w-4 shrink-0"
+                              style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--text-muted)") }}
+                            />
+                            {item.label}
+                          </>
+                        )}
+                      </NavLink>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </nav>
 
           <div className="relative border-t p-3" style={{ borderColor: "var(--border)" }}>
