@@ -8,8 +8,10 @@ PRD v3.0 Final — Opsi F: Talent-Centric Metered:
   Revenue Cloud = payroll+finance, Govern = accounting.
   BUNDLE_REGISTRY F adalah paket komersial, APP_REGISTRY adalah SKU teknis.
 
-Prefix yang TIDAK terdaftar (auth, platform, overview, files, health, /apps,
-chat, pages, dashboard) adalah FOUNDATION gratis — selalu aktif.
+Penegakan akses per-SKU (`require_licensed_app`) sudah dihapus sejak Opsi G
+(Fase 28, lihat `require_active_subscription` di core/security.py) — modul
+ini sekarang murni data historis, dibaca oleh `GET /apps` & panel Lisensi
+legacy di Platform Admin (ADR-0007), bukan lagi jalur penegakan akses.
 """
 
 from __future__ import annotations
@@ -25,7 +27,6 @@ class AppSpec:
     accent: str
     description: str
     depends_on: tuple[str, ...]
-    route_prefixes: tuple[str, ...]
     bundle: str
     meter: str  # metered metric untuk Opsi F
 
@@ -43,7 +44,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "Pipeline, aktivitas, konversi klien → klien aktif otomatis saat onboarding."
             ),
             depends_on=(),
-            route_prefixes=("/leads", "/clients"),
             bundle="talent",
             meter="talent_active",
         ),
@@ -56,7 +56,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "JO stage + talent pool + AI Matching native 0-100 + interview/offering/onboard."
             ),
             depends_on=(),
-            route_prefixes=("/recruitment", "/talentpool"),
             bundle="talent",
             meter="talent_active + match_credit",
         ),
@@ -70,14 +69,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "asuransi polis+kartu (one-to-many), absensi, project placement, ESS, TTE."
             ),
             depends_on=(),
-            route_prefixes=(
-                "/employees",
-                "/bpjs",
-                "/me",
-                "/notifications",
-                "/esign",
-                "/attendance",
-            ),
             bundle="workforce",
             meter="employee_active",
         ),
@@ -91,7 +82,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "Tagih ke klien ada di Revenue."
             ),
             depends_on=(),
-            route_prefixes=("/payroll",),
             bundle="revenue",
             meter="payslip",
         ),
@@ -106,7 +96,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "penagihan, cashflow."
             ),
             depends_on=(),
-            route_prefixes=("/finance",),
             bundle="revenue",
             meter="invoice+faktur",
         ),
@@ -120,7 +109,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "pembelian, aset, periode & tutup buku, laporan + AI."
             ),
             depends_on=(),
-            route_prefixes=("/accounting",),
             bundle="govern",
             meter="flat",
         ),
@@ -133,7 +121,6 @@ APP_REGISTRY: dict[str, AppSpec] = {
                 "Chat AI @AEOS lintas app, RAG kontrak, forecast (matching sudah native di Talent)."
             ),
             depends_on=(),
-            route_prefixes=("/ai",),
             bundle="addon",
             meter="token",
         ),
@@ -273,12 +260,3 @@ def bundle_for_app(app_key: str) -> str | None:
 def apps_for_bundle(bundle_key: str) -> list[str]:
     spec = BUNDLE_REGISTRY.get(bundle_key)
     return list(spec.apps) if spec else []
-
-
-def app_for_path(path: str) -> str | None:
-    """Kunci aplikasi untuk sebuah path API; None = kapabilitas foundation gratis."""
-    for spec in APP_REGISTRY.values():
-        for prefix in spec.route_prefixes:
-            if path == prefix or path.startswith(prefix + "/"):
-                return spec.key
-    return None

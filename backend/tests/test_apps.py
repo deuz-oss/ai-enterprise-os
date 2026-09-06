@@ -1,5 +1,6 @@
-"""Fase 7: registry aplikasi (masih dipakai untuk pemetaan path->app_key).
-Guard akses bisnis sejak Fase 28 memakai `require_active_subscription()`
+"""Fase 7: registry aplikasi (data historis, dibaca oleh GET /apps & panel
+Lisensi legacy Platform Admin -- lihat ADR-0007 di core/apps.py). Guard akses
+bisnis sejak Fase 28 memakai `require_active_subscription()`
 (TenantSubscription), bukan lagi lisensi per-SKU -- lihat
 `test_guard_blocks_without_subscription_and_passes_once_active`."""
 
@@ -20,30 +21,6 @@ def _provision_tenant(client, platform_headers, slug: str) -> dict:
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
-
-
-def test_registry_covers_all_business_prefixes():
-    """Setiap prefix bisnis harus terpetakan ke satu aplikasi registry — PRD v3.0 F."""
-    from app.core.apps import app_for_path
-
-    pemetaan = {
-        "/leads": "sales_crm",
-        "/clients/abc/documents": "sales_crm",
-        "/recruitment/candidates": "recruitment",
-        "/employees": "people_ops",
-        "/payroll/runs": "payroll",
-        "/me/payslips": "people_ops",
-        "/me/notifications": "people_ops",
-        "/finance": "finance",
-        "/accounting/journals": "accounting",
-        "/esign/requests": "people_ops",
-        "/ai/contracts/ask": "ai_addon",
-    }
-    for path, expected in pemetaan.items():
-        assert app_for_path(path) == expected, path
-    # Kapabilitas gratis tanpa lisensi.
-    for free in ("/auth/login", "/overview", "/platform/tenants", "/files/x", "/apps"):
-        assert app_for_path(free) is None, free
 
 
 def test_default_tenant_gets_full_package(client):
