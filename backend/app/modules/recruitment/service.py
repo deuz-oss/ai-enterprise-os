@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import math
 from datetime import UTC, date, datetime, timedelta, timezone
 
@@ -42,6 +43,8 @@ from app.modules.recruitment.schemas import (
     PlacementCreate,
 )
 from app.modules.talentpool.models import CvIntake
+
+logger = logging.getLogger(__name__)
 
 # ---------- Job orders ----------
 
@@ -1137,7 +1140,14 @@ def _send_interview_ics_invite(db: Session, *, jo, candidate, sched) -> None:
                 attachment_params={"method": "REQUEST", "name": "interview.ics"},
             )
     except Exception:
-        pass
+        # Best-effort (jangan gagalkan penjadwalan interview kalau invite-nya
+        # error), TAPI tetap harus tercatat -- sebelumnya silent `pass` bikin
+        # kandidat/interviewer tidak dapat invite tanpa jejak sama sekali.
+        logger.exception(
+            "Gagal kirim invite .ics interview untuk kandidat %s (JO %s)",
+            candidate.id,
+            jo.id,
+        )
 
 
 def list_interviews(db: Session, job_order_id: str | None = None) -> list[InterviewSchedule]:

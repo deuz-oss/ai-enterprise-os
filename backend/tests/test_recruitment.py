@@ -521,6 +521,43 @@ def test_interview_schedule_sends_ics_invite_to_candidate_and_interviewer(client
     assert b"BEGIN:VCALENDAR" in ics_payload
 
 
+def test_interview_ics_invite_failure_dicatat_ke_log_bukan_dibungkam(client, caplog):
+    """Gap 2026-09-06: `_send_interview_ics_invite` dulu `except Exception: pass`
+    tanpa jejak sama sekali -- kandidat/interviewer bisa tidak pernah dapat
+    invite tanpa ada yang tahu. Sekarang harus tercatat lewat logger.exception."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+    client.patch(
+        f"/api/v1/recruitment/candidates/{cand_id}",
+        headers=headers,
+        json={"email": "andi@kandidat.co.id"},
+    )
+
+    with (
+        patch(
+            "app.modules.recruitment.calendar_invite.build_interview_ics",
+            side_effect=RuntimeError("ics rusak"),
+        ),
+        caplog.at_level("ERROR", logger="app.modules.recruitment.service"),
+    ):
+        created = client.post(
+            "/api/v1/recruitment/interviews",
+            headers=headers,
+            json={
+                "candidate_id": cand_id,
+                "job_order_id": jo_id,
+                "scheduled_at": "2026-09-10T09:00:00",
+                "location": "Kantor Pusat",
+            },
+        )
+    # Penjadwalan tetap sukses (best-effort, tidak boleh gagalkan interview)...
+    assert created.status_code == 201, created.text
+    # ...tapi kegagalan invite-nya sendiri sekarang harus muncul di log.
+    assert any("Gagal kirim invite .ics" in r.message for r in caplog.records)
+
+
 def test_job_order_template_crud(client):
     headers = _auth_header(client)
     created = client.post(
