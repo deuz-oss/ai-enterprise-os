@@ -743,6 +743,58 @@ def lock_version_for_placement(db: Session, *, candidate_id, placement_id) -> No
 # ---------- Talent pool listing & hak hapus ----------
 
 
+def _build_talentpool_row(
+    c: Candidate,
+    intake: CvIntake | None,
+    latest_cv_version: int | None,
+    latest_cv_version_id,
+) -> dict:
+    return {
+        "candidate_id": str(c.id),
+        "full_name": c.full_name,
+        "city": c.city,
+        "email": c.email,
+        "phone": c.phone,
+        # Status funnel rekrutmen keseluruhan kandidat (Candidates.tsx
+        # sebelum dihapus) -- beda dari `tp_status` (status pemrosesan
+        # CV) di bawah. Talent Pool jadi satu-satunya tempat kandidat
+        # dikelola sejak Candidates.tsx dimigrasi (2026-09-06).
+        "status": c.status.value,
+        "cv_file_name": c.cv_file_name,
+        "expected_salary": float(c.expected_salary) if c.expected_salary else None,
+        "skills": c.skills,
+        "address": c.address,
+        "gender": c.gender,
+        "birthdate": c.birthdate.isoformat() if c.birthdate else None,
+        "birthplace": c.birthplace,
+        "ktp_no": c.ktp_no,
+        "marital_status": c.marital_status,
+        "blood_type": c.blood_type,
+        "religion": c.religion,
+        "education": c.education,
+        "education_level": c.education_level,
+        "school": c.school,
+        "experience_years": c.experience_years,
+        "current_company": c.current_company,
+        "current_position": c.current_position,
+        "position_pool": c.position_pool,
+        "job_level": c.job_level,
+        "languages": ", ".join(c.languages) if c.languages else None,
+        "reference": c.reference,
+        "source": c.source,
+        "description": c.description,
+        "readiness": intake.readiness if intake else None,
+        "tp_status": intake.tp_status.value if intake else TalentPoolStatus.baru.value,
+        "intake_status": intake.status.value if intake else None,
+        "latest_intake_id": str(intake.id) if intake else None,
+        "needs_review_count": (
+            len(json.loads(intake.needs_review)) if intake and intake.needs_review else 0
+        ),
+        "latest_cv_version": latest_cv_version,
+        "latest_cv_version_id": str(latest_cv_version_id) if latest_cv_version_id else None,
+    }
+
+
 def list_talentpool(
     db: Session,
     *,
@@ -783,54 +835,43 @@ def list_talentpool(
         if has_standard_cv and c.id not in locked_counts:
             continue
         rows.append(
-            {
-                "candidate_id": str(c.id),
-                "full_name": c.full_name,
-                "city": c.city,
-                "email": c.email,
-                "phone": c.phone,
-                # Status funnel rekrutmen keseluruhan kandidat (Candidates.tsx
-                # sebelum dihapus) -- beda dari `tp_status` (status pemrosesan
-                # CV) di bawah. Talent Pool jadi satu-satunya tempat kandidat
-                # dikelola sejak Candidates.tsx dimigrasi (2026-09-06).
-                "status": c.status.value,
-                "cv_file_name": c.cv_file_name,
-                "expected_salary": float(c.expected_salary) if c.expected_salary else None,
-                "skills": c.skills,
-                "address": c.address,
-                "gender": c.gender,
-                "birthdate": c.birthdate.isoformat() if c.birthdate else None,
-                "birthplace": c.birthplace,
-                "ktp_no": c.ktp_no,
-                "marital_status": c.marital_status,
-                "blood_type": c.blood_type,
-                "religion": c.religion,
-                "education": c.education,
-                "education_level": c.education_level,
-                "school": c.school,
-                "experience_years": c.experience_years,
-                "current_company": c.current_company,
-                "current_position": c.current_position,
-                "position_pool": c.position_pool,
-                "job_level": c.job_level,
-                "languages": ", ".join(c.languages) if c.languages else None,
-                "reference": c.reference,
-                "source": c.source,
-                "description": c.description,
-                "readiness": intake.readiness if intake else None,
-                "tp_status": intake.tp_status.value if intake else TalentPoolStatus.baru.value,
-                "intake_status": intake.status.value if intake else None,
-                "latest_intake_id": str(intake.id) if intake else None,
-                "needs_review_count": (
-                    len(json.loads(intake.needs_review)) if intake and intake.needs_review else 0
-                ),
-                "latest_cv_version": locked_counts.get(c.id),
-                "latest_cv_version_id": (
-                    str(latest_version_id[c.id]) if c.id in latest_version_id else None
-                ),
-            }
+            _build_talentpool_row(c, intake, locked_counts.get(c.id), latest_version_id.get(c.id))
         )
     return rows
+
+
+def get_talentpool_detail(db: Session, candidate_id: str) -> dict:
+    """Detail satu kandidat -- bentuk field SAMA seperti satu baris `list_talentpool`,
+    dipakai halaman detail `/talent-pool/:id` (konsolidasi panel inline ke tab)."""
+    candidate = db.get(Candidate, parse_uuid(candidate_id))
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Kandidat tidak ditemukan")
+    intake = (
+        db.execute(
+            select(CvIntake)
+            .where(CvIntake.candidate_id == candidate.id)
+            .order_by(CvIntake.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+    latest_version = (
+        db.execute(
+            select(StandardCvVersion)
+            .where(StandardCvVersion.candidate_id == candidate.id)
+            .order_by(StandardCvVersion.seq.desc())
+        )
+        .scalars()
+        .first()
+    )
+    row = _build_talentpool_row(
+        candidate,
+        intake,
+        latest_version.seq if latest_version else None,
+        latest_version.id if latest_version else None,
+    )
+    row["has_photo"] = candidate.photo_object_key is not None
+    return row
 
 
 def forget_candidate(db: Session, *, user, candidate_id: str) -> dict:

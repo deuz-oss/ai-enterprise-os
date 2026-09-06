@@ -191,6 +191,15 @@ def download_logo(db: Session = Depends(get_db)):
     return Response(content=data, media_type=mime)
 
 
+# Path dinamis satu-segmen -- HARUS di paling akhir supaya tidak menabrak
+# path statis satu-segmen di atas (`/branding`, `/field-settings`).
+@router.get("/{candidate_id}")
+def get_talentpool_detail(candidate_id: str, db: Session = Depends(get_db)):
+    """Detail satu kandidat untuk halaman `/talent-pool/:id` (bentuk field
+    sama seperti satu baris `GET /talentpool`)."""
+    return service.get_talentpool_detail(db, candidate_id)
+
+
 # Konfigurasi branding hanya admin/management.
 branding_admin_router = APIRouter(
     prefix="/talentpool",

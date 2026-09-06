@@ -717,13 +717,18 @@ def create_placement(db: Session, payload: PlacementCreate) -> Placement:
 
 
 def list_placements(
-    db: Session, job_order_id: str | None = None, status: PlacementStatus | None = None
+    db: Session,
+    job_order_id: str | None = None,
+    status: PlacementStatus | None = None,
+    candidate_id: str | None = None,
 ) -> list[Placement]:
     stmt = select(Placement).order_by(Placement.created_at.desc())
     if job_order_id:
         stmt = stmt.where(Placement.job_order_id == parse_uuid(job_order_id))
     if status is not None:
         stmt = stmt.where(Placement.status == status)
+    if candidate_id:
+        stmt = stmt.where(Placement.candidate_id == parse_uuid(candidate_id))
     return list(db.execute(stmt).scalars())
 
 

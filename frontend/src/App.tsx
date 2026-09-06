@@ -31,6 +31,7 @@ import Rates from "./pages/Rates";
 import Referral from "./pages/Referral";
 import ResetPassword from "./pages/ResetPassword";
 import TalentPool from "./pages/TalentPool";
+import TalentPoolDetail from "./pages/TalentPoolDetail";
 import Pages from "./pages/Pages";
 import Users from "./pages/Users";
 
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/candidates" element={<Navigate to="/talent-pool" replace />} />
             <Route path="/referral" element={<Referral />} />
             <Route path="/talent-pool" element={<TalentPool />} />
+            <Route path="/talent-pool/:id" element={<TalentPoolDetail />} />
             <Route path="/ai-interview" element={<AIInterview />} />
             <Route path="/blacklist" element={<Blacklist />} />
             <Route path="/pages" element={<Pages />} />

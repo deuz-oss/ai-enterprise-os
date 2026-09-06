@@ -412,6 +412,44 @@ def test_list_talentpool_menyertakan_semua_field_katalog(client, monkeypatch):
         assert key in row
 
 
+def test_get_talentpool_detail_bentuk_sama_seperti_list(client, monkeypatch):
+    """Halaman detail `/talent-pool/:id` konsumsi endpoint ini -- bentuk field
+    harus sama seperti satu baris `GET /talentpool`, plus `has_photo`."""
+    from app.modules.talentpool import service
+
+    monkeypatch.setattr(service, "extract_profile", lambda db, data, kind: _fake_profile())
+    headers = _auth_header(client)
+    pdf = _minimal_pdf_bytes()
+    created = client.post(
+        "/api/v1/talentpool/intake",
+        headers=headers,
+        files={"file": ("cv.pdf", io.BytesIO(pdf), "application/pdf")},
+        data={"consent": "true"},
+    ).json()
+    fin = client.post(f"/api/v1/talentpool/intake/{created['id']}/finalize", headers=headers)
+    assert fin.status_code == 200, fin.text
+    candidate_id = fin.json()["candidate_id"]
+
+    detail = client.get(f"/api/v1/talentpool/{candidate_id}", headers=headers)
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["candidate_id"] == candidate_id
+    assert body["full_name"] == "Budi Santoso"
+    assert body["latest_intake_id"] == created["id"]
+    assert body["latest_cv_version_id"] is not None
+    assert body["has_photo"] is False
+
+    rows = client.get("/api/v1/talentpool", headers=headers).json()
+    row = next(r for r in rows if r["candidate_id"] == candidate_id)
+    assert set(row.keys()) == set(body.keys()) - {"has_photo"}
+
+
+def test_get_talentpool_detail_404(client):
+    headers = _auth_header(client)
+    resp = client.get("/api/v1/talentpool/00000000-0000-0000-0000-000000000000", headers=headers)
+    assert resp.status_code == 404
+
+
 _PNG_1PX = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
     "0000000d49444154789c626001000000ffff03000006000557bfabd400000000"

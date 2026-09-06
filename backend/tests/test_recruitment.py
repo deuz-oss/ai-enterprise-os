@@ -120,6 +120,37 @@ def test_placement_flow_updates_statuses(client):
     assert duplicate.status_code == 409
 
 
+def test_list_placements_filter_candidate_id(client):
+    """Dipakai tab 'Proses' halaman detail kandidat -- cuma placement milik
+    kandidat itu yang boleh kembali, bukan punya kandidat lain."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_a = _create_candidate(client, headers, name="Andi")
+    cand_b = _create_candidate(client, headers, name="Budi")
+
+    client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_a, "job_order_id": jo_id},
+    )
+    client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_b, "job_order_id": jo_id},
+    )
+
+    resp = client.get(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        params={"candidate_id": cand_a},
+    )
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["candidate_id"] == cand_a
+
+
 def test_offering_letter_pdf_dan_esign_sandbox(client):
     """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> esign -> status offered.
 

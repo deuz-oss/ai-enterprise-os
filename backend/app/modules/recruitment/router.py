@@ -228,9 +228,12 @@ def delete_candidate_experience(experience_id: str, db: Session = Depends(get_db
 def list_placements(
     job_order_id: str | None = None,
     placement_status: PlacementStatus | None = None,
+    candidate_id: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return service.list_placements(db, job_order_id=job_order_id, status=placement_status)
+    return service.list_placements(
+        db, job_order_id=job_order_id, status=placement_status, candidate_id=candidate_id
+    )
 
 
 @router.post("/placements", response_model=PlacementOut, status_code=status.HTTP_201_CREATED)
