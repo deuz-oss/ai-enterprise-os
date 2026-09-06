@@ -679,6 +679,12 @@ def list_talentpool(
                 "city": c.city,
                 "email": c.email,
                 "phone": c.phone,
+                # Status funnel rekrutmen keseluruhan kandidat (Candidates.tsx
+                # sebelum dihapus) -- beda dari `tp_status` (status pemrosesan
+                # CV) di bawah. Talent Pool jadi satu-satunya tempat kandidat
+                # dikelola sejak Candidates.tsx dimigrasi (2026-09-06).
+                "status": c.status.value,
+                "cv_file_name": c.cv_file_name,
                 "expected_salary": float(c.expected_salary) if c.expected_salary else None,
                 "skills": c.skills,
                 "readiness": intake.readiness if intake else None,

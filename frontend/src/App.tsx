@@ -8,7 +8,6 @@ import AIInterviewSession from "./pages/AIInterviewSession";
 import Audit from "./pages/Audit";
 import Billing from "./pages/Billing";
 import Blacklist from "./pages/Blacklist";
-import Candidates from "./pages/Candidates";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
@@ -65,7 +64,7 @@ export default function App() {
             <Route path="/agreements" element={<Agreements />} />
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/job-orders/:id" element={<JobOrderDetail />} />
-            <Route path="/candidates" element={<Candidates />} />
+            <Route path="/candidates" element={<Navigate to="/talent-pool" replace />} />
             <Route path="/referral" element={<Referral />} />
             <Route path="/talent-pool" element={<TalentPool />} />
             <Route path="/ai-interview" element={<AIInterview />} />

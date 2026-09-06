@@ -1,7 +1,8 @@
 import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
-import { ScoreBadge } from "../components/Ai";
+import { AiResultCard, ScoreBadge } from "../components/Ai";
+import type { Screening } from "../components/Ai";
 import { CheckCircle2, Clock, Dna, FileCheck2, Palette } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
 import { KpiCard, PillTabs, type PillTab } from "../components/ui";
@@ -21,7 +22,40 @@ interface TpRow {
   latest_intake_id: string | null;
   needs_review_count: number;
   latest_cv_version: number;
+  // Status funnel rekrutmen keseluruhan (bukan status pemrosesan CV di atas)
+  // -- dipindahkan dari Candidates.tsx (dihapus 2026-09-06, Talent Pool jadi
+  // satu-satunya database kandidat).
+  status: string;
+  cv_file_name: string | null;
 }
+
+interface CandidateExperience {
+  id: string;
+  company: string;
+  position: string;
+  start_date: string | null;
+  end_date: string | null;
+  description: string | null;
+}
+
+interface ActivityLogEntry {
+  id: string;
+  action: string;
+  detail: unknown;
+  created_at: string;
+}
+
+// Status funnel rekrutmen (Candidate.status) -- pindahan dari Candidates.tsx.
+const RECRUIT_STATUSES = ["baru", "screening", "interview", "offered", "placed", "gagal", "arsip"];
+const RECRUIT_BADGE: Record<string, string> = {
+  baru: "pill p-gray",
+  screening: "pill p-blue",
+  interview: "pill p-indigo",
+  offered: "pill p-yellow",
+  placed: "pill p-green",
+  gagal: "pill p-red",
+  arsip: "pill p-gray",
+};
 
 interface IntakeDetail {
   id: string;
@@ -231,6 +265,173 @@ function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   );
 }
 
+/** AI Screening — pindahan dari Candidates.tsx. Beda dari kolom "Skor
+ * Match" di tabel (native matching, me-ranking BANYAK kandidat per SATU job
+ * order): ini menilai SATU kandidat secara mendalam (verdict + alasan LLM),
+ * opsional terhadap satu job order. */
+function ScreeningPanel({
+  candidateId,
+  cvFileName,
+  jobOrders,
+}: {
+  candidateId: string;
+  cvFileName: string | null;
+  jobOrders: JobOrder[];
+}) {
+  const qc = useQueryClient();
+  const screenings = useQuery({
+    queryKey: ["screenings", candidateId],
+    queryFn: () => api.get<Screening[]>(`/ai/candidates/${candidateId}/screenings`),
+  });
+  const runScreening = useMutation({
+    mutationFn: (joId: string) =>
+      api.post<Screening>(`/ai/candidates/${candidateId}/screen`, { job_order_id: joId || null }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["screenings", candidateId] }),
+  });
+
+  return (
+    <div className="space-y-3 rounded p-3" style={{ backgroundColor: "var(--hover)" }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+          Screening AI
+        </span>
+        {!cvFileName && (
+          <span className="badge border-0 bg-red-100 text-red-600">
+            CV belum diunggah — unggah dulu agar AI bisa menilai
+          </span>
+        )}
+        <form
+          className="ml-auto flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const sel = e.currentTarget.elements.namedItem("jo") as HTMLSelectElement;
+            runScreening.mutate(sel.value);
+          }}
+        >
+          <select name="jo" className="input w-auto py-1 text-xs">
+            <option value="">Tanpa job order (nilai umum)</option>
+            {jobOrders.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.title}
+              </option>
+            ))}
+          </select>
+          <button className="btn py-1 text-xs" disabled={runScreening.isPending || !cvFileName}>
+            {runScreening.isPending ? "AI sedang menilai..." : "Jalankan Screening"}
+          </button>
+        </form>
+      </div>
+      {runScreening.error && <p className="text-sm text-red-600">{(runScreening.error as Error).message}</p>}
+      {screenings.isLoading ? (
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat riwayat...</p>
+      ) : (
+        <div className="space-y-2">
+          {(screenings.data ?? []).map((s) => (
+            <AiResultCard key={s.id} screening={s} />
+          ))}
+          {screenings.data?.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada hasil screening.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Riwayat pengalaman + activity log — pindahan dari Candidates.tsx. */
+function HistoryPanel({ candidateId }: { candidateId: string }) {
+  const qc = useQueryClient();
+  const experiences = useQuery({
+    queryKey: ["candidate-experiences", candidateId],
+    queryFn: () => api.get<CandidateExperience[]>(`/recruitment/candidates/${candidateId}/experiences`),
+  });
+  const activityLog = useQuery({
+    queryKey: ["candidate-activity-log", candidateId],
+    queryFn: () => api.get<ActivityLogEntry[]>(`/recruitment/candidates/${candidateId}/activity-log`),
+  });
+  const createExperience = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post(`/recruitment/candidates/${candidateId}/experiences`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidate-experiences", candidateId] }),
+  });
+  const deleteExperience = useMutation({
+    mutationFn: (id: string) => api.delete(`/recruitment/candidates/experiences/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["candidate-experiences", candidateId] }),
+  });
+
+  return (
+    <div className="grid grid-cols-1 gap-4 rounded p-3 sm:grid-cols-2" style={{ backgroundColor: "var(--hover)" }}>
+      <div>
+        <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+          Riwayat Pengalaman
+        </span>
+        <form
+          className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            createExperience.mutate({
+              company: form.get("company"),
+              position: form.get("position"),
+              start_date: form.get("start_date") || null,
+              end_date: form.get("end_date") || null,
+            });
+            e.currentTarget.reset();
+          }}
+        >
+          <input name="company" required placeholder="Perusahaan" className="input py-1 text-xs" />
+          <input name="position" required placeholder="Posisi" className="input py-1 text-xs" />
+          <input name="start_date" type="date" className="input py-1 text-xs" />
+          <input name="end_date" type="date" className="input py-1 text-xs" />
+          <button disabled={createExperience.isPending} className="btn-secondary py-1 text-xs sm:col-span-2">
+            + Tambah Pengalaman
+          </button>
+        </form>
+        <ul className="mt-2 space-y-1.5">
+          {(experiences.data ?? []).map((exp) => (
+            <li
+              key={exp.id}
+              className="flex items-center justify-between rounded p-2 text-xs"
+              style={{ backgroundColor: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            >
+              <div>
+                <p className="font-medium" style={{ color: "var(--text)" }}>
+                  {exp.position} · {exp.company}
+                </p>
+                <p style={{ color: "var(--text-muted)" }}>
+                  {exp.start_date ?? "?"} s/d {exp.end_date ?? "sekarang"}
+                </p>
+              </div>
+              <button onClick={() => deleteExperience.mutate(exp.id)} className="text-rose-600 hover:text-rose-800">
+                Hapus
+              </button>
+            </li>
+          ))}
+          {experiences.data?.length === 0 && (
+            <li className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada riwayat pengalaman.</li>
+          )}
+        </ul>
+      </div>
+      <div>
+        <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+          Aktivitas Terbaru
+        </span>
+        <ul className="mt-2 space-y-1">
+          {(activityLog.data ?? []).map((a) => (
+            <li key={a.id} className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <span style={{ color: "var(--text)" }}>{a.action}</span> ·{" "}
+              {new Date(a.created_at).toLocaleString("id-ID")}
+            </li>
+          ))}
+          {activityLog.data?.length === 0 && (
+            <li className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas tercatat.</li>
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function BrandingCard() {
   const qc = useQueryClient();
   const me = useQuery({
@@ -369,6 +570,12 @@ export default function TalentPool() {
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Pindahan dari Candidates.tsx (dihapus 2026-09-06) -- create manual tanpa
+  // CV, AI screening per-kandidat, dan riwayat pengalaman/aktivitas.
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const cvRef = useRef<HTMLInputElement>(null);
+  const [aiCandidateId, setAiCandidateId] = useState<string | null>(null);
+  const [historyCandidateId, setHistoryCandidateId] = useState<string | null>(null);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
@@ -404,13 +611,26 @@ export default function TalentPool() {
   // tapi sengaja tidak dipakai di sini, supaya count tiap pill tetap
   // mencerminkan seluruh hasil pencarian/filter lain yang sedang aktif).
   const [tpStatusTab, setTpStatusTab] = useState("");
-  const visibleRows = matchFilteredRows.filter((r) => !tpStatusTab || r.tp_status === tpStatusTab);
+  const tpFilteredRows = matchFilteredRows.filter((r) => !tpStatusTab || r.tp_status === tpStatusTab);
   const tpStatusTabs: PillTab[] = [
     { key: "", label: "Semua", count: matchFilteredRows.length },
     ...["baru", "diproses", "placed", "non_aktif"].map((s) => ({
       key: s,
       label: s === "non_aktif" ? "Non-aktif" : s[0].toUpperCase() + s.slice(1),
       count: matchFilteredRows.filter((r) => r.tp_status === s).length,
+    })),
+  ];
+
+  // Filter kedua, independen dari tp_status di atas: status funnel
+  // rekrutmen keseluruhan kandidat (pindahan dari Candidates.tsx).
+  const [recruitStatusTab, setRecruitStatusTab] = useState("");
+  const visibleRows = tpFilteredRows.filter((r) => !recruitStatusTab || r.status === recruitStatusTab);
+  const recruitStatusTabs: PillTab[] = [
+    { key: "", label: "Semua", count: tpFilteredRows.length },
+    ...RECRUIT_STATUSES.map((s) => ({
+      key: s,
+      label: s[0].toUpperCase() + s.slice(1),
+      count: tpFilteredRows.filter((r) => r.status === s).length,
     })),
   ];
 
@@ -437,6 +657,68 @@ export default function TalentPool() {
     void pool.refetch();
   }
 
+  const createCandidate = useMutation({
+    mutationFn: async ({ body, cv }: { body: Record<string, unknown>; cv: File | null }) => {
+      const created = await api.post<{ id: string }>("/recruitment/candidates", body);
+      if (cv) {
+        const fd = new FormData();
+        fd.append("file", cv);
+        await api.upload(`/recruitment/candidates/${created.id}/cv`, fd);
+      }
+      return created;
+    },
+    onSuccess: () => {
+      setShowCreateForm(false);
+      void qc.invalidateQueries({ queryKey: ["talentpool"] });
+    },
+  });
+
+  const changeRecruitStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/recruitment/candidates/${id}`, { status }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["talentpool"] }),
+  });
+
+  function handleCreateCandidate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    createCandidate.mutate({
+      body: {
+        full_name: form.get("full_name"),
+        phone: form.get("phone") || null,
+        city: form.get("city") || null,
+        education: form.get("education") || null,
+        expected_salary: Number(form.get("expected_salary")) || null,
+        source: form.get("source") || null,
+        referral_code: form.get("referral_code") || null,
+        skills: form.get("skills") || null,
+        skills_list: String(form.get("skills_list") || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        gender: form.get("gender") || null,
+        current_position: form.get("current_position") || null,
+        birthdate: form.get("birthdate") || null,
+        birthplace: form.get("birthplace") || null,
+        address: form.get("address") || null,
+        ktp_no: form.get("ktp_no") || null,
+        marital_status: form.get("marital_status") || null,
+        blood_type: form.get("blood_type") || null,
+        religion: form.get("religion") || null,
+        languages: String(form.get("languages") || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        description: form.get("description") || null,
+        position_pool: form.get("position_pool") || null,
+        job_level: form.get("job_level") || null,
+        school: form.get("school") || null,
+        education_level: form.get("education_level") || null,
+      },
+      cv: cvRef.current?.files?.[0] ?? null,
+    });
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -461,6 +743,81 @@ export default function TalentPool() {
       </div>
 
       <PillTabs tabs={tpStatusTabs} value={tpStatusTab} onChange={setTpStatusTab} />
+      <PillTabs tabs={recruitStatusTabs} value={recruitStatusTab} onChange={setRecruitStatusTab} />
+
+      <div className="card space-y-2 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Tambah Kandidat Manual</h3>
+          <button className="btn-secondary text-xs" onClick={() => setShowCreateForm((v) => !v)}>
+            {showCreateForm ? "Tutup" : "+ Kandidat Manual"}
+          </button>
+        </div>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Untuk kandidat yang belum punya CV (mis. sumber telepon/walk-in) — CV bisa
+          diunggah belakangan lewat "Unggah CV Kandidat" di bawah.
+        </p>
+        {showCreateForm && (
+          <form onSubmit={handleCreateCandidate} className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
+            <input name="full_name" required placeholder="Nama lengkap *" className="input" />
+            <input name="phone" placeholder="Telepon" className="input" />
+            <input name="city" placeholder="Kota" className="input" />
+            <input name="education" placeholder="Pendidikan terakhir" className="input" />
+            <input name="expected_salary" type="number" placeholder="Ekspektasi gaji (Rp)" className="input" />
+            <input name="source" placeholder="Sumber (referral/loker/dll)" className="input" />
+            <input name="referral_code" placeholder="Kode referral (jika ada)" className="input" />
+            <input name="skills" placeholder="Skill (teks bebas)" className="input" />
+            <input
+              name="skills_list"
+              placeholder="Skill terstruktur (pisah koma, mis. excel, forklift)"
+              className="input sm:col-span-2"
+            />
+            <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" title="CV (opsional)" />
+
+            <details className="rounded-lg border p-3 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
+              <summary className="cursor-pointer text-sm font-medium" style={{ color: "var(--text)" }}>
+                Detail Tambahan (opsional)
+              </summary>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select name="gender" defaultValue="" className="input">
+                  <option value="">Jenis kelamin</option>
+                  <option value="L">Laki-laki</option>
+                  <option value="P">Perempuan</option>
+                </select>
+                <input name="current_position" placeholder="Posisi saat ini" className="input" />
+                <input name="birthdate" type="date" placeholder="Tanggal lahir" className="input" />
+                <input name="birthplace" placeholder="Tempat lahir" className="input" />
+                <input name="ktp_no" placeholder="No. KTP" className="input" />
+                <select name="marital_status" defaultValue="" className="input">
+                  <option value="">Status pernikahan</option>
+                  <option value="tk">Belum menikah</option>
+                  <option value="k">Menikah</option>
+                </select>
+                <select name="blood_type" defaultValue="" className="input">
+                  <option value="">Golongan darah</option>
+                  {["A", "B", "AB", "O"].map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+                <input name="religion" placeholder="Agama" className="input" />
+                <input name="school" placeholder="Sekolah/kampus" className="input" />
+                <input name="education_level" placeholder="Jenjang pendidikan" className="input" />
+                <input name="job_level" placeholder="Level posisi" className="input" />
+                <input name="position_pool" placeholder="Kategori posisi diminati" className="input" />
+                <input name="languages" placeholder="Bahasa (pisah koma, mis. Indonesia, Inggris)" className="input" />
+                <input name="address" placeholder="Alamat" className="input sm:col-span-3" />
+                <textarea name="description" placeholder="Bio singkat" className="input sm:col-span-3" rows={2} />
+              </div>
+            </details>
+
+            <button type="submit" disabled={createCandidate.isPending} className="btn sm:col-span-3">
+              Simpan Kandidat
+            </button>
+            {createCandidate.error && (
+              <p className="text-xs text-red-600 sm:col-span-3">{(createCandidate.error as Error).message}</p>
+            )}
+          </form>
+        )}
+      </div>
 
       <div className="card space-y-2 p-4">
         <h3 className="text-sm font-semibold">Unggah CV Kandidat</h3>
@@ -539,6 +896,7 @@ export default function TalentPool() {
               <th className="th">Kesiapan</th>
               <th className="th">Ekspektasi</th>
               <th className="th">Status TP</th>
+              <th className="th">Status Rekrutmen</th>
               <th className="th">CV Standar</th>
               {matchJobOrderId && <th className="th">Skor Match</th>}
               <th className="th"></th>
@@ -547,6 +905,7 @@ export default function TalentPool() {
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {visibleRows.map((r) => {
               const match = scoreByCandidate.get(r.candidate_id);
+              const colSpan = matchJobOrderId ? 10 : 9;
               return (
               <Fragment key={r.candidate_id}>
                 <tr>
@@ -561,6 +920,17 @@ export default function TalentPool() {
                       <span className="pill p-yellow ml-1">{r.needs_review_count} perlu cek</span>
                     )}
                   </td>
+                  <td className="td">
+                    <select
+                      value={r.status}
+                      onChange={(e) => changeRecruitStatus.mutate({ id: r.candidate_id, status: e.target.value })}
+                      className={`cursor-pointer border-0 ${RECRUIT_BADGE[r.status] ?? "pill p-gray"}`}
+                    >
+                      {RECRUIT_STATUSES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="td">{r.latest_cv_version ? `v${r.latest_cv_version}` : "—"}</td>
                   {matchJobOrderId && (
                     <td className="td" title={match?.explain}>
@@ -568,20 +938,54 @@ export default function TalentPool() {
                     </td>
                   )}
                   <td className="td">
-                    {r.latest_intake_id && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {r.latest_intake_id && (
+                        <button
+                          onClick={() => setOpenRow(openRow === r.candidate_id ? null : r.candidate_id)}
+                          className="font-medium text-blue-600 hover:text-blue-800"
+                        >
+                          {openRow === r.candidate_id ? "Tutup" : "Review"}
+                        </button>
+                      )}
                       <button
-                        onClick={() => setOpenRow(openRow === r.candidate_id ? null : r.candidate_id)}
-                        className="font-medium text-blue-600 hover:text-blue-800"
+                        onClick={() => setAiCandidateId(aiCandidateId === r.candidate_id ? null : r.candidate_id)}
+                        className={aiCandidateId === r.candidate_id ? "btn py-1 text-xs" : "btn-secondary py-1 text-xs"}
                       >
-                        {openRow === r.candidate_id ? "Tutup" : "Review"}
+                        AI
                       </button>
-                    )}
+                      <button
+                        onClick={() =>
+                          setHistoryCandidateId(historyCandidateId === r.candidate_id ? null : r.candidate_id)
+                        }
+                        className={historyCandidateId === r.candidate_id ? "btn py-1 text-xs" : "btn-secondary py-1 text-xs"}
+                      >
+                        Riwayat
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {openRow === r.candidate_id && r.latest_intake_id && (
                   <tr>
-                    <td colSpan={matchJobOrderId ? 9 : 8} className="td">
+                    <td colSpan={colSpan} className="td">
                       <IntakeReviewPanel intakeId={r.latest_intake_id} />
+                    </td>
+                  </tr>
+                )}
+                {aiCandidateId === r.candidate_id && (
+                  <tr>
+                    <td colSpan={colSpan} className="td">
+                      <ScreeningPanel
+                        candidateId={r.candidate_id}
+                        cvFileName={r.cv_file_name}
+                        jobOrders={jobOrders ?? []}
+                      />
+                    </td>
+                  </tr>
+                )}
+                {historyCandidateId === r.candidate_id && (
+                  <tr>
+                    <td colSpan={colSpan} className="td">
+                      <HistoryPanel candidateId={r.candidate_id} />
                     </td>
                   </tr>
                 )}
@@ -590,10 +994,10 @@ export default function TalentPool() {
             })}
             {visibleRows.length === 0 && (
               <tr>
-                <td colSpan={matchJobOrderId ? 9 : 8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={matchJobOrderId ? 10 : 9} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
                   {matchJobOrderId
                     ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
-                    : tpStatusTab
+                    : tpStatusTab || recruitStatusTab
                       ? "Tidak ada talent dengan status ini."
                       : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
                 </td>

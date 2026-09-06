@@ -330,6 +330,8 @@ class PlacementOut(BaseModel):
     ojt_end_date: date | None
     offering_call_done: bool
     offering_call_at: datetime | None
+    offering_letter_object_key: str | None
+    offering_signed_at: datetime | None
     created_at: datetime
 
 

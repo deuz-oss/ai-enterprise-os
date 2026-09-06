@@ -65,7 +65,7 @@ function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
           .get<{ id: string; name: string }[]>("/clients")
           .catch(() => []),
         api
-          .get<{ id: string; full_name: string }[]>("/candidates")
+          .get<{ id: string; full_name: string }[]>("/recruitment/candidates")
           .catch(() => []),
         api
           .get<{ id: string; title: string }[]>("/recruitment/job-orders")
@@ -87,7 +87,7 @@ function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
             label: c.full_name,
             emoji: "🧑‍💻",
             group: "Kandidat",
-            to: "/candidates",
+            to: "/talent-pool",
           });
       }
       for (const j of jos) {

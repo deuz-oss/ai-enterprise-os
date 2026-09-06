@@ -108,8 +108,8 @@ const CANDIDATE_STATUS_LABELS: Record<string, string> = {
   arsip: "Arsip",
 };
 
-// Warna senada dengan STATUS_DOT di Candidates.tsx — supaya bar funnel di
-// sini konsisten dengan badge status di halaman Kandidat.
+// Warna senada dengan RECRUIT_BADGE di TalentPool.tsx — supaya bar funnel di
+// sini konsisten dengan badge status rekrutmen di Talent Pool.
 const CANDIDATE_STATUS_COLORS: Record<string, string> = {
   baru: "#9f9f9f",
   screening: "#2383e2",
@@ -313,7 +313,7 @@ export default function TalentCloudOverview() {
           title="CRM & Recruitment"
           subtitle={`${(candidates.data ?? []).length} talent pool · ${activeJO.length} JO aktif · ${clientsActive.length} klien aktif.`}
         />
-        <Link to="/candidates" className="btn shrink-0">
+        <Link to="/talent-pool" className="btn shrink-0">
           + Tambah Kandidat
         </Link>
       </div>
@@ -429,9 +429,6 @@ export default function TalentCloudOverview() {
                 ))}
               </select>
               <div className="flex shrink-0 gap-3 text-xs">
-                <Link to="/candidates" className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
-                  Database kandidat →
-                </Link>
                 <Link to="/talent-pool" className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
                   Talent Pool →
                 </Link>
@@ -713,7 +710,7 @@ export default function TalentCloudOverview() {
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada interview terjadwal.</p>
             )}
           </div>
-          <SeeAllLink to="/candidates">Kelola di Kandidat →</SeeAllLink>
+          <SeeAllLink to="/talent-pool">Kelola di Talent Pool →</SeeAllLink>
         </div>
 
         {/* Aktivitas terbaru */}
