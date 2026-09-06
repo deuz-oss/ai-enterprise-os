@@ -1155,7 +1155,13 @@ def employee_payslip_pdf(db: Session, run_id: str, employee_id: str) -> tuple[by
 def send_payslip_email(db: Session, run_id: str, employee_id: str) -> None:
     """Kirim payslip langsung ke email karyawan -- Fase 26 butir 5, TERPISAH
     dari alur Ops->klien Fase 23 butir 4 (`send_saltab_to_client`, penerima
-    beda: karyawan sendiri, bukan PIC klien)."""
+    beda: karyawan sendiri, bukan PIC klien).
+
+    `email_enabled` dicek DULU dan gagal lempar 422 kalau SMTP belum
+    dikonfigurasi -- sama pola `presales.service.send_quotation_email`
+    (aksi dipicu langsung oleh klik HR yang mengharapkan hasil pasti,
+    bukan alur best-effort, jadi tidak boleh no-op senyap)."""
+    from app.core.config import get_settings
     from app.modules.auth.models import User
     from app.modules.notifications.service import send_raw_email_with_attachment
 
@@ -1168,6 +1174,14 @@ def send_payslip_email(db: Session, run_id: str, employee_id: str) -> None:
     user = db.get(User, employee.user_id)
     if user is None or not user.email:
         raise HTTPException(status_code=400, detail="Akun karyawan tidak punya email")
+    if not get_settings().email_enabled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "SMTP belum dikonfigurasi -- hubungi admin platform untuk "
+                "mengaktifkan pengiriman email"
+            ),
+        )
 
     run = _get_run(db, run_id)
     content, filename = employee_payslip_pdf(db, run_id, employee_id)

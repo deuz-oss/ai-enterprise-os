@@ -309,6 +309,7 @@ def test_send_payslip_email_to_employee(client):
     dari alur Ops->klien (Fase 23)."""
     from unittest.mock import patch
 
+    from app.core.config import get_settings
     from app.modules.auth.schemas import UserCreate
     from app.modules.auth.service import create_user
 
@@ -339,16 +340,18 @@ def test_send_payslip_email_to_employee(client):
     generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
     assert generated.status_code == 201, generated.text
 
-    with patch("app.modules.notifications.service.send_raw_email_with_attachment") as send:
-        resp = client.post(
-            f"/api/v1/payroll/runs/{run['id']}/employees/{emp['id']}/send-payslip-email",
-            headers=headers,
-        )
-        assert resp.status_code == 204, resp.text
-        assert send.call_count == 1
-        args, kwargs = send.call_args
-        assert args[0] == "sinta-payslip@outsourcing.co.id"
-        assert kwargs["attachment_bytes"][:4] == b"%PDF"
+    settings = get_settings()
+    with patch.object(settings, "smtp_host", "smtp.test.local"):
+        with patch("app.modules.notifications.service.send_raw_email_with_attachment") as send:
+            resp = client.post(
+                f"/api/v1/payroll/runs/{run['id']}/employees/{emp['id']}/send-payslip-email",
+                headers=headers,
+            )
+            assert resp.status_code == 204, resp.text
+            assert send.call_count == 1
+            args, kwargs = send.call_args
+            assert args[0] == "sinta-payslip@outsourcing.co.id"
+            assert kwargs["attachment_bytes"][:4] == b"%PDF"
 
 
 def test_send_payslip_email_requires_linked_account(client):
@@ -363,6 +366,45 @@ def test_send_payslip_email_requires_linked_account(client):
         headers=headers,
     )
     assert resp.status_code == 400
+
+
+def test_send_payslip_email_gagal_tanpa_smtp(client):
+    """Gap 2026-09-06: `send_payslip_email` dulu mewarisi no-op senyap
+    `send_raw_email_with_attachment` kalau SMTP belum dikonfigurasi -- HR
+    klik "Kirim Payslip", dapat 204 sukses, tapi email tidak benar-benar
+    terkirim tanpa ada yang tahu. Sekarang harus gagal loudly 422."""
+    from app.modules.auth.schemas import UserCreate
+    from app.modules.auth.service import create_user
+
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Doni Tanpa SMTP")
+
+    db = client.testing_session()
+    try:
+        user = create_user(
+            db,
+            UserCreate(
+                email="doni-payslip@outsourcing.co.id",
+                full_name="Doni",
+                password="rahasia-123",
+                role="karyawan",
+            ),
+        )
+        user_id = str(user.id)
+    finally:
+        db.close()
+
+    client.patch(f"/api/v1/employees/{emp['id']}", headers=headers, json={"user_id": user_id})
+    run = _create_run(client, headers, year=2027, month=3)
+    generated = client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert generated.status_code == 201, generated.text
+
+    resp = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/employees/{emp['id']}/send-payslip-email",
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
 
 
 # ---------- Komponen Saltab tambahan (Bonus/THR/dst) & Tahan-Cairkan Gaji ----------

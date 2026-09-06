@@ -76,6 +76,19 @@ export const api = {
     request<T>(path, { method: "POST", body: formData }),
 };
 
+/** Ambil file dengan header auth, kembalikan object URL untuk dirender inline
+ * (mis. <iframe>) -- beda dari downloadFile yang langsung memicu unduhan
+ * paksa. Pemanggil wajib URL.revokeObjectURL() setelah selesai dipakai. */
+export async function previewFile(path: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${API_URL}${path}`, { headers });
+  if (!resp.ok) throw new ApiError(resp.status, `Gagal memuat pratinjau (${resp.status})`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
 /** Unduh file (mis. CSV ekspor BPJS) dengan header auth lalu simpan via browser. */
 export async function downloadFile(path: string): Promise<void> {
   const headers: Record<string, string> = {};

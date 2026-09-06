@@ -3,7 +3,7 @@ import { AlertCircle, Landmark, ShieldAlert, Users, Wallet } from "lucide-react"
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { Button, KpiCard, PreflightAlert } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile, formatRupiah } from "../api/client";
+import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 
 interface EmployeeRow {
   id: string;
@@ -191,6 +191,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [addingComponentFor, setAddingComponentFor] = useState<string | null>(null);
   const [holdingFor, setHoldingFor] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { data: rows, isLoading } = useQuery({
     queryKey: ["saltab", runId],
     queryFn: () => api.get<SaltabRow[]>(`/payroll/runs/${runId}/saltab`),
@@ -254,10 +255,20 @@ function SaltabTable({ runId }: { runId: string | null }) {
     mutationFn: (employeeId: string) =>
       api.post(`/payroll/runs/${runId}/employees/${employeeId}/send-payslip-email`),
   });
+  const previewPayslip = useMutation({
+    mutationFn: (employeeId: string) =>
+      previewFile(`/payroll/runs/${runId}/employees/${employeeId}/payslip/pdf`),
+    onSuccess: setPreviewUrl,
+  });
+  function closePreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  }
   const err = (saveAmount.error ??
     addComponent.error ??
     deleteComponent.error ??
     createHold.error ??
+    previewPayslip.error ??
     sendPayslip.error) as Error | null;
 
   if (!runId)
@@ -269,6 +280,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
   if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
 
   return (
+    <>
     <div className="divide-y" style={{ borderColor: "var(--border)" }}>
       {(rows ?? []).map((row) => (
         <div key={row.payslip_id} className="px-4 py-3">
@@ -307,6 +319,15 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 title="Unduh Bukti Potong PPh 21 karyawan ini"
               >
                 Bukti Potong PPh 21
+              </button>
+              <button
+                onClick={() => previewPayslip.mutate(row.employee_id)}
+                disabled={previewPayslip.isPending}
+                className="cursor-pointer text-xs font-medium hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+                title="Pratinjau slip gaji karyawan ini"
+              >
+                Preview Slip Gaji
               </button>
               <button
                 onClick={() => sendPayslip.mutate(row.employee_id)}
@@ -508,6 +529,41 @@ function SaltabTable({ runId }: { runId: string | null }) {
       )}
       {err && <p className="px-4 pb-3 text-sm text-red-600">{err.message}</p>}
     </div>
+    {previewUrl && (
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center pt-[6vh]"
+        style={{ background: "rgba(15,15,15,0.45)" }}
+        onClick={closePreview}
+      >
+        <div
+          className="flex h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-md"
+          style={{
+            backgroundColor: "var(--bg-elevated)",
+            boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
+            border: "1px solid var(--border)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-2"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+              Preview Slip Gaji
+            </p>
+            <button
+              onClick={closePreview}
+              className="text-xs font-medium hover:underline"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Tutup
+            </button>
+          </div>
+          <iframe src={previewUrl} title="Preview Slip Gaji" className="flex-1" />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
