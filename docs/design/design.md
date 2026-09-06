@@ -199,7 +199,9 @@ fungsi nyata (nama modul kode `apps.py` TIDAK berubah, ini murni
 label & pengelompokan UI):
 
 - **CRM** — Pipeline, Klien, Quotation, Agreement, Lead Sourcing
-- **Recruitment** — Job Orders, Kandidat, Talent Pool, AI Interview,
+- **Recruitment** — Job Orders (termasuk tab "Candidates" per-JO,
+  Kanban — Talent Pool adalah satu-satunya database kandidat, "Kandidat"
+  BUKAN item sidebar terpisah, koreksi 2026-09-05), Talent Pool, AI Interview,
   Black Lists, **Referral** (ditambahkan 2026-09-05 — program referral
   karyawan→kandidat, penempatan dikonfirmasi masuk akal di sini)
 - **Workforce** — Karyawan, kontrak, BPJS+asuransi, Absensi, ESS,
