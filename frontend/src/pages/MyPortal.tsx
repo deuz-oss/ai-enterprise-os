@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { UserCircle } from "lucide-react";
@@ -111,6 +111,16 @@ interface AppNotification {
   created_at: string;
 }
 
+interface TodayAttendance {
+  id: string;
+  date: string;
+  status: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  has_clock_in_selfie: boolean;
+  has_clock_out_selfie: boolean;
+}
+
 interface AttendanceCorrectionRow {
   id: string;
   year: number;
@@ -122,9 +132,32 @@ interface AttendanceCorrectionRow {
   decision_note: string | null;
 }
 
+interface OvertimeRequestRow {
+  id: string;
+  date: string;
+  requested_hours: number;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
+}
+
 async function openDownload(path: string) {
   const { url } = await api.get<{ url: string }>(path);
   window.open(url, "_blank");
+}
+
+function getGpsPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Perangkat/browser ini tidak mendukung GPS."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      () => reject(new Error("Gagal mengambil lokasi GPS -- pastikan izin lokasi diaktifkan.")),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -180,6 +213,61 @@ export default function MyPortal() {
     queryKey: ["me-corrections"],
     queryFn: () => api.get<AttendanceCorrectionRow[]>("/me/attendance-corrections"),
   });
+  const { data: overtimeRequests } = useQuery({
+    queryKey: ["me-overtime"],
+    queryFn: () => api.get<OvertimeRequestRow[]>("/me/overtime-requests"),
+  });
+
+  const { data: attendanceToday } = useQuery({
+    queryKey: ["me-attendance-today"],
+    queryFn: () => api.get<TodayAttendance | null>("/me/attendance/today"),
+  });
+  const [clockDirection, setClockDirection] = useState<"in" | "out" | null>(null);
+  const [clockError, setClockError] = useState<string | null>(null);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const pendingCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  const clockMutation = useMutation({
+    mutationFn: ({ direction, formData }: { direction: "in" | "out"; formData: FormData }) =>
+      api.upload(`/me/attendance/clock-${direction}`, formData),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me-attendance-today"] });
+      qc.invalidateQueries({ queryKey: ["me-attendance"] });
+    },
+  });
+
+  function startClock(direction: "in" | "out") {
+    setClockError(null);
+    setClockDirection(direction);
+    getGpsPosition()
+      .then((pos) => {
+        pendingCoordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        selfieInputRef.current?.click();
+      })
+      .catch((err: unknown) => {
+        setClockError(err instanceof Error ? err.message : "Gagal mengambil lokasi");
+        setClockDirection(null);
+      });
+  }
+
+  function onSelfieChosen(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const coords = pendingCoordsRef.current;
+    const direction = clockDirection;
+    if (!file || !coords || !direction) {
+      setClockDirection(null);
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("latitude", String(coords.lat));
+    fd.append("longitude", String(coords.lng));
+    clockMutation.mutate(
+      { direction, formData: fd },
+      { onSettled: () => setClockDirection(null) }
+    );
+  }
 
   const invalidateCorrections = () => {
     qc.invalidateQueries({ queryKey: ["me-corrections"] });
@@ -194,6 +282,15 @@ export default function MyPortal() {
   const cancelCorrection = useMutation({
     mutationFn: (id: string) => api.post(`/me/attendance-corrections/${id}/cancel`, {}),
     onSuccess: invalidateCorrections,
+  });
+
+  const submitOvertime = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.post("/me/overtime-requests", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me-overtime"] }),
+  });
+  const cancelOvertime = useMutation({
+    mutationFn: (id: string) => api.post(`/me/overtime-requests/${id}/cancel`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me-overtime"] }),
   });
 
   const markNotification = useMutation({
@@ -248,6 +345,87 @@ export default function MyPortal() {
   return (
     <div className="space-y-4">
       <PageHeader icon={UserCircle} title="Portal Saya" />
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Absen Masuk/Keluar</h2>
+          {attendanceToday?.clock_out ? (
+            <span className="badge pill p-green">Selesai hari ini</span>
+          ) : attendanceToday?.clock_in ? (
+            <span className="badge pill p-yellow">Sudah absen masuk</span>
+          ) : null}
+        </div>
+        <input
+          ref={selfieInputRef}
+          type="file"
+          accept="image/*"
+          capture="user"
+          className="hidden"
+          onChange={onSelfieChosen}
+        />
+        {attendanceToday?.clock_in && (
+          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Field
+              label="Jam Masuk"
+              value={new Date(attendanceToday.clock_in).toLocaleTimeString("id-ID")}
+            />
+            <Field
+              label="Jam Keluar"
+              value={
+                attendanceToday.clock_out
+                  ? new Date(attendanceToday.clock_out).toLocaleTimeString("id-ID")
+                  : "-"
+              }
+            />
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {!attendanceToday?.clock_in && (
+            <button
+              onClick={() => startClock("in")}
+              disabled={clockDirection !== null}
+              className="btn"
+            >
+              {clockDirection === "in" ? "Memproses..." : "Absen Masuk"}
+            </button>
+          )}
+          {attendanceToday?.clock_in && !attendanceToday?.clock_out && (
+            <button
+              onClick={() => startClock("out")}
+              disabled={clockDirection !== null}
+              className="btn"
+            >
+              {clockDirection === "out" ? "Memproses..." : "Absen Keluar"}
+            </button>
+          )}
+          {attendanceToday?.has_clock_in_selfie && (
+            <button
+              onClick={() =>
+                openDownload(`/me/attendance/${attendanceToday.id}/selfie/in/download-url`)
+              }
+              className="text-sm font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Lihat Selfie Masuk
+            </button>
+          )}
+          {attendanceToday?.has_clock_out_selfie && (
+            <button
+              onClick={() =>
+                openDownload(`/me/attendance/${attendanceToday.id}/selfie/out/download-url`)
+              }
+              className="text-sm font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Lihat Selfie Keluar
+            </button>
+          )}
+        </div>
+        {clockError && <p className="mt-2 text-sm text-red-600">{clockError}</p>}
+        {clockMutation.error && (
+          <p className="mt-2 text-sm text-red-600">{(clockMutation.error as Error).message}</p>
+        )}
+      </div>
 
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -559,6 +737,85 @@ export default function MyPortal() {
               <tr>
                 <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
                   Belum ada pengajuan koreksi absensi.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h2 className="font-semibold" style={{ color: "var(--text)" }}>Ajukan Lembur</h2>
+        <form
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_1fr_auto]"
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            submitOvertime.mutate({
+              date: form.get("date"),
+              requested_hours: Number(form.get("requested_hours") || 0),
+              reason: form.get("reason") || null,
+            });
+            e.currentTarget.reset();
+          }}
+        >
+          <input name="date" type="date" required className="input" />
+          <input
+            name="requested_hours"
+            type="number"
+            min={1}
+            max={24}
+            required
+            placeholder="Jam lembur"
+            className="input w-32"
+          />
+          <input name="reason" placeholder="Alasan (opsional)" className="input" />
+          <button disabled={submitOvertime.isPending} className="btn">
+            Ajukan
+          </button>
+        </form>
+        {submitOvertime.error && (
+          <p className="mt-2 text-sm text-red-600">{(submitOvertime.error as Error).message}</p>
+        )}
+        <table className="mt-3 w-full">
+          <thead>
+            <tr>
+              <th className="th">Tanggal</th>
+              <th className="th">Jam Diajukan</th>
+              <th className="th">Alasan</th>
+              <th className="th">Status</th>
+              <th className="th">Catatan HR</th>
+              <th className="th">Aksi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {(overtimeRequests ?? []).map((o) => (
+              <tr key={o.id}>
+                <td className="td font-medium">{o.date}</td>
+                <td className="td">{o.requested_hours} jam</td>
+                <td className="td">{o.reason ?? "-"}</td>
+                <td className="td">
+                  <span className={`badge ${LEAVE_STATUS_BADGES[o.status] ?? ""}`}>
+                    {o.status}
+                  </span>
+                </td>
+                <td className="td">{o.decision_note ?? "-"}</td>
+                <td className="td">
+                  {o.status === "menunggu" && (
+                    <button
+                      onClick={() => cancelOvertime.mutate(o.id)}
+                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {overtimeRequests?.length === 0 && (
+              <tr>
+                <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
+                  Belum ada pengajuan lembur.
                 </td>
               </tr>
             )}

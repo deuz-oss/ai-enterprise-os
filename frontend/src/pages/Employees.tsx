@@ -62,6 +62,16 @@ interface AttendanceCorrectionRow {
   decision_note: string | null;
 }
 
+interface OvertimeRequestRow {
+  id: string;
+  employee_id: string;
+  date: string;
+  requested_hours: number;
+  reason: string | null;
+  status: string;
+  decision_note: string | null;
+}
+
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   cuti_tahunan: "Cuti Tahunan",
   izin: "Izin",
@@ -167,6 +177,11 @@ export default function Employees() {
     queryFn: () => api.get<AttendanceCorrectionRow[]>("/employees/attendance-corrections"),
     enabled: !isOpsOnly,
   });
+  const { data: overtimeRequests } = useQuery({
+    queryKey: ["overtime-requests"],
+    queryFn: () => api.get<OvertimeRequestRow[]>("/employees/overtime-requests"),
+    enabled: !isOpsOnly,
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees-lookup"] });
@@ -203,6 +218,15 @@ export default function Employees() {
         note: null,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-corrections"] }),
+  });
+
+  const decideOvertime = useMutation({
+    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
+      api.patch(`/employees/overtime-requests/${id}/decision`, {
+        approved,
+        note: null,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["overtime-requests"] }),
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -376,6 +400,67 @@ export default function Employees() {
                         </>
                       ) : (
                         (c.decision_note ?? "-")
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!isOpsOnly && (overtimeRequests ?? []).length > 0 && (
+        <div className="card overflow-x-auto p-0">
+          <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Pengajuan Lembur</h2>
+          </div>
+          <table className="w-full">
+            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
+              <tr>
+                <th className="th">Karyawan</th>
+                <th className="th">Tanggal</th>
+                <th className="th">Jam Diajukan</th>
+                <th className="th">Alasan</th>
+                <th className="th">Status</th>
+                <th className="th">Keputusan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {(overtimeRequests ?? []).map((o) => {
+                const emp = employeesLookup?.find((e) => e.id === o.employee_id);
+                return (
+                  <tr key={o.id}>
+                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
+                    <td className="td">{o.date}</td>
+                    <td className="td">{o.requested_hours} jam</td>
+                    <td className="td">{o.reason ?? "-"}</td>
+                    <td className="td">
+                      <span className={`badge ${LEAVE_STATUS_BADGES[o.status] ?? ""}`}>
+                        {o.status}
+                      </span>
+                    </td>
+                    <td className="td whitespace-nowrap">
+                      {o.status === "menunggu" ? (
+                        <>
+                          <button
+                            onClick={() => decideOvertime.mutate({ id: o.id, approved: true })}
+                            disabled={decideOvertime.isPending}
+                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                          >
+                            Setujui
+                          </button>
+                          {" · "}
+                          <button
+                            onClick={() => decideOvertime.mutate({ id: o.id, approved: false })}
+                            disabled={decideOvertime.isPending}
+                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                          >
+                            Tolak
+                          </button>
+                        </>
+                      ) : (
+                        (o.decision_note ?? "-")
                       )}
                     </td>
                   </tr>

@@ -15,6 +15,7 @@ from app.modules.ess.schemas import (
     LeaveBalanceUpsertIn,
     LeaveDecisionIn,
     LeaveOut,
+    OvertimeRequestOut,
     SelfserviceAccountOut,
 )
 from app.modules.hrd import service
@@ -218,6 +219,30 @@ def decide_leave_request(
 @router.get("/leave-requests/{leave_id}/attachment/download-url")
 def leave_attachment_url(leave_id: str, db: Session = Depends(get_db)):
     return {"url": ess_service.hr_attachment_download_url(db, leave_id)}
+
+
+@router.get("/overtime-requests", response_model=list[OvertimeRequestOut])
+def list_overtime_requests(
+    status_filter: LeaveStatus | None = Query(None, alias="status"),
+    employee_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    return ess_service.hr_list_overtime_requests(
+        db, status_filter=status_filter, employee_id=employee_id
+    )
+
+
+@router.patch("/overtime-requests/{overtime_id}/decision", response_model=OvertimeRequestOut)
+def decide_overtime_request(
+    overtime_id: str,
+    payload: LeaveDecisionIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Setujui/tolak pengajuan lembur karyawan (wajib status menunggu)."""
+    return ess_service.decide_overtime_request(
+        db, current_user, overtime_id, payload.approved, payload.note
+    )
 
 
 @router.get("/attendance-corrections", response_model=list[AttendanceCorrectionOut])

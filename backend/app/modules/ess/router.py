@@ -11,7 +11,10 @@ from app.modules.ess.schemas import (
     LeaveCreate,
     LeaveOut,
     MyAttendanceOut,
+    MyAttendanceTodayOut,
     MyPayslipOut,
+    OvertimeRequestCreate,
+    OvertimeRequestOut,
     ProfileOut,
 )
 from app.modules.hrd.schemas import ContractOut, DocumentOut
@@ -74,6 +77,12 @@ def my_attendance(
 
 
 # ---------- Mobile GPS+selfie clock in/out ----------
+
+
+@router.get("/attendance/today", response_model=MyAttendanceTodayOut | None)
+def my_attendance_today(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    record = service.get_today_attendance(db, current_user)
+    return MyAttendanceTodayOut.from_record(record) if record else None
 
 
 @router.post("/attendance/clock-in")
@@ -173,6 +182,29 @@ def my_leave_attachment_url(
     db: Session = Depends(get_db),
 ):
     return {"url": service.own_attachment_download_url(db, current_user, leave_id)}
+
+
+@router.get("/overtime-requests", response_model=list[OvertimeRequestOut])
+def my_overtime_requests(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return service.list_own_overtime_requests(db, current_user)
+
+
+@router.post("/overtime-requests", response_model=OvertimeRequestOut, status_code=201)
+def request_overtime(
+    payload: OvertimeRequestCreate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return service.create_overtime_request(db, current_user, payload)
+
+
+@router.post("/overtime-requests/{overtime_id}/cancel", response_model=OvertimeRequestOut)
+def cancel_overtime(
+    overtime_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return service.cancel_own_overtime_request(db, current_user, overtime_id)
 
 
 @router.get("/leave-balance", response_model=LeaveBalanceOut | None)
