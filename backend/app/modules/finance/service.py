@@ -785,7 +785,7 @@ def list_payment_requests(
     return rows, total
 
 
-# ---------- Faktur Pajak DJP — PRD v3.0 Revenue Cloud ----------
+# ---------- Faktur Pajak DJP — PRD v3.0 Finance & Accounting ----------
 
 
 def set_tax_invoice(db: Session, invoice_id: str, payload: TaxInvoiceSet) -> Invoice:

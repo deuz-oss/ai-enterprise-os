@@ -231,7 +231,7 @@ def test_offering_letter_pdf_dan_esign_sandbox(client):
 
 
 def test_offering_summary_pipeline(client):
-    """Widget "Offering" Talent Cloud — GET /recruitment/placements/offering-summary."""
+    """Widget "Offering" di Recruitment — GET /recruitment/placements/offering-summary."""
     from tests.test_esign import _sandbox_settings
 
     headers = _auth_header(client)

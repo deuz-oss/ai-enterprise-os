@@ -206,3 +206,19 @@ class SalaryHoldOut(BaseModel):
     status: SalaryHoldStatus
     held_at: datetime
     released_at: datetime | None
+
+
+class EmployeePayslipOut(BaseModel):
+    """Riwayat slip gaji satu karyawan lintas periode untuk tab Payroll di
+    halaman detail karyawan -- beda dari `MyPayslipOut` (ess) karena tidak
+    difilter status final saja dan menyertakan `run_id`."""
+
+    id: str
+    run_id: str
+    run_status: str
+    year: int
+    month: int
+    base_salary: float
+    gross: float
+    tax_pph21: float
+    net_pay: float

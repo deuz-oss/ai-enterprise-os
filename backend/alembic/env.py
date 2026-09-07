@@ -36,7 +36,19 @@ from sqlalchemy import engine_from_config, pool
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` -- default True mematikan permanen
+    # (`Logger.disabled = True`) semua logger APLIKASI yang sudah ada
+    # (mis. `app.modules.recruitment.service`) begitu Alembic dijalankan
+    # programatik di proses yang sama (bukan CLI sekali-jalan), karena
+    # alembic.ini tidak tahu-menahu soal logger `app.*`. `caplog.at_level`
+    # pytest cuma mereset `.level`/global disable-threshold, BUKAN flag
+    # `.disabled` per-logger ini -- efeknya, tiap test setelah
+    # `test_migrations.py` yang mengandalkan `caplog` untuk logger `app.*`
+    # gagal senyap (records selalu kosong). Ditemukan lewat
+    # `test_interview_ics_invite_failure_dicatat_ke_log_bukan_dibungkam`
+    # yang konsisten gagal di full suite/CI tapi lolos kalau dijalankan
+    # sendiri.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Prioritas URL database:
 # 1. ALEMBIC_DATABASE_URL (mis. untuk CI/test)

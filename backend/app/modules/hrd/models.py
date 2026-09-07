@@ -87,7 +87,7 @@ class InsuranceStatus(str, enum.Enum):
 
 
 class EmployeeInsurance(TenantMixin, Base):
-    """Asuransi one-to-many per karyawan — PRD v3.0 Workforce Cloud."""
+    """Asuransi one-to-many per karyawan — PRD v3.0 Workforce."""
 
     __tablename__ = "employee_insurances"
 

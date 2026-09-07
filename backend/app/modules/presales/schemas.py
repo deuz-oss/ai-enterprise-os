@@ -86,6 +86,7 @@ class CompanyCreate(BaseModel):
     name: str
     industry: str | None = None
     size: str | None = None
+    source: str = "manual"
 
 
 class CompanyUpdate(BaseModel):
@@ -256,9 +257,22 @@ class LeadOut(BaseModel):
     stage: LeadStage
     owner_id: UUID | None = None
     owner_name: str | None = None
+    company_source: str
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class LeadImportRowFailure(BaseModel):
+    row: int
+    company_name: str
+    error: str
+
+
+class LeadImportResultOut(BaseModel):
+    companies_created: int
+    leads_created: int
+    failed: list[LeadImportRowFailure]
 
 
 class ActivityCreate(BaseModel):

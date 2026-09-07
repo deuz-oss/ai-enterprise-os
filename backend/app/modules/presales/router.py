@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -26,6 +26,7 @@ from app.modules.presales.schemas import (
     ContactUpdate,
     FunnelStats,
     LeadCreate,
+    LeadImportResultOut,
     LeadOut,
     LeadUpdate,
     QuotationCreate,
@@ -69,6 +70,23 @@ def list_companies(
 @companies_router.post("", response_model=CompanyOut, status_code=status.HTTP_201_CREATED)
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
     return service.create_company(db, payload)
+
+
+@companies_router.get("/import/template")
+def download_leads_import_template():
+    """Fase 20 item 5 (revisi) -- template CSV impor lead massal (delimiter
+    ;), alternatif aman dari scraping LinkedIn (lihat PRD §Fase 20 butir 5)."""
+    return Response(
+        content=service.leads_import_template_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="template-impor-lead.csv"'},
+    )
+
+
+@companies_router.post("/import", response_model=LeadImportResultOut)
+async def import_leads(file: UploadFile, db: Session = Depends(get_db)):
+    """Impor CSV lead massal; kembalikan jumlah sukses + daftar baris gagal."""
+    return await service.import_leads_csv(db, file)
 
 
 @companies_router.get("/{company_id}", response_model=CompanyOut)

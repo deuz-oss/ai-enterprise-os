@@ -407,6 +407,39 @@ def test_send_payslip_email_gagal_tanpa_smtp(client):
     assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
 
 
+def test_list_employee_payslips_lintas_run(client):
+    """Tab Payroll di halaman detail karyawan (`/employees/:id`) -- beda dari
+    ESS self-service, endpoint ini TIDAK memfilter status final saja (HR
+    boleh lihat run draft/proses) dan menyertakan `run_id` per baris supaya
+    tombol preview/kirim email di tab bisa langsung dipakai."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Rangga Riwayat Slip", salary=7_000_000)
+
+    run_agustus = _create_run(client, headers, year=2027, month=4)
+    client.post(f"/api/v1/payroll/runs/{run_agustus['id']}/generate", headers=headers, json={})
+    run_september = _create_run(client, headers, year=2027, month=5)
+    client.post(f"/api/v1/payroll/runs/{run_september['id']}/generate", headers=headers, json={})
+
+    # dibuat SETELAH kedua run digenerate -> tidak pernah ikut slip run manapun
+    other = _create_employee(client, headers, name="Bukan Rangga")
+
+    resp = client.get(f"/api/v1/payroll/employees/{emp['id']}/payslips", headers=headers)
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()
+    assert len(rows) == 2
+    # terurut terbaru dulu
+    assert (rows[0]["year"], rows[0]["month"]) == (2027, 5)
+    assert (rows[1]["year"], rows[1]["month"]) == (2027, 4)
+    assert rows[0]["run_id"] == run_september["id"]
+    assert rows[1]["run_id"] == run_agustus["id"]
+    # status run TIDAK difilter final-saja (beda dari ESS)
+    assert all(r["run_status"] == "draft" for r in rows)
+
+    other_resp = client.get(f"/api/v1/payroll/employees/{other['id']}/payslips", headers=headers)
+    assert other_resp.status_code == 200
+    assert other_resp.json() == []
+
+
 # ---------- Komponen Saltab tambahan (Bonus/THR/dst) & Tahan-Cairkan Gaji ----------
 
 
