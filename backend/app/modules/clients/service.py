@@ -1,3 +1,7 @@
+import hashlib
+import secrets
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -5,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core import storage
 from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
-from app.modules.clients.models import Client, DocumentType, LegalDocument
+from app.modules.clients.models import Client, ClientPortalAccess, DocumentType, LegalDocument
 from app.modules.clients.schemas import ClientCreate, ClientUpdate
 
 
@@ -139,3 +143,136 @@ def expiring_contracts(db: Session, within_days: int) -> list[Client]:
         .order_by(Client.contract_end)
     )
     return list(db.execute(stmt).scalars())
+
+
+# ---------- Portal monitoring klien (link ber-token, tanpa akun) ----------
+
+
+def _hash_portal_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def generate_portal_access(db: Session, user, client_id: str) -> tuple[ClientPortalAccess, str]:
+    """Buat/ganti link portal monitoring klien -- satu baris per klien
+    (`uq_client_portal_access_client`), regenerate mencabut yang lama
+    (pola sama `payroll.service.submit_to_client`)."""
+    client = _get(db, client_id)
+    existing = db.execute(
+        select(ClientPortalAccess).where(ClientPortalAccess.client_id == client.id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        db.delete(existing)
+        db.flush()
+    raw = secrets.token_urlsafe(24)
+    access = ClientPortalAccess(
+        client_id=client.id,
+        token_hash=_hash_portal_token(raw),
+        created_by=getattr(user, "id", None),
+    )
+    db.add(access)
+    db.commit()
+    db.refresh(access)
+    audit.log_event(
+        db,
+        action="client_portal.access_generated",
+        entity_type="client",
+        entity_id=client.id,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return access, raw
+
+
+def get_portal_access_status(db: Session, client_id: str) -> ClientPortalAccess | None:
+    client = _get(db, client_id)
+    return db.execute(
+        select(ClientPortalAccess).where(ClientPortalAccess.client_id == client.id)
+    ).scalar_one_or_none()
+
+
+def revoke_portal_access(db: Session, client_id: str) -> None:
+    client = _get(db, client_id)
+    existing = db.execute(
+        select(ClientPortalAccess).where(ClientPortalAccess.client_id == client.id)
+    ).scalar_one_or_none()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Belum ada akses portal untuk klien ini")
+    db.delete(existing)
+    db.commit()
+    audit.log_event(
+        db,
+        action="client_portal.access_revoked",
+        entity_type="client",
+        entity_id=client.id,
+    )
+
+
+def _find_portal_access(db: Session, raw_token: str) -> ClientPortalAccess:
+    access = db.execute(
+        select(ClientPortalAccess).where(
+            ClientPortalAccess.token_hash == _hash_portal_token(raw_token)
+        )
+    ).scalar_one_or_none()
+    if access is None:
+        raise HTTPException(status_code=404, detail="Link portal tidak valid")
+    return access
+
+
+def client_portal_attendance(
+    db: Session, raw_token: str, year: int | None, month: int | None
+) -> dict:
+    """Ringkasan kehadiran & lembur read-only untuk klien (tanpa akun).
+
+    Endpoint publik TANPA konteks tenant, sehingga seluruh query dibungkus
+    `set_tenant(access.tenant_id)` segera setelah token ditemukan (pola
+    sama `payroll.service.decide_by_token`)."""
+    from datetime import date
+
+    from app.core.tenancy import get_tenant, set_tenant
+    from app.modules.hrd.models import Employee, EmploymentType
+    from app.modules.payroll.models import AttendanceSummary
+    from app.modules.recruitment.models import JobOrder, Placement
+
+    access = _find_portal_access(db, raw_token)
+    prev_tenant = get_tenant()
+    set_tenant(access.tenant_id)
+    try:
+        client = db.get(Client, access.client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="Klien tidak ditemukan")
+        access.last_accessed_at = datetime.now(UTC)
+        db.commit()
+
+        today = date.today()
+        y = year or today.year
+        m = month or today.month
+
+        rows = db.execute(
+            select(AttendanceSummary, Employee)
+            .join(Employee, AttendanceSummary.employee_id == Employee.id)
+            .join(Placement, Employee.placement_id == Placement.id)
+            .join(JobOrder, Placement.job_order_id == JobOrder.id)
+            .where(
+                JobOrder.client_id == client.id,
+                Employee.employment_type == EmploymentType.eksternal,
+                AttendanceSummary.year == y,
+                AttendanceSummary.month == m,
+            )
+            .order_by(Employee.full_name)
+        ).all()
+        return {
+            "client_name": client.name,
+            "year": y,
+            "month": m,
+            "rows": [
+                {
+                    "employee_name": emp.full_name,
+                    "employee_no": emp.employee_no,
+                    "present_days": summary.present_days,
+                    "overtime_hours": summary.overtime_hours,
+                    "client_approved": summary.client_approved,
+                }
+                for summary, emp in rows
+            ],
+        }
+    finally:
+        set_tenant(prev_tenant)

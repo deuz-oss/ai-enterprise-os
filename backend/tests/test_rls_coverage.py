@@ -40,6 +40,10 @@ EXCLUDED_TABLES = {
     # bukan RLS). Lihat alembic/versions/g8h9i0j1k2l3_extend_rls_coverage.py.
     "ai_interview_responses",
     "payroll_run_tokens",
+    # Sama alasannya: portal monitoring klien (link tanpa akun) dicari
+    # lewat token_hash SEBELUM tenant diketahui. Lihat
+    # alembic/versions/a7b8c9d0e1f2_client_portal_access_table.py.
+    "client_portal_access",
     # Sama alasannya: webhook Xendit mencari baris ini lewat
     # provider_invoice_id SEBELUM tenant diketahui (Fase 28). Lihat
     # alembic/versions/e1f2a3b4c5d6_fase28_payment_intents.py.

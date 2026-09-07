@@ -25,6 +25,12 @@ interface LegalDoc {
   uploaded_at: string;
 }
 
+interface PortalAccessStatus {
+  id: string;
+  created_at: string;
+  last_accessed_at: string | null;
+}
+
 const DOC_TYPES = ["perjanjian_kerjasama", "addendum", "npwp", "nib", "lainnya"];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -78,6 +84,12 @@ export default function Clients() {
     queryFn: () => api.get<LegalDoc[]>(`/clients/${selectedId}/documents`),
     enabled: Boolean(selectedId),
   });
+  const { data: portalAccess } = useQuery({
+    queryKey: ["client-portal-access", selectedId],
+    queryFn: () => api.get<PortalAccessStatus | null>(`/clients/${selectedId}/portal-access`),
+    enabled: Boolean(selectedId),
+  });
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["clients"] });
@@ -99,6 +111,22 @@ export default function Clients() {
       qc.invalidateQueries({ queryKey: ["client-docs", selectedId] });
       qc.invalidateQueries({ queryKey: ["overview"] });
       if (fileRef.current) fileRef.current.value = "";
+    },
+  });
+
+  const generatePortalAccess = useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ access: PortalAccessStatus; url: string }>(`/clients/${id}/portal-access`, {}),
+    onSuccess: (data) => {
+      setPortalUrl(`${window.location.origin}${data.url}`);
+      qc.invalidateQueries({ queryKey: ["client-portal-access", selectedId] });
+    },
+  });
+  const revokePortalAccess = useMutation({
+    mutationFn: (id: string) => api.delete(`/clients/${id}/portal-access`),
+    onSuccess: () => {
+      setPortalUrl(null);
+      qc.invalidateQueries({ queryKey: ["client-portal-access", selectedId] });
     },
   });
 
@@ -264,6 +292,67 @@ export default function Clients() {
               <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada dokumen.</li>
             )}
           </ul>
+        </div>
+      )}
+
+      {selectedId && (
+        <div className="card space-y-2">
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Portal Klien</h2>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Link tanpa akun untuk klien memantau kehadiran &amp; lembur karyawan yang ditempatkan
+            di perusahaan mereka (read-only).
+          </p>
+          {portalAccess ? (
+            <div className="space-y-2">
+              <p className="text-sm" style={{ color: "var(--text)" }}>
+                Dibuat {new Date(portalAccess.created_at).toLocaleString("id-ID")}
+                {portalAccess.last_accessed_at
+                  ? ` · terakhir diakses ${new Date(portalAccess.last_accessed_at).toLocaleString("id-ID")}`
+                  : " · belum pernah diakses"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="btn-secondary"
+                  disabled={generatePortalAccess.isPending}
+                  onClick={() => generatePortalAccess.mutate(selectedId)}
+                >
+                  Buat Ulang Link
+                </button>
+                <button
+                  className="btn-secondary text-rose-600"
+                  disabled={revokePortalAccess.isPending}
+                  onClick={() => revokePortalAccess.mutate(selectedId)}
+                >
+                  Cabut Akses
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="btn-secondary"
+              disabled={generatePortalAccess.isPending}
+              onClick={() => generatePortalAccess.mutate(selectedId)}
+            >
+              Buat Link Portal
+            </button>
+          )}
+          {portalUrl && (
+            <div
+              className="rounded-lg p-3 text-sm"
+              style={{ backgroundColor: "var(--accent-tint)", border: "1px solid var(--border)" }}
+            >
+              <p style={{ color: "var(--text)" }}>
+                Bagikan link ini ke PIC klien (mis. lewat WhatsApp/email):
+              </p>
+              <code className="mt-1 block break-all text-xs">{portalUrl}</code>
+              <button
+                className="btn-secondary mt-2"
+                onClick={() => navigator.clipboard.writeText(portalUrl)}
+              >
+                Salin Link
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

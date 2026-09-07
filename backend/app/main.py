@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     from app.modules.chat.router import ai_router as chat_ai_router
     from app.modules.chat.router import router as chat_router
     from app.modules.chat.router import ws_router as chat_ws_router
+    from app.modules.clients.router import public_router as clients_public_router
     from app.modules.clients.router import router as clients_router
     from app.modules.dashboard.router import router as dashboard_router
     from app.modules.esign.router import router as esign_router
@@ -232,6 +233,8 @@ def create_app() -> FastAPI:
     app.include_router(job_portal_router, prefix="/api/v1")
     # Link self-service onboarding kandidat ber-token: publik, sama pola.
     app.include_router(onboarding_public_router, prefix="/api/v1")
+    # Portal monitoring klien ber-token: publik, read-only, sama pola.
+    app.include_router(clients_public_router, prefix="/api/v1")
     app.include_router(
         bpjs_router,
         prefix="/api/v1",

@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -71,3 +71,24 @@ class LegalDocument(TenantMixin, Base):
     )
 
     client: Mapped[Client] = relationship(back_populates="documents")
+
+
+class ClientPortalAccess(TenantMixin, Base):
+    """Akses portal monitoring read-only untuk klien (link tanpa akun).
+
+    BEDA dari `payroll.PayrollRunToken`/`hrd.OnboardingInvite` yang
+    sekali-pakai/kedaluwarsa pendek: token ini PERSISTEN -- klien kembali
+    berkali-kali tiap bulan untuk cek kehadiran/lembur karyawannya, tidak
+    ada konsep "sudah diputuskan". Dicabut/diganti HR secara eksplisit
+    (`service.generate_portal_access`/`revoke_portal_access`), bukan
+    expired otomatis."""
+
+    __tablename__ = "client_portal_access"
+    __table_args__ = (UniqueConstraint("client_id", name="uq_client_portal_access_client"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
