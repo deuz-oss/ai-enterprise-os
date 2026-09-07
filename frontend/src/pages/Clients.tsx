@@ -31,6 +31,30 @@ interface PortalAccessStatus {
   last_accessed_at: string | null;
 }
 
+interface ClientSite {
+  id: string;
+  client_id: string;
+  name: string;
+  address: string | null;
+  latitude: string;
+  longitude: string;
+  radius_meters: number;
+}
+
+function getGpsPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Perangkat/browser ini tidak mendukung GPS."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      () => reject(new Error("Gagal mengambil lokasi GPS -- pastikan izin lokasi diaktifkan.")),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
 const DOC_TYPES = ["perjanjian_kerjasama", "addendum", "npwp", "nib", "lainnya"];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -90,6 +114,15 @@ export default function Clients() {
     enabled: Boolean(selectedId),
   });
   const [portalUrl, setPortalUrl] = useState<string | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsCoord, setGpsCoord] = useState<{ lat: string; lng: string } | null>(null);
+  const siteFormRef = useRef<HTMLFormElement>(null);
+
+  const { data: sites } = useQuery({
+    queryKey: ["client-sites", selectedId],
+    queryFn: () => api.get<ClientSite[]>(`/clients/${selectedId}/sites`),
+    enabled: Boolean(selectedId),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["clients"] });
@@ -129,6 +162,46 @@ export default function Clients() {
       qc.invalidateQueries({ queryKey: ["client-portal-access", selectedId] });
     },
   });
+
+  const createSite = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post(`/clients/${selectedId}/sites`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-sites", selectedId] });
+      setGpsCoord(null);
+      siteFormRef.current?.reset();
+    },
+  });
+  const deleteSite = useMutation({
+    mutationFn: (siteId: string) => api.delete(`/clients/sites/${siteId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["client-sites", selectedId] }),
+  });
+
+  async function handleUseCurrentLocation() {
+    setGpsError(null);
+    try {
+      const pos = await getGpsPosition();
+      setGpsCoord({
+        lat: pos.coords.latitude.toFixed(6),
+        lng: pos.coords.longitude.toFixed(6),
+      });
+    } catch (err) {
+      setGpsError(err instanceof Error ? err.message : "Gagal mengambil lokasi GPS.");
+    }
+  }
+
+  function handleCreateSite(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selectedId) return;
+    const form = new FormData(e.currentTarget);
+    createSite.mutate({
+      name: form.get("name"),
+      address: form.get("address") || null,
+      latitude: form.get("latitude"),
+      longitude: form.get("longitude"),
+      radius_meters: Number(form.get("radius_meters")),
+    });
+  }
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -353,6 +426,103 @@ export default function Clients() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {selectedId && (
+        <div className="card space-y-3">
+          <div>
+            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Lokasi Kantor</h2>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Klien dengan banyak cabang bisa punya beberapa lokasi. Karyawan yang ditautkan ke
+              salah satu lokasi ini (di halaman Karyawan) wajib absen dalam radiusnya; tanpa
+              lokasi, absen tetap bebas seperti biasa.
+            </p>
+          </div>
+
+          <ul className="space-y-2">
+            {(sites ?? []).map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between rounded-lg p-3 text-sm"
+                style={{ backgroundColor: "var(--hover)" }}
+              >
+                <div>
+                  <p className="font-medium" style={{ color: "var(--text)" }}>{s.name}</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    {s.address ? `${s.address} · ` : ""}
+                    {s.latitude}, {s.longitude} · radius {s.radius_meters}m
+                  </p>
+                </div>
+                <button
+                  className="btn-secondary text-rose-600"
+                  disabled={deleteSite.isPending}
+                  onClick={() => deleteSite.mutate(s.id)}
+                >
+                  Hapus
+                </button>
+              </li>
+            ))}
+            {sites?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada lokasi.</li>
+            )}
+          </ul>
+
+          <form
+            ref={siteFormRef}
+            onSubmit={handleCreateSite}
+            className="flex flex-wrap items-end gap-2 border-t pt-3"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Nama</label>
+              <input name="name" required placeholder="Kantor Pusat" className="input w-40" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Alamat</label>
+              <input name="address" placeholder="Opsional" className="input w-48" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Latitude</label>
+              <input
+                key={`lat-${gpsCoord?.lat ?? ""}`}
+                name="latitude"
+                required
+                defaultValue={gpsCoord?.lat ?? ""}
+                placeholder="-6.200000"
+                className="input w-28"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Longitude</label>
+              <input
+                key={`lng-${gpsCoord?.lng ?? ""}`}
+                name="longitude"
+                required
+                defaultValue={gpsCoord?.lng ?? ""}
+                placeholder="106.816666"
+                className="input w-28"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Radius (m)</label>
+              <input
+                name="radius_meters"
+                type="number"
+                min={1}
+                required
+                defaultValue={100}
+                className="input w-24"
+              />
+            </div>
+            <button type="button" className="btn-secondary" onClick={handleUseCurrentLocation}>
+              Pakai Lokasi Saat Ini
+            </button>
+            <button type="submit" className="btn" disabled={createSite.isPending}>
+              Tambah Lokasi
+            </button>
+          </form>
+          {gpsError && <p className="text-xs text-rose-600">{gpsError}</p>}
         </div>
       )}
     </div>

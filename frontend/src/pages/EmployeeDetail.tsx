@@ -32,6 +32,13 @@ interface SelfserviceAccount {
   full_name: string;
 }
 
+interface ClientSiteOption {
+  id: string;
+  client_name: string;
+  name: string;
+  radius_meters: number;
+}
+
 interface LeaveBalanceRow {
   id: string;
   year: number;
@@ -265,6 +272,11 @@ export default function EmployeeDetail() {
   const { data: selfserviceAccounts } = useQuery({
     queryKey: ["selfservice-accounts"],
     queryFn: () => api.get<SelfserviceAccount[]>("/employees/selfservice-accounts"),
+    enabled: !isOpsOnly,
+  });
+  const { data: clientSites } = useQuery({
+    queryKey: ["client-sites-all"],
+    queryFn: () => api.get<ClientSiteOption[]>("/clients/sites"),
     enabled: !isOpsOnly,
   });
   const { data: selectedBalance } = useQuery({
@@ -1595,6 +1607,39 @@ export default function EmployeeDetail() {
                 </div>
                 {linkAccount.error && (
                   <p className="mt-2 text-sm text-red-600">{(linkAccount.error as Error).message}</p>
+                )}
+              </div>
+
+              <div className="card">
+                <h2 className="font-semibold" style={{ color: "var(--text)" }}>
+                  Lokasi Kerja (Geofencing Absensi)
+                </h2>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Kosong = absen bebas di mana saja. Terisi = wajib clock-in/out dalam radius
+                  lokasi itu (dikelola di halaman Klien, kartu &ldquo;Lokasi Kantor&rdquo;).
+                </p>
+                <select
+                  key={`site-${employee.site_id ?? "none"}`}
+                  defaultValue={employee.site_id ?? ""}
+                  className="input mt-3 w-auto"
+                  onChange={(e) =>
+                    updateEmployee.mutate({
+                      empId: employee.id,
+                      body: { site_id: e.target.value || null },
+                    })
+                  }
+                >
+                  <option value="">Bebas (tanpa lokasi)</option>
+                  {(clientSites ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.client_name} — {s.name} (radius {s.radius_meters}m)
+                    </option>
+                  ))}
+                </select>
+                {updateEmployee.error && (
+                  <p className="mt-2 text-sm text-red-600">
+                    {(updateEmployee.error as Error).message}
+                  </p>
                 )}
               </div>
             </div>

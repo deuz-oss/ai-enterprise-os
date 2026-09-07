@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -72,3 +73,39 @@ class ClientPortalAccessOut(BaseModel):
     id: UUID
     created_at: datetime
     last_accessed_at: datetime | None
+
+
+class ClientSiteCreate(BaseModel):
+    name: str
+    address: str | None = None
+    latitude: Decimal
+    longitude: Decimal
+    radius_meters: int
+
+
+class ClientSiteUpdate(BaseModel):
+    name: str | None = None
+    address: str | None = None
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
+    radius_meters: int | None = None
+
+
+class ClientSiteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    client_id: UUID
+    name: str
+    address: str | None
+    latitude: Decimal
+    longitude: Decimal
+    radius_meters: int
+    created_at: datetime
+
+
+class ClientSiteWithClientOut(ClientSiteOut):
+    """Dipakai `GET /clients/sites` (lintas klien) -- dropdown Karyawan
+    perlu tahu lokasi itu milik klien mana."""
+
+    client_name: str

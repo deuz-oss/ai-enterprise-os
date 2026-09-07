@@ -60,6 +60,41 @@ def _valid_coord(lat_raw, long_raw) -> tuple[float, float]:
     return round(lat, 6), round(lng, 6)
 
 
+def _distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Haversine -- jarak great-circle dalam meter."""
+    from math import atan2, cos, radians, sin, sqrt
+
+    r = 6371000
+    p1, p2 = radians(lat1), radians(lat2)
+    dp, dl = radians(lat2 - lat1), radians(lng2 - lng1)
+    a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
+def _enforce_site_radius(db: Session, employee: Employee, lat: float, lng: float) -> None:
+    """Geofencing absensi (Fase 34) -- `Employee.site_id` kosong = absen
+    bebas (perilaku lama), terisi = wajib dalam radius `ClientSite`
+    itu."""
+    from app.modules.clients.models import ClientSite
+
+    if employee.site_id is None:
+        return
+    site = db.get(ClientSite, employee.site_id)
+    if site is None:
+        # Site sudah dihapus tapi employee.site_id belum dibersihkan --
+        # fail-open (tidak nge-block absensi), bukan fail-closed.
+        return
+    dist = _distance_meters(lat, lng, float(site.latitude), float(site.longitude))
+    if dist > site.radius_meters:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Di luar radius lokasi kerja '{site.name}' "
+                f"({dist:.0f}m dari titik, maksimal {site.radius_meters}m)"
+            ),
+        )
+
+
 def _save_selfie(employee: Employee, direction: str, data: bytes, mime: str) -> str:
     if mime not in _ALLOWED_SELFIE_MIME:
         raise HTTPException(status_code=422, detail="Selfie harus JPG atau PNG")
@@ -112,6 +147,7 @@ def mobile_clock(
         raise HTTPException(status_code=422, detail="Arah clock harus 'in' atau 'out'")
     employee = get_own_employee(db, user)
     lat, lng = _valid_coord(latitude, longitude)
+    _enforce_site_radius(db, employee, lat, lng)
     selfie_key = _save_selfie(employee, direction, photo_data, photo_mime)
 
     today = date.today()

@@ -257,8 +257,14 @@ export default function Layout() {
         credit_balance: number;
         state: "normal" | "warning" | "empty";
       }>("/billing/balance-summary"),
-    enabled:
-      Boolean(getToken()) && me.data?.role !== "platform_admin" && me.data?.role !== "karyawan",
+    // Boolean(me.data) (bukan getToken()) sengaja -- "enabled" dievaluasi
+    // ulang tiap render, dan sebelum `me` resolve, me.data?.role bernilai
+    // undefined sehingga lolos kedua pengecualian di atas (race condition:
+    // query ini sempat terpicu, backend /billing/balance-summary tidak
+    // membatasi per-role, hasilnya nyangkut di cache react-query dan
+    // widget tetap tampil ke karyawan walau enabled berubah false
+    // belakangan). Menunggu me.data ada dulu menutup celah itu.
+    enabled: Boolean(me.data && me.data.role !== "platform_admin" && me.data.role !== "karyawan"),
     refetchInterval: 30_000,
     retry: false,
   });

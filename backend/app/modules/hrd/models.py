@@ -123,6 +123,12 @@ class Employee(TenantMixin, Base):
     placement_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("placements.id"), default=None, index=True
     )
+    # Lokasi kerja untuk geofencing absensi (Fase 34) -- kosong = absen
+    # bebas (perilaku lama), terisi = wajib dalam radius `ClientSite` ini
+    # saat clock-in/out. Lihat `clients.models.ClientSite`.
+    site_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("client_sites.id"), default=None, index=True
+    )
     employee_no: Mapped[str] = mapped_column(String(50), index=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     ktp_no: Mapped[str | None] = mapped_column(String(50))

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from tests.conftest import _auth_header
 from tests.test_ess import _create_karyawan, _link_employee
+from tests.test_recruitment import _client_id
 
 
 def _employee(client, headers, name="Pekerja Mobile") -> str:
@@ -167,3 +168,104 @@ def test_selfie_url_hanya_role_berwenang_dan_pemilik(client):
     # Pemilik boleh lewat portal /me
     own = client.get(f"/api/v1/me/attendance/{record_id}/selfie/in/download-url", headers=emp)
     assert own.status_code == 200
+
+
+# ---------- Geofencing per lokasi klien (Fase 34) ----------
+
+_SITE_LAT = "-6.200000"
+_SITE_LNG = "106.816666"
+
+
+def _create_site(client, headers, client_id, radius_meters=100):
+    resp = client.post(
+        f"/api/v1/clients/{client_id}/sites",
+        headers=headers,
+        json={
+            "name": "Kantor Klien",
+            "latitude": _SITE_LAT,
+            "longitude": _SITE_LNG,
+            "radius_meters": radius_meters,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_clock_in_tanpa_site_id_tetap_bebas(client):
+    """Regresi: karyawan tanpa site_id (perilaku lama) tidak pernah dicek jarak,
+    walau koordinatnya jauh dari mana pun."""
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Bebas")
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        jauh = _clock(client, emp, "in", lat="-8.65", lng="115.2167")  # Bali, jauh dari mana pun
+    assert jauh.status_code == 200, jauh.text
+
+
+def test_clock_in_dalam_radius_site_lolos(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Radius Lolos")
+    cid = _client_id(client, admin)
+    site = _create_site(client, admin, cid, radius_meters=100)
+    assert (
+        client.patch(
+            f"/api/v1/employees/{emp_id}", headers=admin, json={"site_id": site["id"]}
+        ).status_code
+        == 200
+    )
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        # Tepat di titik site -> jarak 0.
+        ok = _clock(client, emp, "in", lat=_SITE_LAT, lng=_SITE_LNG)
+    assert ok.status_code == 200, ok.text
+
+
+def test_clock_in_di_luar_radius_site_ditolak(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Radius Tolak")
+    cid = _client_id(client, admin)
+    site = _create_site(client, admin, cid, radius_meters=100)
+    assert (
+        client.patch(
+            f"/api/v1/employees/{emp_id}", headers=admin, json={"site_id": site["id"]}
+        ).status_code
+        == 200
+    )
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        # Bandung, puluhan km dari titik site -> jauh di luar radius 100m.
+        jauh = _clock(client, emp, "in", lat="-6.9175", lng="107.6191")
+    assert jauh.status_code == 422
+    assert "radius" in jauh.json()["detail"].lower()
+
+    # Record hari ini belum tercatat (ditolak sebelum simpan)
+    today = client.get("/api/v1/me/attendance/today", headers=emp).json()
+    assert today is None
+
+
+def test_clock_in_site_dihapus_fail_open(client):
+    """Site dihapus (via lepas tautan dulu) tapi employee.site_id tersisa
+    (skenario tak terduga) -- tidak boleh memblokir absensi sama sekali."""
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Site Hilang")
+    cid = _client_id(client, admin)
+    site = _create_site(client, admin, cid, radius_meters=50)
+    client.patch(f"/api/v1/employees/{emp_id}", headers=admin, json={"site_id": site["id"]})
+
+    # Hapus site langsung lewat DB (bukan endpoint -- endpoint akan menolak
+    # karena masih direferensikan employee, skenario ini sengaja simulasi
+    # data yatim yang seharusnya tidak terjadi lewat jalur normal).
+    db = client.testing_session()
+    try:
+        from app.core.database import parse_uuid
+        from app.modules.clients.models import ClientSite
+
+        row = db.get(ClientSite, parse_uuid(site["id"]))
+        db.delete(row)
+        db.commit()
+    finally:
+        db.close()
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        jauh = _clock(client, emp, "in", lat="-8.65", lng="115.2167")
+    assert jauh.status_code == 200, jauh.text

@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-04
+**Terakhir diperbarui:** 2026-09-07
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -14,6 +14,27 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 > yang jadi rujukan status implementasi terkini.
 
 > **Changelog**
+> - **2026-09-07** — **Fase 29-33** (lihat §5): **Black Lists kandidat**
+>   (request→approve, dari shortlist MyOHRIS item #3) — ✅ selesai.
+>   **AI Interview Fase 2 percakapan suara real-time** (self-hosted
+>   LiveKit+faster-whisper, TTS OpenAI setelah kualitas self-hosted
+>   ditolak) — kode ditulis & wiring Docker end-to-end terverifikasi,
+>   **performa masih belum divalidasi** (butuh akses server ber-GPU),
+>   supersede catatan "implementasi belum dimulai" di entri 2026-09-02 di
+>   bawah. **Portal ESS clock-in/out (GPS+selfie) dapat UI web** + **alur
+>   pengajuan lembur karyawan** (submit→approve→rekap otomatis) — ✅
+>   selesai. **Portal Klien** — link monitoring kehadiran/lembur read-only
+>   tanpa akun AEOS, token persisten (beda dari token sekali-pakai
+>   payroll/onboarding) — ✅ selesai. **Pipeline penempatan
+>   disederhanakan** 13→11 tahap (kirim/screening klien digabung
+>   `submitted`, diusulkan/disetujui klien digabung `offering`) + **celah
+>   email surat penawaran/kontrak/undangan onboarding ditutup** (dokumen
+>   HR sekarang benar-benar terkirim email ke kandidat, bukan cuma
+>   tersimpan) — ✅ selesai. **Item #1/2/4/5 shortlist MyOHRIS** (Document
+>   Center terpusat, Import Payroll batch, Email Automation per-tahap,
+>   Talent Owner+reference code) **DI-DROP (keputusan eksplisit Brian,
+>   2026-09-07)** — tidak jadi dieksekusi, ditutup sebagai riset tanpa
+>   tindak lanjut.
 > - **2026-09-02** — **AI Interview mode async teks selesai** (Fase 19,
 >   lihat §5) — template+kriteria, undang kandidat, sesi publik via token,
 >   skor AI + gate review manusia wajib. **Keputusan baru untuk Fase 2**
@@ -1089,6 +1110,127 @@ otomatis dari jumlah bundle aktif (1 bundle→Tier 1, 2→Tier 2, 3-4→Tier
 ada grandfathering. Default `--dry-run`, harus pakai `--apply` eksplisit
 untuk menulis.
 
+### Fase 29 — Black Lists Kandidat — ✅ Selesai (2026-09-02)
+
+Dari shortlist riset arsitektur MyOHRIS item #3 (konsep yang sama
+sekali tidak ada di AEOS sebelumnya). Alur request→approve: recruiter
+mana pun bisa mengajukan atau meninjau (AEOS tidak punya role approver
+terpisah), request aktif duplikat diblokir, request yang ditolak bisa
+diajukan ulang. Reuse pola `review_status` yang sama dengan skor AI
+Interview, bukan mekanisme governance baru. **Diperkecil sengaja** dari
+versi MyOHRIS: satu tabel (bukan pasangan request-batch + entry), tanpa
+whitelist, dan belum disambungkan sebagai blocking check ke
+sourcing/matching. Model `BlacklistEntry`+`BlacklistStatus`
+(`backend/app/modules/blacklist/`), migrasi `f7g8h9i0j1k2`. Halaman
+`Blacklist.tsx` + item sidebar Recruitment (§13).
+
+**Item shortlist lain DI-DROP (keputusan eksplisit Brian, 2026-09-07)
+— tidak jadi dieksekusi:**
+- #1 Document Center terpusat (index dokumen lintas-modul + skema
+  penomoran ber-kode cabang)
+- #2 Import Payroll batch (upload spreadsheet + validasi 2-tahap)
+- #4 Email Automation per-tahap pipeline (`email_templates`
+  tenant-scoped di-key per trigger event)
+- #5 Talent Owner + reference code (`owner_user_id` di `Candidate` —
+  catatan: field `reference` kode unik sendiri SUDAH ada, ditambahkan
+  lewat Fase 24, jalur terpisah dari shortlist ini)
+
+Ditutup sebagai riset murni tanpa tindak lanjut — bukan backlog yang
+"nanti dikerjakan".
+
+### Fase 30 — AI Interview Fase 2: Percakapan Suara Real-Time, Self-Hosted — Kode selesai, performa belum divalidasi (2026-09-02)
+
+Live voice conversation (bukan async teks seperti Fase 19), reuse
+`_score_transcript()` yang sama untuk skoring. Stack: **LiveKit**
+(WebRTC signaling/media, self-hosted) + **faster-whisper-server**
+(`fedirz/faster-whisper-server`, STT self-hosted) + **OpenAI** (LLM,
+reuse `core/llm.py`) + **TTS** — awalnya self-hosted
+`facebook/mms-tts-ind`, **diganti ke OpenAI `gpt-4o-mini-tts`** setelah
+kualitas suara self-hosted dinilai tidak layak (keputusan bisnis,
+2026-09-02 setelah commit awal). Proses worker baru `agent/`
+(`livekit-agents` SDK Python) — paradigma long-running background
+worker pertama di codebase ini (semua modul lain request/response).
+Agent TIDAK akses Postgres langsung — memanggil REST backend memakai
+`invite_token` yang sama seperti kandidat browser, supaya tidak
+menyentuh `ContextVar` tenant lintas proses. 4 service Docker baru,
+digerbang di bawah profile `voice` (tidak start default `docker compose
+up`).
+
+Diverifikasi Docker end-to-end sungguhan (bukan cuma build): agent
+register ke LiveKit, terima dispatch, join room yang benar, buka sesi
+WebRTC nyata, sintesis suara. 3 bug nyata ditemukan & diperbaiki lewat
+verifikasi ini: tabrakan port UDP LiveKit dengan proses host lain,
+healthcheck `stt-server` memakai binary yang tidak ada di image-nya,
+dan `tts-server` (versi self-hosted) menulis WAV 32-bit float padahal
+decoder SDK agent butuh 16-bit PCM.
+
+**Status performa tetap "belum divalidasi" sampai ada akses server
+ber-GPU untuk uji nyata** — bukan sekadar formalitas checklist,
+STT self-hosted (`faster-whisper-server`) butuh GPU untuk latensi
+percakapan real-time yang layak, dan environment saat ini tidak
+punya itu.
+
+### Fase 31 — Portal ESS: Clock-in/out GPS+Selfie (UI web) + Alur Pengajuan Lembur — ✅ Selesai (2026-09-07)
+
+**Bagian A — clock-in/out**: backend GPS+selfie sudah lengkap dari
+sesi sebelumnya tapi belum ada UI web sama sekali. Tambah
+`GET /me/attendance/today` (status absen hari ini, supaya state benar
+setelah reload) + seksi "Absen Masuk/Keluar" di Portal Saya (lokasi GPS
++ selfie kamera), ditempatkan paling atas karena aksi harian
+tersering karyawan lapangan.
+
+**Bagian B — pengajuan lembur**: sebelumnya `overtime_hours` cuma bisa
+diisi HR manual, tidak ada jalur karyawan mengajukan sendiri. Model
+`OvertimeRequest` baru (mirror `LeaveRequest`) — ajukan/batalkan
+(karyawan), setujui/tolak (HR); disetujui → jam otomatis ditambahkan ke
+`AttendanceRecord.overtime_hours` tanggal terkait (additive, reuse
+`recompute_month_summary`) sehingga rekap bulanan yang sudah ada (Rekap
+Kehadiran portal, ekspor CSV absensi HR, **dan Portal Klien Fase 32**)
+otomatis ikut ter-update tanpa UI tambahan. Migrasi
+`f6a7b8c9d0e1`.
+
+### Fase 32 — Portal Klien: Monitoring Kehadiran & Lembur Read-Only — ✅ Selesai (2026-09-07)
+
+Klien outsourcing perlu memantau kehadiran/lembur karyawan yang
+ditempatkan di perusahaan mereka **tanpa** akun AEOS internal (yang
+membawa akses ke seluruh modul). Read-only murni (keputusan scope) —
+tidak ada tombol approve di portal ini, approval kehadiran/lembur tetap
+jalur internal HR/Ops seperti sebelumnya.
+
+Token **persisten** — beda sengaja dari pola link ber-token lain di
+codebase (`PayrollRunToken`, undangan onboarding) yang sekali-pakai/
+kedaluwarsa pendek — karena portal ini dibuka berulang tiap bulan,
+bukan satu keputusan. `ClientPortalAccess` (satu baris per klien,
+regenerate mencabut token lama), migrasi `a7b8c9d0e1f2`. Endpoint
+publik `GET /clients/portal/{token}` (rate-limited), endpoint internal
+generate/status/revoke di bawah role Clients. Halaman publik
+`ClientPortal.tsx` (`/clients/portal/:token`, tanpa Layout/sidebar),
+kartu "Portal Klien" di halaman Klien (HR) untuk kelola link.
+
+### Fase 33 — Sederhanakan Pipeline Penempatan + Tutup Celah Email Dokumen HR — ✅ Selesai (2026-09-07)
+
+Serangkaian temuan dari perbandingan langsung alur MYOHRIS:
+
+- **`PlacementStatus` disederhanakan 13→11 tahap** (dari Fase 15):
+  kirim klien/screening klien digabung jadi `submitted`; diusulkan/
+  disetujui klien digabung jadi `offering`. OJT jadi kondisional lewat
+  `JobOrder.requires_ojt` (bukan stage tetap). `rejection_note` wajib
+  diisi saat placement dipindah ke status gagal/dibatalkan.
+- **Surat penawaran sekarang benar-benar mengirim email ke kandidat**
+  — sebelumnya tidak ada email sungguhan sama sekali (esign sandbox
+  cuma simulasi lokal, Privy cuma upload ke provider). Mengirim surat
+  otomatis memindahkan kandidat ke status `hired`.
+- **Kontrak kerja ke TTE juga mengirim email asli** ke calon karyawan
+  — gap yang sama dengan offering letter, ditutup bersamaan.
+- **Undangan onboarding punya daftar dokumen per-undangan** (bukan 3
+  jenis tetap) — kandidat hanya bisa unggah jenis yang diminta HR;
+  placement otomatis pindah ke stage `onboarded` begitu kandidat
+  selesai mengisi form (kembali ke `hired` kalau HR minta isi ulang),
+  tidak lagi menunggu HR klik "Terapkan" manual.
+- `OfferingSettings` digeneralisasi jadi `HrDocumentSettings` — satu
+  setting per tenant untuk alamat pengembalian dokumen bertanda tangan,
+  dipakai bersama surat penawaran dan kontrak kerja.
+
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa
@@ -1454,12 +1596,17 @@ Login ──► Beranda (Overview, 9 widget lintas kategori)
                       field tambahan posisi/level/dst ala MYOHRIS),
                       Talent Pool (upload CV → auto-profil + CV
                       standar bertemplate, AI Matching 0-100+explain),
-                      AI Interview, Black Lists, Referral (Fase 27 —
-                      kode referral karyawan, insentif, toggle on/off)
+                      AI Interview (Fase 30 — mode suara real-time
+                      self-hosted ditambah, performa belum divalidasi;
+                      mode teks async tetap default), Black Lists (Fase
+                      29), Referral (Fase 27 — kode referral karyawan,
+                      insentif, toggle on/off)
   Workforce        : Karyawan, kontrak, dokumen legal, BPJS+asuransi,
-                      Absensi, ESS, TTE, Payroll (Saltab, Approval klien
-                      via token, PPh21 — dipindah dari bekas Revenue
-                      Cloud; sengaja di sini karena soal karyawan)
+                      Absensi (Fase 31 — clock-in/out GPS+selfie di web
+                      Portal Saya, pengajuan lembur karyawan), ESS, TTE,
+                      Payroll (Saltab, Approval klien via token, PPh21 —
+                      dipindah dari bekas Revenue Cloud; sengaja di sini
+                      karena soal karyawan)
   Finance & Accounting : Invoice + faktur DJP, Kas & Bank, Pembelian,
                       Aset Tetap, Payment Request (bekas Revenue Cloud)
                       + Tutup Buku, Jurnal & Bagan Akun, Laporan
@@ -1481,6 +1628,9 @@ Publik (tanpa login, per-tenant white-label):
   /careers/{tenant_slug}         : Listing lowongan publik (Job Portal, Fase 16)
   /careers/{tenant_slug}/{jo_id} : Detail + form lamaran (guest-apply)
   /careers/track                 : Cek status lamaran via token
+  /clients/portal/{token}        : Portal Klien (Fase 32) — monitoring
+                                    kehadiran & lembur read-only, token
+                                    persisten, tanpa akun AEOS
 ```
 
 ## 14. Batasan & Asumsi

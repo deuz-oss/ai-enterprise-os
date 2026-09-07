@@ -12,6 +12,10 @@ from app.modules.clients.schemas import (
     ClientCreate,
     ClientOut,
     ClientPortalAccessOut,
+    ClientSiteCreate,
+    ClientSiteOut,
+    ClientSiteUpdate,
+    ClientSiteWithClientOut,
     ClientUpdate,
     DocumentOut,
 )
@@ -36,6 +40,27 @@ def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
 @router.get("/expiring-contracts", response_model=list[ClientOut])
 def expiring_contracts(within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
     return service.expiring_contracts(db, within_days)
+
+
+# Wajib didaftarkan sebelum `/{client_id}` -- "sites" segmen tunggal akan
+# ketangkap sebagai client_id kalau route ini di bawah.
+@router.get("/sites", response_model=list[ClientSiteWithClientOut])
+def list_all_sites(db: Session = Depends(get_db)):
+    """Lintas klien -- dropdown pemilihan lokasi geofencing di halaman Karyawan."""
+    return [
+        ClientSiteWithClientOut(
+            id=site.id,
+            client_id=site.client_id,
+            name=site.name,
+            address=site.address,
+            latitude=site.latitude,
+            longitude=site.longitude,
+            radius_meters=site.radius_meters,
+            created_at=site.created_at,
+            client_name=client_name,
+        )
+        for site, client_name in service.list_all_sites(db)
+    ]
 
 
 @router.get("/{client_id}", response_model=ClientOut)
@@ -107,6 +132,29 @@ def create_portal_access(
 @router.delete("/{client_id}/portal-access", status_code=204)
 def delete_portal_access(client_id: str, db: Session = Depends(get_db)):
     service.revoke_portal_access(db, client_id)
+
+
+# ---------- Lokasi kantor klien (geofencing absensi, Fase 34) ----------
+
+
+@router.post("/{client_id}/sites", response_model=ClientSiteOut, status_code=201)
+def create_site(client_id: str, payload: ClientSiteCreate, db: Session = Depends(get_db)):
+    return service.create_site(db, client_id, payload)
+
+
+@router.get("/{client_id}/sites", response_model=list[ClientSiteOut])
+def list_sites(client_id: str, db: Session = Depends(get_db)):
+    return service.list_sites(db, client_id)
+
+
+@router.patch("/sites/{site_id}", response_model=ClientSiteOut)
+def update_site(site_id: str, payload: ClientSiteUpdate, db: Session = Depends(get_db)):
+    return service.update_site(db, site_id, payload)
+
+
+@router.delete("/sites/{site_id}", status_code=204)
+def delete_site(site_id: str, db: Session = Depends(get_db)):
+    service.delete_site(db, site_id)
 
 
 # ---------- Publik (tanpa akun): monitoring klien via link ber-token ----------

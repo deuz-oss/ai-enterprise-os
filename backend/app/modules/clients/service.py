@@ -9,8 +9,19 @@ from sqlalchemy.orm import Session
 from app.core import storage
 from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
-from app.modules.clients.models import Client, ClientPortalAccess, DocumentType, LegalDocument
-from app.modules.clients.schemas import ClientCreate, ClientUpdate
+from app.modules.clients.models import (
+    Client,
+    ClientPortalAccess,
+    ClientSite,
+    DocumentType,
+    LegalDocument,
+)
+from app.modules.clients.schemas import (
+    ClientCreate,
+    ClientSiteCreate,
+    ClientSiteUpdate,
+    ClientUpdate,
+)
 
 
 def _get(db: Session, client_id: str) -> Client:
@@ -276,3 +287,59 @@ def client_portal_attendance(
         }
     finally:
         set_tenant(prev_tenant)
+
+
+# ---------- Lokasi kantor klien (geofencing absensi, Fase 34) ----------
+
+
+def create_site(db: Session, client_id: str, payload: ClientSiteCreate) -> ClientSite:
+    client = _get(db, client_id)
+    site = ClientSite(client_id=client.id, **payload.model_dump())
+    db.add(site)
+    db.commit()
+    db.refresh(site)
+    return site
+
+
+def list_sites(db: Session, client_id: str) -> list[ClientSite]:
+    _get(db, client_id)
+    return list(
+        db.execute(
+            select(ClientSite)
+            .where(ClientSite.client_id == parse_uuid(client_id))
+            .order_by(ClientSite.name)
+        ).scalars()
+    )
+
+
+def list_all_sites(db: Session) -> list[tuple[ClientSite, str]]:
+    """Lintas klien -- dropdown pemilihan lokasi di halaman Karyawan."""
+    rows = db.execute(
+        select(ClientSite, Client.name)
+        .join(Client, ClientSite.client_id == Client.id)
+        .order_by(Client.name, ClientSite.name)
+    ).all()
+    return [(site, client_name) for site, client_name in rows]
+
+
+def _get_site(db: Session, site_id: str) -> ClientSite:
+    site = db.get(ClientSite, parse_uuid(site_id))
+    if site is None:
+        raise HTTPException(status_code=404, detail="Lokasi tidak ditemukan")
+    return site
+
+
+def update_site(db: Session, site_id: str, payload: ClientSiteUpdate) -> ClientSite:
+    site = _get_site(db, site_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(site, field, value)
+    db.commit()
+    db.refresh(site)
+    return site
+
+
+def delete_site(db: Session, site_id: str) -> None:
+    site = _get_site(db, site_id)
+    assert_not_referenced(db, "client_sites", site.id, "Lokasi")
+    db.delete(site)
+    db.commit()

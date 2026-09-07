@@ -6,6 +6,50 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 33: Sederhanakan Pipeline Penempatan + Tutup Celah Email Dokumen HR
+
+- `PlacementStatus` disederhanakan 13→11 tahap (kirim/screening klien digabung `submitted`; diusulkan/disetujui klien digabung `offering`); OJT jadi kondisional lewat `JobOrder.requires_ojt`; `rejection_note` wajib diisi saat placement gagal/dibatalkan.
+- Surat penawaran dan kontrak kerja (TTE) sekarang benar-benar mengirim email ke kandidat/calon karyawan — sebelumnya cuma tersimpan/di-upload provider tanpa notifikasi nyata. Mengirim surat penawaran otomatis memindahkan kandidat ke status `hired`.
+- Undangan onboarding punya daftar dokumen per-undangan (bukan 3 jenis tetap); placement otomatis pindah ke `onboarded` begitu kandidat selesai mengisi form, tidak lagi menunggu HR klik "Terapkan" manual.
+- `OfferingSettings` digeneralisasi jadi `HrDocumentSettings` (satu setting per tenant untuk alamat pengembalian dokumen, dipakai bersama offering letter + kontrak).
+
+### Added — Fase 32: Portal Klien (monitoring kehadiran & lembur read-only, tanpa akun)
+
+- Model `ClientPortalAccess` — link ber-token **persisten** (beda dari token sekali-pakai payroll/onboarding), satu baris per klien, regenerate mencabut token lama. Migrasi `a7b8c9d0e1f2`.
+- Endpoint publik `GET /clients/portal/{token}` (rate-limited) + endpoint internal generate/status/revoke di bawah role Clients.
+- Halaman publik `ClientPortal.tsx` (`/clients/portal/:token`, tanpa Layout/sidebar) — read-only murni, tidak ada tombol approve (approval kehadiran/lembur tetap jalur internal HR/Ops).
+- Kartu "Portal Klien" di halaman Klien (HR) untuk generate/salin link, cabut akses.
+
+### Added — Fase 31: Portal ESS clock-in/out (UI web) + alur pengajuan lembur
+
+- `GET /me/attendance/today` + seksi "Absen Masuk/Keluar" di Portal Saya (GPS + selfie kamera) — backend sudah ada dari sesi sebelumnya, sekarang punya UI web.
+- Model `OvertimeRequest` baru (mirror `LeaveRequest`): karyawan ajukan/batalkan, HR setujui/tolak; disetujui → jam otomatis masuk `AttendanceRecord.overtime_hours` (reuse `recompute_month_summary`, ikut otomatis ke Rekap Kehadiran portal, CSV absensi HR, dan Portal Klien). Migrasi `f6a7b8c9d0e1`.
+
+### Added — Fase 30: AI Interview Fase 2 — percakapan suara real-time, self-hosted
+
+- Stack: LiveKit (WebRTC self-hosted) + `faster-whisper-server` (STT self-hosted) + OpenAI (LLM, reuse `core/llm.py`) + TTS OpenAI `gpt-4o-mini-tts` (diganti dari self-hosted `facebook/mms-tts-ind` setelah kualitas suara dinilai tidak layak).
+- Worker baru `agent/` (`livekit-agents` SDK Python) — proses long-running pertama di codebase ini; tidak akses Postgres langsung, memanggil REST backend via `invite_token` yang sama seperti kandidat browser. Reuse `_score_transcript()` yang sama dengan mode async teks.
+- 4 service Docker baru di bawah profile `voice` (tidak start default). Diverifikasi end-to-end Docker sungguhan; 3 bug nyata ditemukan+diperbaiki (tabrakan port UDP LiveKit, healthcheck `stt-server` salah binary, bit-depth WAV self-hosted TTS vs decoder agent).
+- **Status: kode selesai, wiring terverifikasi — performa belum divalidasi** (butuh akses server ber-GPU untuk STT self-hosted).
+
+### Added — Fase 29: Black Lists kandidat
+
+- Alur request→approve untuk menandai kandidat bermasalah (shortlist riset arsitektur MyOHRIS item #3). Model `BlacklistEntry`/`BlacklistStatus`, migrasi `f7g8h9i0j1k2`, halaman `Blacklist.tsx`.
+- Diperkecil sengaja dari versi MyOHRIS: satu tabel (bukan request-batch+entry terpisah), tanpa whitelist, belum jadi blocking check di sourcing/matching.
+
+### Added — Fase 23-28: Employee expansion ala MYOHRIS, Contract Generator, Referral, Opsi G billing
+
+- Gelombang polish arketipe (KPI row, tab/pill status filter, Kanban) di atas Component Library Fase 22 (lihat entri "Fase 22" di bawah), diterapkan ke hampir seluruh halaman utama (Blacklist, Quotations, Agreements, Clients, Candidates, TalentPool, JobOrders, Employees, Users, PaymentRequests, Referral, PlatformTenants, Finance/Invoice) serta redesign topbar (kredit widget, menu akun menggantikan tombol "Action Baru" duplikat search) dan rename label sidebar Dashboard→Overview.
+- **Fase 23** — Employee: perbaikan RBAC Ops, field SKCK, Warning Letter, kirim Saltab ke klien.
+- **Fase 24** — Perluasan field `JobOrder`/`Candidate` ala MYOHRIS (remote, office_address, experience_level, industry, position+level, package_detail; reference kode unik, gender, current_position, alamat lengkap, ktp_no, dll) + stage baru `hired` di `PlacementStatus`. `frequency` (JobOrder) dan `industry`/`current_department` (Candidate) sengaja di-drop dari referensi MYOHRIS.
+- **Fase 25** — Employee Contract Generator (template engine terpisah dari generator dokumen Job Order Fase 20).
+- **Fase 26** — Employee Detail: riwayat mutasi (movements), data vaksin, kontak darurat, kunci payroll per karyawan, kirim slip gaji via email.
+- **Fase 27** — Program Referral karyawan: kode referral, insentif, toggle on/off per tenant.
+- **Fase 28** — Migrasi Opsi F→Opsi G (model komersial baru, §4.4 PRD): `TenantSubscription`/`TenantBudgetCycle`/`TenantCreditAccount`/`CreditTransaction`, hapus guard lisensi per-SKU, indikator saldo credit, integrasi Xendit Subscriptions (checkout manual penuh; auto-reload charge sungguhan belum — baru preferensi tersimpan), halaman pembayaran self-service. Script migrasi tenant existing `backend/scripts/fase28_migrate_opsi_f_to_g.py` (`--dry-run` default).
+- Perbaikan lintas-fase: employee/candidate detail page bertab, preview PDF slip gaji in-app, form onboarding self-service kandidat via link ber-token, field kandidat Talent Pool bisa dikonfigurasi admin, email pengiriman Quotation/Agreement ke klien, komponen payroll baru (Bonus/Insentif/THR/UUCK/Reimbursement/Perdin/Kasbon + Tahan-Cairkan Gaji), lead sourcing via impor CSV massal, fix bypass RLS di endpoint platform-admin + perluasan RLS ke 14 tabel yang belum tercakup, retire 4 halaman landing "4-Cloud" yang sudah tidak dipakai.
+
+> Detail lengkap tiap fase di atas: `docs/02-product/PRD.md` §5.
+
 ### Added — Fase 20 (item 1-4) & Fase 21: Presales Documents, Job Order Enhancements
 
 - **Company/Contact refactor**: `Lead.company_id` jadi FK ke `Company`

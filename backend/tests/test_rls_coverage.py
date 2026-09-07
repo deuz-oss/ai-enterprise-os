@@ -48,13 +48,15 @@ EXCLUDED_TABLES = {
     # provider_invoice_id SEBELUM tenant diketahui (Fase 28). Lihat
     # alembic/versions/e1f2a3b4c5d6_fase28_payment_intents.py.
     "payment_intents",
-    # GAP DIKETAHUI, BELUM DIPERBAIKI (lihat plan file): job_portal's
-    # _resolve_placement_by_token() punya pola pre-tenant-lookup yang sama
-    # tapi `placements` SUDAH RLS-covered sejak migrasi awal -- artinya
-    # GET /public/applications/{token} kemungkinan sudah lama gagal di
-    # Postgres+RLS aktif. Tidak dikecualikan di sini (placements harus
-    # tetap RLS-covered untuk endpoint lain) -- perbaikan ada di sisi
-    # service (resolve tanpa filter tenant eksplisit), bukan di skema.
+    # `placements` TETAP RLS-covered (beda dari tabel-tabel di atas) --
+    # job_portal's get_application_status() perlu resolve tenant dari
+    # token SEBELUM query row yang jadi acuannya, tapi tidak bisa
+    # dikecualikan begitu saja karena tabel ini juga dipakai endpoint lain
+    # yang wajib RLS. Solusinya fungsi SQL sempit SECURITY DEFINER
+    # `resolve_placement_tenant()` (lihat
+    # alembic/versions/c7f352d90854_placement_token_lookup_fn.py) yang
+    # cuma mengembalikan tenant_id, dipanggil sebelum set_tenant() --
+    # bukan bypass RLS umum. Lihat job_portal/service.py.
 }
 
 # Alembic version table & platform-level table tanpa tenant_id filter

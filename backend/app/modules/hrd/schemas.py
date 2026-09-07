@@ -63,6 +63,8 @@ class EmployeeUpdate(BaseModel):
     employment_type: EmploymentType | None = None
     # Taut/lepas akun login self-service (role karyawan); null = lepas tautan.
     user_id: UUID | None = None
+    # Lokasi kerja untuk geofencing absensi (Fase 34); null = absen bebas.
+    site_id: UUID | None = None
     bpjs_kesehatan_status: str | None = None
     bpjs_ketenagakerjaan_status: str | None = None
     bpjs_kesehatan_valid_until: date | None = None
@@ -115,6 +117,7 @@ class EmployeeOut(BaseModel):
     payroll_locked: bool = False
     payroll_locked_at: datetime | None = None
     referral_code: str | None = None
+    site_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 

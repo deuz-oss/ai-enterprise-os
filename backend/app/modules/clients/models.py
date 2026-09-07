@@ -1,8 +1,19 @@
 import enum
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -91,4 +102,26 @@ class ClientPortalAccess(TenantMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
     last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ClientSite(TenantMixin, Base):
+    """Titik lokasi kantor/cabang klien untuk geofencing absensi (Fase 34).
+
+    Radius ditempel di sini, bukan di `Client` -- klien multi-cabang bisa
+    punya banyak site dengan radius beda-beda, dan job order baru di
+    cabang yang sama tinggal reuse site yang sudah ada alih-alih isi
+    ulang lokasi. `Employee.site_id` (nullable) menentukan mode: kosong =
+    absen bebas (perilaku lama, tidak berubah), terisi = wajib dalam
+    radius site ini saat clock-in/out (`ess/service.py::mobile_clock`)."""
+
+    __tablename__ = "client_sites"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    client_id: Mapped[UUID] = mapped_column(ForeignKey("clients.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    address: Mapped[str | None] = mapped_column(String(500), default=None)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    radius_meters: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
