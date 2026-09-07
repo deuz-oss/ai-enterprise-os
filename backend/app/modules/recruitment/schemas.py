@@ -315,6 +315,8 @@ class PlacementUpdate(BaseModel):
     start_date: date | None = None
     ojt_start_date: date | None = None
     ojt_end_date: date | None = None
+    # Alasan gagal/batal -- diisi FE saat status baru `rejected`/`cancelled`.
+    note: str | None = None
 
 
 class PlacementOut(BaseModel):
@@ -332,6 +334,7 @@ class PlacementOut(BaseModel):
     offering_call_at: datetime | None
     offering_letter_object_key: str | None
     offering_signed_at: datetime | None
+    rejection_note: str | None
     created_at: datetime
 
 
@@ -435,3 +438,14 @@ class MatchResult(BaseModel):
     match_score: int
     explain: str
     missing: list[str] = []
+
+
+class HrDocumentSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    return_emails: str
+
+
+class HrDocumentSettingsUpdate(BaseModel):
+    return_emails: str

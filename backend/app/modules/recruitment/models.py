@@ -53,26 +53,43 @@ class CandidateStatus(str, enum.Enum):
 
 
 class PlacementStatus(str, enum.Enum):
-    """Pipeline sourcing->onboarding per pasangan kandidat-JO (PRD v3.1 Patch 2).
+    """Pipeline sourcing->onboarding per pasangan kandidat-JO (PRD v3.1 Patch 2,
+    disederhanakan 2026-09-07 atas umpan balik langsung dari domain owner).
 
-    8 tahap baru ditambah SEBELUM `proposed` — makna proposed/accepted/
-    onboarded/cancelled TIDAK berubah (tetap dipakai alur offering/esign
-    yang sudah ada). `sourced` jadi status default baru saat Placement
-    dibuat (sebelumnya `proposed`) — Placement sekarang dibuat sejak momen
-    kandidat ditautkan ke JO (sourcing), bukan baru saat siap ditawari.
+    Awalnya 13 tahap (termasuk `sent_to_client`/`client_screening` terpisah
+    dan `proposed`/`accepted` terpisah) -- disederhanakan jadi 11 karena dua
+    pasang tahap itu di praktiknya tidak pernah dibedakan penindaklanjutannya
+    oleh staf, cuma menambah friksi UI tanpa nilai:
+    - `sent_to_client`+`client_screening` -> lebur ke `submitted` (`disubmit`).
+      Checkpoint klien yang genuinely penting (klien menolak/meloloskan)
+      tetap terekam lewat `interview_client` dan status terminal `rejected`
+      + `rejection_note` di bawah -- bukan lewat tahap antara yang jarang
+      dipakai.
+    - `proposed`+`accepted` -> lebur jadi satu `offering`. Surat penawaran
+      (`offering_letter_object_key`) dan status esign-nya sudah cukup
+      merepresentasikan "menunggu TTD" vs "sudah TTD" tanpa butuh 2 nilai
+      enum terpisah (lihat `offering_summary()`, yang memang sudah baca
+      `offering_letter_object_key`+`EsignRequest`, bukan status ini).
+
+    `sourced` tetap status default saat Placement dibuat (sejak momen
+    kandidat ditautkan ke JO / sourcing, bukan baru saat siap ditawari).
+
+    `rejection_note` (kolom di `Placement`) menyimpan alasan gagal/batal --
+    ini pengganti "kirim klien"/"screening klien" sebagai jejak KENAPA
+    kandidat gugur, dicatat sebagai teks bebas di titik kegagalan, bukan
+    disimpulkan dari di tahap mana dia berhenti.
     """
 
     sourced = "disourcing"
     screening = "screening"
     interview_internal = "interview_rekruter"
     submitted = "disubmit"
-    sent_to_client = "dikirim_ke_klien"
-    client_screening = "screening_klien"
     interview_client = "interview_klien"
+    # Kondisional -- dilewati di UI kalau JobOrder.requires_ojt=False (tidak
+    # semua klien/posisi butuh OJT).
     ojt = "ojt"
-    proposed = "diusulkan"
-    accepted = "disetujui_klien"
-    # Fase 24 -- disisipkan di antara accepted & onboarded, mengikuti istilah
+    offering = "offering"
+    # Fase 24 -- disisipkan di antara offering & onboarded, mengikuti istilah
     # MYOHRIS "Hired": klien sudah setuju tapi belum resmi onboarding sistem.
     hired = "hired"
     onboarded = "onboarded"
@@ -415,6 +432,9 @@ class Placement(TenantMixin, Base):
         Enum(PlacementStatus, native_enum=False, length=50),
         default=PlacementStatus.sourced,
     )
+    # Alasan gagal/batal, diisi staf di titik transisi ke status terminal
+    # (`rejected`/`cancelled`) -- lihat docstring `PlacementStatus`.
+    rejection_note: Mapped[str | None] = mapped_column(Text, default=None)
     # PRD v3.1 Patch 2 — OJT kondisional, dilewati kalau JobOrder.requires_ojt=False
     ojt_start_date: Mapped[date | None] = mapped_column(Date, default=None)
     ojt_end_date: Mapped[date | None] = mapped_column(Date, default=None)
@@ -492,3 +512,26 @@ class ReferralReward(TenantMixin, Base):
         if self.status != ReferralRewardStatus.pending or self.eligible_at is None:
             return False
         return date.today() >= self.eligible_at
+
+
+class HrDocumentSettings(TenantMixin, Base):
+    """Konfigurasi per-tenant untuk email dokumen HR yang perlu ditandatangani
+    kandidat/karyawan lalu dikirim balik -- awalnya dibuat khusus surat
+    penawaran (ditemukan 2026-09-07: sebelumnya TIDAK ADA email sungguhan
+    yang dikirim ke kandidat sama sekali -- sandbox esign cuma simulasi
+    lokal, Privy cuma upload dokumen ke provider tanpa email kita sendiri),
+    lalu di-generalisasi hari yang sama untuk dipakai ULANG oleh email
+    kontrak kerja (`hrd.service.send_contract_for_signature`) -- MYOHRIS
+    memakai alamat kembali yang SAMA untuk kedua dokumen, jadi satu setting
+    per tenant sudah cukup, tidak perlu tabel terpisah per jenis dokumen.
+
+    `return_emails` -- daftar email tujuan pengembalian dokumen yang sudah
+    ditandatangani, dipisah koma, ditampilkan di body email (pola MYOHRIS:
+    "silakan menandatangani dan mengirimkan kembali ke ..."). Satu baris
+    per tenant (pola sama `TenantCvBranding`), dibuat on-demand lewat
+    `get_hr_document_settings()` kalau belum ada."""
+
+    __tablename__ = "hr_document_settings"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    return_emails: Mapped[str] = mapped_column(String(500), default="brian.fahmi@spcgroup.co.id")

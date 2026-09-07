@@ -164,6 +164,7 @@ class OnboardCreate(BaseModel):
 class OnboardingInviteCreate(BaseModel):
     placement_id: UUID
     days: int = 14
+    document_types: list[HrDocumentType] | None = None
 
 
 class OnboardingSubmitIn(BaseModel):
@@ -196,6 +197,7 @@ class OnboardingInviteOut(BaseModel):
     placement_id: UUID
     status: OnboardingInviteStatus
     consent: bool
+    requested_document_types: list[str]
     submitted_at: datetime | None
     expires_at: datetime
     applied_at: datetime | None

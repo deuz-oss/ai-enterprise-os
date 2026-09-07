@@ -18,6 +18,7 @@ from app.modules.recruitment.models import (
     Candidate,
     CandidateExperience,
     CandidateStatus,
+    HrDocumentSettings,
     InterviewSchedule,
     JobOrder,
     JobOrderBusinessStatus,
@@ -738,6 +739,7 @@ def update_placement_status(
     new_status: PlacementStatus,
     ojt_start_date: date | None = None,
     ojt_end_date: date | None = None,
+    note: str | None = None,
 ) -> Placement:
     placement = db.get(Placement, parse_uuid(placement_id))
     if placement is None:
@@ -747,6 +749,13 @@ def update_placement_status(
         placement.ojt_start_date = ojt_start_date
     if ojt_end_date is not None:
         placement.ojt_end_date = ojt_end_date
+    # Alasan gagal/batal dicatat di titik transisi -- direset kalau kandidat
+    # ditarik keluar dari status terminal (mis. didaftarkan ulang), supaya
+    # tidak ada alasan basi nempel di placement yang sudah lanjut lagi.
+    if new_status in (PlacementStatus.rejected, PlacementStatus.cancelled):
+        placement.rejection_note = note
+    else:
+        placement.rejection_note = None
     candidate = db.get(Candidate, placement.candidate_id)
     jo = db.get(JobOrder, placement.job_order_id)
     previous_candidate_status = candidate.status if candidate else None
@@ -756,7 +765,7 @@ def update_placement_status(
             PlacementStatus.interview_client,
         ):
             candidate.status = CandidateStatus.interview
-        elif new_status == PlacementStatus.proposed:
+        elif new_status == PlacementStatus.offering:
             candidate.status = CandidateStatus.offered
         elif new_status == PlacementStatus.onboarded:
             candidate.status = CandidateStatus.placed
@@ -885,9 +894,44 @@ def _offering_letter_pdf(
     return buf.getvalue()
 
 
+def get_hr_document_settings(db: Session) -> HrDocumentSettings:
+    """Get-or-create, pola sama `talentpool.service.get_branding` -- satu
+    baris per tenant, dibuat on-demand kalau belum ada. Dipakai surat
+    penawaran (di sini) DAN email kontrak kerja (`hrd.service.
+    send_contract_for_signature`) -- satu alamat kembali utk semua dokumen
+    HR yang perlu ditandatangani lalu dikirim balik."""
+    settings = db.execute(select(HrDocumentSettings)).scalars().first()
+    if settings is None:
+        settings = HrDocumentSettings()
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+def update_hr_document_settings(db: Session, return_emails: str) -> HrDocumentSettings:
+    settings = get_hr_document_settings(db)
+    settings.return_emails = return_emails.strip()[:500]
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
 def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn):
-    """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> status offered -> esign."""
+    """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> status offered -> esign.
+
+    Gap 2026-09-07 (temuan lewat perbandingan alur MYOHRIS): sebelumnya
+    TIDAK ADA email sungguhan yang dikirim ke kandidat sama sekali --
+    sandbox esign cuma simulasi lokal, Privy cuma upload dokumen ke
+    provider tanpa email kita sendiri. Kandidat tidak pernah diberi tahu
+    ada penawaran kalau bukan dari notifikasi generik milik provider TTE.
+    Sekarang email dikirim eksplisit lewat SMTP kita sendiri, sama pola
+    "fail loudly" dengan `send_quotation_email`/`send_payslip_email`.
+    """
+    from app.core.config import get_settings as get_app_settings
     from app.modules.esign.service import send_placement_offering
+    from app.modules.notifications.service import send_raw_email_with_attachment
+    from app.modules.platform.models import Tenant
 
     placement = _get_placement(db, placement_id)
     candidate = _get_candidate(db, str(placement.candidate_id))
@@ -908,6 +952,14 @@ def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn
         raise HTTPException(
             status_code=422, detail="Gaji yang ditawarkan wajib diisi sebelum kirim penawaran"
         )
+    if not get_app_settings().email_enabled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "SMTP belum dikonfigurasi -- hubungi admin platform untuk "
+                "mengaktifkan pengiriman email"
+            ),
+        )
 
     pdf_bytes = _offering_letter_pdf(
         db, placement, candidate, jo, client, float(placement.offered_salary)
@@ -927,12 +979,50 @@ def send_offering_letter(db: Session, placement_id: str, payload: OfferingSendIn
         signer_email=payload.signer_email,
     )
 
+    tenant = db.get(Tenant, placement.tenant_id)
+    tenant_name = tenant.name if tenant else "perusahaan kami"
+    return_emails = get_hr_document_settings(db).return_emails
+    sign_note = (
+        f"\n\nAnda juga bisa menandatangani secara elektronik lewat tautan berikut: "
+        f"{request.sign_url}"
+        if request.sign_url
+        else ""
+    )
+    send_raw_email_with_attachment(
+        payload.signer_email,
+        f"Surat Penawaran Kerja - {jo.title} di {tenant_name}",
+        (
+            f"Selamat, {candidate.full_name}!\n\n"
+            f"{tenant_name} dengan senang hati menawarkan Anda posisi {jo.title} "
+            f"di {client.name}.\n\n"
+            "Terlampir Surat Penawaran Kerja yang memuat rincian penawaran. Mohon "
+            "ditinjau dengan saksama. Apabila Anda menyetujui penawaran ini, silakan "
+            "menandatangani dokumen tersebut dan mengirimkan kembali salinan yang "
+            f"telah ditandatangani ke {return_emails}.{sign_note}\n\n"
+            "Apabila ada pertanyaan atau membutuhkan klarifikasi lebih lanjut, "
+            "jangan ragu menghubungi tim HR kami.\n\n"
+            f"Kami berharap Anda dapat bergabung bersama {tenant_name}."
+        ),
+        attachment_bytes=pdf_bytes,
+        attachment_filename=file_name,
+        attachment_maintype="application",
+        attachment_subtype="pdf",
+    )
+
     candidate.status = CandidateStatus.offered
     # PRD v3.1 Patch 2: sebelum ini Placement dibuat langsung dgn status
     # default `proposed`, jadi tidak perlu transisi eksplisit di sini. Sekarang
     # default-nya `sourced` -> wajib set eksplisit, kalau tidak placement tidak
-    # akan pernah maju ke `proposed` meski surat penawaran sudah terkirim.
-    placement.status = PlacementStatus.proposed
+    # akan pernah maju sama sekali meski surat penawaran sudah terkirim.
+    #
+    # Langsung ke `hired` (bukan `offering`) -- alur nyata MYOHRIS (rujukan
+    # 2026-09-07): "offering" adalah tahap PERSIAPAN sebelum surat benar-benar
+    # dikirim (staf pindah manual ke sini lewat dropdown Kanban sambil
+    # menyiapkan detail gaji/durasi); begitu aksi "Send Offering" ini selesai
+    # (surat ter-generate + terkirim), itulah yang MENYELESAIKAN tahap
+    # offering, bukan cuma memasukinya -- jadi placement lompat ke `hired`,
+    # tidak berhenti di `offering` menunggu pemindahan manual lagi.
+    placement.status = PlacementStatus.hired
     if jo.status in (JobOrderStatus.open, JobOrderStatus.screening, JobOrderStatus.interview):
         jo.status = JobOrderStatus.offering
     db.commit()

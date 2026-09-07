@@ -59,6 +59,12 @@ class HrDocumentType(str, enum.Enum):
     kartu_bpjs_kesehatan = "kartu_bpjs_kesehatan"
     kartu_bpjs_ketenagakerjaan = "kartu_bpjs_ketenagakerjaan"
     skck = "skck"
+    kartu_keluarga = "kartu_keluarga"
+    ijazah = "ijazah"
+    sim = "sim"
+    buku_tabungan = "buku_tabungan"
+    paklaring = "paklaring"
+    surat_keterangan_sehat = "surat_keterangan_sehat"
     other = "lainnya"
 
 
@@ -430,6 +436,13 @@ class OnboardingInvite(TenantMixin, Base):
         Enum(OnboardingInviteStatus, native_enum=False, length=20),
         default=OnboardingInviteStatus.invited,
     )
+    # JSON: list[HrDocumentType value] -- daftar dokumen yang diminta HR saat
+    # membuat undangan (pola MYOHRIS "Setup job assessments for onboard"),
+    # BUKAN semua HrDocumentType selalu wajib. Kandidat hanya melihat &
+    # mengunggah jenis yang ada di daftar ini (lihat `requested_document_types`).
+    requested_document_types_json: Mapped[str] = mapped_column(
+        Text, default='["ktp", "npwp", "skck"]'
+    )
     submitted_data_json: Mapped[str | None] = mapped_column(Text, default=None)
     consent: Mapped[bool] = mapped_column(Boolean, default=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
@@ -438,6 +451,16 @@ class OnboardingInvite(TenantMixin, Base):
     applied_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def requested_document_types(self) -> list[str]:
+        if not self.requested_document_types_json:
+            return ["ktp", "npwp", "skck"]
+        try:
+            parsed = json.loads(self.requested_document_types_json)
+        except (TypeError, ValueError):
+            return ["ktp", "npwp", "skck"]
+        return parsed if isinstance(parsed, list) else ["ktp", "npwp", "skck"]
 
 
 class OnboardingDocument(TenantMixin, Base):

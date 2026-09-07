@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Magnet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
@@ -93,6 +93,94 @@ const BUSINESS_STATUS_COLORS: Record<string, string> = {
   dibatalkan: "pill p-red",
   terisi: "pill p-green",
 };
+
+/** Konfigurasi per-tenant: email tujuan pengembalian dokumen HR yang sudah
+ * ditandatangani kandidat/karyawan (gap 2026-09-07: sebelumnya email
+ * offering tidak pernah benar-benar terkirim sama sekali -- lihat
+ * `recruitment/service.py::send_offering_letter`). Setting yang SAMA
+ * dipakai ULANG oleh email kontrak kerja (`hrd.service.
+ * send_contract_for_signature`) -- MYOHRIS memakai alamat kembali yang
+ * sama untuk kedua dokumen. Pola sama persis `BrandingCard` di
+ * TalentPool.tsx -- collapsed default, admin/management saja yang boleh
+ * ubah. */
+function HrDocumentSettingsCard() {
+  const qc = useQueryClient();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ role: string }>("/auth/me"),
+  });
+  const canEdit = me.data?.role === "admin" || me.data?.role === "management";
+  const settings = useQuery({
+    queryKey: ["hr-document-settings"],
+    queryFn: () => api.get<{ return_emails: string }>("/recruitment/hr-document-settings"),
+  });
+  const [emails, setEmails] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (return_emails: string) =>
+      api.put("/recruitment/hr-document-settings", { return_emails }),
+    onSuccess: () => {
+      setEmails(null);
+      void qc.invalidateQueries({ queryKey: ["hr-document-settings"] });
+    },
+  });
+
+  const s = settings.data;
+  if (!s) return null;
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+        style={{ color: "var(--text-muted)" }}
+      >
+        <Mail className="h-3.5 w-3.5" /> Pengaturan Email Dokumen HR
+      </button>
+    );
+  }
+  return (
+    <div className="card space-y-2 p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <Mail className="h-4 w-4" /> Email Dokumen HR
+        </h3>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-xs font-medium hover:underline"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Tutup
+        </button>
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        Email tujuan pengembalian dokumen (surat penawaran, kontrak kerja) yang sudah
+        ditandatangani kandidat/karyawan (dipisah koma) -- disebutkan di body email yang
+        dikirim ke mereka.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          defaultValue={s.return_emails}
+          onChange={(e) => setEmails(e.target.value)}
+          disabled={!canEdit}
+          placeholder="hrd.documents@perusahaan.co.id, operation@perusahaan.co.id"
+          className="input flex-1 py-1 text-xs"
+          style={{ minWidth: "280px" }}
+        />
+        {canEdit && (
+          <button
+            onClick={() => save.mutate(emails ?? s.return_emails)}
+            disabled={save.isPending || emails === null}
+            className="btn-secondary py-1 text-xs"
+          >
+            Simpan
+          </button>
+        )}
+      </div>
+      {save.error && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+    </div>
+  );
+}
 
 export default function JobOrders() {
   const qc = useQueryClient();
@@ -249,6 +337,8 @@ export default function JobOrders() {
           {showForm ? "Tutup" : "+ Job Order Baru"}
         </button>
       </div>
+
+      <HrDocumentSettingsCard />
 
       {!clients?.length && (
         <p className="text-sm text-[var(--text-muted)]">Tambahkan klien terlebih dahulu untuk membuat job order.</p>

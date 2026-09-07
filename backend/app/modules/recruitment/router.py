@@ -17,6 +17,8 @@ from app.modules.recruitment.schemas import (
     CandidateExperienceOut,
     CandidateOut,
     CandidateUpdate,
+    HrDocumentSettingsOut,
+    HrDocumentSettingsUpdate,
     InterviewScheduleCreate,
     InterviewScheduleOut,
     InterviewScheduleUpdate,
@@ -255,6 +257,7 @@ def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = 
         payload.status,
         ojt_start_date=payload.ojt_start_date,
         ojt_end_date=payload.ojt_end_date,
+        note=payload.note,
     )
 
 
@@ -323,6 +326,19 @@ def get_referral_setting(db: Session = Depends(get_db)):
 @router.put("/referral-setting", response_model=ReferralProgramSettingOut)
 def update_referral_setting(payload: ReferralProgramSettingIn, db: Session = Depends(get_db)):
     return service.update_referral_setting(db, payload.is_enabled, payload.reward_amount)
+
+
+# ---------- Konfigurasi email surat penawaran (per tenant) ----------
+
+
+@router.get("/hr-document-settings", response_model=HrDocumentSettingsOut)
+def get_hr_document_settings(db: Session = Depends(get_db)):
+    return service.get_hr_document_settings(db)
+
+
+@router.put("/hr-document-settings", response_model=HrDocumentSettingsOut)
+def update_hr_document_settings(payload: HrDocumentSettingsUpdate, db: Session = Depends(get_db)):
+    return service.update_hr_document_settings(db, payload.return_emails)
 
 
 @router.get("/referral-rewards", response_model=list[ReferralRewardOut])

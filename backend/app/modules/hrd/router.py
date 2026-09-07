@@ -104,7 +104,11 @@ def create_onboarding_invite(
     payload: OnboardingInviteCreate, db: Session = Depends(get_db), user=Depends(get_current_user)
 ):
     invite, raw = service.create_onboarding_invite(
-        db, user=user, placement_id=str(payload.placement_id), days=payload.days
+        db,
+        user=user,
+        placement_id=str(payload.placement_id),
+        days=payload.days,
+        document_types=payload.document_types,
     )
     settings = get_settings()
     base = settings.cors_origin_list[0].rstrip("/") if settings.cors_origin_list else ""

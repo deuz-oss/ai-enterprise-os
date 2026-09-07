@@ -46,6 +46,7 @@ interface Placement {
   offering_call_at: string | null;
   offering_letter_object_key: string | null;
   offering_signed_at: string | null;
+  rejection_note: string | null;
 }
 
 interface OnboardingInvite {
@@ -76,6 +77,25 @@ const ONBOARDING_INVITE_STATUS_LABEL: Record<string, string> = {
   applied: "Diterapkan",
   revoked: "Dibatalkan",
 };
+
+/** Katalog jenis dokumen onboarding -- HR memilih subset dari daftar ini
+ * saat "Kirim Link Onboarding" (pola MYOHRIS "Setup job assessments for
+ * onboard"). Kandidat di halaman self-service hanya melihat jenis yang
+ * dipilih di sini, bukan semuanya. */
+const ONBOARDING_DOC_TYPES: { key: string; label: string }[] = [
+  { key: "ktp", label: "KTP" },
+  { key: "npwp", label: "NPWP" },
+  { key: "kartu_keluarga", label: "Kartu Keluarga (KK)" },
+  { key: "ijazah", label: "Ijazah" },
+  { key: "skck", label: "SKCK" },
+  { key: "sim", label: "SIM" },
+  { key: "buku_tabungan", label: "Buku Tabungan" },
+  { key: "paklaring", label: "Paklaring" },
+  { key: "surat_keterangan_sehat", label: "Surat Keterangan Sehat" },
+  { key: "bpjs_kesehatan", label: "BPJS Kesehatan" },
+  { key: "bpjs_ketenagakerjaan", label: "BPJS Ketenagakerjaan" },
+];
+const DEFAULT_ONBOARDING_DOC_TYPES = ["ktp", "npwp", "skck"];
 
 interface Candidate {
   id: string;
@@ -109,32 +129,46 @@ interface JobOrderTemplateT {
 
 // Kolom Kanban tab "Candidates" (§1.8) -- ikuti tahap PlacementStatus persis,
 // menggantikan tab "Pipeline Kandidat" (list+ProgressStep) sejak migrasi
-// Candidates.tsx (2026-09-06).
-const PIPELINE_STEPS: { key: string; label: string; dot: string }[] = [
+// Candidates.tsx (2026-09-06). Disederhanakan 2026-09-07 (umpan balik
+// langsung domain owner): "Kirim Klien"/"Screening Klien" dibuang (lebur ke
+// "Disubmit" -- checkpoint klien yang genuinely penting tetap terekam lewat
+// "Interview Klien" + status Gagal/rejection_note, bukan lewat tahap antara
+// yang jarang dibedakan penindaklanjutannya), "Diusulkan"+"Disetujui" lebur
+// jadi satu "Offering" (surat penawaran + status esign sudah cukup
+// merepresentasikan menunggu-TTD vs sudah-TTD).
+const PIPELINE_STEPS_BASE: { key: string; label: string; dot: string }[] = [
   { key: "disourcing", label: "Sourcing", dot: "#9f9f9f" },
   { key: "screening", label: "Screening", dot: "#2383e2" },
   { key: "interview_rekruter", label: "Interview Internal", dot: "#5b5bd6" },
   { key: "disubmit", label: "Disubmit", dot: "#8b5cf6" },
-  { key: "dikirim_ke_klien", label: "Kirim Klien", dot: "#9065b0" },
-  { key: "screening_klien", label: "Screening Klien", dot: "#0ea5e9" },
   { key: "interview_klien", label: "Interview Klien", dot: "#cb912f" },
   { key: "ojt", label: "OJT", dot: "#d97706" },
-  { key: "diusulkan", label: "Diusulkan", dot: "#059669" },
-  { key: "disetujui_klien", label: "Disetujui", dot: "#10b981" },
+  { key: "offering", label: "Offering", dot: "#059669" },
   { key: "hired", label: "Hired", dot: "#0f7b6c" },
   { key: "onboarded", label: "Onboarded", dot: "#0f172a" },
 ];
 const TERMINAL_STATUS_LABEL: Record<string, string> = { gagal: "Gagal", dibatalkan: "Dibatalkan" };
 const TERMINAL_DOT = "#e03e3e";
-const KANBAN_COLUMNS: { key: string; label: string; dot: string; statuses: string[] }[] = [
-  ...PIPELINE_STEPS.map((s) => ({ ...s, statuses: [s.key] })),
-  { key: "terminal", label: "Gagal / Dibatalkan", dot: TERMINAL_DOT, statuses: ["gagal", "dibatalkan"] },
-];
-const ALL_STATUS_OPTIONS = [
-  ...PIPELINE_STEPS.map((s) => ({ value: s.key, label: s.label })),
-  { value: "gagal", label: "Gagal" },
-  { value: "dibatalkan", label: "Dibatalkan" },
-];
+
+/** OJT kondisional per Job Order (`requires_ojt`) -- sebagian posisi/klien
+ * tidak butuh tahap ini sama sekali, jadi dilewati di Kanban+dropdown
+ * daripada selalu ditampilkan sebagai kolom kosong yang membingungkan. */
+function pipelineSteps(requiresOjt: boolean) {
+  return requiresOjt ? PIPELINE_STEPS_BASE : PIPELINE_STEPS_BASE.filter((s) => s.key !== "ojt");
+}
+function kanbanColumns(requiresOjt: boolean) {
+  return [
+    ...pipelineSteps(requiresOjt).map((s) => ({ ...s, statuses: [s.key] })),
+    { key: "terminal", label: "Gagal / Dibatalkan", dot: TERMINAL_DOT, statuses: ["gagal", "dibatalkan"] },
+  ];
+}
+function allStatusOptions(requiresOjt: boolean) {
+  return [
+    ...pipelineSteps(requiresOjt).map((s) => ({ value: s.key, label: s.label })),
+    { value: "gagal", label: "Gagal" },
+    { value: "dibatalkan", label: "Dibatalkan" },
+  ];
+}
 
 export default function JobOrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -154,6 +188,21 @@ export default function JobOrderDetail() {
   const [showOnboardForm, setShowOnboardForm] = useState(false);
   const [showOnboardingInviteReview, setShowOnboardingInviteReview] = useState(false);
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
+  // Alasan gagal/batal (pengganti tahap "kirim klien"/"screening klien" yang
+  // dibuang 2026-09-07) -- ditanya lewat modal kecil ini SEBELUM status
+  // benar-benar dipindah ke terminal, bukan field opsional yang gampang
+  // dilewatkan.
+  const [pendingTerminal, setPendingTerminal] = useState<{ placementId: string; status: string } | null>(
+    null
+  );
+  const [terminalNote, setTerminalNote] = useState("");
+  // Pilih dokumen yang diminta SEBELUM link onboarding dikirim (pola MYOHRIS
+  // "Setup job assessments for onboard") -- bukan langsung kirim dengan set
+  // dokumen tetap seperti sebelumnya.
+  const [pendingOnboardingInvite, setPendingOnboardingInvite] = useState<string | null>(null);
+  const [onboardingDocTypes, setOnboardingDocTypes] = useState<string[]>(
+    DEFAULT_ONBOARDING_DOC_TYPES
+  );
 
   const { data: jo } = useQuery({
     queryKey: ["job-order", id],
@@ -243,12 +292,15 @@ export default function JobOrderDetail() {
     },
   });
   const createOnboardingInvite = useMutation({
-    mutationFn: (placementId: string) =>
+    mutationFn: ({ placementId, documentTypes }: { placementId: string; documentTypes: string[] }) =>
       api.post<{ invite: OnboardingInvite; onboarding_url: string }>(
         "/employees/onboarding-invites",
-        { placement_id: placementId }
+        { placement_id: placementId, document_types: documentTypes }
       ),
-    onSuccess: invalidateOnboardingInvites,
+    onSuccess: () => {
+      setPendingOnboardingInvite(null);
+      invalidateOnboardingInvites();
+    },
   });
   const applyOnboardingInvite = useMutation({
     mutationFn: (inviteId: string) =>
@@ -284,10 +336,22 @@ export default function JobOrderDetail() {
     },
   });
   const changePlacementStatus = useMutation({
-    mutationFn: ({ placementId, status }: { placementId: string; status: string }) =>
-      api.patch(`/recruitment/placements/${placementId}`, { status }),
+    mutationFn: ({ placementId, status, note }: { placementId: string; status: string; note?: string }) =>
+      api.patch(`/recruitment/placements/${placementId}`, { status, note }),
     onSuccess: invalidate,
   });
+  const TERMINAL_KEYS = ["gagal", "dibatalkan"];
+  /** Rute semua perubahan status placement lewat sini -- kalau tujuannya
+   * terminal (gagal/dibatalkan), tahan dulu lewat modal alasan, jangan
+   * langsung PATCH. */
+  function requestPlacementStatus(placementId: string, status: string) {
+    if (TERMINAL_KEYS.includes(status)) {
+      setTerminalNote("");
+      setPendingTerminal({ placementId, status });
+    } else {
+      changePlacementStatus.mutate({ placementId, status });
+    }
+  }
   const generateDocument = useMutation({
     mutationFn: () =>
       api.post(`/recruitment/job-orders/${id}/generate-document`, { template_id: docTemplateId }),
@@ -325,6 +389,10 @@ export default function JobOrderDetail() {
   if (!jo) {
     return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
   }
+
+  const steps = pipelineSteps(jo.requires_ojt);
+  const columns = kanbanColumns(jo.requires_ojt);
+  const statusOptions = allStatusOptions(jo.requires_ojt);
 
   return (
     <div className="space-y-4">
@@ -495,7 +563,7 @@ export default function JobOrderDetail() {
       )}
 
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {KANBAN_COLUMNS.map((col) => {
+        {columns.map((col) => {
           const cards = (placements ?? []).filter((p) => col.statuses.includes(p.status));
           return (
             <div
@@ -517,7 +585,7 @@ export default function JobOrderDetail() {
               </div>
               <div className="space-y-2 px-2 pb-3">
                 {cards.map((p) => {
-                  const stepIdx = PIPELINE_STEPS.findIndex((s) => s.key === p.status);
+                  const stepIdx = steps.findIndex((s) => s.key === p.status);
                   return (
                     <div
                       key={p.id}
@@ -553,6 +621,15 @@ export default function JobOrderDetail() {
                           <span className="pill p-yellow text-[10px]">Surat terkirim</span>
                         ) : null}
                       </div>
+                      {p.rejection_note && (
+                        <p
+                          className="mt-1.5 line-clamp-2 text-[10px]"
+                          style={{ color: "var(--text-muted)" }}
+                          title={p.rejection_note}
+                        >
+                          {p.rejection_note}
+                        </p>
+                      )}
                       {stepIdx >= 0 && (
                         <div
                           className="mt-2 flex items-center justify-between text-xs"
@@ -560,12 +637,7 @@ export default function JobOrderDetail() {
                         >
                           <button
                             disabled={stepIdx === 0}
-                            onClick={() =>
-                              changePlacementStatus.mutate({
-                                placementId: p.id,
-                                status: PIPELINE_STEPS[stepIdx - 1].key,
-                              })
-                            }
+                            onClick={() => requestPlacementStatus(p.id, steps[stepIdx - 1].key)}
                             className="rounded px-1 py-0.5 disabled:opacity-25"
                             style={{ border: "1px solid var(--border)" }}
                             title="Tahap sebelumnya"
@@ -574,26 +646,19 @@ export default function JobOrderDetail() {
                           </button>
                           <select
                             value={p.status}
-                            onChange={(e) =>
-                              changePlacementStatus.mutate({ placementId: p.id, status: e.target.value })
-                            }
+                            onChange={(e) => requestPlacementStatus(p.id, e.target.value)}
                             className="cursor-pointer rounded bg-transparent text-[11px]"
                             style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
                           >
-                            {ALL_STATUS_OPTIONS.map((o) => (
+                            {statusOptions.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}
                               </option>
                             ))}
                           </select>
                           <button
-                            disabled={stepIdx === PIPELINE_STEPS.length - 1}
-                            onClick={() =>
-                              changePlacementStatus.mutate({
-                                placementId: p.id,
-                                status: PIPELINE_STEPS[stepIdx + 1].key,
-                              })
-                            }
+                            disabled={stepIdx === steps.length - 1}
+                            onClick={() => requestPlacementStatus(p.id, steps[stepIdx + 1].key)}
                             className="rounded px-1 py-0.5 disabled:opacity-25"
                             style={{ border: "1px solid var(--border)" }}
                             title="Tahap berikutnya"
@@ -606,12 +671,10 @@ export default function JobOrderDetail() {
                         <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={p.status}
-                            onChange={(e) =>
-                              changePlacementStatus.mutate({ placementId: p.id, status: e.target.value })
-                            }
+                            onChange={(e) => requestPlacementStatus(p.id, e.target.value)}
                             className="input w-full py-0.5 text-[11px]"
                           >
-                            {ALL_STATUS_OPTIONS.map((o) => (
+                            {statusOptions.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}
                               </option>
@@ -652,6 +715,12 @@ export default function JobOrderDetail() {
                 <Badge tone="danger">{TERMINAL_STATUS_LABEL[p.status]}</Badge>
               )}
             </div>
+            {p.rejection_note && (
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                <span className="font-medium" style={{ color: "var(--text)" }}>Alasan:</span>{" "}
+                {p.rejection_note}
+              </p>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button
@@ -687,8 +756,10 @@ export default function JobOrderDetail() {
                 <Button
                   size="sm"
                   variant="secondary"
-                  loading={createOnboardingInvite.isPending}
-                  onClick={() => createOnboardingInvite.mutate(p.id)}
+                  onClick={() => {
+                    setOnboardingDocTypes(DEFAULT_ONBOARDING_DOC_TYPES);
+                    setPendingOnboardingInvite(p.id);
+                  }}
                 >
                   <Mail className="h-3.5 w-3.5" /> Kirim Link Onboarding
                 </Button>
@@ -1025,6 +1096,123 @@ export default function JobOrderDetail() {
         );
       })()}
       </>
+      )}
+
+      {pendingTerminal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(15,15,15,0.45)" }}
+          onClick={() => setPendingTerminal(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-md p-4"
+            style={{
+              backgroundColor: "var(--bg-elevated)",
+              boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+              {pendingTerminal.status === "gagal" ? "Tandai Gagal" : "Batalkan Placement"}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              Alasan singkat kenapa kandidat ini gugur -- membantu rekruter lain (atau Anda
+              sendiri nanti) memahami konteksnya tanpa harus menebak dari tahap terakhirnya.
+            </p>
+            <textarea
+              autoFocus
+              value={terminalNote}
+              onChange={(e) => setTerminalNote(e.target.value)}
+              placeholder="mis. Kandidat mengundurkan diri, dapat tawaran lain"
+              rows={3}
+              className="input mt-3 w-full"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setPendingTerminal(null)}>
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                loading={changePlacementStatus.isPending}
+                onClick={() => {
+                  changePlacementStatus.mutate({
+                    placementId: pendingTerminal.placementId,
+                    status: pendingTerminal.status,
+                    note: terminalNote.trim() || undefined,
+                  });
+                  setPendingTerminal(null);
+                }}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingOnboardingInvite && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(15,15,15,0.45)" }}
+          onClick={() => setPendingOnboardingInvite(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-md p-4"
+            style={{
+              backgroundColor: "var(--bg-elevated)",
+              boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+              Pilih Dokumen yang Diminta
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              Kandidat hanya akan melihat & bisa mengunggah jenis dokumen yang dicentang di sini.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {ONBOARDING_DOC_TYPES.map(({ key, label }) => (
+                <label key={key} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={onboardingDocTypes.includes(key)}
+                    onChange={(e) =>
+                      setOnboardingDocTypes((prev) =>
+                        e.target.checked ? [...prev, key] : prev.filter((k) => k !== key)
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {createOnboardingInvite.error && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                {(createOnboardingInvite.error as Error).message}
+              </p>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setPendingOnboardingInvite(null)}>
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                disabled={onboardingDocTypes.length === 0}
+                loading={createOnboardingInvite.isPending}
+                onClick={() =>
+                  createOnboardingInvite.mutate({
+                    placementId: pendingOnboardingInvite,
+                    documentTypes: onboardingDocTypes,
+                  })
+                }
+              >
+                Kirim
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
