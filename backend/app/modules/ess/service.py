@@ -16,11 +16,13 @@ from app.modules.ess.models import (
     LeaveRequest,
     LeaveStatus,
     LeaveType,
+    OvertimeRequest,
 )
 from app.modules.ess.schemas import (
     AttendanceCorrectionCreate,
     LeaveBalanceUpsertIn,
     LeaveCreate,
+    OvertimeRequestCreate,
 )
 from app.modules.hrd.models import Employee, EmployeeDocument, EmploymentContract
 from app.modules.payroll.models import (
@@ -70,6 +72,21 @@ def _save_selfie(employee: Employee, direction: str, data: bytes, mime: str) -> 
     )
     storage.put_object(key, data, mime)
     return key
+
+
+def get_today_attendance(db: Session, user):
+    """Status absen hari ini (bukan `MyAttendanceOut` yang agregat bulanan) --
+    dipakai UI portal supaya tahu kondisi tombol clock-in/out yang benar
+    SETELAH reload halaman, bukan cuma langsung sesudah aksi."""
+    from app.modules.attendance.models import AttendanceRecord
+
+    employee = get_own_employee(db, user)
+    return db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.employee_id == employee.id,
+            AttendanceRecord.date == date.today(),
+        )
+    ).scalar_one_or_none()
 
 
 def mobile_clock(
@@ -382,6 +399,66 @@ def cancel_own_leave_request(db: Session, user, leave_id: str) -> LeaveRequest:
         entity_id=leave.id,
     )
     return leave
+
+
+# ---------- Pengajuan lembur ----------
+
+
+def _get_own_overtime(db: Session, user, overtime_id: str) -> OvertimeRequest:
+    overtime = db.get(OvertimeRequest, parse_uuid(overtime_id))
+    if overtime is None or overtime.employee.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Pengajuan lembur tidak ditemukan")
+    return overtime
+
+
+def create_overtime_request(db: Session, user, payload: OvertimeRequestCreate) -> OvertimeRequest:
+    overtime = OvertimeRequest(
+        employee_id=get_own_employee(db, user).id,
+        date=payload.date,
+        requested_hours=payload.requested_hours,
+        reason=(payload.reason or "").strip() or None,
+        status=LeaveStatus.pending,
+    )
+    db.add(overtime)
+    db.commit()
+    db.refresh(overtime)
+    audit.log_event(
+        db,
+        action="overtime.requested",
+        entity_type="overtime_request",
+        entity_id=overtime.id,
+        detail={"date": overtime.date.isoformat(), "hours": overtime.requested_hours},
+    )
+    return overtime
+
+
+def list_own_overtime_requests(db: Session, user) -> list[OvertimeRequest]:
+    employee = get_own_employee(db, user)
+    return list(
+        db.execute(
+            select(OvertimeRequest)
+            .where(OvertimeRequest.employee_id == employee.id)
+            .order_by(OvertimeRequest.created_at.desc(), OvertimeRequest.date.desc())
+        ).scalars()
+    )
+
+
+def cancel_own_overtime_request(db: Session, user, overtime_id: str) -> OvertimeRequest:
+    overtime = _get_own_overtime(db, user, overtime_id)
+    if overtime.status != LeaveStatus.pending:
+        raise HTTPException(
+            status_code=409, detail="Hanya pengajuan berstatus menunggu yang bisa dibatalkan"
+        )
+    overtime.status = LeaveStatus.cancelled
+    db.commit()
+    db.refresh(overtime)
+    audit.log_event(
+        db,
+        action="overtime.cancelled",
+        entity_type="overtime_request",
+        entity_id=overtime.id,
+    )
+    return overtime
 
 
 # ---------- Lampiran pengajuan (mis. surat dokter) ----------
@@ -720,6 +797,71 @@ def decide_leave_request(
 
         attendance_service.sync_leave_records(db, leave)
     return leave
+
+
+def hr_list_overtime_requests(
+    db: Session,
+    status_filter: LeaveStatus | None = None,
+    employee_id=None,
+) -> list[OvertimeRequest]:
+    stmt = select(OvertimeRequest).order_by(
+        OvertimeRequest.created_at.desc(), OvertimeRequest.date.desc()
+    )
+    if status_filter is not None:
+        stmt = stmt.where(OvertimeRequest.status == status_filter)
+    if employee_id is not None:
+        stmt = stmt.where(OvertimeRequest.employee_id == parse_uuid(str(employee_id)))
+    return list(db.execute(stmt).scalars())
+
+
+def decide_overtime_request(
+    db: Session, user, overtime_id: str, approved: bool, note: str | None
+) -> OvertimeRequest:
+    """HR menyetujui/menolak pengajuan lembur yang masih pending.
+
+    Disetujui → jam ditambahkan ke `AttendanceRecord.overtime_hours`
+    tanggal terkait lewat `attendance.service.sync_overtime_record`,
+    sejajar `decide_leave_request` -> `sync_leave_records`.
+    """
+    overtime = db.get(OvertimeRequest, parse_uuid(overtime_id))
+    if overtime is None:
+        raise HTTPException(status_code=404, detail="Pengajuan lembur tidak ditemukan")
+    if overtime.status != LeaveStatus.pending:
+        raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+    overtime.status = LeaveStatus.approved if approved else LeaveStatus.rejected
+    overtime.decided_by = user.id
+    overtime.decided_at = datetime.now(UTC)
+    overtime.decision_note = (note or "").strip() or None
+    db.commit()
+    db.refresh(overtime)
+    audit.log_event(
+        db,
+        action="overtime.decided",
+        entity_type="overtime_request",
+        entity_id=overtime.id,
+        detail={"approved": approved, "status": overtime.status.value},
+    )
+    from app.modules.notifications import service as notification_service
+
+    if overtime.employee.user_id is not None:
+        keputusan = "disetujui" if approved else "ditolak"
+        notification_service.notify(
+            db,
+            user_id=overtime.employee.user_id,
+            title=f"Pengajuan lembur Anda {keputusan}",
+            body=(
+                f"{overtime.date} · {overtime.requested_hours} jam"
+                + (f" — catatan: {overtime.decision_note}" if overtime.decision_note else "")
+            ),
+            category="attendance",
+            entity_type="overtime_request",
+            entity_id=overtime.id,
+        )
+    if approved:
+        from app.modules.attendance import service as attendance_service
+
+        attendance_service.sync_overtime_record(db, overtime)
+    return overtime
 
 
 def _consume_balance(db: Session, leave: LeaveRequest) -> None:

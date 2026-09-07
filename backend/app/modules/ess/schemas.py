@@ -1,3 +1,4 @@
+import datetime as dt
 from datetime import date, datetime
 from uuid import UUID
 
@@ -58,6 +59,32 @@ class MyAttendanceOut(BaseModel):
     notes: str | None
 
 
+class MyAttendanceTodayOut(BaseModel):
+    """Status absen HARI INI milik akun sendiri -- beda dari `MyAttendanceOut`
+    yang agregat bulanan. Tidak expose object_key selfie mentah, cuma
+    penanda ada/tidaknya (unduh lewat endpoint selfie terpisah)."""
+
+    id: UUID
+    date: date
+    status: str
+    clock_in: datetime | None
+    clock_out: datetime | None
+    has_clock_in_selfie: bool
+    has_clock_out_selfie: bool
+
+    @classmethod
+    def from_record(cls, record) -> "MyAttendanceTodayOut":
+        return cls(
+            id=record.id,
+            date=record.date,
+            status=record.status.value,
+            clock_in=record.clock_in,
+            clock_out=record.clock_out,
+            has_clock_in_selfie=bool(record.clock_in_selfie_key),
+            has_clock_out_selfie=bool(record.clock_out_selfie_key),
+        )
+
+
 class LeaveCreate(BaseModel):
     leave_type: LeaveType = LeaveType.annual
     start_date: date
@@ -87,6 +114,40 @@ class LeaveOut(BaseModel):
     decided_at: datetime | None
     file_name: str | None
     file_size: int
+    created_at: datetime
+
+
+class OvertimeRequestCreate(BaseModel):
+    date: date
+    requested_hours: int
+    reason: str | None = None
+
+    @field_validator("date")
+    @classmethod
+    def _not_in_future(cls, v: dt.date) -> dt.date:
+        if v > dt.date.today():
+            raise ValueError("Tidak bisa mengajukan lembur untuk tanggal yang belum terjadi")
+        return v
+
+    @field_validator("requested_hours")
+    @classmethod
+    def _sane_hours(cls, v: int) -> int:
+        if not 1 <= v <= 24:
+            raise ValueError("Jam lembur harus antara 1-24")
+        return v
+
+
+class OvertimeRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    date: date
+    requested_hours: int
+    reason: str | None
+    status: LeaveStatus
+    decision_note: str | None
+    decided_at: datetime | None
     created_at: datetime
 
 

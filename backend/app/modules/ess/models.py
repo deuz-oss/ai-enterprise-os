@@ -97,6 +97,37 @@ class LeaveRequest(TenantMixin, Base):
     employee = relationship("Employee", lazy="selectin")
 
 
+class OvertimeRequest(TenantMixin, Base):
+    """Pengajuan lembur karyawan dari portal self-service (beda dari
+    `AttendanceCorrection` yang scope-nya koreksi angka SEBULAN yang sudah
+    tercatat -- ini pengajuan jam lembur BARU untuk satu tanggal tertentu).
+
+    Alur: karyawan ajukan (pending) → HR setujui/tolak; karyawan boleh
+    membatalkan sendiri selama masih pending. Disetujui → jam ditambahkan
+    ke `AttendanceRecord.overtime_hours` tanggal terkait (lihat
+    `attendance.service.sync_overtime_record`), lalu ikut agregat bulanan
+    lewat `recompute_month_summary` yang sudah ada."""
+
+    __tablename__ = "overtime_requests"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    requested_hours: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[LeaveStatus] = mapped_column(
+        Enum(LeaveStatus, native_enum=False, length=50),
+        default=LeaveStatus.pending,
+        index=True,
+    )
+    decided_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    decision_note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    employee = relationship("Employee", lazy="selectin")
+
+
 class LeaveBalance(TenantMixin, Base):
     """Jatah cuti tahunan satu karyawan per periode tahun.
 

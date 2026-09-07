@@ -408,3 +408,40 @@ def sync_leave_records(db, leave) -> int:
         detail={"created": created},
     )
     return created
+
+
+def sync_overtime_record(db, overtime) -> AttendanceRecord:
+    """Panggil saat pengajuan lembur ESS disetujui.
+
+    Beda dari `sync_leave_records`: satu tanggal saja, dan jamnya
+    DITAMBAHKAN ke `overtime_hours` yang sudah ada (bukan menimpa) --
+    kalau HR sudah input lembur manual/impor di tanggal yang sama,
+    pengajuan ESS ini nambah, bukan menggantikan.
+    """
+    record = db.execute(
+        select(AttendanceRecord)
+        .where(AttendanceRecord.employee_id == overtime.employee_id)
+        .where(AttendanceRecord.date == overtime.date)
+    ).scalar_one_or_none()
+    if record is None:
+        record = AttendanceRecord(
+            employee_id=overtime.employee_id,
+            date=overtime.date,
+            status=AttendanceStatus.hadir,
+            source=AttendanceSource.ess,
+            notes="Dari pengajuan lembur ESS",
+            overtime_hours=0,
+        )
+        db.add(record)
+    record.overtime_hours += overtime.requested_hours
+    db.commit()
+    db.refresh(record)
+    recompute_month_summary(db, overtime.employee_id, overtime.date.year, overtime.date.month)
+    audit.log_event(
+        db,
+        action="attendance.synced_from_overtime",
+        entity_type="overtime_request",
+        entity_id=overtime.id,
+        detail={"date": overtime.date.isoformat(), "hours": overtime.requested_hours},
+    )
+    return record

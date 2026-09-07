@@ -117,6 +117,33 @@ def test_record_manual_memblokir_clock_in(client):
     assert dup.status_code == 409
 
 
+def test_attendance_today_mengikuti_state_clock_in_out(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Today")
+
+    belum = client.get("/api/v1/me/attendance/today", headers=emp)
+    assert belum.status_code == 200
+    assert belum.json() is None
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        _clock(client, emp, "in")
+
+    setelah_in = client.get("/api/v1/me/attendance/today", headers=emp).json()
+    assert setelah_in["clock_in"] is not None
+    assert setelah_in["clock_out"] is None
+    assert setelah_in["has_clock_in_selfie"] is True
+    assert setelah_in["has_clock_out_selfie"] is False
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        _clock(client, emp, "out")
+
+    setelah_out = client.get("/api/v1/me/attendance/today", headers=emp).json()
+    assert setelah_out["clock_in"] is not None
+    assert setelah_out["clock_out"] is not None
+    assert setelah_out["has_clock_out_selfie"] is True
+
+
 def test_selfie_url_hanya_role_berwenang_dan_pemilik(client):
     admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Selfie")
 
