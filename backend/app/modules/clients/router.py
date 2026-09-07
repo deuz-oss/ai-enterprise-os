@@ -1,12 +1,20 @@
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permissions import CLIENTS_ROLES
+from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_roles
+from app.core.tenancy import get_request_meta
 from app.modules.clients import service
 from app.modules.clients.models import DocumentType
-from app.modules.clients.schemas import ClientCreate, ClientOut, ClientUpdate, DocumentOut
+from app.modules.clients.schemas import (
+    ClientCreate,
+    ClientOut,
+    ClientPortalAccessOut,
+    ClientUpdate,
+    DocumentOut,
+)
 
 router = APIRouter(
     prefix="/clients",
@@ -74,3 +82,66 @@ def list_documents(client_id: str, db: Session = Depends(get_db)):
 @router.get("/documents/{document_id}/download-url")
 def download_url(document_id: str, db: Session = Depends(get_db)):
     return {"url": service.download_url(db, document_id)}
+
+
+# ---------- Portal monitoring klien (link ber-token, tanpa akun) ----------
+
+
+@router.get("/{client_id}/portal-access", response_model=ClientPortalAccessOut | None)
+def portal_access_status(client_id: str, db: Session = Depends(get_db)):
+    return service.get_portal_access_status(db, client_id)
+
+
+@router.post("/{client_id}/portal-access")
+def create_portal_access(
+    client_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)
+):
+    """Buat/ganti link portal klien -- token mentah cuma muncul di response ini."""
+    access, raw = service.generate_portal_access(db, current_user, client_id)
+    return {
+        "access": ClientPortalAccessOut.model_validate(access),
+        "url": f"/clients/portal/{raw}",
+    }
+
+
+@router.delete("/{client_id}/portal-access", status_code=204)
+def delete_portal_access(client_id: str, db: Session = Depends(get_db)):
+    service.revoke_portal_access(db, client_id)
+
+
+# ---------- Publik (tanpa akun): monitoring klien via link ber-token ----------
+# Guard lisensi/tenant TIDAK berlaku di sini -- akses dikontrol token, data
+# read-only, dan setiap kunjungan tercatat (`last_accessed_at`).
+
+public_router = APIRouter(prefix="/clients/portal", tags=["clients-portal"])
+
+_CLIENT_PORTAL_RATE_MAX = 30
+_CLIENT_PORTAL_RATE_WINDOW_SEC = 3600
+
+
+def _check_portal_rate_limit(db: Session) -> None:
+    ip, _ = get_request_meta()
+    limiter = get_limiter("client_portal_token")
+    key = ip or "unknown"
+    allowed, retry_after = limiter.check(
+        db, key, max_attempts=_CLIENT_PORTAL_RATE_MAX, window_seconds=_CLIENT_PORTAL_RATE_WINDOW_SEC
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Terlalu banyak percobaan dari lokasi ini. Coba lagi nanti.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    limiter.hit(db, key, window_seconds=_CLIENT_PORTAL_RATE_WINDOW_SEC)
+
+
+@public_router.get("/{token}")
+def client_portal_view(
+    token: str,
+    year: int | None = Query(None),
+    month: int | None = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Rekap kehadiran & lembur read-only untuk klien (tanpa akun)."""
+    _check_portal_rate_limit(db)
+    return service.client_portal_attendance(db, token, year, month)

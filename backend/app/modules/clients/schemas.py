@@ -61,3 +61,14 @@ class DocumentOut(BaseModel):
     file_size: int
     notes: str | None
     uploaded_at: datetime
+
+
+class ClientPortalAccessOut(BaseModel):
+    """Status akses portal klien -- TIDAK PERNAH menyertakan token mentah
+    (itu cuma muncul sekali di response `generate_portal_access`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    created_at: datetime
+    last_accessed_at: datetime | None
