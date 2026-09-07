@@ -41,15 +41,29 @@ interface OnboardingViewData {
   candidate_name: string | null;
   status: "invited" | "submitted" | "applied" | "revoked";
   expires_at: string;
+  requested_document_types: string[];
   submitted_data: SubmittedData;
   documents: DocumentSummary[];
 }
 
-const DOC_TYPES: { key: string; label: string }[] = [
-  { key: "ktp", label: "KTP" },
-  { key: "npwp", label: "NPWP" },
-  { key: "skck", label: "SKCK" },
-];
+/** Label tampilan -- daftar dokumen yang SUNGGUH diminta ditentukan HR per
+ * undangan (`requested_document_types` dari backend), bukan set tetap. */
+const DOC_TYPE_LABEL: Record<string, string> = {
+  ktp: "KTP",
+  npwp: "NPWP",
+  kartu_keluarga: "Kartu Keluarga (KK)",
+  ijazah: "Ijazah",
+  skck: "SKCK",
+  sim: "SIM",
+  buku_tabungan: "Buku Tabungan",
+  paklaring: "Paklaring",
+  surat_keterangan_sehat: "Surat Keterangan Sehat",
+  bpjs_kesehatan: "BPJS Kesehatan",
+  bpjs_ketenagakerjaan: "BPJS Ketenagakerjaan",
+  kartu_bpjs_kesehatan: "Kartu BPJS Kesehatan",
+  kartu_bpjs_ketenagakerjaan: "Kartu BPJS Ketenagakerjaan",
+  lainnya: "Lainnya",
+};
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -383,10 +397,10 @@ export default function OnboardingSelfService() {
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Format PDF, PNG, atau JPEG, maksimal 10 MB. Unggah ulang akan mengganti file sebelumnya.
         </p>
-        {DOC_TYPES.map(({ key, label }) => (
+        {data.requested_document_types.map((key) => (
           <div key={key} className="flex flex-wrap items-center gap-2">
-            <span className="w-16 text-sm font-medium" style={{ color: "var(--text)" }}>
-              {label}
+            <span className="w-40 text-sm font-medium" style={{ color: "var(--text)" }}>
+              {DOC_TYPE_LABEL[key] ?? key}
             </span>
             {uploadedTypes.has(key) && (
               <span className="pill p-green text-xs">

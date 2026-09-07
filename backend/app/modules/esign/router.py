@@ -12,6 +12,7 @@ from app.modules.esign.schemas import (
     EsignRequestOut,
     EsignSendIn,
 )
+from app.modules.hrd.service import send_contract_for_signature
 
 # Pengelolaan TTE kontrak → domain HR.
 router = APIRouter(
@@ -32,7 +33,12 @@ def config():
 
 @router.post("/contracts/{contract_id}/send", response_model=EsignRequestOut)
 def send_contract(contract_id: UUID, payload: EsignSendIn, db: Session = Depends(get_db)):
-    return service.send_contract(db, contract_id, payload.signer_name, payload.signer_email)
+    return send_contract_for_signature(
+        db,
+        contract_id=str(contract_id),
+        signer_name=payload.signer_name,
+        signer_email=payload.signer_email,
+    )
 
 
 @router.get("/requests", response_model=list[EsignRequestOut])

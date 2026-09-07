@@ -26,7 +26,6 @@ import {
   MessageCircle,
   MessagesSquare,
   Moon,
-  MoreHorizontal,
   PartyPopper,
   Plus,
   Receipt,
@@ -227,7 +226,7 @@ export default function Layout() {
   const { dark, toggle } = useDarkMode();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [helpDismissed, setHelpDismissed] = useState(
     () => localStorage.getItem("aeos_helpchip") === "0"
   );
@@ -273,7 +272,7 @@ export default function Layout() {
       }
       if (e.key === "Escape") {
         setInboxOpen(false);
-        setProfileMenuOpen(false);
+        setAccountMenuOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -494,15 +493,53 @@ export default function Layout() {
               </div>
             )}
           </div>
-          <button
-            onClick={() => setPaletteOpen(true)}
-            className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
-            style={{ backgroundColor: "var(--accent)" }}
-            title="Aksi cepat (buat halaman, ke chat, dst.)"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Action Baru</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setAccountMenuOpen((v) => !v)}
+              className="flex cursor-pointer items-center gap-2 rounded-lg py-1 pl-1.5 pr-2.5 transition-colors hover:bg-[var(--hover)]"
+              title="Akun"
+            >
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                style={{ backgroundColor: "var(--accent)" }}
+              >
+                {initials}
+              </span>
+              <span
+                className="hidden max-w-[140px] truncate text-sm font-medium sm:block"
+                style={{ color: "var(--text)" }}
+              >
+                {me.data?.full_name ?? "..."}
+              </span>
+              <ChevronDown className="hidden h-4 w-4 shrink-0 sm:block" style={{ color: "var(--text-muted)" }} />
+            </button>
+            {accountMenuOpen && (
+              <div
+                className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-lg shadow-lg"
+                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
+              >
+                <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    {me.data?.full_name ?? "..."}
+                  </p>
+                  <p className="truncate text-xs capitalize" style={{ color: "var(--text-muted)" }}>
+                    {me.data?.role ?? ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    clearToken();
+                    navigate("/login");
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
+                  style={{ color: "var(--text)" }}
+                >
+                  <X className="h-4 w-4" />
+                  Keluar
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -556,64 +593,15 @@ export default function Layout() {
             ))}
           </nav>
 
-          <div className="relative border-t p-3" style={{ borderColor: "var(--border)" }}>
-            <div
-              className="flex items-center gap-3 rounded-xl p-3"
-              style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)" }}
+          <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
+            <button
+              onClick={toggle}
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--hover)]"
+              style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)", color: "var(--text)" }}
             >
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                style={{ backgroundColor: "var(--accent)" }}
-              >
-                {initials}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  {me.data?.full_name ?? "..."}
-                </p>
-                <p className="truncate text-xs capitalize" style={{ color: "var(--text-muted)" }}>
-                  {me.data?.role ?? ""}
-                </p>
-              </div>
-              <button
-                onClick={() => setProfileMenuOpen((v) => !v)}
-                className="ml-auto shrink-0 cursor-pointer rounded p-1 transition-colors hover:bg-[var(--hover)]"
-                style={{ color: "var(--text-muted)" }}
-                title="Menu akun"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </div>
-
-            {profileMenuOpen && (
-              <div
-                className="absolute bottom-full left-3 right-3 z-10 mb-1.5 overflow-hidden rounded-lg shadow-lg"
-                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
-              >
-                <button
-                  onClick={() => {
-                    toggle();
-                    setProfileMenuOpen(false);
-                  }}
-                  className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
-                  style={{ color: "var(--text)" }}
-                >
-                  {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                  {dark ? "Mode Terang" : "Mode Gelap"}
-                </button>
-                <button
-                  onClick={() => {
-                    clearToken();
-                    navigate("/login");
-                  }}
-                  className="flex w-full cursor-pointer items-center gap-2.5 border-t px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
-                  style={{ color: "var(--text)", borderColor: "var(--border)" }}
-                >
-                  <X className="h-4 w-4" />
-                  Keluar
-                </button>
-              </div>
-            )}
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {dark ? "Mode Terang" : "Mode Gelap"}
+            </button>
           </div>
         </aside>
 

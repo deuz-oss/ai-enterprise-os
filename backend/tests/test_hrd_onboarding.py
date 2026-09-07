@@ -6,12 +6,15 @@ from tests.conftest import _auth_header
 from tests.test_hrd import _placement_id
 
 
-def _create_invite(client, headers, days=14):
+def _create_invite(client, headers, days=14, document_types=None):
     pid = _placement_id(client, headers)
+    payload = {"placement_id": pid, "days": days}
+    if document_types is not None:
+        payload["document_types"] = document_types
     resp = client.post(
         "/api/v1/employees/onboarding-invites",
         headers=headers,
-        json={"placement_id": pid, "days": days},
+        json=payload,
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -232,6 +235,87 @@ def test_onboarding_request_resubmission_keeps_token_and_data(client):
         f"/api/v1/employees/onboarding-invites/{invite['id']}", headers=headers
     ).json()
     assert detail["submitted_data"]["ktp_no"] == "3201010101019999"
+
+
+def test_onboarding_invite_default_document_types(client):
+    headers = _auth_header(client)
+    invite, token = _create_invite(client, headers)
+    assert invite["requested_document_types"] == ["ktp", "npwp", "skck"]
+
+    view = client.get(f"/api/v1/onboarding/{token}")
+    assert view.json()["requested_document_types"] == ["ktp", "npwp", "skck"]
+
+
+def test_onboarding_invite_custom_document_types(client):
+    headers = _auth_header(client)
+    invite, token = _create_invite(
+        client, headers, document_types=["kartu_keluarga", "ijazah", "skck"]
+    )
+    assert invite["requested_document_types"] == ["kartu_keluarga", "ijazah", "skck"]
+
+    view = client.get(f"/api/v1/onboarding/{token}")
+    assert view.json()["requested_document_types"] == ["kartu_keluarga", "ijazah", "skck"]
+
+    # Dokumen di luar daftar yang diminta ditolak.
+    rejected = client.post(
+        f"/api/v1/onboarding/{token}/documents",
+        files={"file": ("ktp.pdf", io.BytesIO(_pdf_bytes()), "application/pdf")},
+        data={"document_type": "ktp"},
+    )
+    assert rejected.status_code == 422
+
+    accepted = client.post(
+        f"/api/v1/onboarding/{token}/documents",
+        files={"file": ("ijazah.pdf", io.BytesIO(_pdf_bytes()), "application/pdf")},
+        data={"document_type": "ijazah"},
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+def test_onboarding_invite_document_types_kosong_ditolak(client):
+    headers = _auth_header(client)
+    pid = _placement_id(client, headers)
+    resp = client.post(
+        "/api/v1/employees/onboarding-invites",
+        headers=headers,
+        json={"placement_id": pid, "days": 14, "document_types": []},
+    )
+    assert resp.status_code == 422
+
+
+def _placement_status(client, placement_id: str) -> str:
+    from app.core.database import parse_uuid
+    from app.modules.recruitment.models import Placement
+
+    db = client.testing_session()
+    try:
+        return db.get(Placement, parse_uuid(placement_id)).status.value
+    finally:
+        db.close()
+
+
+def test_onboarding_submit_otomatis_pindah_placement_ke_onboarded(client):
+    headers = _auth_header(client)
+    invite, token = _create_invite(client, headers)
+    assert _placement_status(client, invite["placement_id"]) != "onboarded"
+
+    resp = client.post(f"/api/v1/onboarding/{token}", json=_submit_payload())
+    assert resp.status_code == 200, resp.text
+    assert _placement_status(client, invite["placement_id"]) == "onboarded"
+
+
+def test_onboarding_request_resubmission_mengembalikan_placement_ke_hired(client):
+    headers = _auth_header(client)
+    invite, token = _create_invite(client, headers)
+    client.post(f"/api/v1/onboarding/{token}", json=_submit_payload())
+    assert _placement_status(client, invite["placement_id"]) == "onboarded"
+
+    resubmit = client.post(
+        f"/api/v1/employees/onboarding-invites/{invite['id']}/request-resubmission",
+        headers=headers,
+    )
+    assert resubmit.status_code == 200, resubmit.text
+    assert _placement_status(client, invite["placement_id"]) == "hired"
 
 
 def test_onboarding_creating_new_invite_cabut_invite_lama(client):

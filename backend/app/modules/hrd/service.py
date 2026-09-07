@@ -274,12 +274,21 @@ def _get_onboarding_invite(db: Session, invite_id: str) -> OnboardingInvite:
 
 
 def create_onboarding_invite(
-    db: Session, *, user, placement_id: str, days: int = 14
+    db: Session,
+    *,
+    user,
+    placement_id: str,
+    days: int = 14,
+    document_types: list[HrDocumentType] | None = None,
 ) -> tuple[OnboardingInvite, str]:
     """Buat link self-service onboarding untuk kandidat (belum tentu sudah
     jadi Employee -- `apply_onboarding_invite` yang membuatnya kalau perlu).
     Jalur ini independen dari `onboard_from_placement` manual, bukan
-    pengganti -- tidak semua kandidat bisa isi form sendiri."""
+    pengganti -- tidak semua kandidat bisa isi form sendiri.
+
+    `document_types` = daftar dokumen yang HR minta dari kandidat kali ini
+    (pola MYOHRIS "Setup job assessments for onboard") -- default 3 jenis
+    dasar (KTP/NPWP/SKCK) kalau HR tidak memilih sendiri."""
     placement = db.get(Placement, parse_uuid(placement_id))
     if placement is None:
         raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
@@ -289,6 +298,8 @@ def create_onboarding_invite(
         )
     if not 1 <= days <= 90:
         raise HTTPException(status_code=422, detail="Masa berlaku link 1-90 hari")
+    if document_types is not None and not document_types:
+        raise HTTPException(status_code=422, detail="Pilih minimal satu jenis dokumen")
 
     # Cabut invite lama yang belum di-apply untuk placement yang sama --
     # pola sama payroll/service.py::submit_to_client mencabut token lama.
@@ -307,6 +318,9 @@ def create_onboarding_invite(
         token_hash=_hash_token(raw),
         expires_at=datetime.now(UTC) + timedelta(days=days),
         created_by=getattr(user, "id", None),
+        requested_document_types_json=json.dumps(
+            [t.value for t in document_types] if document_types else ["ktp", "npwp", "skck"]
+        ),
     )
     db.add(invite)
     db.commit()
@@ -474,13 +488,17 @@ def revoke_onboarding_invite(db: Session, *, user, invite_id: str) -> Onboarding
 def request_onboarding_resubmission(db: Session, *, user, invite_id: str) -> OnboardingInvite:
     """Tolak submission kandidat & minta isi ulang -- token TETAP berfungsi
     dan `submitted_data_json` TIDAK dihapus (jadi referensi/prefill saat
-    kandidat balik ke link yang sama)."""
+    kandidat balik ke link yang sama). Placement DIKEMBALIKAN ke `hired`
+    (kebalikan dari auto-advance di `submit_onboarding_data`) -- kartu
+    Kanban tidak boleh terus menampilkan "onboarded" selagi HR masih minta
+    kandidat memperbaiki data."""
     invite = _get_onboarding_invite(db, invite_id)
     if invite.status != OnboardingInviteStatus.submitted:
         raise HTTPException(status_code=409, detail="Undangan ini belum disubmit kandidat")
     invite.status = OnboardingInviteStatus.invited
     db.commit()
     db.refresh(invite)
+    update_placement_status(db, str(invite.placement_id), PlacementStatus.hired)
     audit.log_event(
         db,
         action="onboarding.resubmission_requested",
@@ -537,6 +555,7 @@ def onboarding_invite_public_view(db: Session, raw_token: str) -> dict:
             "candidate_name": placement.candidate.full_name if placement else None,
             "status": invite.status.value,
             "expires_at": invite.expires_at,
+            "requested_document_types": invite.requested_document_types,
             "submitted_data": (
                 json.loads(invite.submitted_data_json) if invite.submitted_data_json else {}
             ),
@@ -550,6 +569,12 @@ def onboarding_invite_public_view(db: Session, raw_token: str) -> dict:
 
 
 def submit_onboarding_data(db: Session, raw_token: str, payload: OnboardingSubmitIn) -> dict:
+    """Kandidat menyelesaikan pengisian form -- placement langsung dipindah
+    ke stage `onboarded` di sini (bukan menunggu HR klik "Terapkan"), pola
+    MYOHRIS: kartu Kanban pindah begitu kandidat selesai isi data, review &
+    `apply_onboarding_invite` (yang menulis Employee resmi) tetap terpisah
+    setelahnya. Simetris dengan `request_onboarding_resubmission` yang
+    mengembalikan placement ke `hired` kalau HR minta isi ulang."""
     from app.core.tenancy import get_tenant, set_tenant
 
     invite = _find_invite_by_token(db, raw_token)
@@ -566,6 +591,7 @@ def submit_onboarding_data(db: Session, raw_token: str, payload: OnboardingSubmi
         invite.status = OnboardingInviteStatus.submitted
         invite.submitted_at = datetime.now(UTC)
         db.commit()
+        update_placement_status(db, str(invite.placement_id), PlacementStatus.onboarded)
     finally:
         set_tenant(prev_tenant)
     return {"status": invite.status.value, "submitted_at": invite.submitted_at}
@@ -577,6 +603,10 @@ async def upload_onboarding_document(
     from app.core.tenancy import get_tenant, set_tenant
 
     invite = _find_invite_by_token(db, raw_token)
+    if document_type.value not in invite.requested_document_types:
+        raise HTTPException(
+            status_code=422, detail="Jenis dokumen ini tidak diminta untuk undangan ini"
+        )
     mime = file.content_type or ""
     if mime not in ONBOARDING_DOC_ALLOWED_MIME:
         raise HTTPException(status_code=422, detail="Format dokumen harus PDF, PNG, atau JPEG")
@@ -708,6 +738,78 @@ def sign_contract(db: Session, contract_id: str) -> EmploymentContract:
     db.commit()
     db.refresh(contract)
     return contract
+
+
+def send_contract_for_signature(
+    db: Session, *, contract_id: str, signer_name: str, signer_email: str
+):
+    """Kirim kontrak kerja ke penyedia TTE + email asli ke calon karyawan.
+
+    Gap 2026-09-07 (temuan sama seperti surat penawaran lewat perbandingan
+    alur MYOHRIS): `esign.service.send_contract` sebelumnya cuma upload ke
+    provider (Privy) atau simulasi lokal (sandbox) -- TIDAK ADA email dari
+    kita sendiri yang meminta karyawan meninjau & menandatangani. Sekarang
+    email dikirim eksplisit lewat SMTP kita sendiri, pola sama "fail
+    loudly" dengan `recruitment.service.send_offering_letter`. Fungsi ini
+    (bukan `esign.service.send_contract` langsung) yang jadi target
+    `POST /esign/contracts/{id}/send` -- `esign.service` sengaja tetap
+    generik/tidak tahu soal Employee/email (dipakai juga oleh agreement
+    klien & surat penawaran)."""
+    from app.core.config import get_settings as get_app_settings
+    from app.modules.esign.service import send_contract as esign_send_contract
+    from app.modules.notifications.service import send_raw_email_with_attachment
+    from app.modules.platform.models import Tenant
+    from app.modules.recruitment.service import get_hr_document_settings
+
+    contract = _get_contract(db, contract_id)
+    if not contract.object_key:
+        raise HTTPException(
+            status_code=422, detail="Kontrak belum memiliki file untuk ditandatangani"
+        )
+    if not get_app_settings().email_enabled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "SMTP belum dikonfigurasi -- hubungi admin platform untuk "
+                "mengaktifkan pengiriman email"
+            ),
+        )
+    employee = _get_employee(db, str(contract.employee_id))
+    file_bytes = storage.get_object(contract.object_key)
+
+    request = esign_send_contract(db, contract.id, signer_name, signer_email)
+
+    tenant = db.get(Tenant, contract.tenant_id)
+    tenant_name = tenant.name if tenant else "perusahaan kami"
+    return_emails = get_hr_document_settings(db).return_emails
+    sign_note = (
+        f"\n\nAnda juga bisa menandatangani secara elektronik lewat tautan berikut: "
+        f"{request.sign_url}"
+        if request.sign_url
+        else ""
+    )
+    maintype, _, subtype = (contract.mime_type or "application/octet-stream").partition("/")
+    send_raw_email_with_attachment(
+        signer_email,
+        f"Kontrak Kerja - {employee.full_name} - {tenant_name}",
+        (
+            f"Selamat bergabung dengan {tenant_name}, {employee.full_name}.\n\n"
+            "Bersama email ini kami sampaikan dokumen kontrak kerja yang memuat syarat "
+            "dan ketentuan terkait posisi Anda.\n\n"
+            "Mohon untuk dapat meninjau dokumen tersebut dengan saksama. Apabila Anda "
+            "telah menyetujui isi dokumen tersebut, silakan melakukan proses "
+            "penandatanganan. Selanjutnya, mohon untuk mengirimkan kembali dokumen yang "
+            f"telah ditandatangani tersebut melalui email ke {return_emails}.{sign_note}\n\n"
+            "Apabila terdapat pertanyaan atau hal yang memerlukan klarifikasi lebih "
+            "lanjut, jangan ragu untuk menghubungi tim HR kami.\n\n"
+            f"Kami menantikan kehadiran Anda untuk menjadi bagian dari {tenant_name}."
+        ),
+        attachment_bytes=file_bytes,
+        attachment_filename=contract.file_name or f"{contract.contract_no}.pdf",
+        attachment_maintype=maintype or "application",
+        attachment_subtype=subtype or "octet-stream",
+    )
+    return request
 
 
 async def upload_contract_file(

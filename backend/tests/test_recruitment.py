@@ -151,6 +151,42 @@ def test_list_placements_filter_candidate_id(client):
     assert rows[0]["candidate_id"] == cand_a
 
 
+def test_placement_gagal_menyimpan_rejection_note(client):
+    """Pipeline disederhanakan 2026-09-07 (umpan balik langsung domain owner):
+    tahap "kirim klien"/"screening klien" dibuang, jejak KENAPA kandidat
+    gugur sekarang lewat `rejection_note` bebas teks di titik transisi
+    terminal -- bukan disimpulkan dari di tahap mana dia berhenti."""
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+    pid = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    ).json()["id"]
+
+    rejected = client.patch(
+        f"/api/v1/recruitment/placements/{pid}",
+        headers=headers,
+        json={"status": "gagal", "note": "Kandidat mengundurkan diri, dapat tawaran lain"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["rejection_note"] == "Kandidat mengundurkan diri, dapat tawaran lain"
+
+    cand = client.get(f"/api/v1/recruitment/candidates/{cand_id}", headers=headers).json()
+    assert cand["status"] == "gagal"
+
+    # Didaftarkan ulang (balik ke sourcing) -> catatan lama tidak boleh nempel.
+    resourced = client.patch(
+        f"/api/v1/recruitment/placements/{pid}",
+        headers=headers,
+        json={"status": "disourcing"},
+    )
+    assert resourced.status_code == 200
+    assert resourced.json()["rejection_note"] is None
+
+
 def test_offering_letter_pdf_dan_esign_sandbox(client):
     """PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF -> esign -> status offered.
 
@@ -182,7 +218,14 @@ def test_offering_letter_pdf_dan_esign_sandbox(client):
         )
     assert missing_salary.status_code == 422
 
-    with _sandbox_settings():
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    with (
+        _sandbox_settings(),
+        patch.object(settings, "smtp_host", "smtp.test.local"),
+        patch("app.modules.notifications.service.send_raw_email_with_attachment") as send_email,
+    ):
         sent = client.post(
             f"/api/v1/recruitment/placements/{pid}/offering",
             headers=headers,
@@ -199,13 +242,35 @@ def test_offering_letter_pdf_dan_esign_sandbox(client):
     assert body["status"] == "terkirim"
     assert body["provider_document_id"].startswith("sbx-")
 
+    # Gap 2026-09-07: sebelumnya TIDAK ADA email sungguhan ke kandidat sama
+    # sekali (sandbox esign cuma simulasi lokal, Privy cuma upload dokumen
+    # tanpa email kita sendiri) -- sekarang harus benar-benar terkirim lewat
+    # SMTP kita, lampiran PDF, dan menyebut email tujuan pengembalian surat
+    # yang sudah ditandatangani (default "brian.fahmi@spcgroup.co.id").
+    assert send_email.call_count == 1
+    args, kwargs = send_email.call_args
+    assert args[0] == "andi@example.com"
+    assert kwargs["attachment_bytes"][:4] == b"%PDF"
+    assert "brian.fahmi@spcgroup.co.id" in args[2]
+
     cand = client.get(f"/api/v1/recruitment/candidates/{cand_id}", headers=headers).json()
     assert cand["status"] == "offered"
     jo = client.get(f"/api/v1/recruitment/job-orders/{jo_id}", headers=headers).json()
     assert jo["status"] == "offering"
+    # Alur MYOHRIS (rujukan 2026-09-07): surat penawaran TERKIRIM adalah yang
+    # MENYELESAIKAN tahap offering, bukan cuma memasukinya -- placement lompat
+    # ke `hired`, tidak berhenti di `offering` menunggu pemindahan manual.
+    placements = client.get(
+        "/api/v1/recruitment/placements", headers=headers, params={"candidate_id": cand_id}
+    ).json()
+    assert placements[0]["status"] == "hired"
 
     # Masih ada permintaan berjalan -> kirim ulang ditolak (anti-duplikat).
-    with _sandbox_settings():
+    with (
+        _sandbox_settings(),
+        patch.object(settings, "smtp_host", "smtp.test.local"),
+        patch("app.modules.notifications.service.send_raw_email_with_attachment"),
+    ):
         duplicate = client.post(
             f"/api/v1/recruitment/placements/{pid}/offering",
             headers=headers,
@@ -230,6 +295,60 @@ def test_offering_letter_pdf_dan_esign_sandbox(client):
         assert row.offering_letter_object_key is not None
 
 
+def test_send_offering_gagal_tanpa_smtp(client):
+    """Gap 2026-09-07: sebelumnya tidak ada email ke kandidat sama sekali --
+    sekarang harus gagal loudly (422) kalau SMTP belum dikonfigurasi, bukan
+    diam-diam "berhasil" tanpa kandidat benar-benar diberi tahu."""
+    from tests.test_esign import _sandbox_settings
+
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid)
+    cand_id = _create_candidate(client, headers)
+    pid = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    ).json()["id"]
+
+    with _sandbox_settings():
+        resp = client.post(
+            f"/api/v1/recruitment/placements/{pid}/offering",
+            headers=headers,
+            json={
+                "signer_name": "Andi",
+                "signer_email": "andi@example.com",
+                "offered_salary": 5_200_000,
+            },
+        )
+    assert resp.status_code == 422
+    assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
+
+
+def test_hr_document_settings_default_dan_update(client):
+    """Konfigurasi per-tenant email tujuan pengembalian dokumen HR (surat
+    penawaran, kontrak kerja) -- default awal disengaja diisi (bukan
+    kosong) supaya tenant yang belum sempat mengatur tetap punya nilai
+    masuk akal, tapi tetap bisa diubah."""
+    headers = _auth_header(client)
+
+    default = client.get("/api/v1/recruitment/hr-document-settings", headers=headers)
+    assert default.status_code == 200
+    assert default.json()["return_emails"] == "brian.fahmi@spcgroup.co.id"
+
+    updated = client.put(
+        "/api/v1/recruitment/hr-document-settings",
+        headers=headers,
+        json={"return_emails": "hrd.documents@spcgroup.co.id, operation@spcgroup.co.id"},
+    )
+    expected = "hrd.documents@spcgroup.co.id, operation@spcgroup.co.id"
+    assert updated.status_code == 200
+    assert updated.json()["return_emails"] == expected
+
+    again = client.get("/api/v1/recruitment/hr-document-settings", headers=headers)
+    assert again.json()["return_emails"] == expected
+
+
 def test_offering_summary_pipeline(client):
     """Widget "Offering" di Recruitment — GET /recruitment/placements/offering-summary."""
     from tests.test_esign import _sandbox_settings
@@ -249,7 +368,13 @@ def test_offering_summary_pipeline(client):
     ).json()
     pid = placement["id"]
 
-    with _sandbox_settings():
+    from app.core.config import get_settings
+
+    with (
+        _sandbox_settings(),
+        patch.object(get_settings(), "smtp_host", "smtp.test.local"),
+        patch("app.modules.notifications.service.send_raw_email_with_attachment"),
+    ):
         sent = client.post(
             f"/api/v1/recruitment/placements/{pid}/offering",
             headers=headers,

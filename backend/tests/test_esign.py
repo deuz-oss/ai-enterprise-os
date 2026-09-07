@@ -44,9 +44,22 @@ def _sandbox_settings():
 
 
 def _send(client, headers, contract_id, name="Budi", email="budi@example.com"):
-    """Kirim kontrak ke TTE dengan storage di-mock."""
-    with patch("app.modules.esign.service.get_object") as get_obj:
+    """Kirim kontrak ke TTE dengan storage & SMTP di-mock.
+
+    `send_contract_for_signature` (hrd/service.py) sekarang juga
+    mengirim email asli ke calon karyawan (gap 2026-09-07, sama pola
+    dengan surat penawaran) -- SMTP & fetch objek dokumen di-mock di
+    sini supaya test tidak bergantung server SMTP/storage sungguhan.
+    """
+    settings = get_settings()
+    with (
+        patch("app.modules.esign.service.get_object") as get_obj,
+        patch("app.modules.hrd.service.storage.get_object") as hrd_get_obj,
+        patch.object(settings, "smtp_host", "smtp.test.local"),
+        patch("app.modules.notifications.service.send_raw_email_with_attachment"),
+    ):
         get_obj.return_value = _CONTRACT_TEXT
+        hrd_get_obj.return_value = _CONTRACT_TEXT
         return client.post(
             f"/api/v1/esign/contracts/{contract_id}/send",
             headers=headers,
@@ -77,18 +90,62 @@ def test_send_tanpa_konfigurasi_mengembalikan_503(client):
     assert resp.status_code == 503
 
 
+def test_send_contract_gagal_tanpa_smtp(client):
+    """Gap 2026-09-07 (sama pola surat penawaran): kirim kontrak ke TTE
+    sekarang wajib SMTP aktif -- kandidat harus benar-benar diberi tahu
+    lewat email, bukan cuma diam-diam di-upload ke provider TTE."""
+    headers = _auth_header(client)
+    contract_id = _employee_with_contract(client, headers)
+    with (
+        _sandbox_settings(),
+        patch("app.modules.esign.service.get_object") as get_obj,
+        patch("app.modules.hrd.service.storage.get_object") as hrd_get_obj,
+    ):
+        get_obj.return_value = _CONTRACT_TEXT
+        hrd_get_obj.return_value = _CONTRACT_TEXT
+        resp = client.post(
+            f"/api/v1/esign/contracts/{contract_id}/send",
+            headers=headers,
+            json={"signer_name": "Budi", "signer_email": "budi@example.com"},
+        )
+    assert resp.status_code == 422
+    assert "SMTP belum dikonfigurasi" in resp.json()["detail"]
+
+
 def test_send_sukses_dan_anti_duplikat(client):
     headers = _auth_header(client)
     contract_id = _employee_with_contract(client, headers)
+    settings = get_settings()
 
     with _sandbox_settings():
-        first = _send(client, headers, contract_id)
+        with (
+            patch("app.modules.esign.service.get_object") as get_obj,
+            patch("app.modules.hrd.service.storage.get_object") as hrd_get_obj,
+            patch.object(settings, "smtp_host", "smtp.test.local"),
+            patch("app.modules.notifications.service.send_raw_email_with_attachment") as send_email,
+        ):
+            get_obj.return_value = _CONTRACT_TEXT
+            hrd_get_obj.return_value = _CONTRACT_TEXT
+            first = client.post(
+                f"/api/v1/esign/contracts/{contract_id}/send",
+                headers=headers,
+                json={"signer_name": "Budi", "signer_email": "budi@example.com"},
+            )
         assert first.status_code == 200, first.text
         body = first.json()
         assert body["provider"] == "sandbox"
         assert body["provider_document_id"].startswith("sbx-")
         assert body["status"] == "terkirim"
         assert body["sign_url"]
+
+        # Email asli terkirim ke penandatangan, lampiran dokumen kontrak,
+        # menyebut email tujuan pengembalian dokumen yang sudah
+        # ditandatangani (default "brian.fahmi@spcgroup.co.id").
+        assert send_email.call_count == 1
+        args, kwargs = send_email.call_args
+        assert args[0] == "budi@example.com"
+        assert kwargs["attachment_bytes"] == _CONTRACT_TEXT
+        assert "brian.fahmi@spcgroup.co.id" in args[2]
 
         # Permintaan kedua untuk kontrak yang sama harus ditolak
         duplicate = _send(client, headers, contract_id)
