@@ -19,6 +19,7 @@ from app.modules.clients.schemas import (
     ClientUpdate,
     DocumentOut,
 )
+from app.modules.hrd.schemas import EmployeeOut
 
 router = APIRouter(
     prefix="/clients",
@@ -29,7 +30,12 @@ router = APIRouter(
 
 @router.get("", response_model=list[ClientOut])
 def list_clients(q: str | None = Query(None, max_length=100), db: Session = Depends(get_db)):
-    return service.list_clients(db, q=q)
+    return [
+        ClientOut.model_validate(client, from_attributes=True).model_copy(
+            update={"job_count": job_count}
+        )
+        for client, job_count in service.list_clients(db, q=q)
+    ]
 
 
 @router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
@@ -76,6 +82,12 @@ def update_client(client_id: str, payload: ClientUpdate, db: Session = Depends(g
 @router.delete("/{client_id}", status_code=204)
 def delete_client(client_id: str, db: Session = Depends(get_db)):
     service.delete_client(db, client_id)
+
+
+@router.get("/{client_id}/employees", response_model=list[EmployeeOut])
+def list_client_employees(client_id: str, db: Session = Depends(get_db)):
+    """Karyawan eksternal yang pernah ditempatkan di klien ini (tab Karyawan)."""
+    return service.list_client_employees(db, client_id)
 
 
 @router.post("/{client_id}/documents", response_model=DocumentOut, status_code=201)

@@ -47,6 +47,7 @@ class ClientOut(BaseModel):
     lead_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    job_count: int = 0
 
 
 class DocumentOut(BaseModel):

@@ -36,14 +36,24 @@ def create_client(db: Session, payload: ClientCreate) -> Client:
     db.add(client)
     db.commit()
     db.refresh(client)
+    audit.log_event(db, action="client.create", entity_type="client", entity_id=client.id)
     return client
 
 
-def list_clients(db: Session, q: str | None = None) -> list[Client]:
-    stmt = select(Client).order_by(Client.created_at.desc())
+def list_clients(db: Session, q: str | None = None) -> list[tuple[Client, int]]:
+    """Return `(Client, job_count)` -- job_count dihitung dalam satu query
+    (outerjoin+group_by), bukan N+1 per klien."""
+    from app.modules.recruitment.models import JobOrder
+
+    stmt = (
+        select(Client, func.count(JobOrder.id))
+        .outerjoin(JobOrder, JobOrder.client_id == Client.id)
+        .group_by(Client.id)
+        .order_by(Client.created_at.desc())
+    )
     if q:
         stmt = stmt.where(Client.name.ilike(f"%{q}%"))
-    return list(db.execute(stmt).scalars())
+    return [(cl, count) for cl, count in db.execute(stmt).all()]
 
 
 def get_client(db: Session, client_id: str) -> Client:
@@ -56,14 +66,17 @@ def update_client(db: Session, client_id: str, payload: ClientUpdate) -> Client:
         setattr(client, field, value)
     db.commit()
     db.refresh(client)
+    audit.log_event(db, action="client.update", entity_type="client", entity_id=client.id)
     return client
 
 
 def delete_client(db: Session, client_id: str) -> None:
     client = _get(db, client_id)
     assert_not_referenced(db, "clients", client.id, "Klien")
+    client_id_val = client.id
     db.delete(client)
     db.commit()
+    audit.log_event(db, action="client.delete", entity_type="client", entity_id=client_id_val)
 
 
 def _next_version(db: Session, client_id, document_type: DocumentType) -> int:
@@ -154,6 +167,28 @@ def expiring_contracts(db: Session, within_days: int) -> list[Client]:
         .order_by(Client.contract_end)
     )
     return list(db.execute(stmt).scalars())
+
+
+def list_client_employees(db: Session, client_id: str):
+    """Karyawan eksternal yang PERNAH ditempatkan di klien ini (tab
+    Karyawan di ClientDetail) -- lintas periode, beda dari
+    `client_portal_attendance` yang scope-nya rekap satu bulan."""
+    from app.modules.hrd.models import Employee, EmploymentType
+    from app.modules.recruitment.models import JobOrder, Placement
+
+    _get(db, client_id)
+    return list(
+        db.execute(
+            select(Employee)
+            .join(Placement, Employee.placement_id == Placement.id)
+            .join(JobOrder, Placement.job_order_id == JobOrder.id)
+            .where(
+                JobOrder.client_id == parse_uuid(client_id),
+                Employee.employment_type == EmploymentType.eksternal,
+            )
+            .order_by(Employee.full_name)
+        ).scalars()
+    )
 
 
 # ---------- Portal monitoring klien (link ber-token, tanpa akun) ----------

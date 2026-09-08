@@ -9,6 +9,7 @@ import Audit from "./pages/Audit";
 import Billing from "./pages/Billing";
 import Blacklist from "./pages/Blacklist";
 import Clients from "./pages/Clients";
+import ClientDetail from "./pages/ClientDetail";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
 import { CareerDetail, CareerListing, CareerTrack } from "./pages/CareerPortal";
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/quotations" element={<Quotations />} />
             <Route path="/agreements" element={<Agreements />} />
             <Route path="/job-orders" element={<JobOrders />} />
