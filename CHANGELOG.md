@@ -6,6 +6,19 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 35: Klien — halaman detail bertab + kolom Jobs count
+
+- Halaman baru `ClientDetail.tsx` (`/clients/:id`), mirror arketipe tab horizontal `EmployeeDetail.tsx`/`JobOrderDetail.tsx`: tab Ringkasan (+ form edit `PATCH /clients/{id}` yang sebelumnya tidak pernah dipanggil dari UI), Jobs, Karyawan (endpoint baru — employee eksternal yang pernah ditempatkan di klien), Dokumen, Portal & Lokasi (pindahan dari panel inline lama), Riwayat (audit log, admin/management saja).
+- `create_client`/`update_client`/`delete_client` sekarang mencatat `audit.log_event`.
+- `Clients.tsx` disederhanakan jadi list-only (mirror `Employees.tsx`); tabel tambah kolom Jobs dari `job_count` (satu query outerjoin+group_by).
+- Dibandingkan langsung ke referensi MyOHRIS; field yang di luar cakupan (Client Reference/Code/Type/Industry, Fee Settings, Team/multi-Contact) sengaja tidak ditambahkan.
+
+### Added — Fase 34: Geofencing absensi (radius per lokasi klien)
+
+- Model `ClientSite` (`client_sites`, RLS) — klien multi-cabang bisa punya banyak lokasi, masing-masing radius sendiri. Migrasi `4eae323acbfb`.
+- `Employee.site_id` nullable — kosong = absen bebas (perilaku lama, nol regresi), terisi = wajib dalam radius site itu saat clock-in/out (validasi haversine di `ess/service.py::mobile_clock`). Fail-open kalau site dihapus tapi `site_id` tersisa.
+- CRUD lokasi (`/clients/{id}/sites`, `/clients/sites` lintas klien) + kartu "Lokasi Kantor" di halaman Klien (tombol "Pakai Lokasi Saat Ini" via GPS browser) + dropdown "Lokasi Kerja" di Employee Detail.
+
 ### Added — Fase 33: Sederhanakan Pipeline Penempatan + Tutup Celah Email Dokumen HR
 
 - `PlacementStatus` disederhanakan 13→11 tahap (kirim/screening klien digabung `submitted`; diusulkan/disetujui klien digabung `offering`); OJT jadi kondisional lewat `JobOrder.requires_ojt`; `rejection_note` wajib diisi saat placement gagal/dibatalkan.

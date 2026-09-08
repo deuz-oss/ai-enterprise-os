@@ -4,7 +4,7 @@
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
 **Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-07
+**Terakhir diperbarui:** 2026-09-08
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -14,6 +14,15 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 > yang jadi rujukan status implementasi terkini.
 
 > **Changelog**
+> - **2026-09-08** — **Fase 34-35** (lihat §5): **Geofencing absensi**
+>   — radius per lokasi klien (`ClientSite`, 1 klien bisa banyak
+>   cabang), `Employee.site_id` kosong = bebas/terisi = wajib dalam
+>   radius, fail-open kalau site dihapus — ✅ selesai. **Klien: halaman
+>   detail bertab** (Ringkasan+edit, Jobs, Karyawan, Dokumen, Portal &
+>   Lokasi, Riwayat) menggantikan panel inline lama + kolom Jobs count
+>   di list, dibandingkan langsung ke referensi MyOHRIS — ✅ selesai.
+>   Field MyOHRIS yang di luar cakupan (Client Reference/Code/Type/
+>   Industry, Fee Settings, Team) sengaja tidak ditambahkan.
 > - **2026-09-07** — **Fase 29-33** (lihat §5): **Black Lists kandidat**
 >   (request→approve, dari shortlist MyOHRIS item #3) — ✅ selesai.
 >   **AI Interview Fase 2 percakapan suara real-time** (self-hosted
@@ -1230,6 +1239,61 @@ Serangkaian temuan dari perbandingan langsung alur MYOHRIS:
 - `OfferingSettings` digeneralisasi jadi `HrDocumentSettings` — satu
   setting per tenant untuk alamat pengembalian dokumen bertanda tangan,
   dipakai bersama surat penawaran dan kontrak kerja.
+
+### Fase 34 — Geofencing Absensi: Lokasi Kantor Klien + Radius per-Site — ✅ Selesai (2026-09-08)
+
+Absensi mobile (GPS+selfie, Fase 8 lanjutan) sebelumnya cuma validasi
+format koordinat, tidak ada pengecekan jarak dari titik kerja sama
+sekali — karyawan bisa absen dari mana saja. Brian minta mode kedua:
+dibatasi radius, per permintaan klien (sebagian klien bebas, sebagian
+wajib dalam radius) — dan karena satu klien outsourcing bisa punya
+banyak kantor/cabang, radius ditaruh di entitas baru `ClientSite`
+(1 klien → N lokasi), bukan di `Client` langsung.
+
+**Tidak ada field mode terpisah** ("bebas"/"radius") — derivatif dari
+data: `Employee.site_id` kosong = absen bebas (perilaku lama, nol
+regresi), terisi = wajib dalam radius `ClientSite` itu saat
+clock-in/out (`ess/service.py::mobile_clock`, validasi haversine).
+Site dihapus tapi `site_id` employee tersisa → fail-open (tidak
+memblokir absensi), bukan fail-closed.
+
+Model `ClientSite` (`client_sites`, RLS) — nama, alamat, lat/lng,
+radius meter. Migrasi `4eae323acbfb`. CRUD lokasi
+(`/clients/{id}/sites`, `/clients/sites` lintas klien untuk dropdown).
+Kartu "Lokasi Kantor" di halaman Klien (tombol "Pakai Lokasi Saat Ini"
+via GPS browser, reuse pola `getGpsPosition` dari Portal ESS) +
+dropdown "Lokasi Kerja" di Employee Detail.
+
+### Fase 35 — Klien: Halaman Detail Bertab + Kolom Jobs Count — ✅ Selesai (2026-09-08)
+
+Dibandingkan langsung ke MyOHRIS (screenshot list Clients + Client
+Detail): AEOS sebelumnya cuma punya list + panel inline di bawah tabel
+(Dokumen Legalitas/Portal Klien/Lokasi Kantor bertumpuk), tanpa halaman
+terpisah, tanpa tab, dan tanpa cara mengedit field klien dari UI sama
+sekali (`PATCH /clients/{id}` sudah ada tapi tidak pernah dipanggil).
+
+Halaman baru `ClientDetail.tsx` (`/clients/:id`) — instance ke-3 dari
+arketipe tab horizontal yang sudah dipakai `EmployeeDetail.tsx`/
+`JobOrderDetail.tsx`: tab **Ringkasan** (tampilan + form edit baru),
+**Jobs** (reuse endpoint `job-orders?client_id=` yang sudah ada),
+**Karyawan** (endpoint baru — employee eksternal yang pernah
+ditempatkan di klien ini, lintas periode), **Dokumen** + **Portal &
+Lokasi** (pindahan verbatim dari panel inline lama), dan **Riwayat**
+(audit log `entity_type=client`, hanya admin/management — role
+`business_dev` yang biasa pegang Klien tidak punya akses `/audit/logs`
+di backend, jadi tab disembunyikan bukan dibiarkan gagal diam-diam).
+`create_client`/`update_client`/`delete_client` sekarang mencatat
+`audit.log_event` — sebelumnya tidak pernah, tab Riwayat tadinya akan
+selalu kosong.
+
+`Clients.tsx` disederhanakan jadi list-only (mirror `Employees.tsx`):
+klik baris → navigasi ke halaman detail. Tabel tambah kolom **Jobs**
+dari `job_count` baru (satu query outerjoin+group_by, bukan N+1).
+
+**Field MyOHRIS yang TIDAK ditambahkan** (di luar cakupan yang
+diminta): Client Reference/Code, Client Type, Client Industry, Fee
+Settings, Team/multi-Contact terpisah — kontak tetap PIC tunggal
+seperti sebelumnya.
 
 ## 6. Spesifikasi Inti: Saltab Digital *(baru)*
 
