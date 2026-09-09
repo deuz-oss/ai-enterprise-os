@@ -32,7 +32,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
-            "held_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "held_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
         sa.Column("released_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_by_id", sa.Uuid(), nullable=True),

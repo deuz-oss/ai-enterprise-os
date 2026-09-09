@@ -54,7 +54,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["applied_by"], ["users.id"]),
@@ -100,7 +100,7 @@ def upgrade() -> None:
         sa.Column(
             "uploaded_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["invite_id"], ["onboarding_invites.id"]),
