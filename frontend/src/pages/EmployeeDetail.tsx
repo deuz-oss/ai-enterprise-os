@@ -1642,6 +1642,50 @@ export default function EmployeeDetail() {
                   </p>
                 )}
               </div>
+
+              <div className="card">
+                <h2 className="font-semibold" style={{ color: "var(--text)" }}>Shift Kerja</h2>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Shift tetap default, ditampilkan di halaman Absensi Portal Saya. Kosong = shift
+                  belum diatur (bukan jadwal rotasi per-hari).
+                </p>
+                <form
+                  className="mt-3 flex flex-wrap items-end gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    updateEmployee.mutate({
+                      empId: employee.id,
+                      body: {
+                        shift_start_time: form.get("shift_start_time") || null,
+                        shift_end_time: form.get("shift_end_time") || null,
+                      },
+                    });
+                  }}
+                >
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs" style={{ color: "var(--text-muted)" }}>Mulai</label>
+                    <input
+                      name="shift_start_time"
+                      type="time"
+                      defaultValue={employee.shift_start_time ?? ""}
+                      className="input w-auto"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs" style={{ color: "var(--text-muted)" }}>Selesai</label>
+                    <input
+                      name="shift_end_time"
+                      type="time"
+                      defaultValue={employee.shift_end_time ?? ""}
+                      className="input w-auto"
+                    />
+                  </div>
+                  <button type="submit" disabled={updateEmployee.isPending} className="btn-secondary">
+                    Simpan Shift
+                  </button>
+                </form>
+              </div>
             </div>
           )}
         </>

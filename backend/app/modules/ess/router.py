@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,7 @@ from app.modules.ess.schemas import (
     LeaveOut,
     MyAttendanceOut,
     MyAttendanceTodayOut,
+    MyAttendanceWeekDayOut,
     MyPayslipOut,
     OvertimeRequestCreate,
     OvertimeRequestOut,
@@ -83,6 +86,15 @@ def my_attendance(
 def my_attendance_today(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     record = service.get_today_attendance(db, current_user)
     return MyAttendanceTodayOut.from_record(record) if record else None
+
+
+@router.get("/attendance/week", response_model=list[MyAttendanceWeekDayOut])
+def my_attendance_week(
+    start_date: date | None = Query(None),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return service.list_week_attendance(db, current_user, start_date=start_date)
 
 
 @router.post("/attendance/clock-in")

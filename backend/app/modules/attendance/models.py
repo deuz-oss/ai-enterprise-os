@@ -54,6 +54,12 @@ class AttendanceRecord(TenantMixin, Base):
     # Mobile GPS+selfie (Fase 8 lanjutan): koordinat "lat,long" + objek selfie
     clock_in_geo: Mapped[str | None] = mapped_column(String(60), default=None)
     clock_out_geo: Mapped[str | None] = mapped_column(String(60), default=None)
+    # Reverse geocoding (Fase 36) -- resolve SEKALI saat clock-in/out,
+    # disimpan permanen (bukan dihitung ulang tiap tampil) supaya catatan
+    # historis tidak berubah kalau hasil provider geocoding berubah nanti.
+    # Best-effort, null kalau gagal -- tidak pernah memblokir absensi.
+    clock_in_address: Mapped[str | None] = mapped_column(String(500), default=None)
+    clock_out_address: Mapped[str | None] = mapped_column(String(500), default=None)
     clock_in_selfie_key: Mapped[str | None] = mapped_column(String(500), default=None)
     clock_out_selfie_key: Mapped[str | None] = mapped_column(String(500), default=None)
     overtime_hours: Mapped[int] = mapped_column(Integer, default=0)

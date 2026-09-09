@@ -124,6 +124,42 @@ def get_today_attendance(db: Session, user):
     ).scalar_one_or_none()
 
 
+def list_week_attendance(db: Session, user, start_date: date | None = None):
+    """7 hari (Senin-Minggu) untuk strip kalender halaman Absensi --
+    granularitas harian, beda dari `list_own_attendance` yang agregat
+    bulanan. `start_date` boleh tanggal manapun dalam minggu itu, dibulatkan
+    ke Senin minggu yang sama; default minggu berjalan kalau tidak dikirim."""
+    from datetime import timedelta
+
+    from app.modules.attendance.models import AttendanceRecord
+    from app.modules.ess.schemas import MyAttendanceWeekDayOut
+
+    employee = get_own_employee(db, user)
+    anchor = start_date or date.today()
+    monday = anchor - timedelta(days=anchor.weekday())
+    sunday = monday + timedelta(days=6)
+
+    records = {
+        r.date: r
+        for r in db.execute(
+            select(AttendanceRecord).where(
+                AttendanceRecord.employee_id == employee.id,
+                AttendanceRecord.date >= monday,
+                AttendanceRecord.date <= sunday,
+            )
+        ).scalars()
+    }
+    return [
+        MyAttendanceWeekDayOut(
+            date=day,
+            status=records[day].status.value if day in records else None,
+            clock_in=records[day].clock_in if day in records else None,
+            clock_out=records[day].clock_out if day in records else None,
+        )
+        for day in (monday + timedelta(days=i) for i in range(7))
+    ]
+
+
 def mobile_clock(
     db: Session,
     *,
@@ -140,15 +176,19 @@ def mobile_clock(
       sudah ada record (duplikat ditolak — pakai alur HR/Ops untuk koreksi).
     - clock-out: wajib ada record hari ini tanpa clock_out.
     """
+    from app.core.geocoding import reverse_geocode
     from app.modules.attendance.models import AttendanceRecord, AttendanceSource, AttendanceStatus
+    from app.modules.attendance.service import recompute_month_summary
     from app.modules.notifications.service import notify
 
     if direction not in ("in", "out"):
         raise HTTPException(status_code=422, detail="Arah clock harus 'in' atau 'out'")
+
     employee = get_own_employee(db, user)
     lat, lng = _valid_coord(latitude, longitude)
     _enforce_site_radius(db, employee, lat, lng)
     selfie_key = _save_selfie(employee, direction, photo_data, photo_mime)
+    address = reverse_geocode(lat, lng)
 
     today = date.today()
     record = db.execute(
@@ -174,6 +214,7 @@ def mobile_clock(
             status=AttendanceStatus.hadir,
             clock_in=now,
             clock_in_geo=geo,
+            clock_in_address=address,
             clock_in_selfie_key=selfie_key,
             source=AttendanceSource.mobile,
         )
@@ -189,12 +230,18 @@ def mobile_clock(
             raise HTTPException(status_code=409, detail="Clock-out hari ini sudah tercatat")
         record.clock_out = now
         record.clock_out_geo = geo
+        record.clock_out_address = address
         record.clock_out_selfie_key = selfie_key
         action = "attendance.mobile_clock_out"
         title = f"Clock-out mobile — {employee.full_name}"
 
     db.commit()
     db.refresh(record)
+    # Tanpa ini, Rekap Kehadiran (AttendanceSummary, dibaca /me/attendance)
+    # tidak pernah ikut ter-update dari clock-in/out mobile -- summary cuma
+    # artefak agregasi dari AttendanceRecord, bukan tempat input (lihat
+    # docstring model), pola sama `attendance/service.py::upsert_record`.
+    recompute_month_summary(db, employee.id, today.year, today.month)
     audit.log_event(
         db,
         action=action,
@@ -233,6 +280,7 @@ def mobile_clock(
         "direction": direction,
         "time": now.isoformat(),
         "geo": geo,
+        "address": address,
         "status": record.status.value,
     }
 

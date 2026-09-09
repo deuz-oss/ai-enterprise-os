@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -65,6 +65,9 @@ class EmployeeUpdate(BaseModel):
     user_id: UUID | None = None
     # Lokasi kerja untuk geofencing absensi (Fase 34); null = absen bebas.
     site_id: UUID | None = None
+    # Shift default tetap (Fase 36); null = shift belum diatur.
+    shift_start_time: time | None = None
+    shift_end_time: time | None = None
     bpjs_kesehatan_status: str | None = None
     bpjs_ketenagakerjaan_status: str | None = None
     bpjs_kesehatan_valid_until: date | None = None
@@ -118,6 +121,8 @@ class EmployeeOut(BaseModel):
     payroll_locked_at: datetime | None = None
     referral_code: str | None = None
     site_id: UUID | None = None
+    shift_start_time: time | None = None
+    shift_end_time: time | None = None
     created_at: datetime
     updated_at: datetime
 

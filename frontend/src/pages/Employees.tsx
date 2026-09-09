@@ -37,6 +37,8 @@ export interface EmployeeRow {
   payroll_locked_at: string | null;
   referral_code: string | null;
   site_id: string | null;
+  shift_start_time: string | null;
+  shift_end_time: string | null;
 }
 
 interface LeaveRequestRow {

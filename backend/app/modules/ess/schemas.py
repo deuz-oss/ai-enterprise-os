@@ -1,5 +1,5 @@
 import datetime as dt
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
@@ -28,6 +28,8 @@ class ProfileOut(BaseModel):
     marital_status: MaritalStatus | None
     dependents: int
     status: EmployeeStatus
+    shift_start_time: time | None
+    shift_end_time: time | None
 
 
 class MyPayslipOut(BaseModel):
@@ -69,6 +71,8 @@ class MyAttendanceTodayOut(BaseModel):
     status: str
     clock_in: datetime | None
     clock_out: datetime | None
+    clock_in_address: str | None
+    clock_out_address: str | None
     has_clock_in_selfie: bool
     has_clock_out_selfie: bool
 
@@ -80,9 +84,22 @@ class MyAttendanceTodayOut(BaseModel):
             status=record.status.value,
             clock_in=record.clock_in,
             clock_out=record.clock_out,
+            clock_in_address=record.clock_in_address,
+            clock_out_address=record.clock_out_address,
             has_clock_in_selfie=bool(record.clock_in_selfie_key),
             has_clock_out_selfie=bool(record.clock_out_selfie_key),
         )
+
+
+class MyAttendanceWeekDayOut(BaseModel):
+    """Satu hari dalam strip kalender mingguan halaman Absensi -- beda dari
+    `MyAttendanceOut` yang agregat bulanan, ini granularitas harian tapi
+    ringkas (cuma untuk dot status, bukan detail penuh)."""
+
+    date: date
+    status: str | None
+    clock_in: datetime | None
+    clock_out: datetime | None
 
 
 class LeaveCreate(BaseModel):

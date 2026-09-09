@@ -1,7 +1,20 @@
-import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
-import { UserCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  CalendarClock,
+  FileSignature,
+  FileText,
+  IdCard,
+  KeyRound,
+  type LucideIcon,
+  Plane,
+  Timer,
+  UserCircle,
+  Wallet,
+} from "lucide-react";
 import { PageHeader } from "../components/workspace";
 
 const MONTHS = [
@@ -25,6 +38,8 @@ interface Profile {
   marital_status: string | null;
   dependents: number;
   status: string;
+  shift_start_time: string | null;
+  shift_end_time: string | null;
 }
 
 interface ContractRow {
@@ -117,8 +132,40 @@ interface TodayAttendance {
   status: string;
   clock_in: string | null;
   clock_out: string | null;
+  clock_in_address: string | null;
+  clock_out_address: string | null;
   has_clock_in_selfie: boolean;
   has_clock_out_selfie: boolean;
+}
+
+interface WeekDay {
+  date: string;
+  status: string | null;
+  clock_in: string | null;
+  clock_out: string | null;
+}
+
+const WEEKDAY_LABELS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+
+function weekDayDotColor(status: string | null): string {
+  if (status === null) return "var(--border)";
+  if (status === "hadir" || status === "terlambat" || status === "dinas_luar") return "#059669";
+  if (status === "izin" || status === "sakit" || status === "cuti") return "#2563eb";
+  if (status === "alpa") return "#dc2626";
+  return "var(--text-muted)"; // libur
+}
+
+function mondayOf(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function toDateParam(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 interface AttendanceCorrectionRow {
@@ -160,6 +207,83 @@ function getGpsPosition(): Promise<GeolocationPosition> {
   });
 }
 
+/** Kamera live in-page untuk selfie absensi -- ganti `<input capture>` yang
+ * melempar ke app kamera bawaan HP (izinnya level OS untuk aplikasi
+ * browser, bukan per-website, tidak bisa di-"ask" dari kode web).
+ * `getUserMedia` di sini adalah izin PER-WEBSITE sungguhan, diminta lebih
+ * dulu saat halaman dibuka (lihat efek priming di komponen utama) supaya
+ * modal ini biasanya langsung dapat stream tanpa prompt lagi. */
+function SelfieCameraModal({
+  onCapture,
+  onCancel,
+}: {
+  onCapture: (blob: Blob) => void;
+  onCancel: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" } })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(() => {
+        setError("Tidak bisa mengakses kamera -- pastikan izin kamera untuk situs ini diaktifkan.");
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  function handleShutter() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    // Sampling data mentah video (bukan elemen DOM ter-mirror) -- hasil
+    // jepretan TIDAK terbalik walau preview-nya di-mirror buat kesan natural.
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => blob && onCapture(blob), "image/jpeg", 0.85);
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
+      {error ? (
+        <>
+          <p className="max-w-xs text-center text-sm text-white">{error}</p>
+          <button onClick={onCancel} className="btn-secondary">Tutup</button>
+        </>
+      ) : (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="max-h-[70vh] w-full max-w-md rounded-lg"
+            style={{ transform: "scaleX(-1)" }}
+          />
+          <div className="flex gap-3">
+            <button onClick={onCancel} className="btn-secondary">Batal</button>
+            <button onClick={handleShutter} className="btn">Jepret</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -169,11 +293,263 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium"
+      style={{ color: "var(--text-muted)" }}
+    >
+      <ArrowLeft className="h-3.5 w-3.5" /> Kembali
+    </button>
+  );
+}
+
+function IconTile({
+  icon: Icon,
+  label,
+  badge,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  badge?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex cursor-pointer flex-col items-center gap-2 rounded-xl p-3 text-center transition-colors hover:bg-[var(--hover)]"
+    >
+      <span className="relative flex h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: "var(--accent-tint)" }}>
+        <Icon className="h-5 w-5" style={{ color: "var(--accent)" }} />
+        {badge && (
+          <span
+            className="absolute -right-1 -top-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+            style={{ backgroundColor: "#dc2626" }}
+          >
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="text-xs font-medium" style={{ color: "var(--text)" }}>{label}</span>
+    </button>
+  );
+}
+
+function IconCategory({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p
+        className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-widest"
+        style={{ color: "var(--text-muted)" }}
+      >
+        {label}
+      </p>
+      <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">{children}</div>
+    </div>
+  );
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const s = String(totalSeconds % 60).padStart(2, "0");
+  return `${h}.${m}.${s}`;
+}
+
+/** Halaman Absensi tersendiri (Fase 36) -- dibuka dari widget ringkas di
+ * home Portal Saya, bukan lagi kartu inline dengan tombol clock langsung.
+ * Strip kalender mingguan + shift + tombol bulat Clock In/Out dengan
+ * timer berjalan + alamat hasil reverse geocoding. */
+function AbsensiPage({
+  onBack,
+  profile,
+  attendanceToday,
+  clockDirection,
+  clockError,
+  clockMutationError,
+  startClock,
+  showCamera,
+  onCapture,
+  onCameraCancel,
+}: {
+  onBack: () => void;
+  profile: Profile;
+  attendanceToday: TodayAttendance | null;
+  clockDirection: "in" | "out" | null;
+  clockError: string | null;
+  clockMutationError: Error | null;
+  startClock: (direction: "in" | "out") => void;
+  showCamera: boolean;
+  onCapture: (blob: Blob) => void;
+  onCameraCancel: () => void;
+}) {
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  const [elapsed, setElapsed] = useState(0);
+
+  const { data: week } = useQuery({
+    queryKey: ["me-attendance-week", toDateParam(weekStart)],
+    queryFn: () =>
+      api.get<WeekDay[]>(`/me/attendance/week?start_date=${toDateParam(weekStart)}`),
+  });
+
+  useEffect(() => {
+    if (!attendanceToday?.clock_in || attendanceToday.clock_out) return;
+    const clockInMs = new Date(attendanceToday.clock_in).getTime();
+    const tick = () => setElapsed(Date.now() - clockInMs);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [attendanceToday?.clock_in, attendanceToday?.clock_out]);
+
+  const isClockedIn = Boolean(attendanceToday?.clock_in) && !attendanceToday?.clock_out;
+  const isDone = Boolean(attendanceToday?.clock_out);
+
+  return (
+    <div className="space-y-4">
+      <BackLink onClick={onBack} />
+      {showCamera && <SelfieCameraModal onCapture={onCapture} onCancel={onCameraCancel} />}
+
+      <div className="card">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            className="cursor-pointer rounded-lg p-1.5 hover:bg-[var(--hover)]"
+            onClick={() => setWeekStart((d) => new Date(d.getTime() - 7 * 86400000))}
+          >
+            <ArrowLeft className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+          </button>
+          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            {weekStart.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
+          </p>
+          <button
+            className="cursor-pointer rounded-lg p-1.5 hover:bg-[var(--hover)]"
+            onClick={() => setWeekStart((d) => new Date(d.getTime() + 7 * 86400000))}
+          >
+            <ArrowLeft className="h-4 w-4 rotate-180" style={{ color: "var(--text-muted)" }} />
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+          {(week ?? []).map((d, i) => {
+            const isToday = d.date === toDateParam(new Date());
+            return (
+              <div
+                key={d.date}
+                className="rounded-lg py-2"
+                style={{ backgroundColor: isToday ? "var(--accent-tint)" : undefined }}
+              >
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  {WEEKDAY_LABELS[i]}
+                </p>
+                <p className="mt-0.5 text-sm font-medium" style={{ color: "var(--text)" }}>
+                  {new Date(d.date).getDate()}
+                </p>
+                <span
+                  className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: weekDayDotColor(d.status) }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card flex flex-col items-center gap-4 py-8 text-center">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          {profile.shift_start_time && profile.shift_end_time
+            ? `Shift: ${profile.shift_start_time.slice(0, 5)} - ${profile.shift_end_time.slice(0, 5)}`
+            : "Shift belum diatur HR"}
+        </p>
+
+        <div
+          className="flex h-48 w-48 flex-col items-center justify-center gap-3 rounded-full"
+          style={{ border: "3px solid var(--border)" }}
+        >
+          <p className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
+            {formatElapsed(elapsed)}
+          </p>
+          {!isDone && (
+            <button
+              onClick={() => startClock(isClockedIn ? "out" : "in")}
+              disabled={clockDirection !== null}
+              className="btn"
+            >
+              {clockDirection !== null
+                ? "Memproses..."
+                : isClockedIn
+                  ? "Absen Keluar"
+                  : "Absen Masuk"}
+            </button>
+          )}
+          {isDone && <span className="badge pill p-green">Selesai hari ini</span>}
+        </div>
+
+        {clockError && <p className="text-sm text-red-600">{clockError}</p>}
+        {clockMutationError && (
+          <p className="text-sm text-red-600">{clockMutationError.message}</p>
+        )}
+
+        {attendanceToday?.clock_in && (
+          <div className="w-full space-y-1 text-left text-sm" style={{ color: "var(--text)" }}>
+            <p>
+              Titik Lokasi <span style={{ color: "#059669" }}>✓</span>
+            </p>
+            <p style={{ color: "var(--text-muted)" }}>
+              {(isDone ? attendanceToday.clock_out_address : attendanceToday.clock_in_address) ??
+                "Alamat tidak tersedia"}
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap justify-center gap-3">
+          {attendanceToday?.has_clock_in_selfie && (
+            <button
+              onClick={() =>
+                openDownload(`/me/attendance/${attendanceToday.id}/selfie/in/download-url`)
+              }
+              className="text-sm font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Lihat Selfie Masuk
+            </button>
+          )}
+          {attendanceToday?.has_clock_out_selfie && (
+            <button
+              onClick={() =>
+                openDownload(`/me/attendance/${attendanceToday.id}/selfie/out/download-url`)
+              }
+              className="text-sm font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Lihat Selfie Keluar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MyPortal() {
   const qc = useQueryClient();
   const today = new Date();
   const [attPeriod, setAttPeriod] = useState({ year: today.getFullYear(), month: today.getMonth() + 1 });
   const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+
+  // Priming izin: minta lokasi+kamera begitu halaman dibuka (bukan nunggu
+  // klik Absen) supaya prompt-nya tidak gampang terlewat di HP. Diam-diam
+  // (tidak munculkan error) -- kegagalan sungguhan baru ditampilkan saat
+  // user benar-benar klik Absen.
+  useEffect(() => {
+    getGpsPosition().catch(() => {});
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { facingMode: "user" } })
+      .then((stream) => stream.getTracks().forEach((t) => t.stop()))
+      .catch(() => {});
+  }, []);
+
   const { data: profile, error, isLoading } = useQuery({
     queryKey: ["me-profile"],
     queryFn: () => api.get<Profile>("/me/profile"),
@@ -224,7 +600,7 @@ export default function MyPortal() {
   });
   const [clockDirection, setClockDirection] = useState<"in" | "out" | null>(null);
   const [clockError, setClockError] = useState<string | null>(null);
-  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
   const pendingCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const clockMutation = useMutation({
@@ -242,7 +618,7 @@ export default function MyPortal() {
     getGpsPosition()
       .then((pos) => {
         pendingCoordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        selfieInputRef.current?.click();
+        setShowCamera(true);
       })
       .catch((err: unknown) => {
         setClockError(err instanceof Error ? err.message : "Gagal mengambil lokasi");
@@ -250,23 +626,27 @@ export default function MyPortal() {
       });
   }
 
-  function onSelfieChosen(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+  function handleCaptured(blob: Blob) {
+    setShowCamera(false);
     const coords = pendingCoordsRef.current;
     const direction = clockDirection;
-    if (!file || !coords || !direction) {
+    if (!coords || !direction) {
       setClockDirection(null);
       return;
     }
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", blob, "selfie.jpg");
     fd.append("latitude", String(coords.lat));
     fd.append("longitude", String(coords.lng));
     clockMutation.mutate(
       { direction, formData: fd },
       { onSettled: () => setClockDirection(null) }
     );
+  }
+
+  function handleCameraCancel() {
+    setShowCamera(false);
+    setClockDirection(null);
   }
 
   const invalidateCorrections = () => {
@@ -342,92 +722,86 @@ export default function MyPortal() {
     );
   }
 
+  const hour = today.getHours();
+  const greeting = hour < 11 ? "Selamat pagi" : hour < 15 ? "Selamat siang" : hour < 19 ? "Selamat sore" : "Selamat malam";
+  const unreadCount = (notifications ?? []).filter((n) => !n.read_at).length;
+
   return (
     <div className="space-y-4">
-      <PageHeader icon={UserCircle} title="Portal Saya" />
+      <PageHeader icon={UserCircle} title="Portal Saya" subtitle={`${greeting}, ${profile.full_name}`} />
 
-      <div className="card">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Absen Masuk/Keluar</h2>
-          {attendanceToday?.clock_out ? (
-            <span className="badge pill p-green">Selesai hari ini</span>
-          ) : attendanceToday?.clock_in ? (
-            <span className="badge pill p-yellow">Sudah absen masuk</span>
-          ) : null}
-        </div>
-        <input
-          ref={selfieInputRef}
-          type="file"
-          accept="image/*"
-          capture="user"
-          className="hidden"
-          onChange={onSelfieChosen}
-        />
-        {attendanceToday?.clock_in && (
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Field
-              label="Jam Masuk"
-              value={new Date(attendanceToday.clock_in).toLocaleTimeString("id-ID")}
-            />
-            <Field
-              label="Jam Keluar"
-              value={
-                attendanceToday.clock_out
-                  ? new Date(attendanceToday.clock_out).toLocaleTimeString("id-ID")
-                  : "-"
-              }
-            />
+      {activeSection === null && (
+        <div className="card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold" style={{ color: "var(--text)" }}>Absen Masuk/Keluar</h2>
+              {attendanceToday?.clock_out ? (
+                <span className="badge pill p-green mt-1 inline-block">Selesai hari ini</span>
+              ) : attendanceToday?.clock_in ? (
+                <span className="badge pill p-yellow mt-1 inline-block">Sudah absen masuk</span>
+              ) : (
+                <span className="badge pill p-gray mt-1 inline-block">Belum absen masuk</span>
+              )}
+            </div>
+            <button onClick={() => setActiveSection("absen")} className="btn">
+              Buka Absensi
+            </button>
           </div>
-        )}
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          {!attendanceToday?.clock_in && (
-            <button
-              onClick={() => startClock("in")}
-              disabled={clockDirection !== null}
-              className="btn"
-            >
-              {clockDirection === "in" ? "Memproses..." : "Absen Masuk"}
-            </button>
-          )}
-          {attendanceToday?.clock_in && !attendanceToday?.clock_out && (
-            <button
-              onClick={() => startClock("out")}
-              disabled={clockDirection !== null}
-              className="btn"
-            >
-              {clockDirection === "out" ? "Memproses..." : "Absen Keluar"}
-            </button>
-          )}
-          {attendanceToday?.has_clock_in_selfie && (
-            <button
-              onClick={() =>
-                openDownload(`/me/attendance/${attendanceToday.id}/selfie/in/download-url`)
-              }
-              className="text-sm font-medium hover:opacity-80"
-              style={{ color: "var(--accent)" }}
-            >
-              Lihat Selfie Masuk
-            </button>
-          )}
-          {attendanceToday?.has_clock_out_selfie && (
-            <button
-              onClick={() =>
-                openDownload(`/me/attendance/${attendanceToday.id}/selfie/out/download-url`)
-              }
-              className="text-sm font-medium hover:opacity-80"
-              style={{ color: "var(--accent)" }}
-            >
-              Lihat Selfie Keluar
-            </button>
-          )}
         </div>
-        {clockError && <p className="mt-2 text-sm text-red-600">{clockError}</p>}
-        {clockMutation.error && (
-          <p className="mt-2 text-sm text-red-600">{(clockMutation.error as Error).message}</p>
-        )}
-      </div>
+      )}
 
+      {activeSection === "absen" && (
+        <AbsensiPage
+          onBack={() => setActiveSection(null)}
+          profile={profile}
+          attendanceToday={attendanceToday ?? null}
+          clockDirection={clockDirection}
+          clockError={clockError}
+          clockMutationError={clockMutation.error as Error | null}
+          startClock={startClock}
+          showCamera={showCamera}
+          onCapture={handleCaptured}
+          onCameraCancel={handleCameraCancel}
+        />
+      )}
+
+      {activeSection === null && (
+        <div className="card space-y-5">
+          <IconCategory label="Kepegawaian">
+            <IconTile icon={IdCard} label="Profil Saya" onClick={() => setActiveSection("profil")} />
+            <IconTile icon={FileSignature} label="Kontrak Kerja" onClick={() => setActiveSection("kontrak")} />
+            <IconTile icon={FileText} label="Dokumen Saya" onClick={() => setActiveSection("dokumen")} />
+          </IconCategory>
+          <IconCategory label="Kehadiran">
+            <IconTile icon={CalendarClock} label="Riwayat Absensi" onClick={() => setActiveSection("absensi")} />
+            <IconTile icon={Timer} label="Lembur" onClick={() => setActiveSection("lembur")} />
+          </IconCategory>
+          <IconCategory label="Cuti">
+            <IconTile
+              icon={Plane}
+              label="Cuti & Izin"
+              badge={leaveBalance ? `${leaveBalance.remaining}h` : undefined}
+              onClick={() => setActiveSection("cuti")}
+            />
+          </IconCategory>
+          <IconCategory label="Keuangan">
+            <IconTile icon={Wallet} label="Slip Gaji" onClick={() => setActiveSection("gaji")} />
+          </IconCategory>
+          <IconCategory label="Akun">
+            <IconTile
+              icon={Bell}
+              label="Notifikasi"
+              badge={unreadCount > 0 ? String(unreadCount) : undefined}
+              onClick={() => setActiveSection("notifikasi")}
+            />
+            <IconTile icon={KeyRound} label="Ganti Password" onClick={() => setActiveSection("password")} />
+          </IconCategory>
+        </div>
+      )}
+
+      {activeSection === "profil" && (
       <div className="card">
+        <BackLink onClick={() => setActiveSection(null)} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Data Pribadi</h2>
           <span className="badge pill p-green">{profile.status}</span>
@@ -452,9 +826,12 @@ export default function MyPortal() {
           <Field label="BPJS Ketenagakerjaan" value={profile.bpjs_ketenagakerjaan_no ?? "-"} />
         </dl>
       </div>
+      )}
 
+      {activeSection === "kontrak" && (
       <div className="card overflow-x-auto p-0">
         <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Kontrak Kerja</h2>
         </div>
         <table className="w-full">
@@ -499,9 +876,12 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      )}
 
+      {activeSection === "dokumen" && (
       <div className="card overflow-x-auto p-0">
         <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Dokumen Saya</h2>
         </div>
         <table className="w-full">
@@ -542,9 +922,12 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      )}
 
+      {activeSection === "gaji" && (
       <div className="card overflow-x-auto p-0">
         <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
+          <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Riwayat Slip Gaji</h2>
         </div>
         <table className="w-full">
@@ -591,7 +974,11 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      )}
 
+      {activeSection === "absensi" && (
+      <>
+      <BackLink onClick={() => setActiveSection(null)} />
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Rekap Kehadiran</h2>
@@ -743,8 +1130,12 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
+      {activeSection === "lembur" && (
       <div className="card">
+        <BackLink onClick={() => setActiveSection(null)} />
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Ajukan Lembur</h2>
         <form
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_1fr_auto]"
@@ -822,7 +1213,11 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      )}
 
+      {activeSection === "cuti" && (
+      <>
+      <BackLink onClick={() => setActiveSection(null)} />
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>
@@ -959,8 +1354,12 @@ export default function MyPortal() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
+      {activeSection === "notifikasi" && (
       <div className="card">
+        <BackLink onClick={() => setActiveSection(null)} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Notifikasi</h2>
           {(notifications ?? []).some((n) => !n.read_at) && (
@@ -1007,8 +1406,11 @@ export default function MyPortal() {
           )}
         </ul>
       </div>
+      )}
 
+      {activeSection === "password" && (
       <div className="card max-w-xl">
+        <BackLink onClick={() => setActiveSection(null)} />
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Ganti Password</h2>
         <form
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
@@ -1051,6 +1453,7 @@ export default function MyPortal() {
           </p>
         )}
       </div>
+      )}
     </div>
   );
 }

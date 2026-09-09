@@ -1,6 +1,6 @@
 import enum
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
     UniqueConstraint,
     func,
 )
@@ -129,6 +130,11 @@ class Employee(TenantMixin, Base):
     site_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("client_sites.id"), default=None, index=True
     )
+    # Shift default tetap (Fase 36) -- BUKAN jadwal rotasi/per-hari, cuma
+    # satu jam kerja standar per karyawan, diatur HR, ditampilkan di
+    # halaman Absensi Portal Saya. Kosong = shift belum diatur.
+    shift_start_time: Mapped[time | None] = mapped_column(Time, default=None)
+    shift_end_time: Mapped[time | None] = mapped_column(Time, default=None)
     employee_no: Mapped[str] = mapped_column(String(50), index=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     ktp_no: Mapped[str | None] = mapped_column(String(50))

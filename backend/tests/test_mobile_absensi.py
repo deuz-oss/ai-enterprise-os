@@ -3,9 +3,21 @@
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from tests.conftest import _auth_header
 from tests.test_ess import _create_karyawan, _link_employee
 from tests.test_recruitment import _client_id
+
+
+@pytest.fixture(autouse=True)
+def _no_real_geocoding():
+    """`mobile_clock` panggil reverse_geocode nyata (HTTP ke Nominatim) --
+    default-kan ke None (simulasi gagal/tidak tersedia) di semua test file
+    ini supaya tidak ada panggilan jaringan sungguhan. Test yang perlu
+    verifikasi alamat tersimpan override ini sendiri per-test."""
+    with patch("app.core.geocoding.reverse_geocode", return_value=None) as mock:
+        yield mock
 
 
 def _employee(client, headers, name="Pekerja Mobile") -> str:
@@ -269,3 +281,110 @@ def test_clock_in_site_dihapus_fail_open(client):
         put.return_value = "key"
         jauh = _clock(client, emp, "in", lat="-8.65", lng="115.2167")
     assert jauh.status_code == 200, jauh.text
+
+
+# ---------- Reverse geocoding alamat absensi (Fase 36) ----------
+
+
+def test_clock_in_alamat_tersimpan_saat_geocoding_sukses(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Geo Sukses")
+
+    with (
+        patch("app.core.geocoding.reverse_geocode", return_value="Jl. Sudirman, Jakarta"),
+        patch("app.modules.ess.service.storage.put_object") as put,
+    ):
+        put.return_value = "key"
+        cin = _clock(client, emp, "in")
+    assert cin.status_code == 200, cin.text
+    assert cin.json()["address"] == "Jl. Sudirman, Jakarta"
+
+    today = client.get("/api/v1/me/attendance/today", headers=emp).json()
+    assert today["clock_in_address"] == "Jl. Sudirman, Jakarta"
+
+
+def test_clock_in_tetap_sukses_walau_geocoding_gagal(client):
+    """`_no_real_geocoding` sudah default None (simulasi gagal) -- pastikan
+    clock-in TETAP 200, bukan ikut gagal gara-gara geocoding best-effort."""
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Geo Gagal")
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        cin = _clock(client, emp, "in")
+    assert cin.status_code == 200, cin.text
+    assert cin.json()["address"] is None
+
+    today = client.get("/api/v1/me/attendance/today", headers=emp).json()
+    assert today["clock_in_address"] is None
+
+
+# ---------- Strip kalender mingguan (Fase 36) ----------
+
+
+def test_attendance_week_7_hari_dan_status_benar(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Minggu")
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        _clock(client, emp, "in")
+
+    week = client.get("/api/v1/me/attendance/week", headers=emp)
+    assert week.status_code == 200, week.text
+    days = week.json()
+    assert len(days) == 7
+    today_str = date.today().isoformat()
+    today_entry = next(d for d in days if d["date"] == today_str)
+    assert today_entry["status"] == "hadir"
+    assert today_entry["clock_in"] is not None
+    # Hari lain dalam minggu itu (belum ada absensi) -- status None, bukan error.
+    other_days = [d for d in days if d["date"] != today_str]
+    assert all(d["status"] is None for d in other_days)
+
+
+# ---------- Shift default per karyawan (Fase 36) ----------
+
+
+def test_shift_diatur_hr_muncul_di_profil_karyawan(client):
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Shift")
+
+    set_shift = client.patch(
+        f"/api/v1/employees/{emp_id}",
+        headers=admin,
+        json={"shift_start_time": "09:00:00", "shift_end_time": "18:00:00"},
+    )
+    assert set_shift.status_code == 200, set_shift.text
+
+    profile = client.get("/api/v1/me/profile", headers=emp).json()
+    assert profile["shift_start_time"] == "09:00:00"
+    assert profile["shift_end_time"] == "18:00:00"
+
+
+# ---------- Regresi: clock-in mobile harus ikut Rekap Kehadiran ----------
+
+
+def test_clock_in_mobile_terefleksi_di_rekap_bulanan(client):
+    """Bug ditemukan Brian: absen mobile tidak pernah memicu
+    `recompute_month_summary`, jadi Rekap Kehadiran (AttendanceSummary,
+    /me/attendance) tidak pernah ikut ter-update walau AttendanceRecord-nya
+    ada."""
+    admin, emp, emp_id = _setup_linked_karyawan(client, name="Pekerja Rekap")
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        cin = _clock(client, emp, "in")
+    assert cin.status_code == 200, cin.text
+
+    today = date.today()
+    rekap = client.get(
+        f"/api/v1/me/attendance?year={today.year}&month={today.month}", headers=emp
+    ).json()
+    assert len(rekap) == 1
+    assert rekap[0]["present_days"] == 1
+
+    with patch("app.modules.ess.service.storage.put_object") as put:
+        put.return_value = "key"
+        _clock(client, emp, "out")
+
+    rekap_setelah_keluar = client.get(
+        f"/api/v1/me/attendance?year={today.year}&month={today.month}", headers=emp
+    ).json()
+    assert rekap_setelah_keluar[0]["present_days"] == 1
