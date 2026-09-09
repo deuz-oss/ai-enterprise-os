@@ -23,6 +23,7 @@ import {
   Lightbulb,
   type LucideIcon,
   Magnet,
+  Menu,
   MessageCircle,
   MessagesSquare,
   Moon,
@@ -227,6 +228,7 @@ export default function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [helpDismissed, setHelpDismissed] = useState(
     () => localStorage.getItem("aeos_helpchip") === "0"
   );
@@ -279,6 +281,7 @@ export default function Layout() {
       if (e.key === "Escape") {
         setInboxOpen(false);
         setAccountMenuOpen(false);
+        setSidebarOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -286,6 +289,11 @@ export default function Layout() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
+
+  // Drawer mobile: tutup otomatis begitu pindah halaman (klik nav item).
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   if (!getToken()) return <Navigate to="/login" replace />;
 
@@ -373,6 +381,14 @@ export default function Layout() {
         className="sticky top-0 z-20 flex h-14 items-center gap-3 px-4 lg:px-6"
         style={{ backgroundColor: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
       >
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--hover)] lg:hidden"
+          style={{ color: "var(--text-muted)" }}
+          title="Buka menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <button
           onClick={() => navigate("/")}
           className="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-[var(--hover)]"
@@ -550,9 +566,19 @@ export default function Layout() {
       </header>
 
       <div className="flex">
-        {/* ===== Sidebar ===== */}
+        {/* Backdrop drawer mobile -- lg:hidden supaya tidak pernah nongol di desktop */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* ===== Sidebar (drawer overlay di mobile, statis sejak breakpoint lg) ===== */}
         <aside
-          className="flex w-64 shrink-0 flex-col sticky top-14 h-[calc(100vh-56px)]"
+          className={`fixed left-0 top-14 z-40 flex h-[calc(100vh-56px)] w-64 shrink-0 flex-col overflow-y-auto transition-transform duration-200 lg:sticky lg:z-auto lg:translate-x-0 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
           style={{ backgroundColor: "var(--sidebar)", borderRight: "1px solid var(--border)" }}
         >
           <nav className="flex-1 space-y-5 overflow-y-auto p-3">
