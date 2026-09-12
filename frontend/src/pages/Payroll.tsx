@@ -1011,8 +1011,8 @@ export default function Payroll() {
                     <td className="td font-semibold text-right tabular-nums">
                       {isNegative ? (
                         <>
-                          <span style={{ color: "#b45309" }}>{formatRupiah(Number(s.net_pay))}*</span>
-                          <div className="text-[11px] font-normal" style={{ color: "#b45309" }}>
+                          <span className="text-amber-700">{formatRupiah(Number(s.net_pay))}*</span>
+                          <div className="text-[11px] font-normal text-amber-700">
                             (Net Pay Negatif)
                           </div>
                         </>

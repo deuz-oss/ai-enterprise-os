@@ -285,13 +285,13 @@ export default function Billing() {
                   <td className="td">{new Date(t.created_at).toLocaleString("id-ID")}</td>
                   <td className="td">{t.ref_event}</td>
                   <td
-                    className="td text-right"
-                    style={{ color: t.amount < 0 ? "var(--text)" : "#047857" }}
+                    className={`td text-right tabular-nums ${t.amount < 0 ? "" : "text-emerald-700"}`}
+                    style={t.amount < 0 ? { color: "var(--text)" } : undefined}
                   >
                     {t.amount >= 0 ? "+" : ""}
                     {formatRupiah(t.amount)}
                   </td>
-                  <td className="td text-right">{formatRupiah(t.balance_after)}</td>
+                  <td className="td text-right tabular-nums">{formatRupiah(t.balance_after)}</td>
                 </tr>
               ))}
               {(transactions.data ?? []).length === 0 && (

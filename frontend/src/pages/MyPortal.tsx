@@ -493,7 +493,7 @@ function AbsensiPage({
         {attendanceToday?.clock_in && (
           <div className="w-full space-y-1 text-left text-sm" style={{ color: "var(--text)" }}>
             <p>
-              Titik Lokasi <span style={{ color: "#059669" }}>✓</span>
+              Titik Lokasi <span className="text-emerald-600">✓</span>
             </p>
             <p style={{ color: "var(--text-muted)" }}>
               {(isDone ? attendanceToday.clock_out_address : attendanceToday.clock_in_address) ??

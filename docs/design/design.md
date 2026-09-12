@@ -123,7 +123,7 @@ satu dari 3 kategori di bawah, bukan satu tumpukan "belum dikerjakan".
 | `JobOrderDetail.tsx`, `TalentPool.tsx`, `TalentPoolDetail.tsx` | ✅ Warna+label tahap `PlacementStatus` (dulu di-hardcode 3× identik) disatukan ke `frontend/src/lib/pipelineStages.ts` (2026-09-12) |
 | Sisa file dengan warna Tailwind kategori (biru/violet/emerald/amber) | ✅ Bukan bug — ini warna kategori sidebar yang SENGAJA independen dari `--accent` (lihat komentar `index.css` §"Warna kategori") |
 | `components/ui/PreflightAlert.tsx`, banner urgensi `Dashboard.tsx` | ✅ Bukan bug — warna dipatok persis dari `component-implementation-spec.md` §1.4, SENGAJA sama di light & dark mode (alert compliance/urgensi tinggi, bukan elemen tema) |
-| Sisa hex kecil (mis. teks hijau "Tersimpan" di `Pages.tsx`, warning `Payroll.tsx`, checkmark `MyPortal.tsx`) | ⬜ Belum dimigrasi, tapi prioritas rendah — warna saturasi kecil yang secara visual tetap terbaca di kedua tema, bukan pelanggaran kontras |
+| `Pages.tsx`, `Payroll.tsx`, `MyPortal.tsx`, `Billing.tsx` | ✅ Sisa hex kecil (teks "Tersimpan", warning net-pay negatif, checkmark, kredit transaksi) diganti ke utility Tailwind semantik (`text-emerald-600/700`, `text-amber-700`) yang sudah jadi konvensi di file lain — bukan token `var(--...)` (memang bukan warna brand), tapi tidak lagi hex lepas (2026-09-12) |
 
 Migrasi dilakukan bertahap per halaman saat halaman itu disentuh untuk
 alasan lain (bukan proyek migrasi besar sekaligus) — update tabel ini

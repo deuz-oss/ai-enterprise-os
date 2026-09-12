@@ -269,7 +269,7 @@ export default function Pages() {
                   </button>
                 )}
                 {updatePage.isSuccess && !updatePage.isPending && (
-                  <span style={{ color: "#0f7b6d" }}>Tersimpan ✓</span>
+                  <span className="text-emerald-600">Tersimpan ✓</span>
                 )}
               </div>
               {updatePage.error && (
