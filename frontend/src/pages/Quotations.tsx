@@ -266,6 +266,13 @@ export default function Quotations() {
               <Fragment key={q.id}>
                 <tr
                   onClick={() => setSelectedId(q.id === selectedId ? null : q.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedId(q.id === selectedId ? null : q.id);
+                    }
+                  }}
+                  tabIndex={0}
                   className="cursor-pointer transition-colors"
                   style={{
                     backgroundColor: selectedId === q.id ? "var(--accent-tint)" : undefined,

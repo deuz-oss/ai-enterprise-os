@@ -288,6 +288,13 @@ export default function Agreements() {
               <Fragment key={a.id}>
                 <tr
                   onClick={() => setSelectedId(a.id === selectedId ? null : a.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedId(a.id === selectedId ? null : a.id);
+                    }
+                  }}
+                  tabIndex={0}
                   className="cursor-pointer transition-colors"
                   style={{
                     backgroundColor: selectedId === a.id ? "var(--accent-tint)" : undefined,

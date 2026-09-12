@@ -136,6 +136,14 @@ export default function Clients() {
               <tr
                 key={c.id}
                 onClick={() => navigate(`/clients/${c.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate(`/clients/${c.id}`);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className="cursor-pointer transition-colors hover:bg-[var(--hover)]"
               >
                 <td className="td font-medium">{c.name}</td>

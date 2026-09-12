@@ -642,6 +642,14 @@ export default function Employees() {
               <tr
                 key={e.id}
                 onClick={() => navigate(`/employees/${e.id}`)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    navigate(`/employees/${e.id}`);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className="cursor-pointer hover:bg-[var(--hover)] transition-colors"
               >
                 <td className="td font-mono text-xs">{e.employee_no}</td>

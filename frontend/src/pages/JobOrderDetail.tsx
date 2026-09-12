@@ -577,6 +577,13 @@ export default function JobOrderDetail() {
                     <div
                       key={p.id}
                       onClick={() => setSelectedPlacementId(p.id === selectedPlacementId ? null : p.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedPlacementId(p.id === selectedPlacementId ? null : p.id);
+                        }
+                      }}
+                      tabIndex={0}
                       className="rounded-md p-2.5 shadow-sm transition-shadow hover:shadow"
                       style={{
                         backgroundColor: "var(--bg-elevated)",
@@ -636,6 +643,7 @@ export default function JobOrderDetail() {
                             onChange={(e) => requestPlacementStatus(p.id, e.target.value)}
                             className="cursor-pointer rounded bg-transparent text-[11px]"
                             style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
+                            aria-label={`Ubah tahap kandidat ${candidateName(p.candidate_id)}`}
                           >
                             {statusOptions.map((o) => (
                               <option key={o.value} value={o.value}>
@@ -660,6 +668,7 @@ export default function JobOrderDetail() {
                             value={p.status}
                             onChange={(e) => requestPlacementStatus(p.id, e.target.value)}
                             className="input w-full py-0.5 text-[11px]"
+                            aria-label={`Ubah tahap kandidat ${candidateName(p.candidate_id)}`}
                           >
                             {statusOptions.map((o) => (
                               <option key={o.value} value={o.value}>
@@ -673,7 +682,7 @@ export default function JobOrderDetail() {
                   );
                 })}
                 {cards.length === 0 && (
-                  <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--th-color)" }}>
                     Kosong
                   </p>
                 )}

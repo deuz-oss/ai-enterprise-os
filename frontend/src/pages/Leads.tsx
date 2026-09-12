@@ -425,6 +425,13 @@ export default function Leads() {
               <tr
                 key={lead.id}
                 onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedId(lead.id === selectedId ? null : lead.id);
+                  }
+                }}
+                tabIndex={0}
                 className="cursor-pointer transition-colors"
                 style={{
                   backgroundColor:
@@ -534,6 +541,13 @@ export default function Leads() {
                         opacity: dragId === lead.id ? 0.5 : 1,
                       }}
                       onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedId(lead.id === selectedId ? null : lead.id);
+                        }
+                      }}
+                      tabIndex={0}
                       title={lead.industry ?? undefined}
                     >
                       {lead.industry && (
