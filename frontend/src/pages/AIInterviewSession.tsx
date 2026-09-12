@@ -134,10 +134,11 @@ export default function AIInterviewSession() {
         <form onSubmit={handleSubmit} className="card space-y-4">
           {data.questions.map((q, idx) => (
             <div key={q.id}>
-              <label className="text-sm font-medium text-[var(--text)]">
+              <label htmlFor={`answer-${q.id}`} className="text-sm font-medium text-[var(--text)]">
                 {idx + 1}. {q.prompt}
               </label>
               <textarea
+                id={`answer-${q.id}`}
                 required
                 rows={4}
                 value={answers[q.id] ?? ""}

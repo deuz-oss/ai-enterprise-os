@@ -171,8 +171,15 @@ export function CareerDetail() {
           <input name="file" type="file" required accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="input w-full" aria-label="Unggah CV" />
           {jo.screening_questions.map((q) => (
             <div key={q.id}>
-              <label className="text-sm text-[var(--text)]">{q.prompt}</label>
-              <input name={`q_${q.id}`} required={q.required} className="input mt-1 w-full" />
+              <label htmlFor={`q_${q.id}`} className="text-sm text-[var(--text)]">
+                {q.prompt}
+              </label>
+              <input
+                id={`q_${q.id}`}
+                name={`q_${q.id}`}
+                required={q.required}
+                className="input mt-1 w-full"
+              />
             </div>
           ))}
           <label className="flex items-start gap-2 text-xs text-[var(--text-muted)]">
