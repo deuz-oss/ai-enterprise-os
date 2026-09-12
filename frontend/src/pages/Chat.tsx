@@ -2,7 +2,17 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api } from "../api/client";
-import { ClipboardList, CornerUpLeft, Hash, Lock, MessageCircle, Megaphone } from "lucide-react";
+import {
+  ClipboardList,
+  CornerUpLeft,
+  FileText,
+  Hash,
+  Lock,
+  MessageCircle,
+  Megaphone,
+  Paperclip,
+  X,
+} from "lucide-react";
 import { PageHeader } from "../components/workspace";
 
 // Index dasar arbitrer yang besar untuk `firstItemIndex` Virtuoso -- pola
@@ -23,6 +33,14 @@ interface ChannelRow {
   mention_count: number;
 }
 
+interface ChatFileMeta {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  url: string;
+}
+
 interface MessageRow {
   id: string;
   sender_id: string;
@@ -35,9 +53,16 @@ interface MessageRow {
   message_type?: string;
   card_data?: { title: string; body?: string; type?: string } | null;
   actions?: { id: string; label: string; style?: string }[] | null;
+  files: ChatFileMeta[];
 }
 
 const EMOJI_REACTIONS = ["👍", "❤️", "🎉", "😂", "🙏", "🔥"];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function Chat() {
   const qc = useQueryClient();
@@ -201,8 +226,45 @@ export default function Chat() {
       appendMessageToCache(newMessage);
       qc.invalidateQueries({ queryKey: ["chat-channels"] });
       if (inputRef.current) inputRef.current.value = "";
+      setPendingFiles([]);
     },
   });
+
+  // Lampiran: upload langsung saat file dipilih (alur ala Mattermost --
+  // POST /files dulu, id-nya baru disertakan ke POST /messages sebagai
+  // file_ids), supaya UI bisa tampilkan progres unggah sebelum "Kirim".
+  const [pendingFiles, setPendingFiles] = useState<ChatFileMeta[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFile = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return api.upload<ChatFileMeta>(`/chat/channels/${activeChannel}/files`, formData);
+    },
+    onSuccess: (meta) => setPendingFiles((prev) => [...prev, meta]),
+  });
+
+  async function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList || !activeChannel) return;
+    const files = Array.from(fileList);
+    setUploadingCount((n) => n + files.length);
+    for (const file of files) {
+      try {
+        await uploadFile.mutateAsync(file);
+      } catch {
+        // error sudah tampil lewat state uploadFile.isError; lanjut file berikutnya
+      } finally {
+        setUploadingCount((n) => n - 1);
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removePendingFile(id: string) {
+    setPendingFiles((prev) => prev.filter((f) => f.id !== id));
+  }
 
   const addReaction = useMutation({
     mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
@@ -341,8 +403,12 @@ export default function Chat() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const content = String(form.get("content") || "").trim();
-    if (!content || !activeChannel) return;
-    sendMessage.mutate({ content, parent_id: threadParent || undefined });
+    if (!activeChannel || (!content && pendingFiles.length === 0)) return;
+    sendMessage.mutate({
+      content,
+      parent_id: threadParent || undefined,
+      file_ids: pendingFiles.map((f) => f.id),
+    });
   }
 
   function renderMessage(m: MessageRow) {
@@ -365,9 +431,42 @@ export default function Chat() {
             )}
           </div>
 
-          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--text)" }}>
-            {m.content}
-          </p>
+          {m.content && (
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--text)" }}>
+              {m.content}
+            </p>
+          )}
+          {m.files.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {m.files.map((f) =>
+                f.mime_type.startsWith("image/") ? (
+                  <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
+                    <img
+                      src={f.url}
+                      alt={f.file_name}
+                      className="max-h-48 rounded-md object-cover"
+                      style={{ border: "1px solid var(--border)" }}
+                    />
+                  </a>
+                ) : (
+                  <a
+                    key={f.id}
+                    href={f.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs hover:opacity-80"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span className="max-w-[12rem] truncate" style={{ color: "var(--text)" }}>
+                      {f.file_name}
+                    </span>
+                    <span style={{ color: "var(--text-muted)" }}>{formatFileSize(f.file_size)}</span>
+                  </a>
+                )
+              )}
+            </div>
+          )}
           {m.message_type === "card" && m.card_data && (
             <div
               className="mt-2 rounded-md p-3"
@@ -681,14 +780,58 @@ export default function Chat() {
               handleSend(e);
               setMentionQuery(null);
             }}
-            className="relative flex gap-2 px-4 py-3"
+            className="relative flex flex-col gap-2 px-4 py-3"
             style={{ borderTop: "1px solid var(--border)" }}
           >
+            {(pendingFiles.length > 0 || uploadingCount > 0) && (
+              <div className="flex flex-wrap gap-1.5">
+                {pendingFiles.map((f) => (
+                  <span
+                    key={f.id}
+                    className="flex items-center gap-1 rounded px-2 py-1 text-xs"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
+                  >
+                    <FileText className="h-3 w-3 shrink-0" />
+                    <span className="max-w-[10rem] truncate">{f.file_name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(f.id)}
+                      className="shrink-0 hover:opacity-70"
+                      title="Batalkan lampiran"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                {uploadingCount > 0 && (
+                  <span className="flex items-center px-2 py-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    Mengunggah {uploadingCount} file…
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              disabled={!activeChannel}
+              onChange={(e) => handleFilesSelected(e.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!activeChannel}
+              className="btn-secondary px-2.5"
+              title="Lampirkan file"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
             <div className="relative flex-1">
               <input
                 ref={inputRef}
                 name="content"
-                required
                 placeholder={activeChannel ? (threadParent ? "Balas di thread..." : "Tulis pesan... (@ untuk mention, @AEOS untuk bertanya, / untuk perintah)") : "Pilih channel dulu"}
                 disabled={!activeChannel}
                 className="input w-full"
@@ -728,9 +871,13 @@ export default function Chat() {
                 </div>
               )}
             </div>
-            <button disabled={!activeChannel || sendMessage.isPending} className="btn">
+            <button
+              disabled={!activeChannel || sendMessage.isPending || uploadingCount > 0}
+              className="btn"
+            >
               Kirim
             </button>
+            </div>
           </form>
         </div>
       </div>

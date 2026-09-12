@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, WebSocket
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -147,10 +147,29 @@ def send_message(
 ):
     content = str((payload or {}).get("content") or "")
     parent_id = (payload or {}).get("parent_id")
+    file_ids = (payload or {}).get("file_ids") or []
     msg = service.send_message(
-        db, user=user, channel_id=channel_id, content=content, parent_id=parent_id
+        db,
+        user=user,
+        channel_id=channel_id,
+        content=content,
+        parent_id=parent_id,
+        file_ids=file_ids if isinstance(file_ids, list) else [],
     )
     return service._serialize_message(msg, user.id)
+
+
+@router.post("/channels/{channel_id}/files", status_code=201)
+async def upload_file(
+    channel_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Upload lampiran berdiri sendiri; id-nya disertakan sebagai `file_ids`
+    saat mengirim pesan (lihat `send_message`)."""
+    chat_file = await service.upload_chat_file(db, user=user, channel_id=channel_id, file=file)
+    return service._serialize_file(chat_file)
 
 
 @router.patch("/messages/{message_id}")

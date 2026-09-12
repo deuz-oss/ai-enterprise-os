@@ -18,6 +18,7 @@ from app.core.database import parse_uuid
 from app.modules.chat.models import (
     Channel,
     ChatChannelMember,
+    ChatFile,
     ChatMessage,
     ChatMessageReaction,
 )
@@ -301,18 +302,106 @@ def add_member(db: Session, user, channel_id: str, new_user_id) -> dict:
     return {"channel_id": str(ch.id), "user_id": str(new_user_id), "added": True}
 
 
+# ---------- File attachment ----------
+#
+# Alur: upload dulu berdiri sendiri (`upload_chat_file`, message_id NULL),
+# baru "ditempel" ke pesan lewat `file_ids` saat `send_message` dipanggil
+# (`_claim_pending_files`) -- meniru alur Mattermost (`POST /files` lalu
+# `POST /posts` dengan `file_ids`), bukan multipart+JSON sekaligus, supaya
+# UI bisa tampilkan progres unggah sebelum tombol kirim ditekan.
+
+MAX_CHAT_FILE_SIZE = 10 * 1024 * 1024  # 10 MB, sama seperti lampiran cuti ESS
+
+
+async def upload_chat_file(db: Session, *, user, channel_id: str, file) -> ChatFile:
+    from app.core import storage
+
+    ch = get_channel_with_access_check(db, user, channel_id)
+    _assert_can_post(db, user, ch)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="File kosong")
+    if len(data) > MAX_CHAT_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Ukuran file maksimal 10 MB")
+    file_name = (file.filename or "lampiran")[:255]
+    content_type = (file.content_type or "application/octet-stream")[:120]
+    object_key = storage.new_object_key(f"chat/{ch.id}", file_name)
+    storage.put_object(object_key, data, content_type)
+    chat_file = ChatFile(
+        channel_id=ch.id,
+        uploader_id=parse_uuid(str(user.id)),
+        object_key=object_key,
+        file_name=file_name,
+        mime_type=content_type,
+        file_size=len(data),
+    )
+    db.add(chat_file)
+    db.commit()
+    db.refresh(chat_file)
+    return chat_file
+
+
+def _claim_pending_files(
+    db: Session, *, user, channel: Channel, file_ids: list[str]
+) -> list[ChatFile]:
+    """Validasi & "tempel" file yang sudah diupload ke pesan yang akan dibuat.
+
+    Ditolak kalau: id tidak valid/tidak ditemukan, channel-nya beda (cegah
+    lampiran dari channel lain yang aksesnya berbeda dipakai lintas
+    channel), pengunggahnya beda user (cegah pakai lampiran orang lain),
+    atau sudah terpasang di pesan lain (cegah dipakai berkali-kali).
+    """
+    if not file_ids:
+        return []
+    parsed_ids = [uid for fid in file_ids if (uid := _parse(fid)) is not None]
+    if len(parsed_ids) != len(file_ids):
+        raise HTTPException(status_code=422, detail="file_id tidak valid")
+    files = list(db.execute(select(ChatFile).where(ChatFile.id.in_(parsed_ids))).scalars())
+    if len(files) != len(parsed_ids):
+        raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
+    sender_id = parse_uuid(str(user.id))
+    for f in files:
+        if f.channel_id != channel.id:
+            raise HTTPException(status_code=422, detail="Lampiran bukan milik channel ini")
+        if f.uploader_id != sender_id:
+            raise HTTPException(status_code=403, detail="Lampiran bukan milik Anda")
+        if f.message_id is not None:
+            raise HTTPException(status_code=409, detail="Lampiran sudah terpasang di pesan lain")
+    return files
+
+
+def _serialize_file(f: ChatFile) -> dict:
+    from app.core import storage
+
+    return {
+        "id": str(f.id),
+        "file_name": f.file_name,
+        "mime_type": f.mime_type,
+        "file_size": f.file_size,
+        "url": storage.presigned_get_url(f.object_key),
+    }
+
+
 # ---------- Messages ----------
 
 
 def send_message(
-    db: Session, *, user, channel_id: str, content: str, parent_id=None
+    db: Session,
+    *,
+    user,
+    channel_id: str,
+    content: str,
+    parent_id=None,
+    file_ids: list[str] | None = None,
 ) -> ChatMessage:
     ch = get_channel_with_access_check(db, user, channel_id)
     _assert_can_post(db, user, ch)
     content = content.strip()
-    if not content:
+    file_ids = file_ids or []
+    if not content and not file_ids:
         raise HTTPException(status_code=422, detail="Pesan tidak boleh kosong")
     _validate_mentions(db, user, str(ch.id), content)
+    files = _claim_pending_files(db, user=user, channel=ch, file_ids=file_ids)
     msg = ChatMessage(
         channel_id=ch.id,
         sender_id=parse_uuid(str(user.id)),
@@ -324,6 +413,9 @@ def send_message(
     mention_ids = _resolve_mention_target_ids(db, ch, content, user.id)
     db.commit()
     db.refresh(msg)
+    for f in files:
+        f.message_id = msg.id
+    db.commit()
     for mentioned_id in mention_ids:
         _mark_mentioned(db, ch, mentioned_id)
     _mark_caught_up(db, ch, user.id)
@@ -624,7 +716,7 @@ def list_messages(
     limit = max(1, min(limit, 200))
     stmt = (
         select(ChatMessage)
-        .options(joinedload(ChatMessage.reactions))
+        .options(joinedload(ChatMessage.reactions), joinedload(ChatMessage.files))
         .where(ChatMessage.channel_id == ch.id, ChatMessage.deleted_at.is_(None))
     )
     if parent_id:
@@ -777,6 +869,7 @@ def _serialize_message(msg: ChatMessage, current_user_id) -> dict:
         "created_at": msg.created_at.isoformat(),
         "reactions": {e: len(u) for e, u in reactions.items()},
         "is_own": parse_uuid(str(msg.sender_id)) == parse_uuid(str(current_user_id)),
+        "files": [_serialize_file(f) for f in msg.files] if msg.deleted_at is None else [],
     }
     if hasattr(msg, "message_type"):
         base["message_type"] = getattr(msg, "message_type", "text")
@@ -1133,7 +1226,7 @@ def _search_messages_fts(db: Session, channel_ids: list, q: str, limit: int) -> 
         m.id: m
         for m in db.execute(
             select(ChatMessage)
-            .options(joinedload(ChatMessage.reactions))
+            .options(joinedload(ChatMessage.reactions), joinedload(ChatMessage.files))
             .where(ChatMessage.id.in_(ordered_ids))
         )
         .unique()

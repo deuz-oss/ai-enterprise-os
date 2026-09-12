@@ -92,6 +92,7 @@ class ChatMessage(TenantMixin, Base):
     reactions = relationship(
         "ChatMessageReaction", back_populates="message", cascade="all, delete-orphan"
     )
+    files = relationship("ChatFile", back_populates="message")
 
 
 class ChatMessageReaction(TenantMixin, Base):
@@ -104,3 +105,28 @@ class ChatMessageReaction(TenantMixin, Base):
     emoji: Mapped[str] = mapped_column(String(20))
 
     message = relationship("ChatMessage", back_populates="reactions")
+
+
+class ChatFile(TenantMixin, Base):
+    """Lampiran chat: diupload dulu berdiri sendiri (`message_id` NULL),
+    baru "ditempel" ke pesan saat dikirim -- meniru alur `POST /files` lalu
+    `POST /posts` dengan `file_ids` di Mattermost. Memisahkan upload dari
+    pengiriman pesan supaya UI bisa tampilkan progres unggah sebelum user
+    menekan kirim.
+    """
+
+    __tablename__ = "chat_files"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    channel_id: Mapped[UUID] = mapped_column(ForeignKey("chat_channels.id"), index=True)
+    message_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("chat_messages.id"), default=None, index=True
+    )
+    uploader_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    object_key: Mapped[str] = mapped_column(String(500))
+    file_name: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(120))
+    file_size: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message = relationship("ChatMessage", back_populates="files")
