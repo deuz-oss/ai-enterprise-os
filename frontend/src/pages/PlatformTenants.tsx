@@ -460,7 +460,7 @@ export default function PlatformTenants() {
                     Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
                     status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
                   </p>
-                  <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="mb-2 text-xs" style={{ color: "var(--th-color)" }}>
                     Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
                     supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
                     aktif"), atau atur app satu-satu lewat dropdown bila perlu.
@@ -541,7 +541,7 @@ export default function PlatformTenants() {
                     Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
                   </p>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--th-color)" }}>
                       Estimasi tagihan — belum menagih, hanya laporan pemakaian
                     </p>
                     <input
@@ -552,13 +552,13 @@ export default function PlatformTenants() {
                     />
                   </div>
                   {usageLoading && (
-                    <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Memuat...</p>
+                    <p className="mt-2 text-xs" style={{ color: "var(--th-color)" }}>Memuat...</p>
                   )}
                   {usage && (
                     <div className="mt-2 overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr style={{ color: "var(--text-muted)" }}>
+                          <tr style={{ color: "var(--th-color)" }}>
                             <th className="py-1 text-left">SKU</th>
                             <th className="py-1 text-right">Jumlah</th>
                             <th className="py-1 text-right">Estimasi</th>
@@ -570,7 +570,7 @@ export default function PlatformTenants() {
                               <td className="py-1.5" style={{ color: "var(--text)" }}>
                                 {line.label}
                               </td>
-                              <td className="py-1.5 text-right" style={{ color: "var(--text-muted)" }}>
+                              <td className="py-1.5 text-right" style={{ color: "var(--th-color)" }}>
                                 {line.qty !== undefined
                                   ? line.qty
                                   : line.qty_invoice !== undefined
@@ -579,7 +579,7 @@ export default function PlatformTenants() {
                               </td>
                               <td className="py-1.5 text-right font-medium" style={{ color: "var(--text)" }}>
                                 {line.amount !== null ? formatRupiah(line.amount) : (
-                                  <span title={line.note} style={{ color: "var(--text-muted)" }}>
+                                  <span title={line.note} style={{ color: "var(--th-color)" }}>
                                     belum diketahui
                                   </span>
                                 )}
@@ -588,7 +588,7 @@ export default function PlatformTenants() {
                           ))}
                           {usage.lines.length === 0 && (
                             <tr>
-                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
+                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--th-color)" }}>
                                 Tidak ada SKU berlisensi untuk periode ini.
                               </td>
                             </tr>
@@ -610,7 +610,7 @@ export default function PlatformTenants() {
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-4">
                         <div>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             Tier saat ini
                           </p>
                           <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
@@ -618,7 +618,7 @@ export default function PlatformTenants() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             Sisa jatah cycle
                           </p>
                           <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
@@ -627,7 +627,7 @@ export default function PlatformTenants() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             Saldo top up
                           </p>
                           <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
@@ -635,10 +635,11 @@ export default function PlatformTenants() {
                           </p>
                         </div>
                         <div className="ml-auto flex items-center gap-2">
-                          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <label htmlFor="override_tier" className="text-xs" style={{ color: "var(--th-color)" }}>
                             Override tier manual:
                           </label>
                           <select
+                            id="override_tier"
                             defaultValue=""
                             disabled={overrideSubscription.isPending}
                             onChange={(e) => {

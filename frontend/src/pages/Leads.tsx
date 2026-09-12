@@ -322,7 +322,7 @@ export default function Leads() {
                 {importResult.failed.length > 0 && ` ${importResult.failed.length} baris gagal.`}
               </p>
               {importResult.failed.length > 0 && (
-                <ul className="mt-2 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <ul className="mt-2 space-y-1 text-xs" style={{ color: "var(--th-color)" }}>
                   {importResult.failed.map((f) => (
                     <li key={f.row}>
                       Baris {f.row} ({f.company_name}): {f.error}
@@ -509,10 +509,10 @@ export default function Leads() {
                       style={{ backgroundColor: STAGE_DOT[stage] }}
                     />
                     <span className="capitalize">{stage}</span>
-                    <span style={{ color: "var(--text-muted)" }}>{cards.length}</span>
+                    <span style={{ color: "var(--th-color)" }}>{cards.length}</span>
                   </span>
                 </div>
-                <p className="px-3 pb-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="px-3 pb-1 text-xs" style={{ color: "var(--th-color)" }}>
                   {formatRupiah(total)}
                 </p>
                 <div className="space-y-2 px-2 pb-3">
@@ -615,6 +615,7 @@ export default function Leads() {
                           onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
                           className="cursor-pointer rounded bg-transparent text-xs capitalize"
                           style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
+                          aria-label="Ubah tahap lead"
                         >
                           {STAGES.map((s) => (
                             <option key={s} value={s}>
@@ -640,7 +641,7 @@ export default function Leads() {
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="px-1 py-3 text-center text-xs" style={{ color: "var(--th-color)" }}>
                       Kosong
                     </p>
                   )}
@@ -728,7 +729,7 @@ export default function Leads() {
                 className="rounded-lg p-3 text-sm"
                 style={{ backgroundColor: "var(--hover)" }}
               >
-                <span className="font-medium" style={{ color: "var(--text-muted)" }}>
+                <span className="font-medium" style={{ color: "var(--th-color)" }}>
                   [{a.activity_type}]
                 </span>{" "}
                 {a.content}

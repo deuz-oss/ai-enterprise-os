@@ -117,7 +117,7 @@ export default function Login() {
       </div>
 
       {/* RIGHT: form */}
-      <div className="flex min-w-0 flex-1 flex-col" style={{ backgroundColor: "var(--bg)" }}>
+      <main className="flex min-w-0 flex-1 flex-col" style={{ backgroundColor: "var(--bg)" }}>
         <div
           className="flex items-center gap-3 px-6 py-5 lg:hidden"
           style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
@@ -157,6 +157,7 @@ export default function Login() {
               <form ref={formRef} onSubmit={handleSubmit} className="mt-5 space-y-4">
                 <div>
                   <label
+                    htmlFor="email"
                     className="text-xs font-semibold uppercase tracking-wide"
                     style={{ color: "var(--text-muted)" }}
                   >
@@ -168,6 +169,7 @@ export default function Login() {
                       style={{ color: "var(--text-muted)" }}
                     />
                     <input
+                      id="email"
                       type="email"
                       required
                       autoFocus
@@ -181,6 +183,7 @@ export default function Login() {
                 <div>
                   <div className="flex items-center justify-between">
                     <label
+                      htmlFor="password"
                       className="text-xs font-semibold uppercase tracking-wide"
                       style={{ color: "var(--text-muted)" }}
                     >
@@ -200,6 +203,7 @@ export default function Login() {
                       style={{ color: "var(--text-muted)" }}
                     />
                     <input
+                      id="password"
                       type={showPassword ? "text" : "password"}
                       required
                       placeholder="••••••••"
@@ -251,7 +255,7 @@ export default function Login() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

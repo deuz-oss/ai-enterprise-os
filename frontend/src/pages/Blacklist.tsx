@@ -127,8 +127,10 @@ export default function Blacklist() {
         <form onSubmit={handleCreate} className="card space-y-3">
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">Kandidat *</label>
-            <select name="candidate_id" required className="input mt-1 w-full" defaultValue="">
+            <label htmlFor="candidate_id" className="text-xs font-medium text-[var(--text-muted)]">
+              Kandidat *
+            </label>
+            <select id="candidate_id" name="candidate_id" required className="input mt-1 w-full" defaultValue="">
               <option value="" disabled>
                 Pilih kandidat
               </option>

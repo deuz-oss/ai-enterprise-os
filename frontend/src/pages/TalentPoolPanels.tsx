@@ -92,7 +92,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
 
   const field = (key: string, label: string) => (
     <label className="block text-xs">
-      <span style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span style={{ color: "var(--th-color)" }}>{label}</span>
       <input
         className="input mt-0.5"
         defaultValue={String(p[key] ?? "")}
@@ -107,7 +107,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
         <span className={`${d.status === "gagal" ? "pill p-red" : d.status === "finalisasi" ? "pill p-green" : "pill p-yellow"}`}>
           {d.status.replace("_", " ")}
         </span>
-        <span style={{ color: "var(--text-muted)" }}>{d.file_name} · skema v{d.schema_version}/prompt v{d.prompt_version}</span>
+        <span style={{ color: "var(--th-color)" }}>{d.file_name} · skema v{d.schema_version}/prompt v{d.prompt_version}</span>
         {d.status === "gagal" && (
           <button
             onClick={() => reprocess.mutate()}
@@ -279,14 +279,14 @@ export function ScreeningPanel({
       </div>
       {runScreening.error && <p className="text-sm text-red-600">{(runScreening.error as Error).message}</p>}
       {screenings.isLoading ? (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat riwayat...</p>
+        <p className="text-sm" style={{ color: "var(--th-color)" }}>Memuat riwayat...</p>
       ) : (
         <div className="space-y-2">
           {(screenings.data ?? []).map((s) => (
             <AiResultCard key={s.id} screening={s} />
           ))}
           {screenings.data?.length === 0 && (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Belum ada hasil screening.</p>
+            <p className="text-sm" style={{ color: "var(--th-color)" }}>Belum ada hasil screening.</p>
           )}
         </div>
       )}
@@ -364,7 +364,7 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
             </li>
           ))}
           {experiences.data?.length === 0 && (
-            <li className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada riwayat pengalaman.</li>
+            <li className="text-xs" style={{ color: "var(--th-color)" }}>Belum ada riwayat pengalaman.</li>
           )}
         </ul>
       </div>
@@ -374,13 +374,13 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
         </span>
         <ul className="mt-2 space-y-1">
           {(activityLog.data ?? []).map((a) => (
-            <li key={a.id} className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <li key={a.id} className="text-xs" style={{ color: "var(--th-color)" }}>
               <span style={{ color: "var(--text)" }}>{a.action}</span> ·{" "}
               {new Date(a.created_at).toLocaleString("id-ID")}
             </li>
           ))}
           {activityLog.data?.length === 0 && (
-            <li className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada aktivitas tercatat.</li>
+            <li className="text-xs" style={{ color: "var(--th-color)" }}>Belum ada aktivitas tercatat.</li>
           )}
         </ul>
       </div>

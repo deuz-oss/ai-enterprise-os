@@ -566,7 +566,7 @@ export default function JobOrderDetail() {
                 <span className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
                   {col.label}
                 </span>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--th-color)" }}>
                   {cards.length}
                 </span>
               </div>
@@ -795,7 +795,7 @@ export default function JobOrderDetail() {
                 <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                   {Object.entries(onboardingInviteDetail.submitted_data).map(([k, v]) => (
                     <div key={k}>
-                      <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                      <dt style={{ color: "var(--th-color)" }}>{k}</dt>
                       <dd style={{ color: "var(--text)" }}>
                         {typeof v === "object" ? JSON.stringify(v) : String(v ?? "-")}
                       </dd>
@@ -861,7 +861,7 @@ export default function JobOrderDetail() {
                   >
                     <Bot className="h-3.5 w-3.5" /> Mode AI — buka AI Interview
                   </Button>
-                  <span className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
+                  <span className="self-center text-xs" style={{ color: "var(--th-color)" }}>
                     atau isi jadwal manusia di bawah:
                   </span>
                 </div>

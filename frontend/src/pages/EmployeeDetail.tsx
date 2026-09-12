@@ -869,7 +869,7 @@ export default function EmployeeDetail() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium" style={{ color: "var(--text)" }}>{c.contract_no}</p>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             {c.start_date ?? "?"} s/d {c.end_date ?? "-"}
                             {c.file_name ? ` · ${c.file_name}` : ""}
                           </p>
@@ -1077,7 +1077,7 @@ export default function EmployeeDetail() {
                       <p className="font-medium" style={{ color: "var(--text)" }}>
                         {TYPE_LABELS[d.document_type]} — v{d.version}
                       </p>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-xs" style={{ color: "var(--th-color)" }}>
                         {d.file_name} · {(d.file_size / 1024).toFixed(0)} KB
                       </p>
                     </div>
@@ -1139,7 +1139,7 @@ export default function EmployeeDetail() {
                         <p className="font-medium" style={{ color: "var(--text)" }}>
                           {WARNING_LETTER_LABELS[w.letter_type] ?? w.letter_type} — {w.reason}
                         </p>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--th-color)" }}>
                           Terbit {w.issued_at} · berlaku s/d {w.valid_until ?? "-"}
                         </p>
                       </div>
@@ -1245,7 +1245,7 @@ export default function EmployeeDetail() {
                         <p className="font-medium" style={{ color: "var(--text)" }}>
                           {formatRupiah(h.amount)} — {h.reason}
                         </p>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--th-color)" }}>
                           Ditahan {new Date(h.held_at).toLocaleDateString("id-ID")}
                           {h.released_at && ` · Dicairkan ${new Date(h.released_at).toLocaleDateString("id-ID")}`}
                         </p>
@@ -1342,7 +1342,7 @@ export default function EmployeeDetail() {
                       <p className="font-medium capitalize" style={{ color: "var(--text)" }}>
                         {m.movement_type} · {m.effective_date}
                       </p>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-xs" style={{ color: "var(--th-color)" }}>
                         {[
                           m.previous_grade || m.new_grade ? `Grade: ${m.previous_grade ?? "-"} → ${m.new_grade ?? "-"}` : null,
                           m.previous_level || m.new_level ? `Level: ${m.previous_level ?? "-"} → ${m.new_level ?? "-"}` : null,
@@ -1395,7 +1395,7 @@ export default function EmployeeDetail() {
                       <p className="font-medium" style={{ color: "var(--text)" }}>
                         {v.vaccine_name} · dosis {v.dose_number}
                       </p>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-xs" style={{ color: "var(--th-color)" }}>
                         {v.vaccinated_at} {v.location ? `· ${v.location}` : ""}
                       </p>
                     </li>
@@ -1574,7 +1574,7 @@ export default function EmployeeDetail() {
                           <p className="font-medium" style={{ color: "var(--text)" }}>
                             {INSURANCE_PROVIDER_LABELS[ins.provider] ?? ins.provider} · {ins.policy_no}
                           </p>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             {ins.start_date ?? "?"} s/d {ins.valid_until ?? "-"}
                           </p>
                         </div>

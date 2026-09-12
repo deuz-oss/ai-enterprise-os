@@ -417,7 +417,7 @@ export default function ClientDetail() {
                   <p className="font-medium" style={{ color: "var(--text)" }}>
                     {TYPE_LABELS[d.document_type]} — v{d.version}
                   </p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs" style={{ color: "var(--th-color)" }}>
                     {d.file_name} · {(d.file_size / 1024).toFixed(0)} KB
                   </p>
                 </div>
@@ -524,7 +524,7 @@ export default function ClientDetail() {
                 >
                   <div>
                     <p className="font-medium" style={{ color: "var(--text)" }}>{s.name}</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs" style={{ color: "var(--th-color)" }}>
                       {s.address ? `${s.address} · ` : ""}
                       {s.latitude}, {s.longitude} · radius {s.radius_meters}m
                     </p>
@@ -550,16 +550,23 @@ export default function ClientDetail() {
               style={{ borderColor: "var(--border)" }}
             >
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: "var(--text-muted)" }}>Nama</label>
-                <input name="name" required placeholder="Kantor Pusat" className="input w-40" />
+                <label htmlFor="site_name" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Nama
+                </label>
+                <input id="site_name" name="name" required placeholder="Kantor Pusat" className="input w-40" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: "var(--text-muted)" }}>Alamat</label>
-                <input name="address" placeholder="Opsional" className="input w-48" />
+                <label htmlFor="site_address" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Alamat
+                </label>
+                <input id="site_address" name="address" placeholder="Opsional" className="input w-48" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: "var(--text-muted)" }}>Latitude</label>
+                <label htmlFor="site_latitude" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Latitude
+                </label>
                 <input
+                  id="site_latitude"
                   key={`lat-${gpsCoord?.lat ?? ""}`}
                   name="latitude"
                   required
@@ -569,8 +576,11 @@ export default function ClientDetail() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: "var(--text-muted)" }}>Longitude</label>
+                <label htmlFor="site_longitude" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Longitude
+                </label>
                 <input
+                  id="site_longitude"
                   key={`lng-${gpsCoord?.lng ?? ""}`}
                   name="longitude"
                   required
@@ -580,8 +590,11 @@ export default function ClientDetail() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: "var(--text-muted)" }}>Radius (m)</label>
+                <label htmlFor="site_radius" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Radius (m)
+                </label>
                 <input
+                  id="site_radius"
                   name="radius_meters"
                   type="number"
                   min={1}

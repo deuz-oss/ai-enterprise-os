@@ -761,7 +761,7 @@ export default function TalentPool() {
                               style={{ backgroundColor: stage?.dot ?? "#9f9f9f" }}
                             />
                             <span className="max-w-[90px] truncate">{jobOrderTitle(p.job_order_id)}</span>
-                            <span style={{ color: "var(--text-muted)" }}>{stage?.label ?? p.status}</span>
+                            <span style={{ color: "var(--th-color)" }}>{stage?.label ?? p.status}</span>
                           </Link>
                         );
                       })}

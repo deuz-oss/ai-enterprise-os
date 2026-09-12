@@ -44,7 +44,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div
+    <main
       className="flex min-h-screen flex-col items-center justify-center p-6 antialiased"
       style={{ backgroundColor: "var(--bg)" }}
     >
@@ -120,6 +120,7 @@ export default function ResetPassword() {
               )}
               <div>
                 <label
+                  htmlFor="new_password"
                   className="text-xs font-semibold uppercase tracking-wide"
                   style={{ color: "var(--text-muted)" }}
                 >
@@ -131,6 +132,7 @@ export default function ResetPassword() {
                     style={{ color: "var(--text-muted)" }}
                   />
                   <input
+                    id="new_password"
                     type="password"
                     required
                     minLength={8}
@@ -144,6 +146,7 @@ export default function ResetPassword() {
               </div>
               <div>
                 <label
+                  htmlFor="confirm_password"
                   className="text-xs font-semibold uppercase tracking-wide"
                   style={{ color: "var(--text-muted)" }}
                 >
@@ -155,6 +158,7 @@ export default function ResetPassword() {
                     style={{ color: "var(--text-muted)" }}
                   />
                   <input
+                    id="confirm_password"
                     type="password"
                     required
                     minLength={8}
@@ -183,6 +187,6 @@ export default function ResetPassword() {
       <div className="mt-4 text-center text-xs" style={{ color: "var(--text-muted)" }}>
         © 2026 AI Enterprise OS
       </div>
-    </div>
+    </main>
   );
 }

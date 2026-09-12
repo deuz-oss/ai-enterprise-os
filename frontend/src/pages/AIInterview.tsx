@@ -201,8 +201,10 @@ export default function AIInterview() {
             rows={2}
           />
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">Mode Interview</label>
-            <select name="mode" defaultValue="async_text" className="input mt-1 w-full">
+            <label htmlFor="mode" className="text-xs font-medium text-[var(--text-muted)]">
+              Mode Interview
+            </label>
+            <select id="mode" name="mode" defaultValue="async_text" className="input mt-1 w-full">
               <option value="async_text">Teks — kandidat ketik jawaban</option>
               <option value="realtime_voice">
                 Suara real-time — kandidat ngobrol langsung dengan AI (butuh infra LIVEKIT_*

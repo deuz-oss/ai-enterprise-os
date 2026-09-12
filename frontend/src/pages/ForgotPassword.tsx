@@ -40,7 +40,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div
+    <main
       className="flex min-h-screen flex-col items-center justify-center p-6 antialiased"
       style={{ backgroundColor: "var(--bg)" }}
     >
@@ -102,6 +102,7 @@ export default function ForgotPassword() {
             )}
             <div>
               <label
+                htmlFor="email"
                 className="text-xs font-semibold uppercase tracking-wide"
                 style={{ color: "var(--text-muted)" }}
               >
@@ -113,6 +114,7 @@ export default function ForgotPassword() {
                   style={{ color: "var(--text-muted)" }}
                 />
                 <input
+                  id="email"
                   type="email"
                   required
                   autoFocus
@@ -129,7 +131,7 @@ export default function ForgotPassword() {
 
             <div className="flex gap-2.5 rounded-xl p-3" style={{ backgroundColor: "var(--hover)" }}>
               <Info className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
-              <div className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
+              <div className="text-xs leading-relaxed" style={{ color: "var(--th-color)" }}>
                 Tenant terdeteksi otomatis dari email Anda. Jika tidak menerima link, hubungi{" "}
                 <span className="font-medium" style={{ color: "var(--text)" }}>
                   HR / admin tenant
@@ -155,6 +157,6 @@ export default function ForgotPassword() {
       <div className="mt-4 text-center text-xs" style={{ color: "var(--text-muted)" }}>
         © 2026 AI Enterprise OS
       </div>
-    </div>
+    </main>
   );
 }

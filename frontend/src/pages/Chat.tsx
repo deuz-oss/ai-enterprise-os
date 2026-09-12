@@ -682,7 +682,7 @@ export default function Chat() {
                   ch.unread_count > 0 && (
                     <span
                       className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                      style={{ backgroundColor: "var(--hover)", color: "var(--text-muted)" }}
+                      style={{ backgroundColor: "var(--hover)", color: "var(--th-color)" }}
                     >
                       {ch.unread_count}
                     </span>
@@ -774,7 +774,7 @@ export default function Chat() {
           </div>
           {searchQuery.trim().length >= 2 && searchResults && (
             <div className="max-h-40 overflow-y-auto border-b px-2 py-1" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
-              <p className="px-2 py-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="px-2 py-1 text-xs" style={{ color: "var(--th-color)" }}>
                 Hasil cari "{searchQuery}" — {searchResults.length} pesan
                 <button onClick={() => setSearchQuery("")} className="ml-2" style={{ color: "var(--accent)" }}>
                   tutup
@@ -801,7 +801,7 @@ export default function Chat() {
                 </span>
                 <button onClick={() => setShowPinned(false)} style={{ color: "var(--accent)" }}>tutup</button>
               </p>
-              {pinnedPosts.isLoading && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Memuat…</p>}
+              {pinnedPosts.isLoading && <p className="text-xs" style={{ color: "var(--th-color)" }}>Memuat…</p>}
               {(pinnedPosts.data ?? []).map((m) => (
                 <div key={m.id} className="flex items-start justify-between gap-2 py-1 text-xs" style={{ color: "var(--text)" }}>
                   <span className="truncate">{m.content || "(lampiran tanpa teks)"}</span>
@@ -816,7 +816,7 @@ export default function Chat() {
                 </div>
               ))}
               {pinnedPosts.data && pinnedPosts.data.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada pesan yang disematkan.</p>
+                <p className="text-xs" style={{ color: "var(--th-color)" }}>Belum ada pesan yang disematkan.</p>
               )}
             </div>
           )}
@@ -829,17 +829,17 @@ export default function Chat() {
                 </span>
                 <button onClick={() => setShowDigest(false)} style={{ color: "var(--accent)" }}>tutup</button>
               </p>
-              {digest.isLoading && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Menyusun…</p>}
+              {digest.isLoading && <p className="text-xs" style={{ color: "var(--th-color)" }}>Menyusun…</p>}
               {(digest.data?.items ?? []).map((it, i) => (
                 <div key={i} className="py-0.5 text-xs" style={{ color: "var(--text)" }}>
                   • {it.detail}
                   {it.refs.length > 0 && (
-                    <span style={{ color: "var(--text-muted)" }}> — {it.refs.join(", ")}</span>
+                    <span style={{ color: "var(--th-color)" }}> — {it.refs.join(", ")}</span>
                   )}
                 </div>
               ))}
               {digest.data && digest.data.items.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Tidak ada item penting hari ini.</p>
+                <p className="text-xs" style={{ color: "var(--th-color)" }}>Tidak ada item penting hari ini.</p>
               )}
             </div>
           )}

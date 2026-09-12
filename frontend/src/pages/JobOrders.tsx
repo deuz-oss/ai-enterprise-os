@@ -347,10 +347,11 @@ export default function JobOrders() {
       {showForm && (
         <div className="card space-y-3">
           <div>
-            <label className="text-sm font-medium text-[var(--text)]">
+            <label htmlFor="jo_doc_upload" className="text-sm font-medium text-[var(--text)]">
               Upload Dokumen Job Order (opsional) — field di bawah akan diisi otomatis dari AI
             </label>
             <input
+              id="jo_doc_upload"
               type="file"
               accept=".pdf,.docx,image/png,image/jpeg,image/webp"
               disabled={extractDoc.isPending}

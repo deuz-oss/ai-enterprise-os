@@ -174,10 +174,11 @@ export default function Billing() {
 
       {tab === "topup" && (
         <div className="card max-w-sm space-y-3">
-          <label className="block text-sm font-medium" style={{ color: "var(--text)" }}>
+          <label htmlFor="topup_amount" className="block text-sm font-medium" style={{ color: "var(--text)" }}>
             Jumlah top up (Rp)
           </label>
           <input
+            id="topup_amount"
             className="input w-full"
             type="number"
             min={10000}

@@ -475,7 +475,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 type="button"
                 onClick={() => setAddingComponentFor(null)}
                 className="text-xs"
-                style={{ color: "var(--text-muted)" }}
+                style={{ color: "var(--th-color)" }}
               >
                 Batal
               </button>
@@ -516,7 +516,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 type="button"
                 onClick={() => setHoldingFor(null)}
                 className="text-xs"
-                style={{ color: "var(--text-muted)" }}
+                style={{ color: "var(--th-color)" }}
               >
                 Batal
               </button>
