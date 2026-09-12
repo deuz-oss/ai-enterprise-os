@@ -341,6 +341,9 @@ export default function Dashboard() {
     <div className="space-y-5">
       <PageHeader icon={LayoutDashboard} title="Overview" subtitle="Ringkasan operasional hari ini" />
 
+      {/* Palet dipatok persis (bukan var(--...)), sama seperti PreflightAlert
+          (components/ui/PreflightAlert.tsx) -- SENGAJA sama di light & dark
+          mode karena ini alert urgensi tinggi, bukan elemen tema biasa. */}
       {urgentItems.length > 0 && (
         <div className="rounded-xl border p-4" style={{ backgroundColor: "#FFFBEB", borderColor: "#FDE68A" }}>
           <div className="flex flex-wrap items-center justify-between gap-2">

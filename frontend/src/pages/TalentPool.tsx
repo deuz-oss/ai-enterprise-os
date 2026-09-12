@@ -6,6 +6,7 @@ import { ScoreBadge } from "../components/Ai";
 import { CheckCircle2, Clock, Dna, FileCheck2, Palette, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { PLACEMENT_STAGE_META as PLACEMENT_STAGE_LABEL } from "../lib/pipelineStages";
 import type { JobOrder } from "./JobOrders";
 
 interface TpRow {
@@ -78,22 +79,6 @@ interface PlacementRow {
   job_order_id: string;
   status: string;
 }
-
-// Label+warna tahap PlacementStatus -- duplikat kecil dari JobOrderDetail.tsx
-// supaya pill "Proses" di sini konsisten dengan Kanban.
-const PLACEMENT_STAGE_LABEL: Record<string, { label: string; dot: string }> = {
-  disourcing: { label: "Sourcing", dot: "#9f9f9f" },
-  screening: { label: "Screening", dot: "#2383e2" },
-  interview_rekruter: { label: "Interview Internal", dot: "#5b5bd6" },
-  disubmit: { label: "Disubmit", dot: "#8b5cf6" },
-  interview_klien: { label: "Interview Klien", dot: "#cb912f" },
-  ojt: { label: "OJT", dot: "#d97706" },
-  offering: { label: "Offering", dot: "#059669" },
-  hired: { label: "Hired", dot: "#0f7b6c" },
-  onboarded: { label: "Onboarded", dot: "#0f172a" },
-  gagal: { label: "Gagal", dot: "#e03e3e" },
-  dibatalkan: { label: "Dibatalkan", dot: "#e03e3e" },
-};
 
 interface IntakeDetail {
   id: string;

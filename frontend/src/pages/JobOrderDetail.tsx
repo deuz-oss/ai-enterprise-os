@@ -2,6 +2,11 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  PIPELINE_STAGES as PIPELINE_STEPS_BASE,
+  TERMINAL_STAGE_DOT as TERMINAL_DOT,
+  TERMINAL_STAGE_LABEL as TERMINAL_STATUS_LABEL,
+} from "../lib/pipelineStages";
+import {
   ArrowLeft,
   Bot,
   Briefcase,
@@ -129,26 +134,8 @@ interface JobOrderTemplateT {
 
 // Kolom Kanban tab "Candidates" (§1.8) -- ikuti tahap PlacementStatus persis,
 // menggantikan tab "Pipeline Kandidat" (list+ProgressStep) sejak migrasi
-// Candidates.tsx (2026-09-06). Disederhanakan 2026-09-07 (umpan balik
-// langsung domain owner): "Kirim Klien"/"Screening Klien" dibuang (lebur ke
-// "Disubmit" -- checkpoint klien yang genuinely penting tetap terekam lewat
-// "Interview Klien" + status Gagal/rejection_note, bukan lewat tahap antara
-// yang jarang dibedakan penindaklanjutannya), "Diusulkan"+"Disetujui" lebur
-// jadi satu "Offering" (surat penawaran + status esign sudah cukup
-// merepresentasikan menunggu-TTD vs sudah-TTD).
-const PIPELINE_STEPS_BASE: { key: string; label: string; dot: string }[] = [
-  { key: "disourcing", label: "Sourcing", dot: "#9f9f9f" },
-  { key: "screening", label: "Screening", dot: "#2383e2" },
-  { key: "interview_rekruter", label: "Interview Internal", dot: "#5b5bd6" },
-  { key: "disubmit", label: "Disubmit", dot: "#8b5cf6" },
-  { key: "interview_klien", label: "Interview Klien", dot: "#cb912f" },
-  { key: "ojt", label: "OJT", dot: "#d97706" },
-  { key: "offering", label: "Offering", dot: "#059669" },
-  { key: "hired", label: "Hired", dot: "#0f7b6c" },
-  { key: "onboarded", label: "Onboarded", dot: "#0f172a" },
-];
-const TERMINAL_STATUS_LABEL: Record<string, string> = { gagal: "Gagal", dibatalkan: "Dibatalkan" };
-const TERMINAL_DOT = "#e03e3e";
+// Candidates.tsx (2026-09-06). Sumber label/warna tahap: lib/pipelineStages.ts
+// (riwayat penyederhanaan tahap ada di komentar file itu).
 
 /** OJT kondisional per Job Order (`requires_ojt`) -- sebagian posisi/klien
  * tidak butuh tahap ini sama sekali, jadi dilewati di Kanban+dropdown

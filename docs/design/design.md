@@ -108,14 +108,22 @@ extend komponen existing, jangan duplikat.
 
 ## 5. Progress Migrasi Token
 
-Dari 41 file frontend yang ditemukan bypass token saat audit awal:
+Dari 41 file frontend yang ditemukan bypass token saat audit awal.
+**Diperbarui 2026-09-12** setelah audit UI/UX menyeluruh (screenshot +
+DOM audit live, bukan cuma baca kode) — tabel "38 file belum disentuh"
+sebelumnya menyesatkan: sebagian besar file itu sebenarnya sudah aman
+(dark mode benar-benar berfungsi saat diuji live), sisanya masuk salah
+satu dari 3 kategori di bawah, bukan satu tumpukan "belum dikerjakan".
 
 | Halaman | Status |
 |---|---|
 | `Login.tsx` | ✅ Migrasi selesai (2026-09-03) |
 | `ForgotPassword.tsx` | ✅ Migrasi selesai (2026-09-03) |
 | `ResetPassword.tsx` | ✅ Migrasi selesai (2026-09-03) |
-| 38 file lain | ⬜ Belum disentuh |
+| `JobOrderDetail.tsx`, `TalentPool.tsx`, `TalentPoolDetail.tsx` | ✅ Warna+label tahap `PlacementStatus` (dulu di-hardcode 3× identik) disatukan ke `frontend/src/lib/pipelineStages.ts` (2026-09-12) |
+| Sisa file dengan warna Tailwind kategori (biru/violet/emerald/amber) | ✅ Bukan bug — ini warna kategori sidebar yang SENGAJA independen dari `--accent` (lihat komentar `index.css` §"Warna kategori") |
+| `components/ui/PreflightAlert.tsx`, banner urgensi `Dashboard.tsx` | ✅ Bukan bug — warna dipatok persis dari `component-implementation-spec.md` §1.4, SENGAJA sama di light & dark mode (alert compliance/urgensi tinggi, bukan elemen tema) |
+| Sisa hex kecil (mis. teks hijau "Tersimpan" di `Pages.tsx`, warning `Payroll.tsx`, checkmark `MyPortal.tsx`) | ⬜ Belum dimigrasi, tapi prioritas rendah — warna saturasi kecil yang secara visual tetap terbaca di kedua tema, bukan pelanggaran kontras |
 
 Migrasi dilakukan bertahap per halaman saat halaman itu disentuh untuk
 alasan lain (bukan proyek migrasi besar sekaligus) — update tabel ini

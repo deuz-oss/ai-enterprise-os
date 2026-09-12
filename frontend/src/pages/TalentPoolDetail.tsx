@@ -7,6 +7,7 @@ import { Badge, Card, PillTabs } from "../components/ui";
 import { initials } from "../components/workspace";
 import { IntakeReviewPanel, ScreeningPanel, HistoryPanel } from "./TalentPoolPanels";
 import type { JobOrder } from "./JobOrders";
+import { PLACEMENT_STAGE_META as PLACEMENT_STAGE_LABEL } from "../lib/pipelineStages";
 
 /** Halaman detail kandidat (`/talent-pool/:id`) -- konsolidasi panel yang
  * dulu jadi baris expand terpisah-pisah di `TalentPool.tsx` (Review/AI/
@@ -67,22 +68,6 @@ interface PlacementRow {
   job_order_id: string;
   status: string;
 }
-
-// Duplikat kecil dari TalentPool.tsx/JobOrderDetail.tsx -- pola sudah
-// dipakai di beberapa halaman, bukan disentralkan (lihat komentar aslinya).
-const PLACEMENT_STAGE_LABEL: Record<string, { label: string; dot: string }> = {
-  disourcing: { label: "Sourcing", dot: "#9f9f9f" },
-  screening: { label: "Screening", dot: "#2383e2" },
-  interview_rekruter: { label: "Interview Internal", dot: "#5b5bd6" },
-  disubmit: { label: "Disubmit", dot: "#8b5cf6" },
-  interview_klien: { label: "Interview Klien", dot: "#cb912f" },
-  ojt: { label: "OJT", dot: "#d97706" },
-  offering: { label: "Offering", dot: "#059669" },
-  hired: { label: "Hired", dot: "#0f7b6c" },
-  onboarded: { label: "Onboarded", dot: "#0f172a" },
-  gagal: { label: "Gagal", dot: "#e03e3e" },
-  dibatalkan: { label: "Dibatalkan", dot: "#e03e3e" },
-};
 
 function formatFieldValue(key: string, row: CandidateDetail): string {
   const value = row[key as keyof CandidateDetail];
