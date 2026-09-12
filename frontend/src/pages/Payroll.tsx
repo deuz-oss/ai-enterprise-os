@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertCircle, Landmark, ShieldAlert, Users, Wallet } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
-import { Button, KpiCard, PreflightAlert } from "../components/ui";
+import { Button, confirmToast, KpiCard, PreflightAlert } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 
@@ -747,14 +747,30 @@ export default function Payroll() {
           )}
           <button
             className="btn"
-            onClick={() =>
-              createRun.mutate({
-                year: period.year,
-                month: period.month,
-                run_type: runType,
-                ...(runType === "proyek" ? { client_id: createClientId || undefined } : {}),
-              })
-            }
+            onClick={() => {
+              const anomalySummary = [
+                missingBankEmployees.length > 0 && `${missingBankEmployees.length} karyawan rekening bank kosong`,
+                expiredBpjsEmployees.length > 0 && `${expiredBpjsEmployees.length} karyawan BPJS kedaluwarsa`,
+                negativeNetPaySlips.length > 0 && `${negativeNetPaySlips.length} slip net pay negatif`,
+              ]
+                .filter((v): v is string => Boolean(v))
+                .join(", ");
+              const message =
+                totalAnomalies > 0
+                  ? `Jalankan payroll ${period.month}/${period.year} untuk ${activeEmployees.length} karyawan aktif? Perhatian: ${anomalySummary}.`
+                  : `Jalankan payroll ${period.month}/${period.year} untuk ${activeEmployees.length} karyawan aktif?`;
+              confirmToast(
+                message,
+                () =>
+                  createRun.mutate({
+                    year: period.year,
+                    month: period.month,
+                    run_type: runType,
+                    ...(runType === "proyek" ? { client_id: createClientId || undefined } : {}),
+                  }),
+                { confirmLabel: "Run Payroll" }
+              );
+            }}
           >
             + Run Payrol
           </button>

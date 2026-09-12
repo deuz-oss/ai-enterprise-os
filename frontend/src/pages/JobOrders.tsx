@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { confirmToast, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -673,9 +673,18 @@ export default function JobOrders() {
                 <td className="td">
                   <select
                     value={jo.business_status}
-                    onChange={(e) =>
-                      changeBusinessStatus.mutate({ id: jo.id, business_status: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === "dibatalkan" && jo.business_status !== "dibatalkan") {
+                        confirmToast(
+                          `Batalkan job order "${jo.title}" (${jo.request_id ?? "-"})? Kandidat di pipeline tidak otomatis diberi tahu.`,
+                          () => changeBusinessStatus.mutate({ id: jo.id, business_status: next }),
+                          { confirmLabel: "Batalkan" }
+                        );
+                        return;
+                      }
+                      changeBusinessStatus.mutate({ id: jo.id, business_status: next });
+                    }}
                     className={`cursor-pointer border-0 ${BUSINESS_STATUS_COLORS[jo.business_status]}`}
                   >
                     {BUSINESS_STATUSES.map((s) => (
