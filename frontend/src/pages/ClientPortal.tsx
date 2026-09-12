@@ -26,12 +26,12 @@ interface ClientPortalData {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
+    <main className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-3xl space-y-6">
         <h1 className="text-2xl font-bold text-[var(--text)]">Portal Klien</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -90,12 +90,14 @@ export default function ClientPortal() {
             value={period.month}
             onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
             className="input w-20"
+            aria-label="Bulan"
           />
           <input
             type="number"
             value={period.year}
             onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
             className="input w-24"
+            aria-label="Tahun"
           />
         </div>
       </div>

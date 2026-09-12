@@ -28,12 +28,12 @@ interface PublicSession {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
+    <main className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-2xl font-bold text-[var(--text)]">Interview AI</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
