@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
 import { Clock, IdCard, Lock, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, StatusPill, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface EmployeeRow {
@@ -321,7 +321,7 @@ export default function Employees() {
           </button>
         </form>
         {askAi.error && (
-          <p className="mt-2 text-sm text-red-600">{(askAi.error as Error).message}</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(askAi.error as Error).message}</p>
         )}
         {askResult && (
           <div className="mt-3 rounded-lg border p-4" style={{ backgroundColor: "var(--accent-tint)", borderColor: "var(--border)" }}>
@@ -386,7 +386,7 @@ export default function Employees() {
                               decideCorrection.mutate({ id: c.id, approved: true })
                             }
                             disabled={decideCorrection.isPending}
-                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
                           >
                             Setujui
                           </button>
@@ -396,7 +396,7 @@ export default function Employees() {
                               decideCorrection.mutate({ id: c.id, approved: false })
                             }
                             disabled={decideCorrection.isPending}
-                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
                             Tolak
                           </button>
@@ -449,7 +449,7 @@ export default function Employees() {
                           <button
                             onClick={() => decideOvertime.mutate({ id: o.id, approved: true })}
                             disabled={decideOvertime.isPending}
-                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
                           >
                             Setujui
                           </button>
@@ -457,7 +457,7 @@ export default function Employees() {
                           <button
                             onClick={() => decideOvertime.mutate({ id: o.id, approved: false })}
                             disabled={decideOvertime.isPending}
-                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
                             Tolak
                           </button>
@@ -572,7 +572,7 @@ export default function Employees() {
                           <button
                             onClick={() => decideLeave.mutate({ id: lv.id, approved: true })}
                             disabled={decideLeave.isPending}
-                            className="text-sm font-medium text-emerald-600 hover:text-emerald-800"
+                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
                           >
                             Setujui
                           </button>
@@ -580,7 +580,7 @@ export default function Employees() {
                           <button
                             onClick={() => decideLeave.mutate({ id: lv.id, approved: false })}
                             disabled={decideLeave.isPending}
-                            className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
                             Tolak
                           </button>
@@ -652,18 +652,27 @@ export default function Employees() {
                 tabIndex={0}
                 className="cursor-pointer hover:bg-[var(--hover)] transition-colors"
               >
-                <td className="td font-mono text-xs">{e.employee_no}</td>
-                <td className="td font-medium">{e.full_name}</td>
-                <td className="td">{e.phone ?? "-"}</td>
-                <td className="td">{e.join_date ?? "-"}</td>
-                <td className="td">
-                  <span
-                    className={`badge ${
-                      e.status === "aktif" ? "pill p-green" : "pill p-gray"
-                    }`}
-                  >
-                    {e.status}
-                  </span>
+                <td className="td py-1.5 font-mono text-xs">{e.employee_no}</td>
+                <td className="td py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-[var(--accent-contrast)]"
+                      style={{ backgroundColor: "var(--accent)" }}
+                    >
+                      {e.full_name
+                        .split(" ")
+                        .map((w) => w[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()}
+                    </span>
+                    <span className="font-medium">{e.full_name}</span>
+                  </div>
+                </td>
+                <td className="td py-1.5">{e.phone ?? "-"}</td>
+                <td className="td py-1.5">{e.join_date ?? "-"}</td>
+                <td className="td py-1.5">
+                  <StatusPill domain="employee" status={e.status} />
                 </td>
               </tr>
             ))}

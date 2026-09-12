@@ -245,7 +245,7 @@ export default function ClientDetail() {
   }
   if (error || !client || !id) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-600 dark:text-red-400">
         {error ? (error as Error).message : "Klien tidak ditemukan."}
       </p>
     );
@@ -469,7 +469,7 @@ export default function ClientDetail() {
                     Buat Ulang Link
                   </button>
                   <button
-                    className="btn-secondary text-rose-600"
+                    className="btn-secondary text-rose-600 dark:text-rose-400"
                     disabled={revokePortalAccess.isPending}
                     onClick={() => revokePortalAccess.mutate()}
                   >
@@ -530,7 +530,7 @@ export default function ClientDetail() {
                     </p>
                   </div>
                   <button
-                    className="btn-secondary text-rose-600"
+                    className="btn-secondary text-rose-600 dark:text-rose-400"
                     disabled={deleteSite.isPending}
                     onClick={() => deleteSite.mutate(s.id)}
                   >
@@ -610,7 +610,7 @@ export default function ClientDetail() {
                 Tambah Lokasi
               </button>
             </form>
-            {gpsError && <p className="text-xs text-rose-600">{gpsError}</p>}
+            {gpsError && <p className="text-xs text-rose-600 dark:text-rose-400">{gpsError}</p>}
           </div>
         </div>
       )}

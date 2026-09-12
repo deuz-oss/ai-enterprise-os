@@ -250,7 +250,7 @@ export default function AIInterview() {
                 <button
                   type="button"
                   onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
-                  className="text-xs text-red-600"
+                  className="text-xs text-red-600 dark:text-red-400"
                 >
                   Hapus
                 </button>
@@ -320,7 +320,7 @@ export default function AIInterview() {
                 <button
                   type="button"
                   onClick={() => setCriteria((cs) => cs.filter((_, i) => i !== idx))}
-                  className="text-xs text-red-600"
+                  className="text-xs text-red-600 dark:text-red-400"
                 >
                   Hapus
                 </button>

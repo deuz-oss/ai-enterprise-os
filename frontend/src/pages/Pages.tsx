@@ -227,7 +227,7 @@ export default function Pages() {
                 }
                 disabled={deletePage.isPending}
                 title="Hapus halaman"
-                className="mt-2 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-2 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Hapus halaman
               </button>
@@ -269,11 +269,11 @@ export default function Pages() {
                   </button>
                 )}
                 {updatePage.isSuccess && !updatePage.isPending && (
-                  <span className="text-emerald-600">Tersimpan ✓</span>
+                  <span className="text-emerald-700 dark:text-emerald-400">Tersimpan ✓</span>
                 )}
               </div>
               {updatePage.error && (
-                <p className="text-xs text-red-600">{(updatePage.error as Error).message}</p>
+                <p className="text-xs text-red-600 dark:text-red-400">{(updatePage.error as Error).message}</p>
               )}
             </form>
 

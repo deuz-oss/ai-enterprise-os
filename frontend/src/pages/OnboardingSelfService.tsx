@@ -388,7 +388,7 @@ export default function OnboardingSelfService() {
           </label>
 
           {submit.error && (
-            <p className="text-sm text-red-600">{(submit.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{(submit.error as Error).message}</p>
           )}
           <button type="submit" className="btn w-full" disabled={!consent || submit.isPending}>
             {submit.isPending ? "Menyimpan..." : "Simpan Data"}
@@ -427,7 +427,7 @@ export default function OnboardingSelfService() {
           </div>
         ))}
         {uploadDoc.error && (
-          <p className="text-sm text-red-600">{(uploadDoc.error as Error).message}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{(uploadDoc.error as Error).message}</p>
         )}
       </div>
     </Shell>

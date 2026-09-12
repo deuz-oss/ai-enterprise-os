@@ -295,7 +295,7 @@ export default function PlatformTenants() {
           {provision.isPending ? "Membuat..." : "+ Provision Tenant"}
         </button>
         {provision.error && (
-          <p className="text-sm text-red-600 sm:col-span-3">
+          <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">
             {(provision.error as Error).message}
           </p>
         )}
@@ -410,7 +410,7 @@ export default function PlatformTenants() {
                 <td className="td">
                   {t.status === "aktif" ? (
                     <button
-                      className="btn-secondary py-1 text-xs text-rose-600"
+                      className="btn-secondary py-1 text-xs text-rose-600 dark:text-rose-400"
                       disabled={toggleStatus.isPending}
                       onClick={() => toggleStatus.mutate({ id: t.id, status: "ditangguhkan" })}
                     >
@@ -418,7 +418,7 @@ export default function PlatformTenants() {
                     </button>
                   ) : (
                     <button
-                      className="btn-secondary py-1 text-xs text-emerald-700"
+                      className="btn-secondary py-1 text-xs text-emerald-700 dark:text-emerald-400"
                       disabled={toggleStatus.isPending}
                       onClick={() => toggleStatus.mutate({ id: t.id, status: "aktif" })}
                     >
@@ -456,7 +456,7 @@ export default function PlatformTenants() {
             {(expandedId !== null) && (
               <tr>
                 <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                  <p className="mb-2 text-xs font-medium text-amber-600">
+                  <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
                     Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
                     status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
                   </p>
@@ -495,7 +495,7 @@ export default function PlatformTenants() {
                                 onClick={() =>
                                   setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "kedaluwarsa" })
                                 }
-                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
                                 style={{ backgroundColor: "rgba(225,29,72,.08)" }}
                               >
                                 Cabut Semua
@@ -537,7 +537,7 @@ export default function PlatformTenants() {
             {usageExpandedId !== null && (
               <tr>
                 <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                  <p className="mb-2 text-xs font-medium text-amber-600">
+                  <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
                     Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
                   </p>
                   <div className="flex flex-wrap items-center justify-between gap-2">

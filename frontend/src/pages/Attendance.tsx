@@ -339,7 +339,7 @@ export default function Attendance() {
           </tbody>
         </table>
         {validateSummary.error && (
-          <p className="px-4 pb-3 text-sm text-red-600">{(validateSummary.error as Error).message}</p>
+          <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{(validateSummary.error as Error).message}</p>
         )}
       </div>
       )}
@@ -413,7 +413,7 @@ export default function Attendance() {
                     <tr key={i}>
                       <td className="td">{f.row}</td>
                       <td className="td font-mono">{f.employee_no}</td>
-                      <td className="td text-red-600">{f.error}</td>
+                      <td className="td text-red-600 dark:text-red-400">{f.error}</td>
                     </tr>
                   ))}
                 </tbody>

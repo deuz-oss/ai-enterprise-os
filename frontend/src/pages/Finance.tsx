@@ -516,7 +516,7 @@ export default function Finance() {
                             >
                               Batal
                             </button>
-                            {fakturError && <span className="text-xs text-rose-700">{fakturError}</span>}
+                            {fakturError && <span className="text-xs text-rose-700 dark:text-rose-400">{fakturError}</span>}
                           </div>
                         </form>
                       </td>
@@ -537,7 +537,7 @@ export default function Finance() {
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-rose-700">Aging — Tagihan Terlambat</h2>
+        <h2 className="font-semibold text-rose-700 dark:text-rose-400">Aging — Tagihan Terlambat</h2>
         {(aging ?? []).length === 0 ? (
           <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>Tidak ada tagihan lewat jatuh tempo.</p>
         ) : (
@@ -583,7 +583,7 @@ export default function Finance() {
               <span>
                 {c.entry_date} · {c.category}
               </span>
-              <span className={c.direction === "masuk" ? "text-emerald-700" : "text-rose-700"}>
+              <span className={c.direction === "masuk" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}>
                 {c.direction === "masuk" ? "+" : "−"} {formatRupiah(Number(c.amount))}
               </span>
             </li>
@@ -621,7 +621,7 @@ export default function Finance() {
           <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>AI sedang menganalisis tren arus kas...</p>
         )}
         {runForecast.error && (
-          <p className="mt-2 text-sm text-red-600">{(runForecast.error as Error).message}</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(runForecast.error as Error).message}</p>
         )}
         {forecast && !runForecast.isPending && (
           <div className="mt-3 space-y-3">
@@ -669,7 +669,7 @@ export default function Finance() {
                       </td>
                       <td className="td">{formatRupiah(p.inflow)}</td>
                       <td className="td">{formatRupiah(p.outflow)}</td>
-                      <td className={`td ${p.net >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                      <td className={`td ${p.net >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
                         {formatRupiah(p.net)}
                       </td>
                     </tr>

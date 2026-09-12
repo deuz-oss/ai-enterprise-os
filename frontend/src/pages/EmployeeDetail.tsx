@@ -570,7 +570,7 @@ export default function EmployeeDetail() {
   }
   if (error || !employee || !id) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-600 dark:text-red-400">
         {error ? (error as Error).message : "Karyawan tidak ditemukan."}
       </p>
     );
@@ -1000,7 +1000,7 @@ export default function EmployeeDetail() {
                                     {generateContractDocument.isPending ? "Membuat..." : "Generate Dokumen"}
                                   </button>
                                   {generateContractDocument.error && (
-                                    <p className="text-xs text-red-600 sm:col-span-2">
+                                    <p className="text-xs text-red-600 dark:text-red-400 sm:col-span-2">
                                       {(generateContractDocument.error as Error).message}
                                     </p>
                                   )}
@@ -1041,7 +1041,7 @@ export default function EmployeeDetail() {
                     </button>
                   </div>
                   {sendEsign.error && (
-                    <p className="text-sm text-red-600 sm:col-span-3">{(sendEsign.error as Error).message}</p>
+                    <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{(sendEsign.error as Error).message}</p>
                   )}
                 </form>
               )}
@@ -1128,7 +1128,7 @@ export default function EmployeeDetail() {
                     <input ref={warningLetterFileRef} type="file" className="input sm:col-span-3" />
                     <button disabled={createWarningLetter.isPending} className="btn">Simpan</button>
                     {createWarningLetter.error && (
-                      <p className="text-sm text-red-600 sm:col-span-4">{(createWarningLetter.error as Error).message}</p>
+                      <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-4">{(createWarningLetter.error as Error).message}</p>
                     )}
                   </form>
                 )}
@@ -1224,7 +1224,7 @@ export default function EmployeeDetail() {
                   </tbody>
                 </table>
                 {(sendPayslipEmail.error || previewPayslip.error) && (
-                  <p className="mt-2 text-sm text-red-600">
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                     {((sendPayslipEmail.error ?? previewPayslip.error) as Error).message}
                   </p>
                 )}
@@ -1562,7 +1562,7 @@ export default function EmployeeDetail() {
                     <input name="valid_until" type="date" placeholder="Berlaku hingga" className="input" aria-label="Berlaku hingga" />
                     <button disabled={createInsurance.isPending} className="btn sm:col-span-4">Simpan Polis</button>
                     {createInsurance.error && (
-                      <p className="text-sm text-red-600 sm:col-span-4">{(createInsurance.error as Error).message}</p>
+                      <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-4">{(createInsurance.error as Error).message}</p>
                     )}
                   </form>
                 )}
@@ -1595,7 +1595,7 @@ export default function EmployeeDetail() {
                                 confirmLabel: "Hapus",
                               })
                             }
-                            className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                            className="text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
                             Hapus
                           </button>
@@ -1725,7 +1725,7 @@ export default function EmployeeDetail() {
                   </p>
                 )}
                 {saveBalance.error && (
-                  <p className="mt-2 text-sm text-red-600">{(saveBalance.error as Error).message}</p>
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(saveBalance.error as Error).message}</p>
                 )}
               </div>
 
@@ -1773,7 +1773,7 @@ export default function EmployeeDetail() {
                   )}
                 </div>
                 {linkAccount.error && (
-                  <p className="mt-2 text-sm text-red-600">{(linkAccount.error as Error).message}</p>
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(linkAccount.error as Error).message}</p>
                 )}
               </div>
 
@@ -1805,7 +1805,7 @@ export default function EmployeeDetail() {
                   ))}
                 </select>
                 {updateEmployee.error && (
-                  <p className="mt-2 text-sm text-red-600">
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                     {(updateEmployee.error as Error).message}
                   </p>
                 )}

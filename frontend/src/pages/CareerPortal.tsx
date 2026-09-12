@@ -53,7 +53,7 @@ export function CareerListing() {
     <CareerShell>
       <p className="text-sm text-[var(--text-muted)]">Lowongan yang sedang dibuka.</p>
       {isLoading && <p className="text-sm text-[var(--text-muted)]">Memuat...</p>}
-      {error && <p className="text-sm text-red-600">{(error as Error).message}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{(error as Error).message}</p>}
       <div className="space-y-3">
         {(data ?? []).map((jo) => (
           <Link
@@ -119,7 +119,7 @@ export function CareerDetail() {
   }
 
   if (isLoading) return <CareerShell><p className="text-sm text-[var(--text-muted)]">Memuat...</p></CareerShell>;
-  if (error) return <CareerShell><p className="text-sm text-red-600">{(error as Error).message}</p></CareerShell>;
+  if (error) return <CareerShell><p className="text-sm text-red-600 dark:text-red-400">{(error as Error).message}</p></CareerShell>;
   if (!jo) return null;
 
   return (
@@ -150,7 +150,7 @@ export function CareerDetail() {
 
       {result ? (
         <div className="card space-y-2 border-emerald-600">
-          <p className="text-sm text-emerald-700">{result.message}</p>
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">{result.message}</p>
           <p className="text-xs text-[var(--text-muted)]">Token lamaran Anda:</p>
           <p className="break-all rounded bg-[var(--hover)] p-2 font-mono text-sm">
             {result.application_token}
@@ -186,7 +186,7 @@ export function CareerDetail() {
             <input name="consent" type="checkbox" required className="mt-0.5 h-4 w-4" />
             Saya setuju data pribadi saya diproses untuk keperluan rekrutmen ini (UU PDP).
           </label>
-          {apply.error && <p className="text-sm text-red-600">{(apply.error as Error).message}</p>}
+          {apply.error && <p className="text-sm text-red-600 dark:text-red-400">{(apply.error as Error).message}</p>}
           <button type="submit" disabled={apply.isPending} className="btn w-full">
             {apply.isPending ? "Mengirim..." : "Kirim Lamaran"}
           </button>
@@ -229,7 +229,7 @@ export function CareerTrack() {
           </button>
         </div>
         {isLoading && <p className="text-sm text-[var(--text-muted)]">Memuat...</p>}
-        {error && <p className="text-sm text-red-600">{(error as Error).message}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{(error as Error).message}</p>}
         {data && (
           <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
             <p className="font-medium text-[var(--text)]">{data.job_title}</p>

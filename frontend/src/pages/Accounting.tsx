@@ -401,7 +401,7 @@ export default function Accounting() {
               </button>
             </div>
             {closePeriod.error && (
-              <p className="text-sm text-red-600">{(closePeriod.error as Error).message}</p>
+              <p className="text-sm text-red-600 dark:text-red-400">{(closePeriod.error as Error).message}</p>
             )}
           </div>
           <div className="card overflow-x-auto p-0">
@@ -497,7 +497,7 @@ export default function Accounting() {
               <h2 className="font-semibold" style={{ color: "var(--text)" }}>Laba Rugi {incomeStatement.year}</h2>
               <div className="mt-3 grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-semibold text-emerald-700">Pendapatan</p>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Pendapatan</p>
                   <ul className="mt-1 space-y-1 text-sm">
                     {incomeStatement.revenues.map((r) => (
                       <li key={r.account_code} className="flex justify-between">
@@ -508,7 +508,7 @@ export default function Accounting() {
                   </ul>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-rose-700">Beban</p>
+                  <p className="text-sm font-semibold text-rose-700 dark:text-rose-400">Beban</p>
                   <ul className="mt-1 space-y-1 text-sm">
                     {incomeStatement.expenses.map((r) => (
                       <li key={r.account_code} className="flex justify-between">
@@ -521,7 +521,7 @@ export default function Accounting() {
               </div>
               <p className="mt-3 border-t pt-3 text-right font-semibold" style={{ borderColor: "var(--border)" }}>
                 Laba Bersih:{" "}
-                <span className={incomeStatement.net_income >= 0 ? "text-emerald-700" : "text-rose-700"}>
+                <span className={incomeStatement.net_income >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}>
                   {formatRupiah(incomeStatement.net_income)}
                 </span>
               </p>
@@ -629,7 +629,7 @@ function JournalList({
                     onClick={() => {
                       if (confirm(`Hapus jurnal draft "${e.description}"?`)) onDelete(e.id);
                     }}
-                    className="text-xs font-medium text-red-600 hover:opacity-80"
+                    className="text-xs font-medium text-red-600 dark:text-red-400 hover:opacity-80"
                   >
                     Hapus
                   </button>
@@ -854,10 +854,10 @@ function FixedAssetsPanel() {
         </CalloutBlock>
       )}
       {depreciateOne.error && (
-        <p className="text-sm text-red-600">{(depreciateOne.error as Error).message}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{(depreciateOne.error as Error).message}</p>
       )}
       {disposeAsset.error && (
-        <p className="text-sm text-red-600">{(disposeAsset.error as Error).message}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{(disposeAsset.error as Error).message}</p>
       )}
 
       {showForm && (
@@ -907,7 +907,7 @@ function FixedAssetsPanel() {
           />
           <input name="notes" placeholder="Catatan" className="input sm:col-span-3" />
           {createAsset.error && (
-            <p className="text-sm text-red-600 sm:col-span-3">{(createAsset.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{(createAsset.error as Error).message}</p>
           )}
           <button type="submit" disabled={createAsset.isPending} className="btn sm:col-span-3">
             Simpan Aset
@@ -955,7 +955,7 @@ function FixedAssetsPanel() {
                         Susutkan
                       </button>
                       <button
-                        className="text-xs font-medium text-red-600 hover:opacity-80"
+                        className="text-xs font-medium text-red-600 dark:text-red-400 hover:opacity-80"
                         onClick={() => {
                           const proceeds = prompt("Hasil pelepasan (Rp, 0 kalau tidak ada):", "0");
                           if (proceeds !== null) {
@@ -1086,7 +1086,7 @@ function PurchasesPanel() {
           <input name="due_date" type="date" placeholder="Jatuh tempo" className="input" />
           <input name="notes" placeholder="Catatan" className="input sm:col-span-3" />
           {createBill.error && (
-            <p className="text-sm text-red-600 sm:col-span-3">{(createBill.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{(createBill.error as Error).message}</p>
           )}
           <button type="submit" disabled={createBill.isPending} className="btn sm:col-span-3">
             Simpan Bill
@@ -1161,7 +1161,7 @@ function PurchasesPanel() {
                             Konfirmasi Bayar
                           </button>
                           {payBill.error && (
-                            <p className="text-xs text-red-600">{(payBill.error as Error).message}</p>
+                            <p className="text-xs text-red-600 dark:text-red-400">{(payBill.error as Error).message}</p>
                           )}
                         </form>
                       </td>
@@ -1315,7 +1315,7 @@ function CashBankPanel() {
           <input name="tx_date" type="date" className="input" />
           <input name="description" placeholder="Keterangan" className="input sm:col-span-3" />
           {createTx.error && (
-            <p className="text-sm text-red-600 sm:col-span-3">{(createTx.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{(createTx.error as Error).message}</p>
           )}
           <button type="submit" disabled={createTx.isPending} className="btn sm:col-span-3">
             Simpan Transaksi

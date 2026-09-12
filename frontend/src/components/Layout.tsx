@@ -602,19 +602,26 @@ export default function Layout() {
                         end={item.end}
                         className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
                         style={({ isActive }) => ({
-                          backgroundColor: isActive ? "var(--accent)" : undefined,
-                          color: isActive ? "var(--accent-contrast)" : "var(--text-muted)",
+                          // Restyle 2026-09-12 (pola dashboard baru, docs/design/design.md
+                          // §"Sidebar — Icon & Warna"): dulu fill solid var(--accent) + teks
+                          // var(--accent-contrast) -- diganti tint lembut supaya sejalan
+                          // prinsip "aksen dipakai pelit" (design.md §2, referensi Rippling).
+                          // Warna kategori ikon TETAP tampil saat aktif (dulu netral saat
+                          // aktif) -- tint background sudah cukup menandai "ini halaman
+                          // aktif" tanpa perlu menyembunyikan warna kategori ikonnya.
+                          backgroundColor: isActive ? "var(--accent-tint)" : undefined,
+                          color: isActive ? "var(--accent)" : "var(--text-muted)",
                         })}
                       >
                         {({ isActive }) => (
                           <>
                             {/* Ikon berwarna per kategori (ungu=CRM, biru=Recruitment,
                                 emerald=Workforce, amber=Finance & Accounting, slate=
-                                Administration); netral saat item aktif (lihat --accent-contrast
-                                di index.css -- putih di light mode, teal gelap di dark mode). */}
+                                Administration) -- baik aktif maupun tidak, lihat catatan
+                                restyle di atas. */}
                             <Icon
                               className="h-4 w-4 shrink-0"
-                              style={{ color: isActive ? "var(--accent-contrast)" : (g.accent ?? "var(--text-muted)") }}
+                              style={{ color: g.accent ?? (isActive ? "var(--accent)" : "var(--text-muted)") }}
                             />
                             {item.label}
                           </>

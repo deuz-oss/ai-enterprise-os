@@ -93,7 +93,7 @@ export function AIInterviewVoiceCall({
 
       {callState === "connected" && (
         <>
-          <p className="text-sm font-medium text-emerald-700">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
             🔴 Panggilan berlangsung — AI sedang mendengarkan.
           </p>
           <div className="flex gap-2">
@@ -113,7 +113,7 @@ export function AIInterviewVoiceCall({
 
       {callState === "error" && (
         <>
-          <p className="text-sm text-red-600">{errorMsg}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
           <button className="btn-secondary w-full" onClick={startCall}>
             Coba Lagi
           </button>

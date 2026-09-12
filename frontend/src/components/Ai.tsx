@@ -36,9 +36,9 @@ const VERDICT_COLORS: Record<string, string> = {
 };
 
 function scoreColor(score: number): string {
-  if (score >= 75) return "text-emerald-600";
-  if (score >= 50) return "text-amber-600";
-  return "text-red-500";
+  if (score >= 75) return "text-emerald-700 dark:text-emerald-400";
+  if (score >= 50) return "text-amber-700 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 }
 
 export function ScoreBadge({ score }: { score: number }) {
@@ -64,7 +64,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {screening.strengths.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                 Kekuatan
               </p>
               <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--th-color)" }}>
@@ -76,7 +76,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
           )}
           {screening.risks.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Risiko</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">Risiko</p>
               <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--th-color)" }}>
                 {screening.risks.map((r, i) => (
                   <li key={i}>{r}</li>

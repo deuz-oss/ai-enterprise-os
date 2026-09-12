@@ -355,7 +355,7 @@ export default function Quotations() {
                           Kirim
                         </Button>
                         {sendEmail.error && sendEmail.variables?.id === q.id && (
-                          <p className="text-xs text-red-600">
+                          <p className="text-xs text-red-600 dark:text-red-400">
                             {(sendEmail.error as Error).message}
                           </p>
                         )}

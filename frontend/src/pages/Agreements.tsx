@@ -403,7 +403,7 @@ export default function Agreements() {
                           Kirim
                         </Button>
                         {sendEmail.error && sendEmail.variables?.id === a.id && (
-                          <p className="text-xs text-red-600">
+                          <p className="text-xs text-red-600 dark:text-red-400">
                             {(sendEmail.error as Error).message}
                           </p>
                         )}

@@ -179,7 +179,7 @@ export default function PayrollClientPortal() {
             className="input w-full"
             rows={2}
           />
-          {decide.error && <p className="text-sm text-red-600">{(decide.error as Error).message}</p>}
+          {decide.error && <p className="text-sm text-red-600 dark:text-red-400">{(decide.error as Error).message}</p>}
           <div className="flex gap-2">
             <button
               className="btn flex-1"

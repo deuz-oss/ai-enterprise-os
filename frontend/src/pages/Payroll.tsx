@@ -180,7 +180,7 @@ function HeldSalaryBadge({
         </span>
       ))}
       {release.error && (
-        <span className="text-red-600">{(release.error as Error).message}</span>
+        <span className="text-red-600 dark:text-red-400">{(release.error as Error).message}</span>
       )}
     </>
   );
@@ -391,7 +391,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                           <button
                             onClick={() => deleteComponent.mutate(c.id)}
                             disabled={deleteComponent.isPending}
-                            className="text-rose-600 hover:text-rose-800"
+                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
                             hapus
                           </button>
@@ -527,7 +527,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
       {rows?.length === 0 && (
         <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Belum ada slip pada run ini.</p>
       )}
-      {err && <p className="px-4 pb-3 text-sm text-red-600">{err.message}</p>}
+      {err && <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{err.message}</p>}
     </div>
     {previewUrl && (
       <div
@@ -946,7 +946,7 @@ export default function Payroll() {
                             Kirim ke Klien
                           </button>
                         ) : (
-                          <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 hover:text-rose-800">
+                          <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
                             Finalisasi
                           </button>
                         )}
@@ -958,7 +958,7 @@ export default function Payroll() {
                       </button>
                     )}
                     {r.status === "finance_processing" && (
-                      <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 hover:text-rose-800">
+                      <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
                         Finalisasi
                       </button>
                     )}
@@ -1026,17 +1026,17 @@ export default function Payroll() {
                       {s.overtime_hours > 0 ? formatRupiah(Number(s.overtime_amount)) : "-"}
                     </td>
                     <td className="td text-right tabular-nums">{formatRupiah(Number(s.gross))}</td>
-                    <td className="td text-rose-600 text-right tabular-nums">-{formatRupiah(Number(s.tax_pph21))}</td>
+                    <td className="td text-rose-600 dark:text-rose-400 text-right tabular-nums">-{formatRupiah(Number(s.tax_pph21))}</td>
                     <td className="td font-semibold text-right tabular-nums">
                       {isNegative ? (
                         <>
-                          <span className="text-amber-700">{formatRupiah(Number(s.net_pay))}*</span>
-                          <div className="text-[11px] font-normal text-amber-700">
+                          <span className="text-amber-700 dark:text-amber-400">{formatRupiah(Number(s.net_pay))}*</span>
+                          <div className="text-[11px] font-normal text-amber-700 dark:text-amber-400">
                             (Net Pay Negatif)
                           </div>
                         </>
                       ) : (
-                        <span className="text-emerald-700">{formatRupiah(Number(s.net_pay))}</span>
+                        <span className="text-emerald-700 dark:text-emerald-400">{formatRupiah(Number(s.net_pay))}</span>
                       )}
                     </td>
                   </tr>
@@ -1114,10 +1114,10 @@ export default function Payroll() {
               {sendSaltabToClient.isPending ? "Mengirim..." : "Kirim"}
             </button>
             {sendSaltabToClient.isSuccess && (
-              <span className="text-xs text-emerald-600">Terkirim.</span>
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">Terkirim.</span>
             )}
             {sendSaltabToClient.error && (
-              <span className="text-xs text-red-600">
+              <span className="text-xs text-red-600 dark:text-red-400">
                 {(sendSaltabToClient.error as Error).message}
               </span>
             )}
@@ -1166,7 +1166,7 @@ export default function Payroll() {
                 <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
                 <td className="td text-right tabular-nums">{formatRupiah(r.salary_kesehatan)}</td>
                 <td className="td text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.employer_total)}</td>
-                <td className="td text-rose-600 text-right tabular-nums">-{formatRupiah(r.employee_total)}</td>
+                <td className="td text-rose-600 dark:text-rose-400 text-right tabular-nums">-{formatRupiah(r.employee_total)}</td>
                 <td className="td font-semibold text-right tabular-nums">{formatRupiah(r.grand_total)}</td>
               </tr>
             ))}
@@ -1176,7 +1176,7 @@ export default function Payroll() {
                   Total
                 </td>
                 <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.employer_total)}</td>
-                <td className="td text-rose-700 text-right tabular-nums">
+                <td className="td text-rose-700 dark:text-rose-400 text-right tabular-nums">
                   -{formatRupiah(bpjsRecap.summary.employee_total)}
                 </td>
                 <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.grand_total)}</td>

@@ -125,7 +125,7 @@ export default function Blacklist() {
 
       {showForm && (
         <form onSubmit={handleCreate} className="card space-y-3">
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           <div>
             <label htmlFor="candidate_id" className="text-xs font-medium text-[var(--text-muted)]">
               Kandidat *
@@ -208,7 +208,7 @@ export default function Blacklist() {
                     Setujui
                   </button>
                   <button
-                    className="btn-secondary py-1 text-xs text-red-600"
+                    className="btn-secondary py-1 text-xs text-red-600 dark:text-red-400"
                     disabled={review.isPending}
                     onClick={() => review.mutate({ id: entry.id, decision: "ditolak" })}
                   >

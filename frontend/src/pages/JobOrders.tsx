@@ -177,7 +177,7 @@ function HrDocumentSettingsCard() {
           </button>
         )}
       </div>
-      {save.error && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+      {save.error && <p className="text-xs text-red-600 dark:text-red-400">{(save.error as Error).message}</p>}
     </div>
   );
 }
@@ -365,10 +365,10 @@ export default function JobOrders() {
               <p className="mt-1 text-xs text-[var(--text-muted)]">AI membaca dokumen...</p>
             )}
             {extractDoc.error && (
-              <p className="mt-1 text-xs text-red-600">{(extractDoc.error as Error).message}</p>
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{(extractDoc.error as Error).message}</p>
             )}
             {extracted && !extractDoc.isPending && (
-              <p className="mt-1 text-xs text-emerald-700">
+              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
                 Diekstrak dari "{extracted.file_name}" — periksa & lengkapi field di bawah sebelum
                 simpan.
                 {extracted.client_name && (
@@ -546,7 +546,7 @@ export default function JobOrders() {
                         <button
                           type="button"
                           onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
-                          className="text-xs text-red-600"
+                          className="text-xs text-red-600 dark:text-red-400"
                         >
                           Hapus
                         </button>
@@ -746,7 +746,7 @@ export default function JobOrders() {
             </p>
           )}
           {match.error && (
-            <p className="text-sm text-red-600">{(match.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{(match.error as Error).message}</p>
           )}
           {matchResults && (
             <ol className="space-y-2">

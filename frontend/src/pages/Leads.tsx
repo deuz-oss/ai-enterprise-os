@@ -312,7 +312,7 @@ export default function Leads() {
             </button>
           </form>
           {importLeads.error && (
-            <p className="text-sm text-red-600">{(importLeads.error as Error).message}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{(importLeads.error as Error).message}</p>
           )}
           {importResult && (
             <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: "var(--hover)" }}>
@@ -686,12 +686,12 @@ export default function Leads() {
                   )}
                 </div>
                 {convertLead.isSuccess && convertLead.variables === lead.id && (
-                  <p className="mt-2 text-sm text-emerald-700">
+                  <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-400">
                     Berhasil dikonversi menjadi klien "{convertLead.data.name}".
                   </p>
                 )}
                 {convertLead.error && convertLead.variables === lead.id && (
-                  <p className="mt-2 text-sm text-red-600">{(convertLead.error as Error).message}</p>
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(convertLead.error as Error).message}</p>
                 )}
                 <PropertiesPanel className="mt-4 max-w-xl">
                   <PropertyRow icon={User} label="PIC">

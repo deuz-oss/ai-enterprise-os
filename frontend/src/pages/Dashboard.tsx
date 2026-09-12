@@ -4,19 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BarChart3,
+  Briefcase,
+  DollarSign,
   FileText,
   Hourglass,
   Info,
-  LayoutDashboard,
   type LucideIcon,
   Palmtree,
   Pin,
   PenLine,
   Receipt,
   Sparkles,
+  Users,
   Wallet,
 } from "lucide-react";
-import { PageHeader, CalloutBlock } from "../components/workspace";
+import { CalloutBlock } from "../components/workspace";
+import { KpiCard, StatusPill, HeaderCanvas, DonutChart } from "../components/ui";
 import { api, formatRupiah } from "../api/client";
 
 interface Overview {
@@ -153,12 +156,6 @@ const PAYROLL_BUCKET_LABELS: Record<string, string> = {
   finalized: "Final",
 };
 
-const INVOICE_STATUS_PILL: Record<string, string> = {
-  draft: "p-gray",
-  terkirim: "p-yellow",
-  dibayar: "p-green",
-};
-
 const FAKTUR_STATUS_LABEL: Record<string, string> = {
   belum_buat: "Faktur belum dibuat",
   draft: "Faktur draft",
@@ -203,45 +200,6 @@ const URGENT_DIGEST_LINK: Record<string, string> = {
 function pct(part: number, total: number): number {
   if (!total) return 0;
   return Math.round((part / total) * 100);
-}
-
-/** Kartu KPI baris atas: label, angka besar, hint, progress bar tipis. */
-function KpiCard({
-  label,
-  value,
-  hint,
-  barPct,
-  barColor,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  barPct?: number;
-  barColor?: string;
-}) {
-  return (
-    <div className="card">
-      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text)" }}>
-        {value}
-      </p>
-      {hint && (
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          {hint}
-        </p>
-      )}
-      {barPct !== undefined && (
-        <div className="mt-3 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
-          <div
-            className="h-full rounded-full transition-[width] duration-500 ease-out"
-            style={{ width: `${Math.min(Math.max(barPct, 0), 100)}%`, backgroundColor: barColor ?? "var(--accent)" }}
-          />
-        </div>
-      )}
-    </div>
-  );
 }
 
 /** Kartu section ber-kategori: strip aksen + label kategori di kepala kartu,
@@ -324,6 +282,12 @@ export default function Dashboard() {
     queryKey: ["invoices"],
     queryFn: () => api.get<InvoiceRow[]>("/finance/invoices"),
   });
+  // Query key "me" sama dengan Layout.tsx -- react-query dedupe otomatis,
+  // tidak ada request tambahan, cuma baca cache yang sama untuk sapaan nama.
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
+  });
 
   if (isLoading || !data)
     return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
@@ -337,9 +301,15 @@ export default function Dashboard() {
   const leadFunnelMax = Math.max(...LEAD_STAGE_ORDER.map((s) => data.leads.by_stage[s] ?? 0), 1);
   const payrollTotal = PAYROLL_BUCKET_ORDER.reduce((sum, b) => sum + (data.payroll[b] ?? 0), 0);
 
+  const firstName = me?.full_name?.split(" ")[0];
+
   return (
     <div className="space-y-5">
-      <PageHeader icon={LayoutDashboard} title="Overview" subtitle="Ringkasan operasional hari ini" />
+      <HeaderCanvas
+        name={firstName}
+        headline="Berikut ringkasan operasional lintas modul hari ini."
+        subtext={`${data.clients} klien aktif · ${data.job_orders.open} job order terbuka · ${data.people.active_employees} karyawan aktif`}
+      />
 
       {/* Palet dipatok persis (bukan var(--...)), sama seperti PreflightAlert
           (components/ui/PreflightAlert.tsx) -- SENGAJA sama di light & dark
@@ -384,14 +354,18 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Baris KPI lintas kategori */}
+      {/* Baris KPI lintas kategori. Tidak ada `delta` (persen vs periode lalu)
+          di kartu manapun -- /overview backend belum menyediakan angka
+          perbandingan periode sungguhan, dan §0 melarang mengarang delta
+          cuma supaya kartu "terlihat lengkap" (lihat komentar KpiCard.tsx). */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Headcount Aktif"
           value={data.people.active_employees}
-          hint={`dari ${data.people.total_employees} karyawan terdaftar`}
-          barPct={pct(data.people.active_employees, data.people.total_employees)}
-          barColor={CATEGORY.workforce.accent}
+          icon={Users}
+          iconTone="success"
+          context={`dari ${data.people.total_employees} karyawan terdaftar`}
+          progressPct={pct(data.people.active_employees, data.people.total_employees)}
         />
         {/* "Aktif" = belum filled/closed (backend: status notin [filled, closed]),
             sengaja BUKAN "Terbuka" -- "open" itu satu tahap tersendiri di
@@ -400,23 +374,26 @@ export default function Dashboard() {
         <KpiCard
           label="Job Order Aktif"
           value={data.job_orders.open}
-          hint={`${data.job_orders.filled} filled · ${data.candidates.total} kandidat`}
-          barPct={pct(data.job_orders.filled, data.job_orders.open + data.job_orders.filled)}
-          barColor={CATEGORY.recruitment.accent}
+          icon={Briefcase}
+          iconTone="info"
+          context={`${data.job_orders.filled} filled · ${data.candidates.total} kandidat`}
+          progressPct={pct(data.job_orders.filled, data.job_orders.open + data.job_orders.filled)}
         />
         <KpiCard
           label="Revenue MTD"
           value={formatRupiah(data.finance.revenue_mtd)}
-          hint={`${data.finance.invoices_total} invoice tercatat`}
-          barPct={revenueShare}
-          barColor={CATEGORY.finance_accounting.accent}
+          icon={DollarSign}
+          iconTone="warning"
+          context={`${data.finance.invoices_total} invoice tercatat`}
+          progressPct={revenueShare}
         />
         <KpiCard
           label="Outstanding & Faktur"
           value={formatRupiah(data.finance.outstanding)}
-          hint={`${data.finance.overdue} overdue · ${data.finance.faktur_belum} faktur belum dibuat`}
-          barPct={pct(data.finance.overdue, Math.max(data.finance.invoices_total, 1))}
-          barColor="#dc2626"
+          icon={AlertTriangle}
+          iconTone="danger"
+          context={`${data.finance.overdue} overdue · ${data.finance.faktur_belum} faktur belum dibuat`}
+          progressPct={pct(data.finance.overdue, Math.max(data.finance.invoices_total, 1))}
         />
       </div>
 
@@ -505,18 +482,20 @@ export default function Dashboard() {
               <p className="mb-2 text-xs font-medium" style={{ color: "var(--text)" }}>
                 Status Kandidat
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(data.candidates.by_status).map(([status, count]) => (
-                  <span key={status} className="pill p-gray">
-                    {CANDIDATE_STATUS_LABELS[status] ?? status}: {count}
-                  </span>
-                ))}
-                {data.candidates.total === 0 && (
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    Belum ada kandidat.
-                  </span>
-                )}
-              </div>
+              {data.candidates.total > 0 ? (
+                <DonutChart
+                  size={120}
+                  centerLabel="Kandidat"
+                  data={Object.entries(data.candidates.by_status).map(([status, count]) => ({
+                    label: CANDIDATE_STATUS_LABELS[status] ?? status,
+                    value: count,
+                  }))}
+                />
+              ) : (
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Belum ada kandidat.
+                </span>
+              )}
             </div>
           </SectionCard>
 
@@ -541,9 +520,9 @@ export default function Dashboard() {
                     <tr key={inv.id}>
                       <td className="td font-mono text-xs">{inv.invoice_no}</td>
                       <td className="td">{clientName(inv.client_id)}</td>
-                      <td className="td text-right font-mono">{formatRupiah(inv.total_due)}</td>
+                      <td className="td text-right tabular-nums">{formatRupiah(inv.total_due)}</td>
                       <td className="td">
-                        <span className={`pill ${INVOICE_STATUS_PILL[inv.status] ?? "p-gray"}`}>{inv.status}</span>
+                        <StatusPill domain="invoice" status={inv.status} />
                       </td>
                       <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
                         {FAKTUR_STATUS_LABEL[inv.tax_invoice_status ?? "belum_buat"] ?? "—"}
@@ -587,9 +566,11 @@ export default function Dashboard() {
                             {formatRupiah(row.revenue)}
                           </p>
                         </div>
-                        <span className={`pill ${marginPct >= 15 ? "p-green" : marginPct >= 0 ? "p-yellow" : "p-red"}`}>
-                          {marginPct}% margin
-                        </span>
+                        <StatusPill
+                          domain="margin"
+                          status={marginPct >= 15 ? "baik" : marginPct >= 0 ? "tipis" : "rugi"}
+                          label={`${marginPct}% margin`}
+                        />
                       </div>
                     );
                   })}

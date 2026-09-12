@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { CheckCircle2, ClipboardList, Clock, Wallet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, promptToast, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, StatusPill, promptToast, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 interface PrDecision {
@@ -39,13 +39,9 @@ interface ChainStep {
   approver_role: string | null;
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  diajukan: "pill p-gray",
-  menunggu_atasan: "pill p-yellow",
-  disetujui_atasan: "pill p-green",
-  dieksekusi: "pill p-blue",
-  ditolak: "pill p-red",
-};
+// Warna badge status dipindah ke StatusPill (domain "payment_request") --
+// daftar ini sekarang cuma sumber urutan tab filter.
+const STATUS_KEYS = ["diajukan", "menunggu_atasan", "disetujui_atasan", "dieksekusi", "ditolak"];
 
 const ROLE_OPTIONS = [
   { value: "management", label: "Management" },
@@ -109,7 +105,7 @@ function ApprovalChainPanel() {
                 setRows([...current, { kind: "role", role: "management" }]);
                 setDirty(true);
               }}
-              className="font-medium text-emerald-700 hover:text-emerald-900"
+              className="font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-900"
             >
               + Tahap
             </button>
@@ -189,7 +185,7 @@ function ApprovalChainPanel() {
             </button>
           </div>
           {save.error && (
-            <p className="text-xs text-red-600">{(save.error as Error).message}</p>
+            <p className="text-xs text-red-600 dark:text-red-400">{(save.error as Error).message}</p>
           )}
         </div>
       )}
@@ -219,7 +215,7 @@ export default function PaymentRequests() {
   const prTotal = filteredPrs.length;
   const statusTabs: PillTab[] = [
     { key: "", label: "Semua", count: allPrs.length },
-    ...Object.keys(STATUS_BADGE).map((s) => {
+    ...STATUS_KEYS.map((s) => {
       const label = s.replace("_", " ");
       return {
         key: s,
@@ -297,9 +293,7 @@ export default function PaymentRequests() {
                 <td className="td font-semibold">{formatRupiah(Number(p.amount))}</td>
                 <td className="td max-w-xs truncate">{p.description ?? "-"}</td>
                 <td className="td">
-                  <span className={`${STATUS_BADGE[p.status] ?? "pill p-gray"}`}>
-                    {p.status.replace("_", " ")}
-                  </span>
+                  <StatusPill domain="payment_request" status={p.status} />
                   {p.progress?.total_steps > 0 &&
                     (p.status === "menunggu_atasan" || p.status === "disetujui_atasan") && (
                       <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
@@ -321,7 +315,7 @@ export default function PaymentRequests() {
                       <button
                         onClick={() => act.mutate({ id: p.id, action: "approve" })}
                         disabled={act.isPending}
-                        className="font-medium text-emerald-600 hover:text-emerald-800"
+                        className="font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
                       >
                         Setujui
                       </button>
@@ -333,7 +327,7 @@ export default function PaymentRequests() {
                           })
                         }
                         disabled={act.isPending}
-                        className="font-medium text-rose-600 hover:text-rose-800"
+                        className="font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                       >
                         Tolak
                       </button>
@@ -367,7 +361,7 @@ export default function PaymentRequests() {
         </table>
         <Pagination offset={offset} limit={pageLimit} total={prTotal} onOffsetChange={setOffset} />
         {act.error && (
-          <p className="px-4 pb-3 text-sm text-red-600">{(act.error as Error).message}</p>
+          <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{(act.error as Error).message}</p>
         )}
       </div>
     </div>

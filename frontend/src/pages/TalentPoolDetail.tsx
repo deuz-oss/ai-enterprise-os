@@ -116,7 +116,7 @@ export default function TalentPoolDetail() {
   }
   if (error || !data) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-600 dark:text-red-400">
         {error ? (error as Error).message : "Kandidat tidak ditemukan."}
       </p>
     );

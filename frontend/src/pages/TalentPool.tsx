@@ -251,7 +251,7 @@ function BrandingCard() {
         </div>
       )}
       {(save.error || uploadLogo.error) && (
-        <p className="text-xs text-red-600">
+        <p className="text-xs text-red-600 dark:text-red-400">
           {((save.error || uploadLogo.error) as Error).message}
         </p>
       )}
@@ -348,7 +348,7 @@ function FieldSettingsCard() {
           Simpan
         </button>
       )}
-      {save.error && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+      {save.error && <p className="text-xs text-red-600 dark:text-red-400">{(save.error as Error).message}</p>}
     </div>
   );
 }
@@ -588,7 +588,7 @@ export default function TalentPool() {
               Centang persetujuan untuk mengaktifkan tombol.
             </p>
           )}
-          {intake.error && <p className="text-xs text-red-600">{(intake.error as Error).message}</p>}
+          {intake.error && <p className="text-xs text-red-600 dark:text-red-400">{(intake.error as Error).message}</p>}
         </div>
 
         <div className="flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
@@ -657,7 +657,7 @@ export default function TalentPool() {
               Simpan Kandidat
             </button>
             {createCandidate.error && (
-              <p className="text-xs text-red-600 sm:col-span-3">{(createCandidate.error as Error).message}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 sm:col-span-3">{(createCandidate.error as Error).message}</p>
             )}
           </form>
         )}

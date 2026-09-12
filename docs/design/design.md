@@ -36,6 +36,7 @@ berbeda — bukan satu app ditiru mentah-mentah:
 | **BambooHR** | "Lightness": whitespace lega, navigasi predictable, config kompleks dipecah jadi wizard step-by-step | Portal Karyawan (ESS) — audiens beda dari staf ops |
 | **Deel** | Unifikasi kompleksitas ke satu dashboard, pre-flight check sebelum aksi besar (payroll run), compliance alert jadi elemen visual utama | Onboarding klien, dashboard lintas modul, payroll review |
 | **LinovHR** | **Kompetitor langsung** (sama pasar Indonesia, sama regulasi) — jadi *benchmark minimum*, bukan tujuan akhir. Kekuatannya: multi-entity clarity, dashboard analitik. Secara visual sendiri sudah terasa agak dated dibanding standar SaaS 2026 | Sinyal "jangan sampai kalah dari ini" saat sales pitch |
+| **Dashboard admin generik (2026-09-12)** | 10 preview dashboard (Real Estate, CRM, E-Commerce, HR, Finance, Healthcare, Marketing, Project Management, dll) dari satu desainer/design system yang sama — KPI card row dengan ikon lingkaran, donut chart center-label + legend, status pill semantik, tabel padat `tabular-nums`, sidebar ikon minimalis konsisten. Diambil sebagai **pola komponen lintas 10 vertikal industri**, BUKAN identitas visual/brand satu produk tertentu — beda karakter dari 4 referensi di atas yang masing-masing satu produk SaaS spesifik | Component Spec — Dashboard Pattern (§4a): `KpiCard`, `DonutChart`, `StatusPill`, `HeaderCanvas`, pola tabel, restyle sidebar |
 
 Prinsip gabungan: **Rippling/Deel untuk kerapian & kepadatan data,
 BambooHR untuk modul yang disentuh user awam, LinovHR sebagai lantai
@@ -101,10 +102,163 @@ Fase 22. Ringkasan:
 | `Badge` | ✅ Ada (reuse `.pill`/`.p-*`, API `tone` semantik) | **SENGAJA independen dari `--accent`** — warna status (sukses=hijau, dst.) universal, tidak boleh ikut goyah |
 | `Card` | ✅ Ada (reuse `.card`) | Netral, tidak terpengaruh §3 |
 | `ProgressStep` | ✅ Ada (baru, dipakai tracker `PlacementStatus` di PRD Fase 21) | `var(--accent)` — ikut berubah kalau §3 final |
+| `KpiCard` | ✅ Ada, ditambah ikon lingkaran + delta indicator (2026-09-12, §4a) | Ikon: tone `Badge` (independen accent); delta: `text-emerald-700 dark:text-emerald-300` / `text-red-700 dark:text-red-300` |
+| `StatusPill` | ✅ Ada (baru 2026-09-12, §4a) | Wrapper `Badge` — independen accent, sama seperti `Badge` |
+| `HeaderCanvas` | ✅ Ada (baru 2026-09-12, §4a) | Netral + `var(--accent)` untuk teks aktif date-range picker |
+| `DonutChart` | ✅ Ada (baru 2026-09-12, §4a) — library **recharts**, dipilih via skill `/pick-ui-library` (kategori "General charts") | Legend custom pakai `var(--cat-*)` sebagai fallback warna slice; center-label render manual (bukan fitur recharts) |
 
 **Aturan wajib** (selaras `AEP-014` §17): jangan bikin komponen baru
 kalau yang sesuai sudah ada di tabel ini. Kalau butuh varian baru,
 extend komponen existing, jangan duplikat.
+
+## 4a. Component Spec — Dashboard Pattern (2026-09-12)
+
+Ditambahkan mengikuti 10 referensi preview dashboard admin generik
+(Real Estate, CRM, E-Commerce, HR, Finance, Healthcare, Marketing,
+Project Management, dll — satu desainer, satu design system yang
+konsisten lintas 10 vertikal industri berbeda; dipakai sebagai
+referensi **pola komponen**, BUKAN identitas visual/brand — lihat
+entri baru di §2). Melanjutkan backlog audit UI/UX sebelumnya (quick
+win #7 tinggi baris tabel, #6/#8 native select & dialog).
+
+**KpiCard** (`components/ui/KpiCard.tsx`)
+- Struktur: ikon (lingkaran, `rounded-full`, latar tinted dari tone `Badge`) →
+  nilai (`tabular-nums`, bold, besar) → label (kecil, `var(--text-muted)`,
+  uppercase) → delta indicator opsional (panah ↑/↓ + persen, warna semantik
+  hijau/merah — lihat catatan §0 di bawah)
+- **Delta TIDAK dipasang di manapun saat ini** — backend `/overview` (dan
+  endpoint sejenis) belum menyediakan angka perbandingan periode
+  sungguhan sama sekali. Prop `delta` disediakan di komponen supaya siap
+  dipakai begitu backend punya datanya, TAPI belum ada satu pun pemanggil
+  yang mengisinya — mengarang angka delta cuma supaya kartu "terlihat
+  lengkap" melanggar §0 (data harus asli). Kalau ada entri lain yang
+  bilang delta "aktif" di halaman tertentu tanpa dicek ke kode, itu keliru.
+- Warna icon tone re-use `ICON_TONE_CLASS` (sama pemetaan dengan `Badge`)
+  — SENGAJA independen dari `--accent` per prinsip §6.3 (bukan warna
+  kategori sidebar, itu urusan `--cat-*` yang berbeda lagi).
+- Dipakai di: Dashboard (4 kartu ringkasan lintas kategori) + 14 halaman
+  lain yang sudah pakai versi sebelumnya (Employees, PaymentRequests,
+  Agreements, Quotations, Leads, Clients, TalentPool, PlatformTenants,
+  Payroll, JobOrders, Blacklist, Users, Finance, Referral) — perubahan
+  ikon lingkaran otomatis berlaku di semua pemakaian existing ini karena
+  cuma ubah komponen bersama, bukan API-nya (backward-compatible, prop
+  baru semua opsional).
+
+**DonutChart** (`components/ui/DonutChart.tsx`, baru)
+- Struktur: total value di tengah lingkaran (center-label, `<div>` absolute
+  overlay — recharts sendiri TIDAK punya fitur center-label bawaan) +
+  legend list di samping (dot warna + label + `count · persen%`)
+- Library: **recharts**, dipilih via skill `/pick-ui-library` (dijalankan
+  manual oleh user setelah tool `Skill` Claude Code gagal dengan
+  `disable-model-invocation` — skill ini sengaja di-gate slash-command
+  saja). Kategori "General charts (static/interactive dashboards)", bukan
+  Liveline (itu untuk data streaming real-time, bukan kasus di sini).
+  Legend custom ditulis sendiri (bukan `<Legend>` bawaan recharts) supaya
+  bisa konsisten pakai token `var(--...)` tema.
+- Warna slice: fallback ke `--cat-crm`/`--cat-recruitment`/dst. berurutan
+  kalau pemanggil tidak kirim warna eksplisit per slice — reuse token
+  kategori yang sudah ada, tidak menambah palet warna baru.
+- **Catatan instalasi:** `recharts` butuh `react-is` sebagai dependency
+  transitif yang TIDAK ter-install otomatis oleh `npm install recharts`
+  sendirian (ketahuan lewat error esbuild "`Could not resolve react-is`"
+  saat Vite pre-bundle deps, dev server sempat crash sampai `react-is`
+  di-`npm install` eksplisit). Kalau upgrade recharts di masa depan
+  bikin dev server blank/500 lagi, cek dependency ini duluan.
+- Dipakai di: Dashboard.tsx, section "Job Order & Kandidat" → "Status
+  Kandidat" (dulu daftar pill datar tanpa proporsi visual, sekarang donut
+  + legend persentase per status kandidat).
+
+**StatusPill** (`components/ui/StatusPill.tsx`, baru)
+- Struktur: pill penuh (reuse `.pill` lewat `Badge`), background tinted +
+  teks warna solid — 3 tone inti hijau=sukses/selesai, kuning=proses,
+  merah=gagal/ditolak, plus `neutral`/`info` untuk status transisi yang
+  genuinely bukan salah satu dari 3 itu (lihat catatan cakupan di bawah)
+- **Beda dari `Badge`:** `Badge` adalah primitif generik (`tone` manual per
+  pemanggil); `StatusPill` tahu ARTI status per domain — pemanggil kirim
+  string status mentah dari backend (`status="menunggu_atasan"`), bukan
+  menghafal warnanya sendiri. Pemetaan status→tone per domain sekarang
+  di SATU tempat (`StatusPill.tsx`), bukan diduplikasi tiap halaman.
+- Domain yang sudah dimigrasikan (baca-saja, bukan `<select>` interaktif):
+  `payment_request` (dulu `STATUS_BADGE` lokal di `PaymentRequests.tsx`),
+  `invoice` (dulu `INVOICE_STATUS_PILL` lokal di `Dashboard.tsx`),
+  `margin` (dulu threshold inline persen margin per klien di `Dashboard.tsx`),
+  `employee` (dulu badge ad-hoc status aktif/resign di `Employees.tsx`)
+- **SENGAJA TIDAK mencakup** (batasan cakupan, bukan celah yang terlewat):
+  (1) `business_status` job order di `JobOrders.tsx` — itu `<select>`
+  interaktif buat ganti status inline, memaksanya jadi StatusPill baca-saja
+  akan menghapus kemampuan edit; (2) status pipeline `PlacementStatus`
+  (9+ tahap: Sourcing→Screening→...→Onboarded) — sudah benar
+  disentralisasi terpisah di `lib/pipelineStages.ts` dengan warna dot
+  per-tahap sendiri-sendiri, memaksa 9+ tahap itu ke 3 tone StatusPill
+  akan menghilangkan informasi tahap yang genuinely berbeda. Ad-hoc pill
+  di ~16 file lain (`"pill p-*"` mentah untuk tag sumber lead, role user,
+  dst — bukan "status" dalam makna badge selesai/proses/gagal) juga TIDAK
+  disentuh, di luar cakupan permintaan ini.
+
+**Pola Layout "Header Canvas"** (`components/ui/HeaderCanvas.tsx`, baru)
+- Struktur: greeting kontekstual (berdasar jam lokal: Pagi <11:00, Siang
+  <15:00, Sore <18:00, Malam sisanya) + nama user (dari `/auth/me`,
+  opsional) + headline 1 kalimat (bold, besar) + subtext deskriptif
+  (abu-abu, 1 baris) + date-range picker (kanan atas)
+- **Date-range picker PRESENTASIONAL SAJA** — backend `/overview` (dan
+  endpoint dashboard lain) belum menerima parameter rentang tanggal sama
+  sekali, jadi memilih rentang di dropdown TIDAK memfilter data apa pun.
+  Sama persis dengan tombol "Periode tampilan (segera dapat difilter)"
+  yang sudah lebih dulu ada di topbar `Layout.tsx` — bukan pola baru,
+  cuma versi lebih baik (dropdown asli, bukan tombol statis). Prop
+  `onRangeChange` disediakan supaya gampang diwujudkan nyata begitu
+  backend terkait mendukung filter tanggal.
+- Status penerapan: **Dashboard.tsx saja.** Job Orders/Employees/Payroll
+  BELUM menerapkan pola ini — waktu di sesi ini tidak cukup untuk
+  menjangkau ketiganya setelah scope Bagian 1 lain (KpiCard, StatusPill,
+  restyle tabel, sidebar) selesai. Menggantikan `PageHeader` lama di
+  `components/workspace.tsx` HANYA di Dashboard; `PageHeader` sendiri
+  TIDAK dihapus, masih dipakai halaman lain yang belum disentuh pola ini.
+
+**Pola Tabel Data**
+- Struktur baris: avatar/ikon (lingkaran, inisial) + nama (kolom pertama)
+  → data lain → StatusPill (kolom terakhir)
+- Sel numerik: `tabular-nums` (Tailwind utility, setara `font-variant-
+  numeric: tabular-nums`), rata kanan
+- Tinggi baris target: 32-40px (padding vertikal ~8-10px) — dicek lewat
+  `getBoundingClientRect()` di browser sungguhan, bukan cuma baca CSS
+- Status penerapan: **`Employees.tsx`** (tabel utama daftar karyawan) —
+  avatar inisial + `StatusPill` domain `employee` + padding diketatkan
+  dari `py-2.5` (default `.td` shared, ~40-44px dengan avatar) ke
+  `py-1.5` lokal supaya avatar 20px tetap pas di tinggi baris target;
+  diverifikasi 34.67px lewat `getBoundingClientRect()` langsung di
+  browser. **`Dashboard.tsx`** tabel invoice — `tabular-nums` + `StatusPill`
+  diterapkan, avatar TIDAK relevan (baris invoice, bukan baris orang).
+  Tabel lain di app (~18+ tabel data lain, termasuk 2 tabel lain di
+  `Employees.tsx` sendiri: koreksi absensi & yang belum disebut) BELUM
+  disentuh — restyle di sesi ini dibatasi ke 2 tabel di atas sebagai
+  implementasi representatif, bukan sapuan menyeluruh semua tabel app.
+
+**Sidebar — Icon & Warna (restyle, bukan restrukturisasi)**
+- Icon set: **lucide-react** (satu library, sudah dipakai eksklusif sejak
+  sebelumnya — dikonfirmasi tidak ada icon set lain tercampur; semua
+  ikon outline-style konsisten by design karena itu satu-satunya gaya
+  yang diekspor lucide-react)
+- Warna label + ikon aktif: **direstyle** dari fill solid `var(--accent)`
+  + teks `var(--accent-contrast)` (sebelumnya) menjadi tint lembut
+  `var(--accent-tint)` sebagai background + `var(--accent)` sebagai
+  warna teks — selaras prinsip "aksen dipakai pelit" (§2, referensi
+  Rippling) yang sebelumnya cuma diterapkan ke elemen lain, belum ke nav
+  aktif sendiri. Warna kategori ikon (`--cat-crm`/dst.) sekarang TETAP
+  tampil sekalipun item lagi aktif (sebelumnya disembunyikan jadi netral
+  saat aktif) — tint background sudah cukup menandai "ini halaman aktif"
+  tanpa perlu menyembunyikan warna kategorinya.
+- Warna label non-aktif: `var(--text-muted)` (tidak berubah dari sebelumnya)
+- Kontras diverifikasi manual (rumus luminance relatif WCAG) DAN lewat
+  `getComputedStyle` di browser sungguhan, kedua tema: teks aktif
+  `var(--accent)` di atas `var(--accent-tint)` — light ≈5.6:1, dark
+  ≈6.5:1 (keduanya lolos AA 4.5:1); ikon kategori (mis. violet CRM
+  `#c4b5fd` dark) di atas tint yang sama ≈7.1:1 (lolos AA non-teks 3:1)
+- **CATATAN EKSPLISIT: struktur navigasi, kategori, dan urutan menu TIDAK
+  berubah** — `NAV_ITEMS`, `CATEGORY_ORDER`, dan routing di `Layout.tsx`
+  sama persis seperti sebelumnya. Perubahan ini murni visual/styling
+  (background + warna teks nav link), tidak menyentuh array/struktur data
+  navigasi sama sekali.
 
 ## 5. Progress Migrasi Token
 
@@ -128,6 +282,39 @@ satu dari 3 kategori di bawah, bukan satu tumpukan "belum dikerjakan".
 Migrasi dilakukan bertahap per halaman saat halaman itu disentuh untuk
 alasan lain (bukan proyek migrasi besar sekaligus) — update tabel ini
 setiap ada halaman baru yang dimigrasi.
+
+## 5a. Progress Komponen Pola Dashboard (2026-09-12)
+
+Status **aktual** per akhir sesi implementasi ini (disiplin sama seperti
+koreksi §5 di atas: laporkan apa yang benar-benar jalan, bukan rencana):
+
+| Item | Status |
+|---|---|
+| `KpiCard` — ikon lingkaran + prop `delta` | ✅ Komponen selesai, berlaku otomatis di 15 halaman existing yang sudah pakai (lihat §4a). Prop `delta` TIDAK dipasang di mana pun (belum ada sumber data delta asli). |
+| `StatusPill` (baru) | ✅ Komponen selesai. Migrasi baca-saja: `payment_request`, `invoice`, `margin`, `employee` (4 domain, 4 file). Job Order status (select interaktif) dan Placement pipeline (sistem dot multi-tahap) sengaja tidak dimigrasikan — lihat §4a. |
+| `HeaderCanvas` (baru) | ✅ Komponen selesai. Diterapkan: **Dashboard.tsx**. Belum diterapkan: Job Orders, Employees, Payroll (waktu tidak cukup di sesi ini). |
+| `DonutChart` (baru) | ✅ Selesai — library recharts (dipilih via `/pick-ui-library` yang dijalankan user). Diterapkan di Dashboard.tsx "Status Kandidat". Diverifikasi live light & dark mode. |
+| Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-40px) | ✅ **`Employees.tsx`** tabel utama (34.67px diverifikasi live) dan **`Dashboard.tsx`** tabel invoice (parsial — tanpa avatar, tidak relevan untuk baris invoice). Tabel lain di app (~18+) belum disentuh. |
+| Sidebar — restyle ikon & warna | ✅ Ikon: konfirmasi sudah 100% lucide-react konsisten (tidak ada perubahan library, sudah benar sebelumnya). Warna nav aktif: fill solid → tint lembut + teks `var(--accent)`, ikon kategori tetap tampil saat aktif. Struktur/urutan menu tidak berubah (diverifikasi baca kode `NAV_ITEMS`/`CATEGORY_ORDER` tidak tersentuh). |
+
+**Verifikasi yang sudah dilakukan** (bukan cuma baca kode): `npx tsc
+--noEmit` bersih di setiap tahap; live browser check Dashboard, Employees,
+Leads, PaymentRequests di light DAN dark mode (termasuk DonutChart);
+kontras warna aktif sidebar dihitung manual (rumus luminance WCAG) lalu
+dicocokkan ke `getComputedStyle` sungguhan; tinggi baris tabel diukur
+via `getBoundingClientRect()`, bukan diasumsikan dari CSS. Instalasi
+`recharts` sempat bikin dev server blank/crash (dependency `react-is`
+hilang, lihat catatan di §4a) — ketahuan & diperbaiki lewat pengecekan
+network request + log dev server, bukan diasumsikan "pasti kepasang
+otomatis".
+
+**Yang masih terbuka untuk sesi lanjutan:** HeaderCanvas di 3 halaman
+lain (Job Orders, Employees, Payroll), restyle tabel di halaman selain
+Employees/Dashboard, dan migrasi StatusPill ke domain lain kalau
+ditemukan status baca-saja lain yang genuinely 3-5 state datar (bukan
+select interaktif atau sistem multi-tahap). DonutChart sudah selesai
+(lihat baris di atas) — satu-satunya item Bagian 1 yang sempat blocked
+di sesi ini, sekarang tuntas setelah user menjalankan `/pick-ui-library`.
 
 ## 6. Prinsip Kerja Ke Depan
 

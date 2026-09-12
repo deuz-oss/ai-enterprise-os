@@ -256,9 +256,9 @@ export default function Billing() {
               {saveAutoReload.isPending ? "Menyimpan..." : "Simpan Pengaturan"}
             </button>
             {saveAutoReload.isSuccess && !autoReloadError && (
-              <p className="text-xs text-emerald-600">Pengaturan tersimpan.</p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">Pengaturan tersimpan.</p>
             )}
-            {autoReloadError && <p className="text-xs text-red-600">{autoReloadError}</p>}
+            {autoReloadError && <p className="text-xs text-red-600 dark:text-red-400">{autoReloadError}</p>}
           </form>
           <CalloutBlock icon={Info} tone="info">
             Ini baru menyimpan <b>pengaturan</b> -- eksekusi otomatisnya (charge kartu/GoPay
@@ -286,7 +286,7 @@ export default function Billing() {
                   <td className="td">{new Date(t.created_at).toLocaleString("id-ID")}</td>
                   <td className="td">{t.ref_event}</td>
                   <td
-                    className={`td text-right tabular-nums ${t.amount < 0 ? "" : "text-emerald-700"}`}
+                    className={`td text-right tabular-nums ${t.amount < 0 ? "" : "text-emerald-700 dark:text-emerald-400"}`}
                     style={t.amount < 0 ? { color: "var(--text)" } : undefined}
                   >
                     {t.amount >= 0 ? "+" : ""}

@@ -50,9 +50,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function riskColor(score: number): string {
-  if (score >= 70) return "text-red-600";
-  if (score >= 40) return "text-amber-600";
-  return "text-emerald-600";
+  if (score >= 70) return "text-red-600 dark:text-red-400";
+  if (score >= 40) return "text-amber-700 dark:text-amber-400";
+  return "text-emerald-700 dark:text-emerald-400";
 }
 
 function ScanFakturCard() {
@@ -87,7 +87,7 @@ function ScanFakturCard() {
       />
       {scan.isPending && <p className="text-xs">Membaca faktur…</p>}
       {scan.error && (
-        <p className="text-xs text-red-600">{(scan.error as Error).message}</p>
+        <p className="text-xs text-red-600 dark:text-red-400">{(scan.error as Error).message}</p>
       )}
       {result && (
         <div className="rounded p-3 text-xs" style={{ backgroundColor: "var(--hover)" }}>
@@ -181,7 +181,7 @@ function RekonsiliasiCard() {
       />
       {importCsv.isPending && <p className="text-xs">Mengimpor…</p>}
       {importCsv.error && (
-        <p className="text-xs text-red-600">{(importCsv.error as Error).message}</p>
+        <p className="text-xs text-red-600 dark:text-red-400">{(importCsv.error as Error).message}</p>
       )}
       {importCsv.data && (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -208,10 +208,10 @@ function RekonsiliasiCard() {
             <tr key={ln.id}>
               <td className="td whitespace-nowrap">{ln.tx_date}</td>
               <td className="td max-w-[180px] truncate">{ln.description ?? "-"}</td>
-              <td className="td text-emerald-700">
+              <td className="td text-emerald-700 dark:text-emerald-400">
                 {ln.amount_in ? formatRupiah(ln.amount_in) : "—"}
               </td>
-              <td className="td text-rose-600">
+              <td className="td text-rose-600 dark:text-rose-400">
                 {ln.amount_out ? formatRupiah(ln.amount_out) : "—"}
               </td>
               <td className="td">
@@ -232,7 +232,7 @@ function RekonsiliasiCard() {
                       confirm.mutate({ lineId: ln.id, txId: ln.suggested_tx_id! })
                     }
                     disabled={confirm.isPending}
-                    className="font-medium text-emerald-600 hover:text-emerald-800"
+                    className="font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
                   >
                     Cocokkan
                   </button>
@@ -305,7 +305,7 @@ function PrediksiKlienCard() {
                 {r.risk_basis}
               </td>
               <td className="td">{formatRupiah(r.outstanding_total)}</td>
-              <td className={`td ${r.overdue_total > 0 ? "font-semibold text-red-600" : ""}`}>
+              <td className={`td ${r.overdue_total > 0 ? "font-semibold text-red-600 dark:text-red-400" : ""}`}>
                 {formatRupiah(r.overdue_total)}
               </td>
               <td className="td">{formatRupiah(r.priority_score)}</td>
@@ -380,7 +380,7 @@ function CloseChecklistCard() {
           </span>
           <ul className="space-y-1.5 text-xs">
             {checklist.data.findings.map((f, i) => (
-              <li key={i} className={f.severity === "error" ? "text-red-600" : "text-amber-600"}>
+              <li key={i} className={f.severity === "error" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-400"}>
                 <span className="font-medium">[{f.severity}]</span> {f.detail}
               </li>
             ))}
@@ -436,7 +436,7 @@ function AnomaliesCard() {
       </div>
       <ul className="space-y-1.5 text-xs">
         {(anomalies.data?.anomalies ?? []).map((a, i) => (
-          <li key={i} className={a.severity === "high" ? "font-medium text-red-600" : "text-amber-600"}>
+          <li key={i} className={a.severity === "high" ? "font-medium text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-400"}>
             [{a.severity}] {a.detail}
           </li>
         ))}
@@ -555,7 +555,7 @@ function AskReportCard() {
           Tanya
         </button>
       </form>
-      {ask.error && <p className="text-xs text-red-600">{(ask.error as Error).message}</p>}
+      {ask.error && <p className="text-xs text-red-600 dark:text-red-400">{(ask.error as Error).message}</p>}
       {ask.data && (
         <p className="whitespace-pre-line rounded p-2 text-xs" style={{ backgroundColor: "var(--hover)" }}>
           {ask.data.answer}
@@ -613,7 +613,7 @@ function LedgerCard() {
           Tampilkan
         </button>
       </div>
-      {ledger.error && <p className="text-xs text-red-600">{(ledger.error as Error).message}</p>}
+      {ledger.error && <p className="text-xs text-red-600 dark:text-red-400">{(ledger.error as Error).message}</p>}
       {ledger.data && (
         <table className="w-full text-xs">
           <thead style={{ backgroundColor: "var(--hover)" }}>

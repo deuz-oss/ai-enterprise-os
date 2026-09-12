@@ -87,7 +87,7 @@ export default function AIInterviewSession() {
     return (
       <Shell>
         <div className="card">
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-red-600 dark:text-red-400">
             {status === 410
               ? "Link interview ini sudah kedaluwarsa. Hubungi tim rekrutmen untuk link baru."
               : status === 404
@@ -117,7 +117,7 @@ export default function AIInterviewSession() {
 
       {submitted || alreadyDone ? (
         <div className="card border-emerald-600">
-          <p className="text-sm text-emerald-700">
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">
             Terima kasih, jawaban Anda sudah kami terima. Tim rekrutmen akan meninjau hasilnya dan
             menghubungi Anda untuk langkah berikutnya.
           </p>
@@ -148,7 +148,7 @@ export default function AIInterviewSession() {
               />
             </div>
           ))}
-          {submit.error && <p className="text-sm text-red-600">{(submit.error as Error).message}</p>}
+          {submit.error && <p className="text-sm text-red-600 dark:text-red-400">{(submit.error as Error).message}</p>}
           <button type="submit" disabled={submit.isPending} className="btn w-full">
             {submit.isPending ? "Mengirim..." : "Kirim Jawaban"}
           </button>

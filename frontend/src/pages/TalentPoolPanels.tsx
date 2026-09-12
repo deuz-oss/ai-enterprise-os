@@ -86,7 +86,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   });
 
   if (detail.isLoading) return <p className="text-xs">Memuat profil…</p>;
-  if (detail.error) return <p className="text-xs text-red-600">{(detail.error as Error).message}</p>;
+  if (detail.error) return <p className="text-xs text-red-600 dark:text-red-400">{(detail.error as Error).message}</p>;
   const d = detail.data!;
   const p = d.extracted ?? {};
 
@@ -193,7 +193,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
       )}
 
       {(review.error || finalize.error || reprocess.error) && (
-        <p className="text-xs text-red-600">
+        <p className="text-xs text-red-600 dark:text-red-400">
           {((review.error || finalize.error || reprocess.error) as Error).message}
         </p>
       )}
@@ -277,7 +277,7 @@ export function ScreeningPanel({
           </button>
         </form>
       </div>
-      {runScreening.error && <p className="text-sm text-red-600">{(runScreening.error as Error).message}</p>}
+      {runScreening.error && <p className="text-sm text-red-600 dark:text-red-400">{(runScreening.error as Error).message}</p>}
       {screenings.isLoading ? (
         <p className="text-sm" style={{ color: "var(--th-color)" }}>Memuat riwayat...</p>
       ) : (
@@ -358,7 +358,7 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
                   {exp.start_date ?? "?"} s/d {exp.end_date ?? "sekarang"}
                 </p>
               </div>
-              <button onClick={() => deleteExperience.mutate(exp.id)} className="text-rose-600 hover:text-rose-800">
+              <button onClick={() => deleteExperience.mutate(exp.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
                 Hapus
               </button>
             </li>

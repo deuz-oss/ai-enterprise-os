@@ -485,15 +485,15 @@ function AbsensiPage({
           {isDone && <span className="badge pill p-green">Selesai hari ini</span>}
         </div>
 
-        {clockError && <p className="text-sm text-red-600">{clockError}</p>}
+        {clockError && <p className="text-sm text-red-600 dark:text-red-400">{clockError}</p>}
         {clockMutationError && (
-          <p className="text-sm text-red-600">{clockMutationError.message}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{clockMutationError.message}</p>
         )}
 
         {attendanceToday?.clock_in && (
           <div className="w-full space-y-1 text-left text-sm" style={{ color: "var(--text)" }}>
             <p>
-              Titik Lokasi <span className="text-emerald-600">✓</span>
+              Titik Lokasi <span className="text-emerald-700 dark:text-emerald-400">✓</span>
             </p>
             <p style={{ color: "var(--text-muted)" }}>
               {(isDone ? attendanceToday.clock_out_address : attendanceToday.clock_in_address) ??
@@ -957,9 +957,9 @@ export default function MyPortal() {
                     : "-"}
                 </td>
                 <td className="td">{formatRupiah(Number(s.gross))}</td>
-                <td className="td text-rose-600">-{formatRupiah(Number(s.tax_pph21))}</td>
-                <td className="td text-rose-600">-{formatRupiah(Number(s.deductions))}</td>
-                <td className="td font-semibold text-emerald-700">
+                <td className="td text-rose-600 dark:text-rose-400">-{formatRupiah(Number(s.tax_pph21))}</td>
+                <td className="td text-rose-600 dark:text-rose-400">-{formatRupiah(Number(s.deductions))}</td>
+                <td className="td font-semibold text-emerald-700 dark:text-emerald-400">
                   {formatRupiah(Number(s.net_pay))}
                 </td>
               </tr>
@@ -1078,7 +1078,7 @@ export default function MyPortal() {
           </button>
         </form>
         {createCorrection.error && (
-          <p className="mt-2 text-sm text-red-600">
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
             {(createCorrection.error as Error).message}
           </p>
         )}
@@ -1112,7 +1112,7 @@ export default function MyPortal() {
                   {c.status === "menunggu" && (
                     <button
                       onClick={() => cancelCorrection.mutate(c.id)}
-                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                     >
                       Batalkan
                     </button>
@@ -1166,7 +1166,7 @@ export default function MyPortal() {
           </button>
         </form>
         {submitOvertime.error && (
-          <p className="mt-2 text-sm text-red-600">{(submitOvertime.error as Error).message}</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(submitOvertime.error as Error).message}</p>
         )}
         <table className="mt-3 w-full">
           <thead>
@@ -1195,7 +1195,7 @@ export default function MyPortal() {
                   {o.status === "menunggu" && (
                     <button
                       onClick={() => cancelOvertime.mutate(o.id)}
-                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                     >
                       Batalkan
                     </button>
@@ -1274,7 +1274,7 @@ export default function MyPortal() {
           </button>
         </form>
         {submitLeave.error && (
-          <p className="mt-2 text-sm text-red-600">{(submitLeave.error as Error).message}</p>
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(submitLeave.error as Error).message}</p>
         )}
         <table className="mt-3 w-full">
           <thead>
@@ -1336,7 +1336,7 @@ export default function MyPortal() {
                   {lv.status === "menunggu" && (
                     <button
                       onClick={() => cancelLeave.mutate(lv.id)}
-                      className="text-sm font-medium text-rose-600 hover:text-rose-800"
+                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
                     >
                       Batalkan
                     </button>
@@ -1446,7 +1446,7 @@ export default function MyPortal() {
         {passwordMsg && (
           <p
             className={`mt-2 text-sm ${
-              passwordMsg.ok ? "text-emerald-600" : "text-red-600"
+              passwordMsg.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             }`}
           >
             {passwordMsg.text}
