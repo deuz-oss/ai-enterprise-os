@@ -266,7 +266,16 @@ export default function EmployeeDetail() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>("ringkasan");
-  type SummaryEditKey = "salary" | "grade" | "emergency" | "citizen_address" | "residential_address" | null;
+  type SummaryEditKey =
+    | "salary"
+    | "grade"
+    | "emergency"
+    | "citizen_address"
+    | "residential_address"
+    | "bpjs_kesehatan"
+    | "bpjs_ketenagakerjaan"
+    | "cuti_saldo"
+    | null;
   const [editingField, setEditingField] = useState<SummaryEditKey>(null);
 
   const [tteContract, setTteContract] = useState<{ id: string; name: string } | null>(null);
@@ -1425,42 +1434,66 @@ export default function EmployeeDetail() {
                         fileRef: bpjsKetenagakerjaanFileRef,
                       },
                     ] as const
-                  ).map((b) => (
+                  ).map((b) => {
+                    const editKey = `bpjs_${b.type}` as "bpjs_kesehatan" | "bpjs_ketenagakerjaan";
+                    const isEditingBpjs = editingField === editKey;
+                    return (
                     <div key={b.type} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{b.label}</p>
-                        {b.statusVal && (
-                          <span className={`badge ${BPJS_STATUS_BADGES[b.statusVal] ?? "pill p-gray"}`}>{b.statusVal}</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {b.statusVal && (
+                            <span className={`badge ${BPJS_STATUS_BADGES[b.statusVal] ?? "pill p-gray"}`}>{b.statusVal}</span>
+                          )}
+                          {!isEditingBpjs && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingField(editKey)}
+                              className="hover:opacity-70"
+                              style={{ color: "var(--text-muted)" }}
+                              title={`Ubah ${b.label}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
-                        {b.no ?? "Nomor belum diisi"}
-                      </p>
-                      <form
-                        className="mt-2 flex flex-wrap items-center gap-2"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const form = new FormData(e.currentTarget);
-                          updateEmployee.mutate({
-                            empId: id,
-                            body: {
-                              [`bpjs_${b.type}_no`]: form.get("no") || null,
-                              [`bpjs_${b.type}_status`]: form.get("status") || null,
-                              [`bpjs_${b.type}_valid_until`]: form.get("valid_until") || null,
-                            },
-                          });
-                        }}
-                      >
-                        <input name="no" defaultValue={b.no ?? ""} placeholder="Nomor BPJS" className="input w-auto py-1 text-xs" />
-                        <select name="status" defaultValue={b.statusVal ?? ""} className="input w-auto py-1 text-xs">
-                          <option value="">—</option>
-                          <option value="aktif">aktif</option>
-                          <option value="nonaktif">nonaktif</option>
-                          <option value="menunggu">menunggu</option>
-                        </select>
-                        <input name="valid_until" type="date" defaultValue={b.validUntil ?? ""} className="input w-auto py-1 text-xs" title="Berlaku hingga" />
-                        <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">Simpan</button>
-                      </form>
+                      {isEditingBpjs ? (
+                        <form
+                          className="mt-2 flex flex-wrap items-center gap-2"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = new FormData(e.currentTarget);
+                            updateEmployee.mutate(
+                              {
+                                empId: id,
+                                body: {
+                                  [`bpjs_${b.type}_no`]: form.get("no") || null,
+                                  [`bpjs_${b.type}_status`]: form.get("status") || null,
+                                  [`bpjs_${b.type}_valid_until`]: form.get("valid_until") || null,
+                                },
+                              },
+                              { onSuccess: () => setEditingField(null) }
+                            );
+                          }}
+                        >
+                          <input autoFocus name="no" defaultValue={b.no ?? ""} placeholder="Nomor BPJS" className="input w-auto py-1 text-xs" />
+                          <select name="status" defaultValue={b.statusVal ?? ""} className="input w-auto py-1 text-xs">
+                            <option value="">—</option>
+                            <option value="aktif">aktif</option>
+                            <option value="nonaktif">nonaktif</option>
+                            <option value="menunggu">menunggu</option>
+                          </select>
+                          <input name="valid_until" type="date" defaultValue={b.validUntil ?? ""} className="input w-auto py-1 text-xs" title="Berlaku hingga" />
+                          <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">Simpan</button>
+                          <button type="button" onClick={() => setEditingField(null)} className="btn-ghost py-1 text-xs">Batal</button>
+                        </form>
+                      ) : (
+                        <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                          {b.no ?? "Nomor belum diisi"}
+                          {b.validUntil ? ` · berlaku s/d ${b.validUntil}` : ""}
+                        </p>
+                      )}
                       <form
                         className="mt-2 flex flex-wrap items-center gap-2"
                         onSubmit={(e) => {
@@ -1490,7 +1523,8 @@ export default function EmployeeDetail() {
                         )}
                       </form>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1636,36 +1670,58 @@ export default function EmployeeDetail() {
           {tab === "cuti-akun" && (
             <div className="space-y-4">
               <div className="card">
-                <h2 className="font-semibold" style={{ color: "var(--text)" }}>Jatah Cuti Tahunan</h2>
-                <form
-                  className="mt-3 flex flex-wrap items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = new FormData(e.currentTarget);
-                    saveBalance.mutate({
-                      empId: id,
-                      body: { year: Number(form.get("year")), total_days: Number(form.get("total_days")) },
-                    });
-                  }}
-                >
-                  <input name="year" type="number" required defaultValue={new Date().getFullYear()} className="input w-24" />
-                  <input
-                    key={`${id}-${selectedBalance?.total_days ?? "x"}`}
-                    name="total_days"
-                    type="number"
-                    min={0}
-                    required
-                    placeholder="Total hari"
-                    defaultValue={selectedBalance?.total_days ?? ""}
-                    className="input w-32"
-                  />
-                  <button disabled={saveBalance.isPending} className="btn-secondary">Simpan Jatah</button>
-                </form>
-                {selectedBalance && (
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold" style={{ color: "var(--text)" }}>Jatah Cuti Tahunan</h2>
+                  {editingField !== "cuti_saldo" && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingField("cuti_saldo")}
+                      className="hover:opacity-70"
+                      style={{ color: "var(--text-muted)" }}
+                      title="Ubah jatah cuti"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {editingField === "cuti_saldo" ? (
+                  <form
+                    className="mt-3 flex flex-wrap items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      saveBalance.mutate(
+                        {
+                          empId: id,
+                          body: { year: Number(form.get("year")), total_days: Number(form.get("total_days")) },
+                        },
+                        { onSuccess: () => setEditingField(null) }
+                      );
+                    }}
+                  >
+                    <input autoFocus name="year" type="number" required defaultValue={new Date().getFullYear()} className="input w-24" />
+                    <input
+                      key={`${id}-${selectedBalance?.total_days ?? "x"}`}
+                      name="total_days"
+                      type="number"
+                      min={0}
+                      required
+                      placeholder="Total hari"
+                      defaultValue={selectedBalance?.total_days ?? ""}
+                      className="input w-32"
+                    />
+                    <button disabled={saveBalance.isPending} className="btn-secondary">Simpan Jatah</button>
+                    <button type="button" onClick={() => setEditingField(null)} className="btn-ghost">Batal</button>
+                  </form>
+                ) : selectedBalance ? (
                   <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
                     Terpakai {selectedBalance.used_days} hari · sisa{" "}
                     <span className="font-semibold">{selectedBalance.remaining}</span> dari{" "}
                     {selectedBalance.total_days} hari ({selectedBalance.year})
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                    Belum ada jatah cuti diatur untuk tahun ini.
                   </p>
                 )}
                 {saveBalance.error && (
