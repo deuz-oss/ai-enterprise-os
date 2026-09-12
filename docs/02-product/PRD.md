@@ -1483,6 +1483,94 @@ sama sekali (`bg-{hue}-50/100` + teks matching, tidak pernah
 diberi `dark:` di kedua sisi) — beda masalah, SENGAJA belum disentuh,
 dicatat sebagai gap terbuka berikutnya.
 
+### Fase 40 — CRM: Multi-Contact per Lead dengan Peran (LeadContact) — ✅ Selesai (2026-09-13)
+
+Hasil riset komparatif terhadap CRM open-source trycompai/crm (MIT,
+10rb+ bintang) untuk melengkapi fitur CRM Aeos yang masih sederhana
+dibanding tool sejenis. Item pertama dari gap list: satu Lead/deal bisa
+punya beberapa PIC dengan peran berbeda (Decision Maker, Champion,
+dst.), terinspirasi pola `DealContact` trycompai — beda dari
+`Company.contacts` (daftar PIC company secara umum) yang cuma nunjuk
+satu kontak "primary" per company.
+
+- Tabel baru `lead_contacts` (junction Lead↔Contact + `role` teks
+  bebas, unique per pasangan) — kontak harus berasal dari company yang
+  sama dengan lead (divalidasi service layer, ditolak 422 kalau tidak).
+- Endpoint: `GET/POST /leads/{id}/contacts`, `PATCH/DELETE
+  /leads/contacts/{lead_contact_id}`.
+- UI: seksi "Kontak Terlibat" di panel detail Lead (`Leads.tsx`) —
+  tambah/hapus PIC dari daftar kontak company, edit peran inline
+  (simpan on-blur).
+- TIDAK diubah: `Lead.primary_contact`/`contact_name` (properti lama,
+  masih company-level default) — ini fitur aditif, bukan pengganti.
+
+### Fase 41 — CRM: Field Kustom Admin-Configurable (Company/Contact/Lead) — ✅ Selesai (2026-09-13)
+
+Item kedua dari gap list trycompai/crm, terinspirasi
+`FieldDefinition`/`FieldValue`. Field tambahan bisa didefinisikan
+sendiri oleh staf (bukan hardcode di kode) untuk 3 entitas CRM
+sekaligus: Company, Contact, Lead.
+
+- Tabel baru: `custom_field_definitions` (entity/key/label/tipe/wajib/
+  urutan), `custom_field_options` (opsi untuk tipe `select`),
+  `custom_field_values` (nilai per record — satu tabel polimorfik
+  melayani ketiga entitas, `entity_id` sengaja tanpa FK DB, divalidasi
+  di service layer).
+- 9 tipe field: teks, teks panjang, angka, tanggal, checkbox, pilihan,
+  URL, email, telepon. Validasi per tipe (angka harus bisa di-parse,
+  pilihan harus salah satu opsi terdaftar, wajib-isi ditolak kalau
+  kosong).
+- Endpoint: `GET/POST /custom-fields/definitions`, `PATCH/DELETE
+  /custom-fields/definitions/{id}`, `GET /custom-fields/values`,
+  `PUT /custom-fields/values` (upsert).
+- UI: komponen `CustomFieldsSection` (reusable) dipasang 3× di
+  `Leads.tsx` — level Lead, level Company (sekali per lead, dari
+  `company_id`-nya), dan level Contact (expandable per baris di
+  "Kontak Terlibat"). Form "+ Field Baru" inline; hapus field pakai
+  `confirmToast` (bukan `window.confirm`, yang sudah dilarang sejak
+  audit Fase 38).
+- TIDAK ada UI di halaman Company/Contact standalone — Aeos belum
+  punya halaman detail terpisah untuk Company/Contact presales (cuma
+  nempel di Leads.tsx), jadi field kustom company/contact baru bisa
+  diisi lewat lead yang menunjuk ke company/contact itu.
+
+### Fase 42 — CRM: Bundel Field Sales-Ops (Target Closing, Alasan Menang/Kalah, Kecepatan Tahap) — ✅ Selesai (2026-09-13)
+
+Item ketiga dari gap list, terinspirasi
+`Deal.stageChangedAt`/`closedReason`/`expectedCloseDate`/`lastActivityAt`
+trycompai/crm. 4 kolom baru di `Lead`:
+
+- `expected_close_date` — target tanggal closing, diisi manual staf.
+- `closed_reason` — alasan menang/kalah, cuma ditampilkan di UI saat
+  stage deal/gagal (tidak diwajibkan supaya alur drag-drop Kanban yang
+  tidak mengumpulkan alasan tidak terblokir).
+- `stage_changed_at`/`last_activity_at` — auto-diisi service layer
+  (bukan dari body PATCH klien, supaya tidak bisa dipalsukan), ter-update
+  tiap kali stage benar-benar berubah atau ada aktivitas baru dicatat.
+- UI: indikator "sudah N hari di tahap ini" di dropdown Tahapan
+  (dihitung client-side dari `stage_changed_at`), input Target Closing,
+  field Alasan Menang/Kalah kondisional, baris read-only Aktivitas
+  Terakhir.
+
+### Fase 43 — CRM: Follow-up Terjadwal & Widget Tugas Jatuh Tempo — ✅ Selesai (2026-09-13)
+
+Item keempat gap list, terinspirasi `Activity.dueAt`/`completedAt`
+trycompai/crm. `LeadActivity` (sebelumnya cuma catatan peristiwa yang
+sudah terjadi) sekarang bisa juga jadi tugas terjadwal.
+
+- 2 kolom baru: `due_at` (opsional, bisa dipasang ke aktivitas tipe apa
+  pun), `completed_at`. Tipe aktivitas baru `tugas` untuk follow-up
+  yang belum terjadi (beda dari telepon/meeting/email/catatan yang
+  semuanya mencatat yang sudah terjadi).
+- Endpoint baru: `GET /leads/activities/due` (daftar tugas jatuh tempo
+  lintas semua lead, join ke company/owner, filter `overdue_only`/
+  `include_completed`), `PATCH /leads/activities/{id}` (toggle selesai).
+- UI: form Aktivitas di `Leads.tsx` dapat input jadwal opsional; daftar
+  aktivitas tampilkan checkbox + badge "Terlambat" (merah) untuk tugas
+  yang sudah lewat. Widget baru "Tugas Jatuh Tempo" di halaman Pipeline
+  (di bawah baris KPI) — daftar lintas lead, klik nama company langsung
+  buka detail lead itu, checkbox tandai selesai tanpa pindah halaman.
+
 
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa

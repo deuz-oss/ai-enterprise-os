@@ -18,8 +18,14 @@ from app.modules.presales.models import (
     AgreementTemplate,
     Company,
     Contact,
+    CustomFieldDefinition,
+    CustomFieldOption,
+    CustomFieldValue,
+    FieldEntity,
+    FieldType,
     Lead,
     LeadActivity,
+    LeadContact,
     LeadStage,
     Quotation,
     QuotationStatus,
@@ -33,8 +39,13 @@ from app.modules.presales.schemas import (
     CompanyUpdate,
     ContactCreate,
     ContactUpdate,
+    CustomFieldDefinitionCreate,
+    CustomFieldDefinitionUpdate,
+    CustomFieldValueIn,
     FunnelStage,
     FunnelStats,
+    LeadContactCreate,
+    LeadContactUpdate,
     LeadCreate,
     LeadImportResultOut,
     LeadImportRowFailure,
@@ -700,6 +711,7 @@ def create_lead(db: Session, payload: LeadCreate) -> Lead:
                 )
             )
 
+    now = datetime.now(UTC)
     lead = Lead(
         id=uuid4(),
         company_id=company.id,
@@ -707,6 +719,8 @@ def create_lead(db: Session, payload: LeadCreate) -> Lead:
         estimated_value=payload.estimated_value,
         stage=payload.stage,
         notes=payload.notes,
+        stage_changed_at=now,
+        last_activity_at=now,
     )
     db.add(lead)
     db.commit()
@@ -811,12 +825,15 @@ async def import_leads_csv(db: Session, file: UploadFile) -> LeadImportResultOut
 
             headcount_raw = (row.get("estimated_headcount") or "").strip()
             value_raw = (row.get("estimated_value") or "").strip()
+            import_now = datetime.now(UTC)
             lead = Lead(
                 id=uuid4(),
                 company_id=company.id,
                 estimated_headcount=int(headcount_raw) if headcount_raw else None,
                 estimated_value=float(value_raw) if value_raw else None,
                 notes=(row.get("notes") or "").strip() or None,
+                stage_changed_at=import_now,
+                last_activity_at=import_now,
             )
             db.add(lead)
             result.leads_created += 1
@@ -869,6 +886,12 @@ def get_lead(db: Session, lead_id: str) -> Lead:
 def update_lead(db: Session, lead_id: str, payload: LeadUpdate) -> Lead:
     lead = _get(db, lead_id)
     data = payload.model_dump(exclude_unset=True)
+    now = datetime.now(UTC)
+    # Fase 42 -- `stage_changed_at`/`last_activity_at` auto-diisi di sini,
+    # bukan lewat field yang dikirim klien, supaya tidak bisa dipalsukan.
+    if "stage" in data and data["stage"] != lead.stage:
+        lead.stage_changed_at = now
+        lead.last_activity_at = now
     for field, value in data.items():
         setattr(lead, field, value)
     db.commit()
@@ -883,14 +906,122 @@ def delete_lead(db: Session, lead_id: str) -> None:
 
 
 def add_activity(
-    db: Session, lead_id: str, activity_type: ActivityType, content: str
+    db: Session,
+    lead_id: str,
+    activity_type: ActivityType,
+    content: str,
+    due_at: datetime | None = None,
 ) -> LeadActivity:
     lead = _get(db, lead_id)
-    activity = LeadActivity(lead_id=lead.id, activity_type=activity_type, content=content)
+    activity = LeadActivity(
+        lead_id=lead.id, activity_type=activity_type, content=content, due_at=due_at
+    )
+    lead.last_activity_at = datetime.now(UTC)
     db.add(activity)
     db.commit()
     db.refresh(activity)
     return activity
+
+
+def _get_lead_activity(db: Session, activity_id: str) -> LeadActivity:
+    activity = db.get(LeadActivity, parse_uuid(activity_id))
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Aktivitas tidak ditemukan")
+    return activity
+
+
+def set_activity_completed(db: Session, activity_id: str, completed: bool) -> LeadActivity:
+    activity = _get_lead_activity(db, activity_id)
+    activity.completed_at = datetime.now(UTC) if completed else None
+    db.commit()
+    db.refresh(activity)
+    return activity
+
+
+def list_due_tasks(
+    db: Session, overdue_only: bool = False, include_completed: bool = False
+) -> list[dict]:
+    """Fase 43 -- daftar 'tugas jatuh tempo' lintas lead (bukan per-lead)
+    untuk dashboard follow-up: semua `LeadActivity` yang punya `due_at`,
+    join ke Lead+Company biar frontend tidak perlu fetch terpisah."""
+    stmt = (
+        select(LeadActivity)
+        .join(Lead, LeadActivity.lead_id == Lead.id)
+        .where(LeadActivity.due_at.is_not(None))
+        .order_by(LeadActivity.due_at)
+    )
+    if not include_completed:
+        stmt = stmt.where(LeadActivity.completed_at.is_(None))
+    if overdue_only:
+        stmt = stmt.where(LeadActivity.due_at < datetime.now(UTC))
+    rows = list(db.execute(stmt).scalars())
+    return [
+        {
+            "id": a.id,
+            "lead_id": a.lead_id,
+            "company_name": a.lead.company_name,
+            "activity_type": a.activity_type,
+            "content": a.content,
+            "due_at": a.due_at,
+            "completed_at": a.completed_at,
+            "owner_name": a.lead.owner_name,
+        }
+        for a in rows
+    ]
+
+
+def _get_lead_contact(db: Session, lead_contact_id: str) -> LeadContact:
+    lc = db.get(LeadContact, parse_uuid(lead_contact_id))
+    if lc is None:
+        raise HTTPException(status_code=404, detail="Kontak lead tidak ditemukan")
+    return lc
+
+
+def add_lead_contact(db: Session, lead_id: str, payload: LeadContactCreate) -> LeadContact:
+    """Fase 40 -- tautkan kontak company ke lead ini dengan peran spesifik
+    (mis. Decision Maker, Champion). Kontak harus milik company yang sama
+    dengan lead -- tidak masuk akal menautkan PIC perusahaan lain."""
+    lead = _get(db, lead_id)
+    contact = _get_contact(db, str(payload.contact_id))
+    if contact.company_id != lead.company_id:
+        raise HTTPException(
+            status_code=422, detail="Kontak harus berasal dari perusahaan yang sama dengan lead ini"
+        )
+    existing = db.execute(
+        select(LeadContact).where(
+            LeadContact.lead_id == lead.id, LeadContact.contact_id == contact.id
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Kontak ini sudah ditautkan ke lead")
+
+    lc = LeadContact(id=uuid4(), lead_id=lead.id, contact_id=contact.id, role=payload.role)
+    db.add(lc)
+    db.commit()
+    db.refresh(lc)
+    return lc
+
+
+def list_lead_contacts(db: Session, lead_id: str) -> list[LeadContact]:
+    lead = _get(db, lead_id)
+    return list(lead.lead_contacts)
+
+
+def update_lead_contact(
+    db: Session, lead_contact_id: str, payload: LeadContactUpdate
+) -> LeadContact:
+    lc = _get_lead_contact(db, lead_contact_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(lc, field, value)
+    db.commit()
+    db.refresh(lc)
+    return lc
+
+
+def remove_lead_contact(db: Session, lead_contact_id: str) -> None:
+    lc = _get_lead_contact(db, lead_contact_id)
+    db.delete(lc)
+    db.commit()
 
 
 def funnel_stats(db: Session) -> FunnelStats:
@@ -913,6 +1044,176 @@ def funnel_stats(db: Session) -> FunnelStats:
         won_leads=counts.get(LeadStage.won, 0),
         lost_leads=counts.get(LeadStage.lost, 0),
     )
+
+
+# ---------------- Custom fields (Fase 41) ----------------
+
+
+def _get_field_definition(db: Session, field_id: str) -> CustomFieldDefinition:
+    fd = db.get(CustomFieldDefinition, parse_uuid(field_id))
+    if fd is None:
+        raise HTTPException(status_code=404, detail="Field kustom tidak ditemukan")
+    return fd
+
+
+def _validate_entity_exists(db: Session, entity: FieldEntity, entity_id: str) -> None:
+    if entity == FieldEntity.lead:
+        _get(db, entity_id)
+    elif entity == FieldEntity.company:
+        _get_company(db, entity_id)
+    elif entity == FieldEntity.contact:
+        _get_contact(db, entity_id)
+
+
+def create_custom_field_definition(
+    db: Session, payload: CustomFieldDefinitionCreate
+) -> CustomFieldDefinition:
+    if payload.field_type == FieldType.select and not payload.options:
+        raise HTTPException(
+            status_code=422, detail="Field bertipe pilihan wajib punya minimal satu opsi"
+        )
+    existing = db.execute(
+        select(CustomFieldDefinition).where(
+            CustomFieldDefinition.entity == payload.entity, CustomFieldDefinition.key == payload.key
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=409, detail="Key field ini sudah dipakai untuk entitas yang sama"
+        )
+
+    fd = CustomFieldDefinition(
+        id=uuid4(),
+        entity=payload.entity,
+        key=payload.key,
+        label=payload.label,
+        field_type=payload.field_type,
+        is_required=payload.is_required,
+        position=payload.position,
+    )
+    fd.options = [
+        CustomFieldOption(id=uuid4(), label=opt.label, position=i)
+        for i, opt in enumerate(payload.options)
+    ]
+    db.add(fd)
+    db.commit()
+    db.refresh(fd)
+    return fd
+
+
+def list_custom_field_definitions(db: Session, entity: FieldEntity) -> list[CustomFieldDefinition]:
+    stmt = (
+        select(CustomFieldDefinition)
+        .where(CustomFieldDefinition.entity == entity)
+        .order_by(CustomFieldDefinition.position, CustomFieldDefinition.created_at)
+    )
+    return list(db.execute(stmt).scalars())
+
+
+def update_custom_field_definition(
+    db: Session, field_id: str, payload: CustomFieldDefinitionUpdate
+) -> CustomFieldDefinition:
+    fd = _get_field_definition(db, field_id)
+    data = payload.model_dump(exclude_unset=True, exclude={"options"})
+    for field, value in data.items():
+        setattr(fd, field, value)
+    if payload.options is not None:
+        if fd.field_type == FieldType.select and not payload.options:
+            raise HTTPException(
+                status_code=422, detail="Field bertipe pilihan wajib punya minimal satu opsi"
+            )
+        fd.options.clear()
+        fd.options = [
+            CustomFieldOption(id=uuid4(), label=opt.label, position=i)
+            for i, opt in enumerate(payload.options)
+        ]
+    db.commit()
+    db.refresh(fd)
+    return fd
+
+
+def delete_custom_field_definition(db: Session, field_id: str) -> None:
+    fd = _get_field_definition(db, field_id)
+    db.delete(fd)
+    db.commit()
+
+
+def _validate_field_value(fd: CustomFieldDefinition, value: str | None) -> None:
+    if value is None or value == "":
+        if fd.is_required:
+            raise HTTPException(status_code=422, detail=f"Field '{fd.label}' wajib diisi")
+        return
+    if fd.field_type == FieldType.number:
+        try:
+            float(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"Field '{fd.label}' harus berupa angka"
+            ) from exc
+    elif fd.field_type == FieldType.checkbox:
+        if value not in ("true", "false"):
+            raise HTTPException(status_code=422, detail=f"Field '{fd.label}' harus true/false")
+    elif fd.field_type == FieldType.select:
+        valid_ids = {str(opt.id) for opt in fd.options}
+        if value not in valid_ids:
+            raise HTTPException(
+                status_code=422, detail=f"Pilihan tidak valid untuk field '{fd.label}'"
+            )
+
+
+def list_custom_field_values(db: Session, entity: FieldEntity, entity_id: str) -> list[dict]:
+    """Gabungkan semua definisi field untuk `entity` dengan nilai yang ada
+    untuk record `entity_id` -- field yang belum diisi tetap muncul dengan
+    value=None supaya frontend bisa render form lengkap sekali fetch."""
+    _validate_entity_exists(db, entity, entity_id)
+    definitions = list_custom_field_definitions(db, entity)
+    values_by_field = {
+        v.field_definition_id: v.value
+        for v in db.execute(
+            select(CustomFieldValue).where(
+                CustomFieldValue.entity_id == parse_uuid(entity_id),
+                CustomFieldValue.field_definition_id.in_([d.id for d in definitions]),
+            )
+        ).scalars()
+    }
+    return [
+        {
+            "field_definition_id": d.id,
+            "key": d.key,
+            "label": d.label,
+            "field_type": d.field_type,
+            "value": values_by_field.get(d.id),
+        }
+        for d in definitions
+    ]
+
+
+def set_custom_field_value(db: Session, payload: CustomFieldValueIn) -> CustomFieldValue:
+    fd = _get_field_definition(db, str(payload.field_definition_id))
+    if fd.entity != payload.entity:
+        raise HTTPException(status_code=422, detail="Field ini tidak berlaku untuk entitas ini")
+    _validate_entity_exists(db, payload.entity, str(payload.entity_id))
+    _validate_field_value(fd, payload.value)
+
+    existing = db.execute(
+        select(CustomFieldValue).where(
+            CustomFieldValue.field_definition_id == fd.id,
+            CustomFieldValue.entity_id == payload.entity_id,
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = CustomFieldValue(
+            id=uuid4(),
+            field_definition_id=fd.id,
+            entity_id=payload.entity_id,
+            value=payload.value,
+        )
+        db.add(existing)
+    else:
+        existing.value = payload.value
+    db.commit()
+    db.refresh(existing)
+    return existing
 
 
 def convert_lead_to_client(db: Session, lead_id: str):

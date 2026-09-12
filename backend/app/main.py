@@ -97,6 +97,7 @@ def create_app() -> FastAPI:
     )
     from app.modules.presales.router import agreements_router as presales_agreements_router
     from app.modules.presales.router import companies_router as presales_companies_router
+    from app.modules.presales.router import custom_fields_router as presales_custom_fields_router
     from app.modules.presales.router import (
         quotation_templates_router as presales_quotation_templates_router,
     )
@@ -118,6 +119,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         presales_companies_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    app.include_router(
+        presales_custom_fields_router,
         prefix="/api/v1",
         dependencies=[Depends(require_active_subscription())],
     )

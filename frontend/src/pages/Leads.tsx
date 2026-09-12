@@ -4,18 +4,25 @@ import { api, downloadFile, formatRupiah } from "../api/client";
 import {
   Briefcase,
   Building2,
+  CalendarClock,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   CircleDollarSign,
+  Clock,
   LayoutGrid,
   List,
   MapPin,
+  MessageSquareText,
   User,
   Users,
+  X,
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import { Badge, KpiCard } from "../components/ui";
 import { Pagination } from "../components/Pagination";
+import { CustomFieldsSection } from "../components/CustomFieldsSection";
 
 export interface Lead {
   id: string;
@@ -31,6 +38,10 @@ export interface Lead {
   notes: string | null;
   owner_id: string | null;
   owner_name: string | null;
+  expected_close_date: string | null;
+  stage_changed_at: string | null;
+  closed_reason: string | null;
+  last_activity_at: string | null;
   created_at: string;
 }
 
@@ -87,7 +98,42 @@ interface Activity {
   id: string;
   activity_type: string;
   content: string;
+  due_at: string | null;
+  completed_at: string | null;
   created_at: string;
+}
+
+// Fase 43 -- baris widget "Tugas Jatuh Tempo" lintas lead.
+interface DueTask {
+  id: string;
+  lead_id: string;
+  company_name: string;
+  activity_type: string;
+  content: string;
+  due_at: string;
+  completed_at: string | null;
+  owner_name: string | null;
+}
+
+interface Contact {
+  id: string;
+  company_id: string;
+  name: string;
+  department: string | null;
+  email: string | null;
+  phone: string | null;
+  is_primary: boolean;
+}
+
+// Fase 40: satu lead/deal bisa punya beberapa PIC dengan peran berbeda
+// (Decision Maker, Champion, dst.), dipilih dari kontak company yang sama
+// -- lihat `presales/models.py::LeadContact`.
+interface LeadContact {
+  id: string;
+  lead_id: string;
+  role: string | null;
+  created_at: string;
+  contact: Contact;
 }
 
 // Badge tipe di kartu Kanban (§1.8) -- Lead/Company belum punya field
@@ -102,6 +148,15 @@ function industryBadgeClass(industry: string): string {
   return INDUSTRY_BADGE_CLASSES[hash % INDUSTRY_BADGE_CLASSES.length];
 }
 
+// Fase 42 -- "sudah berapa lama di tahap ini", dihitung dari
+// `stage_changed_at` (server-side, auto-diisi) supaya sinyal kecepatan
+// pipeline terlihat langsung tanpa perlu laporan terpisah.
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
 export default function Leads() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -112,6 +167,7 @@ export default function Leads() {
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [offset, setOffset] = useState(0);
   const [stageFilter, setStageFilter] = useState("");
+  const [expandedContactFields, setExpandedContactFields] = useState<Record<string, boolean>>({});
   const pageLimit = 50;
   // Tabel (satu halaman) terpisah dari `leadsLookup` (semua lead) --
   // papan Kanban, drag-and-drop, dan panel detail (bisa dipilih dari
@@ -136,6 +192,19 @@ export default function Leads() {
     queryFn: () => api.get<Activity[]>(`/leads/${selectedId}/activities`),
     enabled: Boolean(selectedId),
   });
+  const { data: leadContacts } = useQuery({
+    queryKey: ["lead-contacts", selectedId],
+    queryFn: () => api.get<LeadContact[]>(`/leads/${selectedId}/contacts`),
+    enabled: Boolean(selectedId),
+  });
+  const selectedCompanyId = leadsLookup?.find((l) => l.id === selectedId)?.company_id;
+  // Daftar kontak company untuk dropdown "tambah PIC" -- terpisah dari
+  // `leadContacts` (yang sudah ditautkan ke lead ini).
+  const { data: companyContacts } = useQuery({
+    queryKey: ["company-contacts", selectedCompanyId],
+    queryFn: () => api.get<Contact[]>(`/companies/${selectedCompanyId}/contacts`),
+    enabled: Boolean(selectedCompanyId),
+  });
   // Untuk avatar+nama "Pemilik Deal" (§1.8) & dropdown assign owner. Endpoint
   // ini admin-only di backend -- sama seperti dipakai Candidates.tsx untuk
   // pilihan interviewer, jadi kalau gagal (403) dropdown cuma kosong, tidak
@@ -144,6 +213,10 @@ export default function Leads() {
     queryKey: ["users-lite"],
     queryFn: () => api.get<UserOption[]>("/auth/users"),
     retry: false,
+  });
+  const { data: dueTasks } = useQuery({
+    queryKey: ["due-tasks"],
+    queryFn: () => api.get<DueTask[]>("/leads/activities/due"),
   });
 
   // KPI row (§2 archetype F) -- archetype F spec menyebut 4 kartu contoh
@@ -191,6 +264,13 @@ export default function Leads() {
     onError: invalidate,
   });
 
+  // Fase 42 -- bundel field sales-ops (target closing, alasan menang/kalah).
+  const updateLeadFields = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/leads/${id}`, body),
+    onSuccess: invalidate,
+  });
+
   const assignOwner = useMutation({
     mutationFn: ({ id, ownerId }: { id: string; ownerId: string | null }) =>
       api.patch(`/leads/${id}`, { owner_id: ownerId }),
@@ -219,10 +299,47 @@ export default function Leads() {
   }
 
   const addActivity = useMutation({
-    mutationFn: ({ id, content }: { id: string; content: string }) =>
-      api.post(`/leads/${id}/activities`, { activity_type: "catatan", content }),
+    mutationFn: ({ id, content, dueAt }: { id: string; content: string; dueAt?: string }) =>
+      api.post(`/leads/${id}/activities`, {
+        activity_type: dueAt ? "tugas" : "catatan",
+        content,
+        due_at: dueAt || null,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lead-activities", selectedId] });
+      qc.invalidateQueries({ queryKey: ["due-tasks"] });
+    },
+  });
+
+  const completeActivity = useMutation({
+    mutationFn: ({ activityId, completed }: { activityId: string; completed: boolean }) =>
+      api.patch(`/leads/activities/${activityId}`, { completed }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-activities", selectedId] });
+      qc.invalidateQueries({ queryKey: ["due-tasks"] });
+    },
+  });
+
+  const addLeadContact = useMutation({
+    mutationFn: ({ id, contactId, role }: { id: string; contactId: string; role: string }) =>
+      api.post(`/leads/${id}/contacts`, { contact_id: contactId, role: role || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-contacts", selectedId] });
+    },
+  });
+
+  const updateLeadContactRole = useMutation({
+    mutationFn: ({ leadContactId, role }: { leadContactId: string; role: string }) =>
+      api.patch(`/leads/contacts/${leadContactId}`, { role: role || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-contacts", selectedId] });
+    },
+  });
+
+  const removeLeadContact = useMutation({
+    mutationFn: (leadContactId: string) => api.delete(`/leads/contacts/${leadContactId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead-contacts", selectedId] });
     },
   });
 
@@ -359,6 +476,47 @@ export default function Leads() {
           context={formatRupiah(wonValue)}
         />
       </div>
+
+      {dueTasks && dueTasks.length > 0 && (
+        <div className="card">
+          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
+            Tugas Jatuh Tempo ({dueTasks.length})
+          </h2>
+          <ul className="mt-3 space-y-2">
+            {dueTasks.slice(0, 5).map((t) => {
+              const isOverdue = new Date(t.due_at) < new Date();
+              return (
+                <li key={t.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    onChange={() => completeActivity.mutate({ activityId: t.id, completed: true })}
+                    aria-label={`Tandai selesai: ${t.content}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(t.lead_id)}
+                    className="min-w-0 flex-1 truncate text-left hover:underline"
+                    style={{ color: "var(--text)" }}
+                  >
+                    <span className="font-medium">{t.company_name}</span> — {t.content}
+                  </button>
+                  <span
+                    className={`shrink-0 text-xs ${isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}`}
+                    style={isOverdue ? undefined : { color: "var(--text-muted)" }}
+                  >
+                    {new Date(t.due_at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {dueTasks.length > 5 && (
+            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              +{dueTasks.length - 5} tugas lainnya -- buka detail lead untuk lihat semua.
+            </p>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleCreate} className="card grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -704,51 +862,304 @@ export default function Leads() {
                     {formatRupiah(lead.estimated_value)}
                   </PropertyRow>
                   <PropertyRow icon={MapPin} label="Tahapan">
-                    <select
-                      value={lead.stage}
-                      onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
-                      className="input w-auto py-1 text-sm capitalize"
-                    >
-                      {STAGES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={lead.stage}
+                        onChange={(e) => changeStage.mutate({ id: lead.id, stage: e.target.value })}
+                        className="input w-auto py-1 text-sm capitalize"
+                      >
+                        {STAGES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      {daysSince(lead.stage_changed_at) !== null && (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          sudah {daysSince(lead.stage_changed_at)} hari di tahap ini
+                        </span>
+                      )}
+                    </div>
                   </PropertyRow>
+                  <PropertyRow icon={CalendarClock} label="Target Closing">
+                    <input
+                      type="date"
+                      defaultValue={lead.expected_close_date ?? ""}
+                      className="input w-auto py-1 text-sm"
+                      onBlur={(e) => {
+                        if (e.target.value !== (lead.expected_close_date ?? "")) {
+                          updateLeadFields.mutate({
+                            id: lead.id,
+                            body: { expected_close_date: e.target.value || null },
+                          });
+                        }
+                      }}
+                    />
+                  </PropertyRow>
+                  {(lead.stage === "deal" || lead.stage === "gagal") && (
+                    <PropertyRow icon={MessageSquareText} label="Alasan Menang/Kalah">
+                      <input
+                        defaultValue={lead.closed_reason ?? ""}
+                        placeholder="mis. Harga cocok / Kalah tender"
+                        className="input w-64 py-1 text-sm"
+                        onBlur={(e) => {
+                          if (e.target.value !== (lead.closed_reason ?? "")) {
+                            updateLeadFields.mutate({
+                              id: lead.id,
+                              body: { closed_reason: e.target.value || null },
+                            });
+                          }
+                        }}
+                      />
+                    </PropertyRow>
+                  )}
+                  {lead.last_activity_at && (
+                    <PropertyRow icon={Clock} label="Aktivitas Terakhir">
+                      {new Date(lead.last_activity_at).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </PropertyRow>
+                  )}
                 </PropertiesPanel>
               </>
             );
           })()}
 
-          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Aktivitas</h2>
+          {selectedCompanyId && (
+            <CustomFieldsSection
+              entity="company"
+              entityId={selectedCompanyId}
+              title="Field Kustom Perusahaan"
+              description="Field tambahan di level perusahaan (mis. NPWP) -- berlaku untuk semua lead dari company ini, bukan cuma lead yang sedang dibuka."
+            />
+          )}
+
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Kontak Terlibat</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            PIC yang relevan untuk deal ini beserta perannya (mis. Decision Maker, Champion) —
+            beda lead pada company yang sama boleh punya kontak/peran berbeda.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {(leadContacts ?? []).map((lc) => {
+              const fieldsOpen = expandedContactFields[lc.contact.id] ?? false;
+              return (
+                <li
+                  key={lc.id}
+                  className="rounded-lg p-3 text-sm"
+                  style={{ backgroundColor: "var(--hover)" }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-[var(--accent-contrast)]"
+                        style={{ backgroundColor: "var(--accent)" }}
+                      >
+                        {initials(lc.contact.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium" style={{ color: "var(--text)" }}>
+                          {lc.contact.name}
+                        </p>
+                        {(lc.contact.email || lc.contact.phone) && (
+                          <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                            {lc.contact.email ?? lc.contact.phone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        defaultValue={lc.role ?? ""}
+                        placeholder="Peran (mis. Decision Maker)"
+                        aria-label={`Peran ${lc.contact.name} di lead ini`}
+                        className="input w-auto py-1 text-xs"
+                        onBlur={(e) => {
+                          const role = e.target.value.trim();
+                          if (role !== (lc.role ?? "")) {
+                            updateLeadContactRole.mutate({ leadContactId: lc.id, role });
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedContactFields((prev) => ({
+                            ...prev,
+                            [lc.contact.id]: !fieldsOpen,
+                          }))
+                        }
+                        className="flex items-center gap-1 rounded p-1 text-xs hover:opacity-70"
+                        style={{ color: "var(--text-muted)" }}
+                        aria-label={`${fieldsOpen ? "Sembunyikan" : "Tampilkan"} field kustom ${lc.contact.name}`}
+                        title="Field kustom kontak ini"
+                      >
+                        {fieldsOpen ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeLeadContact.mutate(lc.id)}
+                        className="rounded p-1 hover:opacity-70"
+                        style={{ color: "var(--text-muted)" }}
+                        aria-label={`Hapus ${lc.contact.name} dari lead ini`}
+                        title="Hapus"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {fieldsOpen && (
+                    <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                      <CustomFieldsSection
+                        entity="contact"
+                        entityId={lc.contact.id}
+                        title="Field Kustom Kontak"
+                        compact
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {leadContacts?.length === 0 && (
+              <li className="text-sm" style={{ color: "var(--text-muted)" }}>
+                Belum ada kontak yang ditautkan ke lead ini.
+              </li>
+            )}
+          </ul>
           <form
-            className="mt-3 flex gap-2"
+            className="mt-3 flex flex-wrap gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              const input = e.currentTarget.elements.namedItem("content") as HTMLInputElement;
+              const form = e.currentTarget;
+              const contactId = (form.elements.namedItem("contact_id") as HTMLSelectElement).value;
+              const role = (form.elements.namedItem("role") as HTMLInputElement).value;
+              if (!selectedId || !contactId) return;
+              addLeadContact.mutate({ id: selectedId, contactId, role });
+              form.reset();
+            }}
+          >
+            <select name="contact_id" required className="input w-auto" aria-label="Pilih kontak">
+              <option value="">Pilih kontak company...</option>
+              {(companyContacts ?? [])
+                .filter((c) => !(leadContacts ?? []).some((lc) => lc.contact.id === c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+            <input name="role" placeholder="Peran (opsional)" className="input w-auto" />
+            <button className="btn-secondary" disabled={addLeadContact.isPending}>
+              + Tambah PIC
+            </button>
+          </form>
+          {addLeadContact.error && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+              {(addLeadContact.error as Error).message}
+            </p>
+          )}
+
+          {selectedId && (
+            <CustomFieldsSection
+              entity="lead"
+              entityId={selectedId}
+              title="Field Kustom Lead"
+              description="Field tambahan yang dikonfigurasi untuk semua lead (mis. Tipe Layanan) -- hapus/tambah field di sini berlaku untuk seluruh pipeline, bukan cuma lead ini."
+            />
+          )}
+
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Aktivitas</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            Isi "Jadwalkan follow-up" untuk membuat tugas dengan pengingat -- muncul di
+            widget "Tugas Jatuh Tempo" di bagian atas Pipeline.
+          </p>
+          <form
+            className="mt-3 flex flex-wrap gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const input = form.elements.namedItem("content") as HTMLInputElement;
+              const dueInput = form.elements.namedItem("due_at") as HTMLInputElement;
               if (input.value.trim()) {
-                addActivity.mutate({ id: selectedId, content: input.value });
-                input.value = "";
+                addActivity.mutate({
+                  id: selectedId,
+                  content: input.value,
+                  dueAt: dueInput.value ? new Date(dueInput.value).toISOString() : undefined,
+                });
+                form.reset();
               }
             }}
           >
-            <input name="content" placeholder="Tambah catatan aktivitas..." className="input" />
+            <input name="content" placeholder="Tambah catatan aktivitas..." className="input flex-1" />
+            <input
+              name="due_at"
+              type="datetime-local"
+              className="input w-auto"
+              title="Jadwalkan follow-up (opsional)"
+            />
             <button className="btn-secondary">Tambah</button>
           </form>
           <ul className="mt-3 space-y-2">
-            {(activities ?? []).map((a) => (
-              <li
-                key={a.id}
-                className="rounded-lg p-3 text-sm"
-                style={{ backgroundColor: "var(--hover)" }}
-              >
-                <span className="font-medium" style={{ color: "var(--th-color)" }}>
-                  [{a.activity_type}]
-                </span>{" "}
-                {a.content}
-              </li>
-            ))}
+            {(activities ?? []).map((a) => {
+              const isTask = a.due_at !== null;
+              const isDone = a.completed_at !== null;
+              const isOverdue = isTask && !isDone && new Date(a.due_at as string) < new Date();
+              return (
+                <li
+                  key={a.id}
+                  className="flex items-start gap-2 rounded-lg p-3 text-sm"
+                  style={{ backgroundColor: "var(--hover)" }}
+                >
+                  {isTask && (
+                    <input
+                      type="checkbox"
+                      checked={isDone}
+                      onChange={(e) =>
+                        completeActivity.mutate({ activityId: a.id, completed: e.target.checked })
+                      }
+                      className="mt-0.5"
+                      aria-label={`Tandai selesai: ${a.content}`}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium" style={{ color: "var(--th-color)" }}>
+                      [{a.activity_type}]
+                    </span>{" "}
+                    <span
+                      style={
+                        isDone
+                          ? { textDecoration: "line-through", color: "var(--text-muted)" }
+                          : undefined
+                      }
+                    >
+                      {a.content}
+                    </span>
+                    {isTask && !isDone && (
+                      <span
+                        className={`ml-2 text-xs font-medium ${
+                          isOverdue ? "text-red-600 dark:text-red-400" : ""
+                        }`}
+                        style={isOverdue ? undefined : { color: "var(--text-muted)" }}
+                      >
+                        {isOverdue ? "Terlambat — " : "Jatuh tempo "}
+                        {new Date(a.due_at as string).toLocaleDateString("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
             {activities?.length === 0 && (
               <li className="text-sm" style={{ color: "var(--text-muted)" }}>
                 Belum ada aktivitas.

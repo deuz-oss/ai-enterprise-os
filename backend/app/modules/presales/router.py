@@ -6,8 +6,9 @@ from app.core.permissions import PRESALES_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.clients.schemas import ClientOut
 from app.modules.presales import service
-from app.modules.presales.models import AgreementStatus, LeadStage, QuotationStatus
+from app.modules.presales.models import AgreementStatus, FieldEntity, LeadStage, QuotationStatus
 from app.modules.presales.schemas import (
+    ActivityCompleteIn,
     ActivityCreate,
     ActivityOut,
     AgreementCreate,
@@ -24,10 +25,19 @@ from app.modules.presales.schemas import (
     ContactCreate,
     ContactOut,
     ContactUpdate,
+    CustomFieldDefinitionCreate,
+    CustomFieldDefinitionOut,
+    CustomFieldDefinitionUpdate,
+    CustomFieldValueIn,
+    CustomFieldValueOut,
     FunnelStats,
+    LeadContactCreate,
+    LeadContactOut,
+    LeadContactUpdate,
     LeadCreate,
     LeadImportResultOut,
     LeadOut,
+    LeadTaskOut,
     LeadUpdate,
     QuotationCreate,
     QuotationEmailIn,
@@ -343,6 +353,60 @@ def send_agreement_email(
     )
 
 
+# Fase 41 -- field tambahan admin-configurable per entitas CRM
+# (Company/Contact/Lead). Router terpisah, prefix sendiri, sama pola
+# companies_router/quotation_templates_router di atas.
+custom_fields_router = APIRouter(
+    prefix="/custom-fields",
+    tags=["presales"],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*PRESALES_ROLES))],
+)
+
+
+@custom_fields_router.get("/definitions", response_model=list[CustomFieldDefinitionOut])
+def list_custom_field_definitions(entity: FieldEntity, db: Session = Depends(get_db)):
+    return service.list_custom_field_definitions(db, entity)
+
+
+@custom_fields_router.post(
+    "/definitions", response_model=CustomFieldDefinitionOut, status_code=status.HTTP_201_CREATED
+)
+def create_custom_field_definition(
+    payload: CustomFieldDefinitionCreate, db: Session = Depends(get_db)
+):
+    return service.create_custom_field_definition(db, payload)
+
+
+@custom_fields_router.patch("/definitions/{field_id}", response_model=CustomFieldDefinitionOut)
+def update_custom_field_definition(
+    field_id: str, payload: CustomFieldDefinitionUpdate, db: Session = Depends(get_db)
+):
+    return service.update_custom_field_definition(db, field_id, payload)
+
+
+@custom_fields_router.delete("/definitions/{field_id}", status_code=204)
+def delete_custom_field_definition(field_id: str, db: Session = Depends(get_db)):
+    service.delete_custom_field_definition(db, field_id)
+
+
+@custom_fields_router.get("/values", response_model=list[CustomFieldValueOut])
+def list_custom_field_values(entity: FieldEntity, entity_id: str, db: Session = Depends(get_db)):
+    return service.list_custom_field_values(db, entity, entity_id)
+
+
+@custom_fields_router.put("/values", response_model=CustomFieldValueOut)
+def set_custom_field_value(payload: CustomFieldValueIn, db: Session = Depends(get_db)):
+    value = service.set_custom_field_value(db, payload)
+    fd = value.field_definition
+    return {
+        "field_definition_id": value.field_definition_id,
+        "key": fd.key,
+        "label": fd.label,
+        "field_type": fd.field_type,
+        "value": value.value,
+    }
+
+
 @router.get("", response_model=list[LeadOut])
 def list_leads(
     response: Response,
@@ -390,10 +454,57 @@ def convert_lead(lead_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{lead_id}/activities", response_model=ActivityOut, status_code=201)
 def add_activity(lead_id: str, payload: ActivityCreate, db: Session = Depends(get_db)):
-    return service.add_activity(db, lead_id, payload.activity_type, payload.content)
+    return service.add_activity(
+        db, lead_id, payload.activity_type, payload.content, due_at=payload.due_at
+    )
 
 
 @router.get("/{lead_id}/activities", response_model=list[ActivityOut])
 def list_activities(lead_id: str, db: Session = Depends(get_db)):
     lead = service.get_lead(db, lead_id)
     return list(lead.activities)
+
+
+# Fase 43 -- daftar tugas jatuh tempo lintas lead. Terdaftar SEBELUM
+# `/{lead_id}/activities` route registrations di atas sudah cukup spesifik
+# (literal "activities" di posisi awal vs `{lead_id}` sebagai variable) jadi
+# tidak bentrok terlepas urutan -- pola sama `/leads/contacts/{id}` vs
+# `/leads/{lead_id}/contacts`.
+@router.get("/activities/due", response_model=list[LeadTaskOut])
+def list_due_tasks(
+    overdue_only: bool = False, include_completed: bool = False, db: Session = Depends(get_db)
+):
+    return service.list_due_tasks(
+        db, overdue_only=overdue_only, include_completed=include_completed
+    )
+
+
+@router.patch("/activities/{activity_id}", response_model=ActivityOut)
+def set_activity_completed(
+    activity_id: str, payload: ActivityCompleteIn, db: Session = Depends(get_db)
+):
+    return service.set_activity_completed(db, activity_id, payload.completed)
+
+
+@router.get("/{lead_id}/contacts", response_model=list[LeadContactOut])
+def list_lead_contacts(lead_id: str, db: Session = Depends(get_db)):
+    return service.list_lead_contacts(db, lead_id)
+
+
+@router.post(
+    "/{lead_id}/contacts", response_model=LeadContactOut, status_code=status.HTTP_201_CREATED
+)
+def add_lead_contact(lead_id: str, payload: LeadContactCreate, db: Session = Depends(get_db)):
+    return service.add_lead_contact(db, lead_id, payload)
+
+
+@router.patch("/contacts/{lead_contact_id}", response_model=LeadContactOut)
+def update_lead_contact(
+    lead_contact_id: str, payload: LeadContactUpdate, db: Session = Depends(get_db)
+):
+    return service.update_lead_contact(db, lead_contact_id, payload)
+
+
+@router.delete("/contacts/{lead_contact_id}", status_code=204)
+def remove_lead_contact(lead_contact_id: str, db: Session = Depends(get_db)):
+    service.remove_lead_contact(db, lead_contact_id)

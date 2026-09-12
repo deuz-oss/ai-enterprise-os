@@ -6,6 +6,29 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 43: CRM — follow-up terjadwal & widget "Tugas Jatuh Tempo"
+
+- `LeadActivity` dapat `due_at`/`completed_at` + tipe aktivitas baru `tugas`, terinspirasi `Activity.dueAt`/`completedAt` trycompai/crm.
+- Endpoint `GET /leads/activities/due` (daftar tugas lintas semua lead, filter `overdue_only`/`include_completed`) dan `PATCH /leads/activities/{id}` (toggle selesai).
+- UI: form Aktivitas dapat input jadwal opsional, badge "Terlambat" untuk tugas lewat tempo, widget baru "Tugas Jatuh Tempo" di halaman Pipeline (klik untuk buka lead, checkbox tandai selesai tanpa pindah halaman).
+
+### Added — Fase 42: CRM — bundel field sales-ops (target closing, alasan menang/kalah, kecepatan tahap)
+
+- 4 kolom baru di `Lead`: `expected_close_date` (manual), `closed_reason` (manual, kondisional saat deal/gagal), `stage_changed_at`/`last_activity_at` (auto, tidak bisa dipalsukan lewat PATCH klien) — terinspirasi `Deal.stageChangedAt`/`closedReason`/`expectedCloseDate`/`lastActivityAt` trycompai/crm.
+- UI: indikator "sudah N hari di tahap ini", input Target Closing, field Alasan Menang/Kalah kondisional, baris read-only Aktivitas Terakhir.
+
+### Added — Fase 41: CRM — field kustom admin-configurable (Company/Contact/Lead)
+
+- Tabel baru `custom_field_definitions`/`custom_field_options`/`custom_field_values` (satu tabel value polimorfik untuk 3 entitas), terinspirasi `FieldDefinition`/`FieldValue` trycompai/crm. 9 tipe field dengan validasi per tipe.
+- Endpoint CRUD definisi + upsert nilai (`/custom-fields/definitions`, `/custom-fields/values`).
+- UI: komponen reusable `CustomFieldsSection` dipasang di level Lead, Company, dan per-kontak (expandable) di `Leads.tsx`. Hapus field pakai `confirmToast`, bukan `window.confirm`.
+
+### Added — Fase 40: CRM — multi-contact per lead dengan peran (LeadContact)
+
+- Tabel baru `lead_contacts` (junction Lead↔Contact + `role` teks bebas), terinspirasi pola `DealContact` trycompai/crm — satu lead/deal bisa punya beberapa PIC dengan peran berbeda (Decision Maker, Champion, dst.), beda dari `Company.contacts` yang cuma satu PIC "primary" per company.
+- Endpoint `GET/POST /leads/{id}/contacts`, `PATCH/DELETE /leads/contacts/{lead_contact_id}`.
+- UI: seksi "Kontak Terlibat" di panel detail Lead — tambah/hapus PIC, edit peran inline.
+
 ### Added — Fase 39: Pola Dashboard Baru (KpiCard/DonutChart/StatusPill/HeaderCanvas) + fix kontras warna semantik
 
 - `KpiCard` diperluas: ikon jadi lingkaran tinted + delta indicator opsional (belum dipasang di mana pun — `/overview` belum punya data perbandingan periode sungguhan).

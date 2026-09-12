@@ -1,8 +1,18 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -25,6 +35,10 @@ class ActivityType(str, enum.Enum):
     meeting = "meeting"
     email = "email"
     note = "catatan"
+    # Fase 43 -- follow-up terjadwal (beda dari 4 tipe di atas yang semuanya
+    # mencatat peristiwa yang SUDAH terjadi); "tugas" dipasangkan dengan
+    # `LeadActivity.due_at` untuk daftar "tugas jatuh tempo" lintas lead.
+    task = "tugas"
 
 
 class QuotationTemplate(TenantMixin, Base):
@@ -206,6 +220,15 @@ class Lead(TenantMixin, Base):
     )
     notes: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
+    # Fase 42 -- bundel field sales-ops kecil (terinspirasi `Deal.stageChangedAt`/
+    # `closedReason`/`expectedCloseDate`/`lastActivityAt` trycompai/crm).
+    # `expected_close_date` diisi manual staf; tiga lainnya auto-diisi service
+    # layer (lihat `service.update_lead`/`add_activity`), TIDAK diekspos di
+    # `LeadUpdate` supaya tidak bisa dipalsukan lewat PATCH biasa.
+    expected_close_date: Mapped[date | None] = mapped_column(Date, default=None)
+    stage_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    closed_reason: Mapped[str | None] = mapped_column(Text)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -214,6 +237,9 @@ class Lead(TenantMixin, Base):
     company: Mapped[Company] = relationship()
     activities: Mapped[list["LeadActivity"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", order_by="LeadActivity.created_at"
+    )
+    lead_contacts: Mapped[list["LeadContact"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", order_by="LeadContact.created_at"
     )
     owner: Mapped["User | None"] = relationship()
 
@@ -273,6 +299,136 @@ class LeadActivity(TenantMixin, Base):
         Enum(ActivityType, native_enum=False, length=50), default=ActivityType.note
     )
     content: Mapped[str] = mapped_column(Text)
+    # Fase 43 -- follow-up terjadwal & reminder. `due_at` opsional dan
+    # dipakai untuk aktivitas APAPUN (bukan cuma tipe "tugas") supaya staf
+    # bisa jadwalkan follow-up dari catatan apa pun yang sudah ditulis;
+    # `completed_at` null berarti belum selesai/masih pending.
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     lead: Mapped[Lead] = relationship(back_populates="activities")
+
+
+class LeadContact(TenantMixin, Base):
+    """Fase 40 -- kontak (PIC) perusahaan yang terlibat di satu lead/deal
+    spesifik, dengan peran masing-masing (mis. Decision Maker, Champion).
+
+    Beda dari `Company.contacts` (daftar PIC perusahaan secara umum):
+    `LeadContact` memilih SUBSET kontak company itu yang relevan untuk lead
+    ini, dan perannya bisa beda per lead -- kalau company yang sama
+    followup lagi nanti dengan lead/kebutuhan lain, kontak dan perannya
+    tidak harus sama. `role` sengaja teks bebas (bukan enum) karena ini
+    label yang diketik staf sales sesuai konteks deal, bukan status alur
+    kerja yang logikanya bercabang di sistem (beda dari `LeadStage`)."""
+
+    __tablename__ = "lead_contacts"
+    __table_args__ = (UniqueConstraint("lead_id", "contact_id", name="uq_lead_contact"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
+    contact_id: Mapped[UUID] = mapped_column(
+        ForeignKey("contacts.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    lead: Mapped[Lead] = relationship(back_populates="lead_contacts")
+    contact: Mapped[Contact] = relationship()
+
+
+class FieldEntity(str, enum.Enum):
+    company = "company"
+    contact = "contact"
+    lead = "lead"
+
+
+class FieldType(str, enum.Enum):
+    text = "text"
+    long_text = "long_text"
+    number = "number"
+    date = "date"
+    checkbox = "checkbox"
+    select = "select"
+    url = "url"
+    email = "email"
+    phone = "phone"
+
+
+class CustomFieldDefinition(TenantMixin, Base):
+    """Fase 41 -- field tambahan yang bisa dikonfigurasi per entitas CRM
+    (Company/Contact/Lead), terinspirasi `FieldDefinition` di CRM
+    open-source trycompai/crm. Beda dari `QuotationTemplate.field_schema`
+    (JSON per-dokumen, nilainya nempel ke SATU quotation) -- nilai field
+    ini nempel ke record Company/Contact/Lead itu sendiri dan dipakai
+    lintas alur, makanya butuh tabel value sendiri (`CustomFieldValue`)."""
+
+    __tablename__ = "custom_field_definitions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "entity", "key", name="uq_custom_field_tenant_entity_key"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    entity: Mapped[FieldEntity] = mapped_column(
+        Enum(FieldEntity, native_enum=False, length=20), index=True
+    )
+    key: Mapped[str] = mapped_column(String(80))
+    label: Mapped[str] = mapped_column(String(120))
+    field_type: Mapped[FieldType] = mapped_column(Enum(FieldType, native_enum=False, length=20))
+    is_required: Mapped[bool] = mapped_column(default=False)
+    position: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    options: Mapped[list["CustomFieldOption"]] = relationship(
+        back_populates="field_definition",
+        cascade="all, delete-orphan",
+        order_by="CustomFieldOption.position",
+    )
+
+
+class CustomFieldOption(TenantMixin, Base):
+    """Opsi pilihan untuk field bertipe `select` (Fase 41)."""
+
+    __tablename__ = "custom_field_options"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    field_definition_id: Mapped[UUID] = mapped_column(
+        ForeignKey("custom_field_definitions.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(String(120))
+    position: Mapped[int] = mapped_column(default=0)
+
+    field_definition: Mapped[CustomFieldDefinition] = relationship(back_populates="options")
+
+
+class CustomFieldValue(TenantMixin, Base):
+    """Nilai field tambahan per record (Fase 41). `entity_id` sengaja
+    polimorfik tanpa FK DB (menunjuk companies.id/contacts.id/leads.id
+    tergantung `field_definition.entity`) -- beda dari `LeadContact` yang
+    FK-nya ketat karena cuma menghubungkan 2 tabel tetap, di sini SATU
+    tabel value melayani 3 jenis entitas sekaligus (pola sama trycompai/
+    crm `FieldValue`), jadi validasi keberadaan record dilakukan di
+    service layer, bukan constraint DB."""
+
+    __tablename__ = "custom_field_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "field_definition_id", "entity_id", name="uq_custom_field_value_definition_entity"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    field_definition_id: Mapped[UUID] = mapped_column(
+        ForeignKey("custom_field_definitions.id", ondelete="CASCADE"), index=True
+    )
+    entity_id: Mapped[UUID] = mapped_column(index=True)
+    value: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    field_definition: Mapped[CustomFieldDefinition] = relationship()

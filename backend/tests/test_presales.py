@@ -41,6 +41,70 @@ def test_update_lead_stage(client):
     assert updated.json()["stage"] == "negosiasi"
 
 
+def test_lead_stage_changed_at_set_on_create_and_stage_change(client):
+    """Fase 42: `stage_changed_at` terisi otomatis saat lead dibuat, dan
+    ter-update lagi setiap kali `stage` benar-benar berubah -- tidak
+    berubah kalau field lain yang diupdate."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+    assert lead["stage_changed_at"] is not None
+    first_stage_changed_at = lead["stage_changed_at"]
+
+    same_stage = client.patch(
+        f"/api/v1/leads/{lead['id']}", headers=headers, json={"notes": "update tanpa ganti tahap"}
+    ).json()
+    assert same_stage["stage_changed_at"] == first_stage_changed_at
+
+    changed = client.patch(
+        f"/api/v1/leads/{lead['id']}", headers=headers, json={"stage": "negosiasi"}
+    ).json()
+    assert changed["stage_changed_at"] != first_stage_changed_at
+
+
+def test_lead_last_activity_at_updates_on_activity_and_stage_change(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+    assert lead["last_activity_at"] is not None
+    baseline = lead["last_activity_at"]
+
+    client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={"activity_type": "telepon", "content": "Follow up telepon"},
+    )
+    after_activity = client.get(f"/api/v1/leads/{lead['id']}", headers=headers).json()
+    assert after_activity["last_activity_at"] != baseline
+
+
+def test_lead_expected_close_date_and_closed_reason_settable(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+
+    updated = client.patch(
+        f"/api/v1/leads/{lead['id']}",
+        headers=headers,
+        json={"expected_close_date": "2026-12-01", "stage": "deal", "closed_reason": "Harga cocok"},
+    )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["expected_close_date"] == "2026-12-01"
+    assert body["closed_reason"] == "Harga cocok"
+
+
+def test_lead_stage_changed_at_not_spoofable_via_update(client):
+    """`stage_changed_at` bukan bagian `LeadUpdate` -- klien yang kirim
+    field ini di body PATCH harus diabaikan, dihitung ulang server."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+    resp = client.patch(
+        f"/api/v1/leads/{lead['id']}",
+        headers=headers,
+        json={"stage_changed_at": "2020-01-01T00:00:00Z", "notes": "x"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["stage_changed_at"] != "2020-01-01T00:00:00Z"
+
+
 def test_activity_and_funnel(client):
     headers = _auth_header(client)
     lead = _create_lead(client, headers)
@@ -58,6 +122,89 @@ def test_activity_and_funnel(client):
     assert funnel["total_leads"] == 1
     stage_counts = {s["stage"]: s["count"] for s in funnel["stages"]}
     assert stage_counts["lead"] == 1
+
+
+def test_activity_with_due_date_appears_in_due_tasks(client):
+    """Fase 43: aktivitas dengan `due_at` muncul di daftar tugas jatuh
+    tempo lintas lead, aktivitas biasa (tanpa due_at) tidak."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Follow Up")
+    client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={"activity_type": "catatan", "content": "Catatan biasa tanpa due date"},
+    )
+    task = client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={
+            "activity_type": "tugas",
+            "content": "Telepon follow up harga",
+            "due_at": "2026-12-25T09:00:00Z",
+        },
+    )
+    assert task.status_code == 201, task.text
+    assert task.json()["due_at"] is not None
+    assert task.json()["completed_at"] is None
+
+    due_tasks = client.get("/api/v1/leads/activities/due", headers=headers).json()
+    assert len(due_tasks) == 1
+    assert due_tasks[0]["content"] == "Telepon follow up harga"
+    assert due_tasks[0]["company_name"] == "PT Follow Up"
+
+
+def test_complete_activity_removes_it_from_due_tasks(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Tugas Selesai")
+    task = client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={
+            "activity_type": "tugas",
+            "content": "Kirim ulang quotation",
+            "due_at": "2026-11-01T00:00:00Z",
+        },
+    ).json()
+
+    assert len(client.get("/api/v1/leads/activities/due", headers=headers).json()) == 1
+
+    completed = client.patch(
+        f"/api/v1/leads/activities/{task['id']}", headers=headers, json={"completed": True}
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_at"] is not None
+
+    assert client.get("/api/v1/leads/activities/due", headers=headers).json() == []
+    with_completed = client.get(
+        "/api/v1/leads/activities/due", headers=headers, params={"include_completed": True}
+    ).json()
+    assert len(with_completed) == 1
+
+    reopened = client.patch(
+        f"/api/v1/leads/activities/{task['id']}", headers=headers, json={"completed": False}
+    )
+    assert reopened.json()["completed_at"] is None
+    assert len(client.get("/api/v1/leads/activities/due", headers=headers).json()) == 1
+
+
+def test_due_tasks_overdue_only_filter(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Overdue")
+    client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={"activity_type": "tugas", "content": "Sudah lewat", "due_at": "2020-01-01T00:00:00Z"},
+    )
+    client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={"activity_type": "tugas", "content": "Masih jauh", "due_at": "2099-01-01T00:00:00Z"},
+    )
+    overdue = client.get(
+        "/api/v1/leads/activities/due", headers=headers, params={"overdue_only": True}
+    ).json()
+    assert len(overdue) == 1
+    assert overdue[0]["content"] == "Sudah lewat"
 
 
 def test_search_leads(client):
@@ -199,6 +346,323 @@ def test_contact_crud(client):
     deleted = client.delete(f"/api/v1/companies/contacts/{contact['id']}", headers=headers)
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/companies/{company['id']}/contacts", headers=headers).json() == []
+
+
+def test_lead_contact_add_list_update_remove(client):
+    """Fase 40: satu lead bisa punya beberapa PIC dengan peran berbeda,
+    dipilih dari daftar kontak company yang sama."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Multi Kontak")
+    company_id = lead["company_id"]
+    contact_a = client.post(
+        f"/api/v1/companies/{company_id}/contacts", headers=headers, json={"name": "Ani"}
+    ).json()
+    contact_b = client.post(
+        f"/api/v1/companies/{company_id}/contacts", headers=headers, json={"name": "Bram"}
+    ).json()
+
+    lc_a = client.post(
+        f"/api/v1/leads/{lead['id']}/contacts",
+        headers=headers,
+        json={"contact_id": contact_a["id"], "role": "Decision Maker"},
+    )
+    assert lc_a.status_code == 201, lc_a.text
+    lc_a_body = lc_a.json()
+    assert lc_a_body["role"] == "Decision Maker"
+    assert lc_a_body["contact"]["name"] == "Ani"
+
+    lc_b = client.post(
+        f"/api/v1/leads/{lead['id']}/contacts",
+        headers=headers,
+        json={"contact_id": contact_b["id"], "role": "Champion"},
+    )
+    assert lc_b.status_code == 201, lc_b.text
+
+    listed = client.get(f"/api/v1/leads/{lead['id']}/contacts", headers=headers).json()
+    assert len(listed) == 2
+    assert {lc["role"] for lc in listed} == {"Decision Maker", "Champion"}
+
+    updated = client.patch(
+        f"/api/v1/leads/contacts/{lc_a_body['id']}", headers=headers, json={"role": "Champion Baru"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["role"] == "Champion Baru"
+
+    deleted = client.delete(f"/api/v1/leads/contacts/{lc_a_body['id']}", headers=headers)
+    assert deleted.status_code == 204
+    remaining = client.get(f"/api/v1/leads/{lead['id']}/contacts", headers=headers).json()
+    assert len(remaining) == 1
+    assert remaining[0]["contact"]["name"] == "Bram"
+
+
+def test_lead_contact_rejects_contact_from_other_company(client):
+    headers = _auth_header(client)
+    lead1 = _create_lead(client, headers, "PT Satu")
+    lead2 = _create_lead(client, headers, "PT Dua")
+    contact_lead2 = client.get(
+        f"/api/v1/companies/{lead2['company_id']}/contacts", headers=headers
+    ).json()[0]
+
+    resp = client.post(
+        f"/api/v1/leads/{lead1['id']}/contacts",
+        headers=headers,
+        json={"contact_id": contact_lead2["id"], "role": "Champion"},
+    )
+    assert resp.status_code == 422
+
+
+def test_lead_contact_duplicate_rejected(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Duplikat")
+    contact = client.get(
+        f"/api/v1/companies/{lead['company_id']}/contacts", headers=headers
+    ).json()[0]
+
+    first = client.post(
+        f"/api/v1/leads/{lead['id']}/contacts",
+        headers=headers,
+        json={"contact_id": contact["id"], "role": "Champion"},
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        f"/api/v1/leads/{lead['id']}/contacts",
+        headers=headers,
+        json={"contact_id": contact["id"], "role": "Decision Maker"},
+    )
+    assert second.status_code == 409
+
+
+def test_custom_field_text_definition_and_value_lifecycle(client):
+    """Fase 41: field kustom teks -- definisi dibuat sekali, nilainya
+    per-lead. Lead lain (belum punya value) tetap dapat field-nya dengan
+    value=None supaya frontend bisa render form lengkap."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Field Kustom")
+
+    fd = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "key": "sumber_referral",
+            "label": "Sumber Referral",
+            "field_type": "text",
+        },
+    )
+    assert fd.status_code == 201, fd.text
+    fd_body = fd.json()
+
+    values = client.get(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        params={"entity": "lead", "entity_id": lead["id"]},
+    ).json()
+    assert len(values) == 1
+    assert values[0]["value"] is None
+    assert values[0]["label"] == "Sumber Referral"
+
+    set_resp = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": fd_body["id"],
+            "value": "Pameran Dagang",
+        },
+    )
+    assert set_resp.status_code == 200, set_resp.text
+    assert set_resp.json()["value"] == "Pameran Dagang"
+
+    values2 = client.get(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        params={"entity": "lead", "entity_id": lead["id"]},
+    ).json()
+    assert values2[0]["value"] == "Pameran Dagang"
+
+    # Update ulang value yang sama (bukan bikin row baru)
+    set_resp2 = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": fd_body["id"],
+            "value": "Referral Klien",
+        },
+    )
+    assert set_resp2.status_code == 200
+    values3 = client.get(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        params={"entity": "lead", "entity_id": lead["id"]},
+    ).json()
+    assert len(values3) == 1
+    assert values3[0]["value"] == "Referral Klien"
+
+
+def test_custom_field_select_validates_option(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Field Select")
+    fd = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "key": "tipe_layanan",
+            "label": "Tipe Layanan",
+            "field_type": "select",
+            "options": [{"label": "Payroll Only"}, {"label": "Full Outsourcing"}],
+        },
+    ).json()
+    option_id = fd["options"][0]["id"]
+
+    invalid = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": fd["id"],
+            "value": "bukan-opsi",
+        },
+    )
+    assert invalid.status_code == 422
+
+    valid = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": fd["id"],
+            "value": option_id,
+        },
+    )
+    assert valid.status_code == 200
+
+
+def test_custom_field_select_requires_options(client):
+    headers = _auth_header(client)
+    resp = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={"entity": "lead", "key": "tanpa_opsi", "label": "Tanpa Opsi", "field_type": "select"},
+    )
+    assert resp.status_code == 422
+
+
+def test_custom_field_duplicate_key_per_entity_rejected(client):
+    headers = _auth_header(client)
+    client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "key": "catatan_khusus",
+            "label": "Catatan Khusus",
+            "field_type": "text",
+        },
+    )
+    dup = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "key": "catatan_khusus",
+            "label": "Catatan Khusus Lain",
+            "field_type": "text",
+        },
+    )
+    assert dup.status_code == 409
+
+
+def test_custom_field_required_rejects_empty_value(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Field Wajib")
+    fd = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "key": "npwp",
+            "label": "NPWP",
+            "field_type": "text",
+            "is_required": True,
+        },
+    ).json()
+
+    resp = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": fd["id"],
+            "value": "",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_custom_field_scoped_to_own_entity(client):
+    """Field yang didefinisikan untuk entity=company tidak boleh dipasang
+    nilai lewat entity=lead, walau entity_id kebetulan valid."""
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Field Scope")
+    company_fd = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={
+            "entity": "company",
+            "key": "npwp_company",
+            "label": "NPWP Company",
+            "field_type": "text",
+        },
+    ).json()
+
+    resp = client.put(
+        "/api/v1/custom-fields/values",
+        headers=headers,
+        json={
+            "entity": "lead",
+            "entity_id": lead["id"],
+            "field_definition_id": company_fd["id"],
+            "value": "123",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_custom_field_definition_update_and_delete(client):
+    headers = _auth_header(client)
+    fd = client.post(
+        "/api/v1/custom-fields/definitions",
+        headers=headers,
+        json={"entity": "lead", "key": "prioritas", "label": "Prioritas", "field_type": "text"},
+    ).json()
+
+    updated = client.patch(
+        f"/api/v1/custom-fields/definitions/{fd['id']}",
+        headers=headers,
+        json={"label": "Prioritas Deal"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["label"] == "Prioritas Deal"
+
+    listed = client.get(
+        "/api/v1/custom-fields/definitions", headers=headers, params={"entity": "lead"}
+    ).json()
+    assert any(f["id"] == fd["id"] for f in listed)
+
+    deleted = client.delete(f"/api/v1/custom-fields/definitions/{fd['id']}", headers=headers)
+    assert deleted.status_code == 204
+    listed2 = client.get(
+        "/api/v1/custom-fields/definitions", headers=headers, params={"entity": "lead"}
+    ).json()
+    assert not any(f["id"] == fd["id"] for f in listed2)
 
 
 def test_render_document_pdf_returns_valid_pdf_bytes():

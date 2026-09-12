@@ -1,10 +1,17 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.modules.presales.models import ActivityType, AgreementStatus, LeadStage, QuotationStatus
+from app.modules.presales.models import (
+    ActivityType,
+    AgreementStatus,
+    FieldEntity,
+    FieldType,
+    LeadStage,
+    QuotationStatus,
+)
 
 
 class TemplateFieldDef(BaseModel):
@@ -240,6 +247,12 @@ class LeadUpdate(BaseModel):
     # Pemilik deal (§1.8 kartu Kanban) -- kolom `owner_id` sudah ada di model
     # sejak awal, baru diekspos lewat schema di sini (Fase 28 redesign).
     owner_id: UUID | None = None
+    # Fase 42 -- target closing manual staf. `closed_reason` cuma bermakna
+    # saat stage deal/gagal, tapi tidak divalidasi wajib di sini supaya alur
+    # drag-drop Kanban (yang tidak mengumpulkan alasan) tidak terblokir --
+    # staf isi lewat panel detail setelahnya.
+    expected_close_date: date | None = None
+    closed_reason: str | None = None
 
 
 class LeadOut(BaseModel):
@@ -259,8 +272,88 @@ class LeadOut(BaseModel):
     owner_name: str | None = None
     company_source: str
     notes: str | None
+    expected_close_date: date | None = None
+    stage_changed_at: datetime | None = None
+    closed_reason: str | None = None
+    last_activity_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class LeadContactCreate(BaseModel):
+    contact_id: UUID
+    role: str | None = None
+
+
+class LeadContactUpdate(BaseModel):
+    role: str | None = None
+
+
+class LeadContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    lead_id: UUID
+    role: str | None
+    created_at: datetime
+    contact: ContactOut
+
+
+class CustomFieldOptionIn(BaseModel):
+    label: str
+
+
+class CustomFieldOptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    label: str
+    position: int
+
+
+class CustomFieldDefinitionCreate(BaseModel):
+    entity: FieldEntity
+    key: str
+    label: str
+    field_type: FieldType
+    is_required: bool = False
+    position: int = 0
+    options: list[CustomFieldOptionIn] = []
+
+
+class CustomFieldDefinitionUpdate(BaseModel):
+    label: str | None = None
+    is_required: bool | None = None
+    position: int | None = None
+    options: list[CustomFieldOptionIn] | None = None
+
+
+class CustomFieldDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    entity: FieldEntity
+    key: str
+    label: str
+    field_type: FieldType
+    is_required: bool
+    position: int
+    options: list[CustomFieldOptionOut] = []
+
+
+class CustomFieldValueIn(BaseModel):
+    entity: FieldEntity
+    entity_id: UUID
+    field_definition_id: UUID
+    value: str | None = None
+
+
+class CustomFieldValueOut(BaseModel):
+    field_definition_id: UUID
+    key: str
+    label: str
+    field_type: FieldType
+    value: str | None
 
 
 class LeadImportRowFailure(BaseModel):
@@ -278,6 +371,7 @@ class LeadImportResultOut(BaseModel):
 class ActivityCreate(BaseModel):
     activity_type: ActivityType = ActivityType.note
     content: str
+    due_at: datetime | None = None
 
 
 class ActivityOut(BaseModel):
@@ -286,7 +380,28 @@ class ActivityOut(BaseModel):
     id: UUID
     activity_type: ActivityType
     content: str
+    due_at: datetime | None
+    completed_at: datetime | None
     created_at: datetime
+
+
+class ActivityCompleteIn(BaseModel):
+    completed: bool = True
+
+
+class LeadTaskOut(BaseModel):
+    """Fase 43 -- baris daftar 'tugas jatuh tempo' lintas lead (dashboard
+    follow-up), gabungan `LeadActivity` + info lead/company secukupnya
+    supaya frontend tidak perlu fetch terpisah per baris."""
+
+    id: UUID
+    lead_id: UUID
+    company_name: str
+    activity_type: ActivityType
+    content: str
+    due_at: datetime
+    completed_at: datetime | None
+    owner_name: str | None = None
 
 
 class FunnelStage(BaseModel):
