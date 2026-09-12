@@ -714,18 +714,21 @@ export default function Payroll() {
             max={12}
             onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
             className="input w-20"
+            aria-label="Bulan periode payroll"
           />
           <input
             type="number"
             value={period.year}
             onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
             className="input w-24"
+            aria-label="Tahun periode payroll"
           />
           <select
             value={runType}
             onChange={(e) => setRunType(e.target.value as "internal" | "proyek")}
             className="input w-auto"
             title="Jenis payrol"
+            aria-label="Jenis payrol"
           >
             <option value="internal">Internal</option>
             <option value="proyek">Proyek (per klien)</option>
@@ -823,7 +826,7 @@ export default function Payroll() {
           Absensi & Lembur — {period.month}/{period.year} (approval klien)
         </h2>
         <form onSubmit={handleAttendance} className="mt-3 flex flex-wrap items-center gap-2">
-          <select name="employee_id" required className="input w-auto">
+          <select name="employee_id" required className="input w-auto" aria-label="Pilih karyawan">
             {(employees ?? [])
               .filter((e) => e.status === "aktif")
               .map((e) => (

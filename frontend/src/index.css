@@ -25,6 +25,19 @@
   /* Default aksen: teal (tombol primer/nav aktif — docs/design/design.md §3). */
   --accent: #0f6e56;
   --accent-tint: rgba(15, 110, 86, 0.08);
+  /* Warna teks di atas latar --accent. Terpisah dari --accent karena versi
+     dark-nya (#5dcaa5, teal terang) gagal kontras (2:1) dengan teks putih —
+     ditemukan lewat audit axe-core 2026-09-12 di tombol primer/FAB/nav aktif
+     di seluruh app. */
+  --accent-contrast: #ffffff;
+  /* Warna kategori sidebar (CRM/Recruitment/dst.) -- dipakai sebagai teks
+     (label "CRM", link "Buka →") di beberapa halaman, bukan cuma badge.
+     Versi light pakai hex Tailwind ke-600 (sama seperti sebelumnya). */
+  --cat-crm: #7c3aed;
+  --cat-recruitment: #2563eb;
+  --cat-workforce: #059669;
+  --cat-finance: #d97706;
+  --cat-administration: #475569;
 }
 
 .dark {
@@ -38,6 +51,16 @@
   --text-muted: #94a3b8;
   --accent: #5dcaa5;
   --accent-tint: rgba(93, 202, 165, 0.16);
+  --accent-contrast: #0a4d3c;
+  /* Varian terang, sama persis dengan .dark .p-violet/.p-blue/.p-green/
+     .p-orange di bawah -- ditemukan lewat audit axe-core 2026-09-12:
+     hex ke-600 versi light gagal kontras (3.1-3.4:1, butuh 4.5:1) sebagai
+     teks di atas kartu gelap. */
+  --cat-crm: #c4b5fd;
+  --cat-recruitment: #93c5fd;
+  --cat-workforce: #6ee7b7;
+  --cat-finance: #fdba74;
+  --cat-administration: #cbd5e1;
 }
 
 html,
@@ -54,8 +77,9 @@ body {
 
 @layer components {
   .btn {
-    @apply rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
+    @apply rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50;
     background-color: var(--accent);
+    color: var(--accent-contrast);
     transition: filter 0.15s ease, transform 0.12s ease-out;
   }
   .btn:hover {

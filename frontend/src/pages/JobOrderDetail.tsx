@@ -589,7 +589,7 @@ export default function JobOrderDetail() {
                     >
                       <div className="flex items-center gap-1.5">
                         <span
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-[var(--accent-contrast)]"
                           style={{ backgroundColor: "var(--accent)" }}
                         >
                           {initials(candidateName(p.candidate_id))}

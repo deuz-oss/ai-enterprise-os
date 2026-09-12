@@ -30,7 +30,7 @@ export function ProgressStep({ steps, currentIndex }: ProgressStepProps) {
                 className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-xs font-medium"
                 style={
                   isDone || isActive
-                    ? { backgroundColor: "var(--accent)", color: "#fff" }
+                    ? { backgroundColor: "var(--accent)", color: "var(--accent-contrast)" }
                     : { border: "1px solid var(--border)", color: "var(--text-muted)" }
                 }
               >

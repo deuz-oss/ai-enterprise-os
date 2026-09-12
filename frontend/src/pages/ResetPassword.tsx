@@ -54,7 +54,7 @@ export default function ResetPassword() {
       />
       <div className="mb-6 flex items-center gap-3">
         <div
-          className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-white"
+          className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-[var(--accent-contrast)]"
           style={{ backgroundColor: "var(--accent)" }}
         >
           AE

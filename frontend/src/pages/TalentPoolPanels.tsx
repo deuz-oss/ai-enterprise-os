@@ -175,7 +175,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
                 <button
                   onClick={() => review.mutate()}
                   disabled={review.isPending || Object.keys(edits).length === 0}
-                  className="rounded bg-[var(--accent)] px-3 py-1.5 font-medium text-white disabled:opacity-40"
+                  className="rounded bg-[var(--accent)] px-3 py-1.5 font-medium text-[var(--accent-contrast)] disabled:opacity-40"
                 >
                   Simpan Koreksi
                 </button>

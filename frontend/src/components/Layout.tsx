@@ -61,11 +61,11 @@ interface NavItem {
 type Category = "crm" | "recruitment" | "workforce" | "finance_accounting" | "administration";
 
 const CATEGORY_META: Record<Category, { label: string; accent: string }> = {
-  crm: { label: "CRM", accent: "#7c3aed" },
-  recruitment: { label: "Recruitment", accent: "#2563eb" },
-  workforce: { label: "Workforce", accent: "#059669" },
-  finance_accounting: { label: "Finance & Accounting", accent: "#d97706" },
-  administration: { label: "Administration", accent: "#475569" },
+  crm: { label: "CRM", accent: "var(--cat-crm)" },
+  recruitment: { label: "Recruitment", accent: "var(--cat-recruitment)" },
+  workforce: { label: "Workforce", accent: "var(--cat-workforce)" },
+  finance_accounting: { label: "Finance & Accounting", accent: "var(--cat-finance)" },
+  administration: { label: "Administration", accent: "var(--cat-administration)" },
 };
 
 const CATEGORY_ORDER: Category[] = [
@@ -396,7 +396,7 @@ export default function Layout() {
           title="Ke Overview"
         >
           <span
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-[var(--accent-contrast)]"
             style={{ backgroundColor: "var(--accent)" }}
           >
             AE
@@ -523,7 +523,7 @@ export default function Layout() {
               title="Akun"
             >
               <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-[var(--accent-contrast)]"
                 style={{ backgroundColor: "var(--accent)" }}
               >
                 {initials}
@@ -603,17 +603,18 @@ export default function Layout() {
                         className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors"
                         style={({ isActive }) => ({
                           backgroundColor: isActive ? "var(--accent)" : undefined,
-                          color: isActive ? "#ffffff" : "var(--text-muted)",
+                          color: isActive ? "var(--accent-contrast)" : "var(--text-muted)",
                         })}
                       >
                         {({ isActive }) => (
                           <>
                             {/* Ikon berwarna per kategori (ungu=CRM, biru=Recruitment,
                                 emerald=Workforce, amber=Finance & Accounting, slate=
-                                Administration); netral putih saat item aktif. */}
+                                Administration); netral saat item aktif (lihat --accent-contrast
+                                di index.css -- putih di light mode, teal gelap di dark mode). */}
                             <Icon
                               className="h-4 w-4 shrink-0"
-                              style={{ color: isActive ? "#ffffff" : (g.accent ?? "var(--text-muted)") }}
+                              style={{ color: isActive ? "var(--accent-contrast)" : (g.accent ?? "var(--text-muted)") }}
                             />
                             {item.label}
                           </>
@@ -677,7 +678,7 @@ export default function Layout() {
           )}
           <button
             onClick={() => navigate("/chat")}
-            className="fixed bottom-5 right-5 z-30 flex cursor-pointer items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-105"
+            className="fixed bottom-5 right-5 z-30 flex cursor-pointer items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-[var(--accent-contrast)] shadow-lg transition-transform hover:scale-105"
             style={{ backgroundColor: "var(--accent)" }}
             title="Buka Chat — sebut @AEOS untuk bertanya"
           >

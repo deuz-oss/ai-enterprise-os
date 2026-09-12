@@ -556,7 +556,7 @@ export default function Leads() {
                       >
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span
-                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-[var(--accent-contrast)]"
                             style={{ backgroundColor: "var(--accent)" }}
                           >
                             {lead.owner_name ? initials(lead.owner_name) : "?"}

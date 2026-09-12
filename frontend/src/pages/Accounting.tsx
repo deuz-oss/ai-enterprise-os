@@ -175,6 +175,7 @@ export default function Accounting() {
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
             className="input w-24"
+            aria-label="Tahun"
           />
         </div>
       </div>
@@ -214,13 +215,13 @@ export default function Accounting() {
           <form onSubmit={handleCreate} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold" style={{ color: "var(--text)" }}>Jurnal Umum Baru</h2>
-              <select name="status" defaultValue="posted" className="input w-auto text-xs">
+              <select name="status" defaultValue="posted" className="input w-auto text-xs" aria-label="Status jurnal">
                 <option value="posted">Langsung posted</option>
                 <option value="memorial">Memorial (draft)</option>
               </select>
             </div>
             <div className="flex flex-wrap gap-2">
-              <input name="entry_date" type="date" className="input w-auto" />
+              <input name="entry_date" type="date" className="input w-auto" aria-label="Tanggal entri" />
               <input name="description" required placeholder="Keterangan *" className="input w-72" />
             </div>
             {lines.map((line, i) => (
@@ -229,6 +230,7 @@ export default function Accounting() {
                   value={line.account_code}
                   onChange={(e) => updateLine(i, { account_code: e.target.value })}
                   className="input w-auto"
+                  aria-label="Kode akun"
                 >
                   {(accounts ?? []).map((a) => (
                     <option key={a.id} value={a.code}>
@@ -255,6 +257,7 @@ export default function Accounting() {
                   onChange={(e) => updateLine(i, { client_dim_id: e.target.value || null })}
                   className="input w-auto text-xs"
                   title="Dimensi klien (opsional)"
+                  aria-label="Dimensi klien (opsional)"
                 >
                   <option value="">— tanpa dimensi —</option>
                   {(clients.data ?? []).map((c) => (
@@ -566,6 +569,7 @@ function JournalList({
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="input w-auto text-xs"
+          aria-label="Filter sumber jurnal"
         >
           <option value="">Semua sumber</option>
           <option value="invoice_issued">invoice_issued</option>

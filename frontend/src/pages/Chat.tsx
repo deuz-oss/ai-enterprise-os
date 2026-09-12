@@ -672,7 +672,7 @@ export default function Chat() {
                 </span>
                 {ch.mention_count > 0 ? (
                   <span
-                    className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
+                    className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent-contrast)]"
                     style={{ backgroundColor: "var(--accent)" }}
                     title="Ada mention untuk Anda"
                   >

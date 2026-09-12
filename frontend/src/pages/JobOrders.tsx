@@ -602,6 +602,7 @@ export default function JobOrders() {
             setOffset(0);
           }}
           className="input w-auto"
+          aria-label="Filter klien"
         >
           <option value="">Semua klien</option>
           {(clients ?? []).map((c) => (
@@ -686,6 +687,7 @@ export default function JobOrders() {
                       changeBusinessStatus.mutate({ id: jo.id, business_status: next });
                     }}
                     className={`cursor-pointer border-0 ${BUSINESS_STATUS_COLORS[jo.business_status]}`}
+                    aria-label={`Ubah status job order ${jo.request_id ?? jo.title}`}
                   >
                     {BUSINESS_STATUSES.map((s) => (
                       <option key={s} value={s}>

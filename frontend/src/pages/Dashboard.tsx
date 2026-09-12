@@ -88,10 +88,10 @@ interface InvoiceRow {
 // grup sidebar terbaca sebagai satu taksonomi, bukan dua pengelompokan
 // berbeda. Kalau salah satu berubah, ubah keduanya.
 const CATEGORY: Record<string, { label: string; accent: string; to: string }> = {
-  crm: { label: "CRM", accent: "#7c3aed", to: "/leads" },
-  recruitment: { label: "Recruitment", accent: "#2563eb", to: "/job-orders" },
-  workforce: { label: "Workforce", accent: "#059669", to: "/employees" },
-  finance_accounting: { label: "Finance & Accounting", accent: "#d97706", to: "/finance" },
+  crm: { label: "CRM", accent: "var(--cat-crm)", to: "/leads" },
+  recruitment: { label: "Recruitment", accent: "var(--cat-recruitment)", to: "/job-orders" },
+  workforce: { label: "Workforce", accent: "var(--cat-workforce)", to: "/employees" },
+  finance_accounting: { label: "Finance & Accounting", accent: "var(--cat-finance)", to: "/finance" },
 };
 
 // Tahapan lead -- urutan & nilai mengikuti `LeadStage` backend

@@ -123,7 +123,7 @@ export default function Login() {
           style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
         >
           <div
-            className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-white"
+            className="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-[var(--accent-contrast)]"
             style={{ backgroundColor: "var(--accent)" }}
           >
             AE

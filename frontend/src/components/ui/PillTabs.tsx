@@ -26,11 +26,11 @@ export function PillTabs({ tabs, value, onChange }: PillTabsProps) {
             key={t.key}
             onClick={() => onChange(t.key)}
             className={`cursor-pointer whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              active ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--hover)]"
+              active ? "bg-[var(--accent)] text-[var(--accent-contrast)]" : "text-[var(--text-muted)] hover:bg-[var(--hover)]"
             }`}
           >
             {t.label}
-            {t.count !== undefined && <span className="ml-1 opacity-80">({t.count})</span>}
+            {t.count !== undefined && <span className="ml-1">({t.count})</span>}
           </button>
         );
       })}

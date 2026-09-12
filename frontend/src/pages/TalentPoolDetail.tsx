@@ -142,7 +142,7 @@ export default function TalentPoolDetail() {
           />
         ) : (
           <span
-            className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-white"
+            className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-[var(--accent-contrast)]"
             style={{ backgroundColor: "var(--accent)" }}
           >
             {initials(data.full_name)}
