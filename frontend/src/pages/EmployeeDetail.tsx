@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Phone, Tag } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Pencil, Phone, Tag } from "lucide-react";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import { Badge, confirmToast, PillTabs } from "../components/ui";
@@ -213,10 +213,61 @@ const MOVEMENT_TYPES = ["mutasi", "promosi", "demosi", "lainnya"];
 
 type TabKey = "ringkasan" | "kontrak" | "dokumen" | "payroll" | "riwayat" | "bpjs-asuransi" | "cuti-akun";
 
+/** Baris properti dengan mode lihat/edit terpisah (audit UI/UX 2026-09-12:
+ * field ini dulu selalu tampil sebagai form siap-ketik, terasa "selalu
+ * dalam mode edit" untuk data sensitif seperti gaji & alamat KTP). Default
+ * ke tampilan read-only; klik ikon pensil untuk membuka form yang sama
+ * seperti sebelumnya. */
+function EditableRow({
+  icon,
+  label,
+  editing,
+  onEdit,
+  onCancel,
+  view,
+  children,
+}: {
+  icon: Parameters<typeof PropertyRow>[0]["icon"];
+  label: string;
+  editing: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  view: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <PropertyRow icon={icon} label={label}>
+      {editing ? (
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          {children}
+          <button type="button" onClick={onCancel} className="btn-ghost py-1 text-xs">
+            Batal
+          </button>
+        </div>
+      ) : (
+        <>
+          <span className="flex-1">{view}</span>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 hover:opacity-70"
+            style={{ color: "var(--text-muted)" }}
+            title={`Ubah ${label}`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </>
+      )}
+    </PropertyRow>
+  );
+}
+
 export default function EmployeeDetail() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>("ringkasan");
+  type SummaryEditKey = "salary" | "grade" | "emergency" | "citizen_address" | "residential_address" | null;
+  const [editingField, setEditingField] = useState<SummaryEditKey>(null);
 
   const [tteContract, setTteContract] = useState<{ id: string; name: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -600,16 +651,31 @@ export default function EmployeeDetail() {
                     {employee.payroll_locked ? "Buka Kunci Payroll" : "Kunci Payroll"}
                   </button>
                 </PropertyRow>
-                <PropertyRow icon={Banknote} label="Gaji Pokok">
+                <EditableRow
+                  icon={Banknote}
+                  label="Gaji Pokok"
+                  editing={editingField === "salary"}
+                  onEdit={() => setEditingField("salary")}
+                  onCancel={() => setEditingField(null)}
+                  view={
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      {formatRupiah(employee.base_salary)}/bulan
+                    </span>
+                  }
+                >
                   <form
                     className="flex items-center gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
                       const form = new FormData(e.currentTarget);
-                      updateEmployee.mutate({ empId: id, body: { base_salary: Number(form.get("base_salary")) || 0 } });
+                      updateEmployee.mutate(
+                        { empId: id, body: { base_salary: Number(form.get("base_salary")) || 0 } },
+                        { onSuccess: () => setEditingField(null) }
+                      );
                     }}
                   >
                     <input
+                      autoFocus
                       name="base_salary"
                       type="number"
                       min="0"
@@ -619,47 +685,75 @@ export default function EmployeeDetail() {
                     <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
                       Simpan
                     </button>
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {formatRupiah(employee.base_salary)}/bulan
-                    </span>
                   </form>
-                </PropertyRow>
-                <PropertyRow icon={Award} label="Grade / Level">
+                </EditableRow>
+                <EditableRow
+                  icon={Award}
+                  label="Grade / Level"
+                  editing={editingField === "grade"}
+                  onEdit={() => setEditingField("grade")}
+                  onCancel={() => setEditingField(null)}
+                  view={[employee.grade, employee.level].filter(Boolean).join(" / ") || "—"}
+                >
                   <form
                     className="flex flex-wrap items-center gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
                       const form = new FormData(e.currentTarget);
-                      updateEmployee.mutate({
-                        empId: id,
-                        body: { grade: form.get("grade") || null, level: form.get("level") || null },
-                      });
+                      updateEmployee.mutate(
+                        {
+                          empId: id,
+                          body: { grade: form.get("grade") || null, level: form.get("level") || null },
+                        },
+                        { onSuccess: () => setEditingField(null) }
+                      );
                     }}
                   >
-                    <input name="grade" defaultValue={employee.grade ?? ""} placeholder="Grade" className="input w-auto py-1 text-xs" />
+                    <input autoFocus name="grade" defaultValue={employee.grade ?? ""} placeholder="Grade" className="input w-auto py-1 text-xs" />
                     <input name="level" defaultValue={employee.level ?? ""} placeholder="Level" className="input w-auto py-1 text-xs" />
                     <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
                       Simpan
                     </button>
                   </form>
-                </PropertyRow>
-                <PropertyRow icon={AlertTriangle} label="Kontak Darurat">
+                </EditableRow>
+                <EditableRow
+                  icon={AlertTriangle}
+                  label="Kontak Darurat"
+                  editing={editingField === "emergency"}
+                  onEdit={() => setEditingField("emergency")}
+                  onCancel={() => setEditingField(null)}
+                  view={
+                    employee.emergency_contact_name
+                      ? [
+                          employee.emergency_contact_name,
+                          employee.emergency_contact_relation && `(${employee.emergency_contact_relation})`,
+                          employee.emergency_contact_phone,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"
+                  }
+                >
                   <form
                     className="flex flex-wrap items-center gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
                       const form = new FormData(e.currentTarget);
-                      updateEmployee.mutate({
-                        empId: id,
-                        body: {
-                          emergency_contact_name: form.get("emergency_contact_name") || null,
-                          emergency_contact_relation: form.get("emergency_contact_relation") || null,
-                          emergency_contact_phone: form.get("emergency_contact_phone") || null,
+                      updateEmployee.mutate(
+                        {
+                          empId: id,
+                          body: {
+                            emergency_contact_name: form.get("emergency_contact_name") || null,
+                            emergency_contact_relation: form.get("emergency_contact_relation") || null,
+                            emergency_contact_phone: form.get("emergency_contact_phone") || null,
+                          },
                         },
-                      });
+                        { onSuccess: () => setEditingField(null) }
+                      );
                     }}
                   >
                     <input
+                      autoFocus
                       name="emergency_contact_name"
                       defaultValue={employee.emergency_contact_name ?? ""}
                       placeholder="Nama"
@@ -681,34 +775,49 @@ export default function EmployeeDetail() {
                       Simpan
                     </button>
                   </form>
-                </PropertyRow>
+                </EditableRow>
                 {(
                   [
                     { key: "citizen_address", label: "Alamat KTP", value: employee.citizen_address },
                     { key: "residential_address", label: "Alamat Domisili", value: employee.residential_address },
                   ] as const
                 ).map((addr) => (
-                  <PropertyRow key={addr.key} icon={Home} label={addr.label}>
+                  <EditableRow
+                    key={addr.key}
+                    icon={Home}
+                    label={addr.label}
+                    editing={editingField === addr.key}
+                    onEdit={() => setEditingField(addr.key)}
+                    onCancel={() => setEditingField(null)}
+                    view={
+                      [addr.value?.detail, addr.value?.district, addr.value?.city, addr.value?.province, addr.value?.postal_code]
+                        .filter(Boolean)
+                        .join(", ") || "—"
+                    }
+                  >
                     <form
-                      className="grid grid-cols-2 gap-2 sm:grid-cols-5"
+                      className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-5"
                       onSubmit={(e) => {
                         e.preventDefault();
                         const form = new FormData(e.currentTarget);
-                        updateEmployee.mutate({
-                          empId: id,
-                          body: {
-                            [addr.key]: {
-                              province: form.get("province") || undefined,
-                              city: form.get("city") || undefined,
-                              district: form.get("district") || undefined,
-                              postal_code: form.get("postal_code") || undefined,
-                              detail: form.get("detail") || undefined,
+                        updateEmployee.mutate(
+                          {
+                            empId: id,
+                            body: {
+                              [addr.key]: {
+                                province: form.get("province") || undefined,
+                                city: form.get("city") || undefined,
+                                district: form.get("district") || undefined,
+                                postal_code: form.get("postal_code") || undefined,
+                                detail: form.get("detail") || undefined,
+                              },
                             },
                           },
-                        });
+                          { onSuccess: () => setEditingField(null) }
+                        );
                       }}
                     >
-                      <input name="province" defaultValue={addr.value?.province ?? ""} placeholder="Provinsi" className="input py-1 text-xs" />
+                      <input autoFocus name="province" defaultValue={addr.value?.province ?? ""} placeholder="Provinsi" className="input py-1 text-xs" />
                       <input name="city" defaultValue={addr.value?.city ?? ""} placeholder="Kota/Kab." className="input py-1 text-xs" />
                       <input name="district" defaultValue={addr.value?.district ?? ""} placeholder="Kecamatan" className="input py-1 text-xs" />
                       <input name="postal_code" defaultValue={addr.value?.postal_code ?? ""} placeholder="Kode Pos" className="input py-1 text-xs" />
@@ -717,7 +826,7 @@ export default function EmployeeDetail() {
                         Simpan
                       </button>
                     </form>
-                  </PropertyRow>
+                  </EditableRow>
                 ))}
               </PropertiesPanel>
             </div>
