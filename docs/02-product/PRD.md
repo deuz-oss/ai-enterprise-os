@@ -1295,7 +1295,195 @@ diminta): Client Reference/Code, Client Type, Client Industry, Fee
 Settings, Team/multi-Contact terpisah — kontak tetap PIC tunggal
 seperti sebelumnya.
 
-## 6. Spesifikasi Inti: Saltab Digital *(baru)*
+### Fase 36 — Portal ESS: Shift Default per Karyawan, Reverse Geocoding, Halaman Absensi Tersendiri — ✅ Selesai (2026-09-09)
+
+`Employee.shift_start_time`/`shift_end_time` (sudah ada, diatur HR)
+sekarang ditampilkan di Portal Saya sebagai jam kerja standar
+karyawan — bukan jadwal rotasi, murni referensi jam masuk/pulang
+default. Reverse geocoding best-effort (Nominatim, `core/geocoding.py`)
+menerjemahkan koordinat GPS clock-in/out jadi alamat yang bisa dibaca
+manusia; gagal/timeout geocoding TIDAK PERNAH memblokir absensi
+(fail-open, sama prinsipnya dengan geofencing Fase 34).
+
+Portal Saya dirombak: seksi absensi (week strip, timer melingkar,
+kamera live in-page, alamat hasil geocoding) yang sebelumnya jadi
+widget selalu-terbuka di beranda portal, dipindah jadi halaman
+tersendiri diakses lewat tombol "Buka Absensi" — beranda jadi lebih
+ringkas untuk fungsi lain (cuti, lembur, dokumen).
+
+**Bug fix nyata**: `mobile_clock()` (endpoint absensi dari kanal
+mobile) tidak pernah memanggil `recompute_month_summary()` —akibatnya
+absensi yang direkam lewat mobile app tidak pernah muncul di riwayat
+pribadi, rekap bulanan HR, maupun CSV ekspor absensi, walau data
+mentahnya tersimpan benar di database. Regresi silent yang cuma
+kelihatan kalau membandingkan sumber absen (web vs mobile), bukan
+dari satu jalur saja.
+
+Ditambah (commit terpisah, hari yang sama): sidebar navigasi jadi
+drawer overlay di lebar mobile (di bawah breakpoint `lg`) — tombol
+hamburger + backdrop, tutup otomatis saat pindah halaman — sebelumnya
+statis `w-64 sticky` yang memakan sebagian besar layar mobile. Tetap
+sticky statis seperti semula di desktop, tidak ada perubahan struktur
+navigasi.
+
+### Fase 37 — Audit UI/UX: Priority Backlog, Mode Lihat/Edit, Migrasi Token Tuntas — ✅ Selesai (2026-09-12)
+
+Audit UI/UX menyeluruh (screenshot + review DOM live, bukan cuma baca
+kode) menghasilkan daftar prioritas yang dikerjakan bertahap:
+
+- **Quick-win** (5 temuan): state `:active` di semua varian tombol,
+  crossfade transisi tema dark/light, `transition: width` pada 4
+  progress bar Dashboard yang sebelumnya teleport instan saat data
+  refresh, `prefers-reduced-motion` global, kartu sukses provisioning
+  tenant diganti dari accent-bar dekoratif jadi tinted card bertoken
+  semantik (konsisten sistem pill yang sudah ada).
+- **Medium polish**: fix `color-scheme` CSS (native control — Choose
+  File, date picker, checkbox — akhirnya ikut dark mode), densitas
+  tabel diperketat, dan **`sonner`** (toast library) ditambah sebagai
+  dependency baru — `confirmToast`/`promptToast` (`ui/dialogToast.tsx`)
+  jadi pengganti standar untuk seluruh `window.confirm`/`window.prompt`
+  yang tersebar di Accounting, Agreements, Chat, EmployeeDetail,
+  JobOrders, Pages, PaymentRequests, Payroll, Quotations.
+- **EmployeeDetail — pemisahan mode lihat/edit**: field-per-field
+  (bukan seluruh tab jadi form sekaligus) di tab Ringkasan dulu (Gaji
+  Pokok, Grade/Level, Kontak Darurat, Alamat KTP/Domisili), lalu
+  ditemukan dan ditambal gap-nya sendiri (fix ini cuma menjangkau
+  Ringkasan, belum BPJS & Cuti) — disusulkan tab BPJS & Asuransi
+  (nomor+status+valid_until per jenis BPJS) dan Cuti & Akun (Jatah
+  Cuti Tahunan) di commit terpisah.
+- **Pre-flight confirm** sebelum aksi ireversibel: pembatalan Job
+  Order dan Run Payroll (yang punya anomali — karyawan belum ada
+  rekening, BPJS kedaluwarsa, net pay negatif) sekarang minta
+  konfirmasi eksplisit via `confirmToast`, status lain tetap instan
+  (prinsip Apple HIG: jangan over-confirm aksi reversibel).
+- **Migrasi token warna dituntaskan**: audit "38 file belum disentuh"
+  (klaim lama di §5 `design.md`) ternyata sebagian besar BUKAN bug —
+  warna kategori sidebar dan palet `PreflightAlert` sengaja independen
+  dari `--accent`, sudah terdokumentasi. Temuan nyata yang diperbaiki:
+  warna+label tahap `PlacementStatus` di-hardcode identik 3× di
+  `JobOrderDetail.tsx`/`TalentPool.tsx`/`TalentPoolDetail.tsx` —
+  disatukan ke `lib/pipelineStages.ts`. Ditambah 4 hex kecil yang
+  tersisa (Pages.tsx "Tersimpan", Payroll.tsx warning net-pay negatif,
+  MyPortal.tsx checkmark, Billing.tsx kredit transaksi) diganti ke
+  utility Tailwind semantik yang sudah jadi konvensi di file lain.
+
+### Fase 38 — Audit Aksesibilitas Menyeluruh (axe-core) + Portal Token-Based + Siklus "Cek Gap" — ✅ Selesai (2026-09-12)
+
+Install `axe-core` (dev dependency) untuk audit aksesibilitas live —
+script disuntik ke dev server yang sedang jalan (bukan build
+terpisah), setiap temuan diverifikasi manual per node sebelum
+diperbaiki (beberapa `color-contrast` ternyata bacaan environment
+flaky, bukan bug nyata — pelajaran penting yang berulang sepanjang
+siklus ini: satu false-positif yang terkonfirmasi TIDAK melisensikan
+mengabaikan semua temuan sejenis, lihat detail di bawah).
+
+**Sweep bertahap** — mulai dari 4 halaman (Dashboard, JobOrders,
+Accounting, Payroll), lalu dituntaskan ke SELURUH halaman internal
+(Leads, Clients, Quotations, Agreements, Referral, TalentPool
+sekeluarga, AI Interview, Blacklist, Pages, Employees lengkap 6 tab,
+Attendance, Chat, PaymentRequests, Finance, Accounting 8 tab, Rates,
+Billing, Audit, Users, Portal Saya), lalu ke 5 portal publik
+ber-token (careers, onboarding, payroll-client, clients-portal,
+ai-interview-session — perlu token asli, digenerate via API langsung
+karena tidak semua alur bisa dicapai lewat UI admin). Temuan
+sistemik yang diperbaiki:
+
+1. **Teks putih di atas `var(--accent)` gagal kontras (2:1) di dark
+   mode** — `--accent` dark (`#5dcaa5`, teal terang) tidak pernah
+   dievaluasi ulang untuk pasangan teks putih, mempengaruhi tombol
+   primer, FAB "Tanya AEOS AI", avatar/badge inisial, nav aktif di
+   HAMPIR SEMUA halaman. Fix: token `--accent-contrast` baru (putih
+   di light, `#0a4d3c` di dark).
+2. Warna kategori sidebar (ungu CRM, biru Recruitment, dst.) dipakai
+   sebagai teks label di atas kartu gelap gagal kontras 3.1-3.4:1 —
+   token `--cat-crm`/`--cat-recruitment`/dst. ditambah, varian terang
+   sama seperti `.dark .p-violet`/`.p-blue` yang sudah ada.
+3. **`.th` (header tabel) gagal kontras di light mode app-wide**
+   (4.25:1, butuh 4.5) — sempat luput karena `color-contrast` salah
+   disaring habis sebagai noise selama sweep internal (pelajaran yang
+   dicatat eksplisit); ditemukan ulang saat audit Payroll Client
+   Portal, diperbaiki via token `--th-color` baru (bukan mengubah
+   `--text-muted` yang dipakai puluhan tempat lain belum terverifikasi).
+4. Puluhan `<select>`/`<input>` filter tanpa accessible name
+   (`select-name`/`label`/`label-title-only`) ditambah `aria-label` —
+   halaman + portal.
+5. **Label `<label>` tak terhubung ke input via `htmlFor`/`id`** — bug
+   yang secara struktural tidak terdeteksi axe kalau kontrolnya punya
+   accessible-name fallback (placeholder) — ditemukan di
+   `AIInterviewSession.tsx` (semua pertanyaan interview akan
+   diumumkan screen reader dengan nama placeholder generik yang sama)
+   dan lebih parah di `CareerPortal.tsx` (accessible name kosong
+   total, tidak kelihatan di sweep awal karena tidak ada job order
+   dengan `screening_questions` terisi saat itu).
+6. **Pasangan warna `--text-muted` di atas `--hover` gagal kontras
+   sistemik** (~4.3:1, butuh 4.5) di 17 file, ~35 titik — caption di
+   dalam card/badge bertone `--hover`. Diperbaiki via token
+   `--th-color` yang sama dengan temuan #3 (bukan token baru lagi).
+7. **Kartu/baris `<div>`/`<tr>` dengan `onClick` tanpa
+   `role`/`tabIndex`/`onKeyDown`** — tidak terjangkau keyboard sama
+   sekali (WCAG 2.1.1), tidak terdeteksi axe (bukan aturan default
+   ruleset-nya) — 7 titik di `Leads.tsx`, `JobOrderDetail.tsx`,
+   `Clients.tsx`, `Employees.tsx`, `Quotations.tsx`, `Agreements.tsx`.
+
+**Pola berulang yang eksplisit dicatat sebagai pembelajaran proses**:
+tiap ronde "cek gap"/"cek all gap" (ritual re-audit yang diminta
+berulang di siklus ini) menemukan sesuatu yang nyata lewat lensa
+BERBEDA tiap kali — label terputus, lalu pasangan kontras sistemik,
+lalu warna semantik hardcoded (didokumentasikan sebagai gap terbuka,
+lihat Fase 39), lalu aksesibilitas keyboard. Jangan ulangi lensa yang
+sama saat resume — cek `docs/design/design.md` untuk lensa yang belum
+dipakai.
+
+### Fase 39 — Pola Dashboard Baru (KpiCard/DonutChart/StatusPill/HeaderCanvas) + Fix Kontras Warna Semantik — ✅ Selesai (2026-09-12)
+
+Melanjutkan backlog Fase 37 (quick-win #7 tinggi baris tabel, #6/#8
+native select & dialog) dengan pola baru dari referensi 10 preview
+dashboard admin generik (Real Estate, CRM, E-Commerce, HR, Finance,
+Healthcare, Marketing, Project Management, dll — satu design system,
+dipakai sebagai referensi pola komponen, BUKAN identitas visual satu
+brand). Detail lengkap teknis ada di `docs/design/design.md` §4a —
+ringkasan produk:
+
+- **`KpiCard`** (component library existing, diperluas): ikon jadi
+  lingkaran tinted, delta indicator opsional (↑/↓ persen vs periode
+  lalu) — TIDAK dipasang di mana pun saat ini karena `/overview`
+  belum menyediakan data perbandingan periode sungguhan (§0: jangan
+  mengarang data supaya "kelihatan lengkap").
+- **`DonutChart`** (baru) — total di tengah cincin + legend
+  persentase, pakai library **recharts** (dipilih via skill internal
+  `/pick-ui-library`). Diterapkan di Overview, breakdown "Status
+  Kandidat".
+- **`StatusPill`** (baru) — konsolidasi mapping status→warna yang
+  sebelumnya tersebar ad-hoc per halaman (payment request, invoice,
+  margin klien, status karyawan) jadi satu tempat. Status Job Order
+  (masih `<select>` interaktif) dan tahap `PlacementStatus` (sistem
+  dot 9+ tahap dari Fase 37) SENGAJA tidak dipaksa masuk 3 warna ini —
+  beda kebutuhan, bukan celah yang terlewat.
+- **`HeaderCanvas`** (baru) — greeting kontekstual + headline + subtext
+  + date-range picker. Date-range picker presentasional saja (backend
+  belum dukung filter tanggal) — diterapkan di halaman Overview.
+- Sidebar: warna nav aktif dari fill solid jadi tint lembut + teks
+  `var(--accent)` (prinsip "aksen dipakai pelit"), struktur/urutan
+  menu TIDAK berubah.
+- Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi
+  baris 32-36px) diterapkan ke tabel karyawan (`Employees.tsx`,
+  34.67px terverifikasi live) dan tabel invoice Overview — belum
+  menjangkau seluruh tabel di app.
+
+**Fix kontras warna semantik hardcoded** (gap yang sempat dicatat-saja
+tanpa diperbaiki di Fase 38, lihat catatan pola berulang di atas):
+`text-red/rose/emerald/amber-{500,600,700}` dipakai sebagai teks
+polos (bukan di dalam badge) gagal WCAG AA di salah satu tema —
+dihitung exact via rumus luminance WCAG terhadap latar asli app,
+bukan tebakan. ~140 titik di 33 file diperbaiki: `red`/`rose` cukup
+ditambah varian `dark:`, `emerald-600`/`amber-600` base-nya harus
+dinaikkan ke 700 karena gagal light mode sama sekali (bukan cuma
+kasus sempit). Badge/container yang belum pernah dimigrasi dark mode
+sama sekali (`bg-{hue}-50/100` + teks matching, tidak pernah
+diberi `dark:` di kedua sisi) — beda masalah, SENGAJA belum disentuh,
+dicatat sebagai gap terbuka berikutnya.
+
+
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa
 line-item `PayslipComponent`.

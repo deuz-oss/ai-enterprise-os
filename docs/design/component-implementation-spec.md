@@ -61,6 +61,14 @@ ADMINISTRATION). Kadang ada status tambahan di kanan breadcrumb (mis.
 dipakai di halaman yang datanya live/sinkron sistem eksternal.
 
 ### 1.3 KPI Card (versi presisi, upgrade dari v1)
+
+**Update 2026-09-12 (Fase 39, `design.md` §4a): implementasi nyata di
+`components/ui/KpiCard.tsx`** — ikon jadi LINGKARAN penuh (`rounded-full`,
+bukan `[🔲]` persegi seperti sketsa asli di bawah), ditambah delta
+indicator opsional (panah ↑/↓ + persen, belum dipasang di halaman
+manapun karena belum ada sumber data perbandingan periode asli — lihat
+§0). Sketsa ASCII di bawah dipertahankan sebagai rujukan struktur asli,
+bentuk ikon aktualnya lingkaran.
 ```
 ┌───────────────────────────────┐
 │ LABEL UPPERCASE 11px      [🔲]│ ← ikon kecil kanan atas, warna kontekstual
@@ -121,6 +129,10 @@ dipakai di halaman yang datanya live/sinkron sistem eksternal.
   normal, anomali harus kelihatan beda dari baris normal secara visual.
 - **Status inline**: dot warna + label pendek (bukan cuma badge pill
   polos) untuk status yang perlu deteksi cepat sambil scan tabel.
+  **Update 2026-09-12**: untuk status baca-saja yang genuinely 3-5
+  state datar (bukan tahap pipeline multi-warna), pakai `StatusPill`
+  (`components/ui/StatusPill.tsx`, baru — lihat `design.md` §4a) supaya
+  mapping status→warna terpusat, bukan diduplikasi per halaman.
 - Kolom nominal selalu rata kanan, tabular-nums (tidak berubah dari v1).
 - **Row height 32-36px (bukan 36-40px)** — direvisi lebih ketat dari
   `design.md` §3b setelah review implementasi nyata; versi lama masih

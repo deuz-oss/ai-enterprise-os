@@ -220,7 +220,10 @@ win #7 tinggi baris tabel, #6/#8 native select & dialog).
   → data lain → StatusPill (kolom terakhir)
 - Sel numerik: `tabular-nums` (Tailwind utility, setara `font-variant-
   numeric: tabular-nums`), rata kanan
-- Tinggi baris target: 32-40px (padding vertikal ~8-10px) — dicek lewat
+- Tinggi baris target: **32-36px**, konsisten dengan standar yang sudah
+  final di §3b/`component-implementation-spec.md` §1.6 (bukan angka
+  baru — kalimat awal yang menulis "32-40px" di sini keliru mengutip
+  instruksi mentah tanpa cek standar existing, dikoreksi) — dicek lewat
   `getBoundingClientRect()` di browser sungguhan, bukan cuma baca CSS
 - Status penerapan: **`Employees.tsx`** (tabel utama daftar karyawan) —
   avatar inisial + `StatusPill` domain `employee` + padding diketatkan
@@ -294,7 +297,7 @@ koreksi §5 di atas: laporkan apa yang benar-benar jalan, bukan rencana):
 | `StatusPill` (baru) | ✅ Komponen selesai. Migrasi baca-saja: `payment_request`, `invoice`, `margin`, `employee` (4 domain, 4 file). Job Order status (select interaktif) dan Placement pipeline (sistem dot multi-tahap) sengaja tidak dimigrasikan — lihat §4a. |
 | `HeaderCanvas` (baru) | ✅ Komponen selesai. Diterapkan: **Dashboard.tsx**. Belum diterapkan: Job Orders, Employees, Payroll (waktu tidak cukup di sesi ini). |
 | `DonutChart` (baru) | ✅ Selesai — library recharts (dipilih via `/pick-ui-library` yang dijalankan user). Diterapkan di Dashboard.tsx "Status Kandidat". Diverifikasi live light & dark mode. |
-| Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-40px) | ✅ **`Employees.tsx`** tabel utama (34.67px diverifikasi live) dan **`Dashboard.tsx`** tabel invoice (parsial — tanpa avatar, tidak relevan untuk baris invoice). Tabel lain di app (~18+) belum disentuh. |
+| Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-36px) | ✅ **`Employees.tsx`** tabel utama (34.67px diverifikasi live) dan **`Dashboard.tsx`** tabel invoice (parsial — tanpa avatar, tidak relevan untuk baris invoice). Tabel lain di app (~18+) belum disentuh. |
 | Sidebar — restyle ikon & warna | ✅ Ikon: konfirmasi sudah 100% lucide-react konsisten (tidak ada perubahan library, sudah benar sebelumnya). Warna nav aktif: fill solid → tint lembut + teks `var(--accent)`, ikon kategori tetap tampil saat aktif. Struktur/urutan menu tidak berubah (diverifikasi baca kode `NAV_ITEMS`/`CATEGORY_ORDER` tidak tersentuh). |
 
 **Verifikasi yang sudah dilakukan** (bukan cuma baca kode): `npx tsc
@@ -315,6 +318,55 @@ ditemukan status baca-saja lain yang genuinely 3-5 state datar (bukan
 select interaktif atau sistem multi-tahap). DonutChart sudah selesai
 (lihat baris di atas) — satu-satunya item Bagian 1 yang sempat blocked
 di sesi ini, sekarang tuntas setelah user menjalankan `/pick-ui-library`.
+
+Semua item di atas + fix kontras §5b di bawah digabung jadi satu commit
+(`4334225`) karena keduanya menumpuk file yang sama sebelum sempat
+di-commit terpisah — lihat PRD.md Fase 39 untuk ringkasan produk.
+Belum di-push ke remote.
+
+## 5b. Fix Kontras Warna Semantik Hardcoded (2026-09-12)
+
+Gap yang ditemukan lewat siklus "cek all gap" (ronde ke-3, lihat riwayat
+audit UI/UX — PRD.md Fase 38) sempat dicatat tapi sengaja tidak
+diperbaiki saat itu ("catat saja" — scope-nya jauh lebih besar dari
+ronde sebelumnya). Diperbaiki di sesi berikutnya setelah user konfirmasi
+lanjut ("ya").
+
+**Masalah**: `text-red-600`, `text-rose-600`, `text-emerald-700`,
+`text-amber-600` (dan varian 500/700 lain yang ditemukan sepanjang
+pengerjaan) dipakai sebagai warna teks BACA-SAJA (bukan di dalam
+badge/pill) di puluhan file — masing-masing warna dikalibrasi untuk
+dipasangkan dengan latar tinted yang cocok (mis. `bg-amber-50
+text-amber-600`), bukan untuk duduk langsung di atas `--bg`/
+`--bg-elevated`/`--hover` netral. Akibatnya tiap warna gagal WCAG AA
+di SATU tema (dihitung exact via rumus luminance WCAG, bukan tebakan):
+`red-600`/`rose-600` gagal spesifik di atas `--hover` meski lolos putih
+polos; `emerald-600`/`amber-600` gagal light mode SAMA SEKALI (bukan
+kasus sempit).
+
+**Fix**: `red-600`/`red-700`/`rose-600`/`rose-700` → tambah
+`dark:text-{hue}-400` (base classnya sendiri tetap, sudah aman di
+light mode/`--bg-elevated`); `emerald-600` → base **dinaikkan** ke
+`emerald-700 dark:text-emerald-400`; `amber-600` → base **dinaikkan**
+ke `amber-700 dark:text-amber-400` (2 yang terakhir HARUS naik base,
+bukan cuma tambah `dark:`, karena gagal light mode outright).
+
+**Skala**: ~140 titik di 33 file. Dikerjakan via subagent fork
+(mekanis, sudah dispesifikasi presis) untuk menjaga context utama
+tetap ringkas, lalu diverifikasi independen: `tsc` ulang, diff manual
+4 file paling rumit, cek live `getComputedStyle` di app sungguhan
+kedua tema.
+
+**SENGAJA TIDAK disentuh** (pola beda, bukan bug kontras ini):
+`CalloutBlock`/`CALLOUT_TONES` di `components/workspace.tsx` — teks
+pesan aslinya sudah pakai `style={{color: "var(--text)"}}`, cuma ikon
+yang inherit warna tone, dan ikon cuma butuh kontras non-teks 3:1 yang
+tetap lolos. Juga badge `bg-{hue}-50/100` + teks `{hue}-600/700` yang
+match (`AccountingAi.tsx` status badge, `TalentPoolPanels.tsx:255`,
+`Finance.tsx` kotak risiko/rekomendasi/aging) — itu masalah "belum
+pernah dimigrasi dark mode sama sekali" (kedua sisi statis, tidak ada
+`dark:` di manapun), beda kategori dari kontras-teks-di-atas-latar-netral
+yang diperbaiki di sini. Dicatat sebagai gap terbuka berikutnya.
 
 ## 6. Prinsip Kerja Ke Depan
 

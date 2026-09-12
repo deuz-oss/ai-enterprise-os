@@ -6,6 +6,29 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 39: Pola Dashboard Baru (KpiCard/DonutChart/StatusPill/HeaderCanvas) + fix kontras warna semantik
+
+- `KpiCard` diperluas: ikon jadi lingkaran tinted + delta indicator opsional (belum dipasang di mana pun — `/overview` belum punya data perbandingan periode sungguhan).
+- `DonutChart` baru (library recharts, dipilih via skill `/pick-ui-library`): total di tengah cincin + legend persentase. Diterapkan di Overview "Status Kandidat".
+- `StatusPill` baru: konsolidasi mapping status→warna (payment request, invoice, margin, status karyawan) yang sebelumnya tersebar per halaman. Job Order status (select interaktif) dan tahap `PlacementStatus` (sistem dot multi-tahap) sengaja tidak dipaksa ke pola ini.
+- `HeaderCanvas` baru: greeting + headline + subtext + date-range picker (presentasional, backend belum dukung filter tanggal) — diterapkan di Overview.
+- Sidebar: nav aktif dari fill solid ke tint lembut + teks `var(--accent)`; struktur/urutan menu tidak berubah.
+- Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-36px): `Employees.tsx` dan tabel invoice Overview.
+- Fix kontras: `text-red/rose/emerald/amber-{500,600,700}` sebagai teks polos gagal WCAG AA di salah satu tema — ~140 titik di 33 file diperbaiki (dihitung exact via rumus luminance, bukan tebakan); `emerald-600`/`amber-600` base dinaikkan ke 700 karena gagal light mode sama sekali.
+
+### Added — Fase 37-38: Audit UI/UX menyeluruh — priority backlog, aksesibilitas (axe-core), siklus "cek gap"
+
+- **Fase 37**: quick-win (state `:active` tombol, crossfade tema, transisi progress bar, `prefers-reduced-motion`), medium polish (`color-scheme` native control, `sonner` toast + `confirmToast`/`promptToast` menggantikan `window.confirm`/`prompt`), EmployeeDetail mode lihat/edit per field (Ringkasan lalu BPJS & Cuti), pre-flight confirm sebelum cancel Job Order/Run Payroll beranomali, migrasi token warna dituntaskan (`PlacementStatus` disatukan ke `lib/pipelineStages.ts`).
+- **Fase 38**: audit `axe-core` live ke seluruh halaman internal + 5 portal token-based. Temuan sistemik: teks putih di atas `--accent` gagal kontras dark mode (token `--accent-contrast` baru), warna kategori sidebar gagal kontras di kartu gelap (token `--cat-*`), `.th`/`--text-muted` di atas `--hover` gagal kontras app-wide (token `--th-color`), label `<label>` tak terhubung `htmlFor`/`id` (accessible name salah/kosong, tidak terdeteksi axe), kartu/baris `onClick` tanpa `tabIndex`/keyboard access (7 titik).
+
+### Added — Fase 36: Portal ESS — shift default per karyawan, reverse geocoding, halaman Absensi tersendiri
+
+- `Employee.shift_start_time`/`shift_end_time` ditampilkan di Portal Saya sebagai jam kerja standar.
+- Reverse geocoding best-effort (Nominatim) untuk alamat clock-in/out dari GPS — tidak pernah memblokir absensi.
+- Portal Saya: absensi dipindah ke halaman tersendiri (tombol "Buka Absensi"), menggantikan widget selalu-terbuka di beranda.
+- Fix bug: `mobile_clock()` tidak memanggil `recompute_month_summary()` — absensi mobile tidak muncul di riwayat/rekap bulanan.
+- Sidebar jadi drawer overlay di mobile (hamburger + backdrop, tutup otomatis saat pindah halaman).
+
 ### Added — Fase 35: Klien — halaman detail bertab + kolom Jobs count
 
 - Halaman baru `ClientDetail.tsx` (`/clients/:id`), mirror arketipe tab horizontal `EmployeeDetail.tsx`/`JobOrderDetail.tsx`: tab Ringkasan (+ form edit `PATCH /clients/{id}` yang sebelumnya tidak pernah dipanggil dari UI), Jobs, Karyawan (endpoint baru — employee eksternal yang pernah ditempatkan di klien), Dokumen, Portal & Lokasi (pindahan dari panel inline lama), Riwayat (audit log, admin/management saja).
