@@ -209,6 +209,27 @@ def mark_read(channel_id: str, db: Session = Depends(get_db), user=Depends(get_c
     return service.mark_all_read(db, user, channel_id)
 
 
+@router.post("/messages/{message_id}/pin")
+def toggle_pin(message_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return service.toggle_pin(db, user, message_id)
+
+
+@router.get("/channels/{channel_id}/pinned")
+def list_pinned(channel_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return service.list_pinned_messages(db, user, channel_id)
+
+
+@router.put("/channels/{channel_id}/notify-level")
+def set_notify_level(
+    channel_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    level = str((payload or {}).get("level") or "")
+    return service.set_notify_level(db, user, channel_id, level)
+
+
 @router.post("/messages/{message_id}/actions/{action_id}")
 def handle_card_action(
     message_id: str,

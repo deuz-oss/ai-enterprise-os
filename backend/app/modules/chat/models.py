@@ -64,6 +64,13 @@ class ChatChannelMember(TenantMixin, Base):
     msg_count: Mapped[int] = mapped_column(default=0, server_default="0")
     mention_count: Mapped[int] = mapped_column(default=0, server_default="0")
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Preferensi notifikasi per channel ala Mattermost `notify_props`:
+    # "all" (tiap pesan dianggap mention utk badge), "mentions" (default --
+    # cuma @mention yang jadi badge merah + notifikasi bel), "none" (bisu
+    # total). Lihat service.py::_apply_all_level_mentions/_mark_mentioned.
+    notify_level: Mapped[str] = mapped_column(
+        String(20), default="mentions", server_default="mentions"
+    )
 
     channel = relationship("Channel", back_populates="members")
 
@@ -87,6 +94,10 @@ class ChatMessage(TenantMixin, Base):
     card_data: Mapped[dict | None] = mapped_column(JSON(), default=None)
     actions: Mapped[list | None] = mapped_column(JSON(), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Pinned posts ala Mattermost.
+    is_pinned: Mapped[bool] = mapped_column(default=False)
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    pinned_by_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
 
     channel = relationship("Channel", back_populates="messages")
     reactions = relationship(

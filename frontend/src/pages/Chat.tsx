@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api } from "../api/client";
 import {
+  BellOff,
   ClipboardList,
   CornerUpLeft,
   FileText,
@@ -11,6 +12,8 @@ import {
   MessageCircle,
   Megaphone,
   Paperclip,
+  Pin,
+  PinOff,
   X,
 } from "lucide-react";
 import { PageHeader } from "../components/workspace";
@@ -22,6 +25,8 @@ import { PageHeader } from "../components/workspace";
 // tanpa harus menghitung ulang/geser posisi scroll secara manual.
 const VIRTUOSO_START_INDEX = 1_000_000;
 
+type NotifyLevel = "all" | "mentions" | "none";
+
 interface ChannelRow {
   id: string;
   name: string;
@@ -31,6 +36,7 @@ interface ChannelRow {
   last_message_preview: string;
   unread_count: number;
   mention_count: number;
+  notify_level: NotifyLevel;
 }
 
 interface ChatFileMeta {
@@ -54,6 +60,8 @@ interface MessageRow {
   card_data?: { title: string; body?: string; type?: string } | null;
   actions?: { id: string; label: string; style?: string }[] | null;
   files: ChatFileMeta[];
+  is_pinned: boolean;
+  pinned_at: string | null;
 }
 
 const EMOJI_REACTIONS = ["👍", "❤️", "🎉", "😂", "🙏", "🔥"];
@@ -300,6 +308,29 @@ export default function Chat() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
   });
 
+  // Pinned posts
+  const [showPinned, setShowPinned] = useState(false);
+  const pinnedPosts = useQuery({
+    queryKey: ["chat-pinned", activeChannel],
+    queryFn: () => api.get<MessageRow[]>(`/chat/channels/${activeChannel}/pinned`),
+    enabled: showPinned && Boolean(activeChannel),
+  });
+  const togglePin = useMutation({
+    mutationFn: (messageId: string) =>
+      api.post<{ message_id: string; is_pinned: boolean }>(`/chat/messages/${messageId}/pin`, {}),
+    onSuccess: (result) => {
+      patchMessageInCache(result.message_id, (m) => ({ ...m, is_pinned: result.is_pinned }));
+      qc.invalidateQueries({ queryKey: ["chat-pinned", activeChannel] });
+    },
+  });
+
+  // Preferensi notifikasi per channel (notify_level: all | mentions | none)
+  const setNotifyLevel = useMutation({
+    mutationFn: ({ channelId, level }: { channelId: string; level: NotifyLevel }) =>
+      api.put(`/chat/channels/${channelId}/notify-level`, { level }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
+  });
+
   const handleAction = useMutation({
     mutationFn: ({ messageId, actionId }: { messageId: string; actionId: string }) =>
       api.post(`/chat/messages/${messageId}/actions/${actionId}`, {}),
@@ -419,6 +450,11 @@ export default function Chat() {
             <span className="truncate text-xs font-medium" style={{ color: "var(--text-muted)" }}>
               {m.sender_id.slice(0, 8)}… · {new Date(m.created_at).toLocaleString("id-ID")}
               {m.edited_at && <span className="ml-1 italic">diedit</span>}
+              {m.is_pinned && (
+                <span className="ml-1.5 inline-flex items-center gap-0.5" style={{ color: "var(--accent)" }}>
+                  <Pin className="h-3 w-3" /> disematkan
+                </span>
+              )}
             </span>
             {m.is_own && !threadParent && (
               <button
@@ -525,6 +561,14 @@ export default function Chat() {
                 {emoji}
               </button>
             ))}
+            <button
+              onClick={() => togglePin.mutate(m.id)}
+              className="ml-auto text-[11px] hover:opacity-80"
+              style={{ color: "var(--text-muted)" }}
+              title={m.is_pinned ? "Lepas sematan" : "Sematkan pesan"}
+            >
+              {m.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+            </button>
             {m.is_own && (
               <>
                 <button
@@ -532,7 +576,7 @@ export default function Chat() {
                     const next = window.prompt("Edit pesan:", m.content);
                     if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
                   }}
-                  className="ml-auto text-[11px] hover:opacity-80"
+                  className="text-[11px] hover:opacity-80"
                   style={{ color: "var(--text-muted)" }}
                 >
                   edit
@@ -616,6 +660,11 @@ export default function Chat() {
                     <Hash className="h-3.5 w-3.5 shrink-0" />
                   )}
                   <span className="truncate">{ch.name}</span>
+                  {ch.notify_level === "none" && (
+                    <span title="Dibisukan">
+                      <BellOff className="h-3 w-3 shrink-0" />
+                    </span>
+                  )}
                 </span>
                 {ch.mention_count > 0 ? (
                   <span
@@ -677,13 +726,39 @@ export default function Chat() {
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={() => setShowDigest((v) => !v)}
-                  className="btn-secondary flex items-center gap-1 py-0.5 text-xs"
-                  title="Digest harian: approval menunggu, SLA, kontrak, invoice"
+                <>
+                  <button
+                    onClick={() => setShowDigest((v) => !v)}
+                    className="btn-secondary flex items-center gap-1 py-0.5 text-xs"
+                    title="Digest harian: approval menunggu, SLA, kontrak, invoice"
+                  >
+                    <ClipboardList className="h-3 w-3" /> Digest
+                  </button>
+                  <button
+                    onClick={() => setShowPinned((v) => !v)}
+                    className="btn-secondary flex items-center gap-1 py-0.5 text-xs"
+                    title="Pesan yang disematkan di channel ini"
+                  >
+                    <Pin className="h-3 w-3" /> Disematkan
+                  </button>
+                </>
+              )}
+              {activeChannel && !threadParent && activeMeta && (
+                <select
+                  value={activeMeta.notify_level}
+                  onChange={(e) =>
+                    setNotifyLevel.mutate({
+                      channelId: activeChannel,
+                      level: e.target.value as NotifyLevel,
+                    })
+                  }
+                  className="input py-0.5 text-xs"
+                  title="Preferensi notifikasi channel ini"
                 >
-                  <ClipboardList className="h-3 w-3" /> Digest
-                </button>
+                  <option value="all">🔔 Semua pesan</option>
+                  <option value="mentions">@ Hanya mention</option>
+                  <option value="none">🔕 Bisukan</option>
+                </select>
               )}
               {activeChannel && (
                 <button onClick={() => markRead.mutate(activeChannel!)} className="btn-secondary py-0.5 text-xs">
@@ -709,6 +784,34 @@ export default function Chat() {
                 <p className="px-2 py-2 text-center text-xs" style={{ color: "var(--text-muted)" }}>
                   Tidak ada hasil.
                 </p>
+              )}
+            </div>
+          )}
+
+          {showPinned && !threadParent && (
+            <div className="max-h-52 overflow-y-auto border-b px-4 py-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
+              <p className="mb-1 flex items-center justify-between text-xs font-semibold" style={{ color: "var(--text)" }}>
+                <span className="flex items-center gap-1.5">
+                  <Pin className="h-3.5 w-3.5" /> Pesan disematkan
+                </span>
+                <button onClick={() => setShowPinned(false)} style={{ color: "var(--accent)" }}>tutup</button>
+              </p>
+              {pinnedPosts.isLoading && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Memuat…</p>}
+              {(pinnedPosts.data ?? []).map((m) => (
+                <div key={m.id} className="flex items-start justify-between gap-2 py-1 text-xs" style={{ color: "var(--text)" }}>
+                  <span className="truncate">{m.content || "(lampiran tanpa teks)"}</span>
+                  <button
+                    onClick={() => togglePin.mutate(m.id)}
+                    className="shrink-0 hover:opacity-80"
+                    style={{ color: "var(--text-muted)" }}
+                    title="Lepas sematan"
+                  >
+                    <PinOff className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {pinnedPosts.data && pinnedPosts.data.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Belum ada pesan yang disematkan.</p>
               )}
             </div>
           )}

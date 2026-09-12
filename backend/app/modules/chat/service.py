@@ -7,6 +7,7 @@ Aturan akses (PRD §9.2):
 """
 
 import logging
+import re
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -34,6 +35,19 @@ STAFF_ROLES = {
     "recruiter",
     "operations",
 }
+
+_MENTION_RE = re.compile(r"@([^\s@]+(?:\s+[^\s@]+)?)")
+_MENTION_TRAILING_PUNCT_RE = re.compile(r"[.,!?;:]+$")
+
+
+def _extract_mention_tokens(content: str) -> list[str]:
+    """Ambil token @mention dari teks, buang tanda baca penutup yang lazim
+    menyusul nama orang dalam kalimat (mis. "@Budi Santoso, tolong...").
+    Tanpa ini token mentah ikut membawa koma sehingga gagal cocok dengan
+    nama asli user -- regresi nyata: "@Nama Dua Kata, ..." tidak pernah
+    match walau usernya persis ada, ketahuan lewat tes notifikasi mention."""
+    raw_mentions = _MENTION_RE.findall(content)
+    return [_MENTION_TRAILING_PUNCT_RE.sub("", m.strip()) for m in raw_mentions]
 
 
 def _is_member(db: Session, channel_id, user_id) -> bool:
@@ -110,6 +124,13 @@ def _notify_channel(db: Session, channel: Channel, event: str) -> None:
 # Menghindari scan tabel chat_messages tiap render sidebar; baca & tulis O(1).
 
 
+def _default_notify_level(channel_type: str) -> str:
+    """DM secara wajar dianggap penting -- default 'all' (tiap pesan jadi
+    badge). Channel/broadcast default 'mentions' (cuma @mention yang jadi
+    badge merah + notifikasi bel), sama seperti default Mattermost."""
+    return "all" if channel_type == "dm" else "mentions"
+
+
 def _get_or_create_member(db: Session, channel: Channel, user_id) -> ChatChannelMember:
     uid = parse_uuid(str(user_id))
     member = db.execute(
@@ -118,7 +139,12 @@ def _get_or_create_member(db: Session, channel: Channel, user_id) -> ChatChannel
         )
     ).scalar_one_or_none()
     if member is None:
-        member = ChatChannelMember(channel_id=channel.id, user_id=uid, tenant_id=channel.tenant_id)
+        member = ChatChannelMember(
+            channel_id=channel.id,
+            user_id=uid,
+            tenant_id=channel.tenant_id,
+            notify_level=_default_notify_level(channel.channel_type),
+        )
         db.add(member)
         db.flush()
     return member
@@ -133,10 +159,78 @@ def _mark_caught_up(db: Session, channel: Channel, user_id) -> None:
     db.commit()
 
 
-def _mark_mentioned(db: Session, channel: Channel, user_id) -> None:
+def _mark_mentioned(
+    db: Session, channel: Channel, user_id, *, sender=None, content: str = ""
+) -> None:
     member = _get_or_create_member(db, channel, user_id)
+    if member.notify_level == "none":
+        return  # channel dibisukan user ini -- tidak dihitung, tidak diberi tahu
     member.mention_count += 1
     db.commit()
+    if sender is not None:
+        _create_mention_notification(
+            db, channel=channel, member_user_id=user_id, sender=sender, content=content
+        )
+
+
+def _apply_all_level_mentions(
+    db: Session, channel: Channel, *, mention_ids: set[str], sender_id
+) -> None:
+    """Anggota dengan `notify_level == "all"` menganggap SETIAP pesan
+    sebagai mention untuk keperluan badge -- TAPI sengaja tidak memicu
+    notifikasi bel/email (beda dari @mention asli di `_mark_mentioned`),
+    supaya channel yang ramai tidak membanjiri bel/email tiap pesan."""
+    sender_uuid = parse_uuid(str(sender_id))
+    members = db.execute(
+        select(ChatChannelMember).where(
+            ChatChannelMember.channel_id == channel.id,
+            ChatChannelMember.notify_level == "all",
+        )
+    ).scalars()
+    changed = False
+    for m in members:
+        if m.user_id == sender_uuid or str(m.user_id) in mention_ids:
+            continue
+        m.mention_count += 1
+        changed = True
+    if changed:
+        db.commit()
+
+
+def _create_mention_notification(
+    db: Session, *, channel: Channel, member_user_id, sender, content: str
+) -> None:
+    """Teruskan @mention ke bel notifikasi in-app (+ email bila SMTP aktif)
+    -- integrasi nyata dengan `app.modules.notifications`, bukan cuma
+    badge di halaman Chat. Gagal mengirim tidak boleh menggagalkan pesan."""
+    try:
+        from app.modules.notifications import service as notif_service
+
+        sender_name = getattr(sender, "full_name", None) or getattr(sender, "email", "Seseorang")
+        notif_service.notify(
+            db,
+            user_id=member_user_id,
+            title=f"{sender_name} menyebut Anda di #{channel.name}",
+            body=content[:200] if content else None,
+            category="chat_mention",
+            entity_type="chat_channel",
+            entity_id=channel.id,
+        )
+    except Exception:  # noqa: BLE001 - notifikasi tidak boleh mematahkan pesan
+        logger.exception("Gagal membuat notifikasi mention chat")
+
+
+VALID_NOTIFY_LEVELS = {"all", "mentions", "none"}
+
+
+def set_notify_level(db: Session, user, channel_id: str, level: str) -> dict:
+    if level not in VALID_NOTIFY_LEVELS:
+        raise HTTPException(status_code=422, detail="Level notifikasi tidak valid")
+    ch = get_channel_with_access_check(db, user, channel_id)
+    member = _get_or_create_member(db, ch, user.id)
+    member.notify_level = level
+    db.commit()
+    return {"channel_id": str(ch.id), "notify_level": level}
 
 
 def _resolve_mention_target_ids(
@@ -149,11 +243,9 @@ def _resolve_mention_target_ids(
     """
     if "@" not in content:
         return set()
-    import re
-
     from app.modules.auth.models import User
 
-    raw_mentions = re.findall(r"@([^\s@]+(?:\s+[^\s@]+)?)", content)
+    raw_mentions = _extract_mention_tokens(content)
     if not raw_mentions:
         return set()
 
@@ -213,11 +305,24 @@ def create_channel(
     )
     db.add(ch)
     db.flush()
+    default_notify = _default_notify_level(channel_type)
     # Creator selalu member + admin
-    db.add(ChatChannelMember(channel_id=ch.id, user_id=parse_uuid(str(user.id)), is_admin=True))
-    for uid in member_ids or []:
-        if uid != user.id:
-            db.add(ChatChannelMember(channel_id=ch.id, user_id=uid))
+    db.add(
+        ChatChannelMember(
+            channel_id=ch.id,
+            user_id=parse_uuid(str(user.id)),
+            is_admin=True,
+            notify_level=default_notify,
+        )
+    )
+    creator_id = parse_uuid(str(user.id))
+    seen_ids = {creator_id}
+    for raw_uid in member_ids or []:
+        uid = parse_uuid(str(raw_uid))
+        if uid is None or uid in seen_ids:
+            continue
+        seen_ids.add(uid)
+        db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, notify_level=default_notify))
     # Karyawan non-staff otomatis jadi member private/broadcast channel
     if channel_type in ("private", "broadcast") and member_ids:
         pass  # sudah ditambahkan di atas
@@ -264,6 +369,9 @@ def list_channels(db: Session, user) -> list[dict]:
         seen = own_member.msg_count if own_member else 0
         mentions = own_member.mention_count if own_member else 0
         unread = max(0, ch.total_msg_count - seen)
+        notify_level = (
+            own_member.notify_level if own_member else _default_notify_level(ch.channel_type)
+        )
         result.append(
             {
                 "id": str(ch.id),
@@ -278,6 +386,7 @@ def list_channels(db: Session, user) -> list[dict]:
                 ),
                 "unread_count": unread,
                 "mention_count": mentions,
+                "notify_level": notify_level,
             }
         )
     return result
@@ -297,7 +406,13 @@ def add_member(db: Session, user, channel_id: str, new_user_id) -> dict:
         raise HTTPException(status_code=403, detail="Karyawan tidak dapat menambah member")
     if _is_member(db, ch.id, new_user_id):
         raise HTTPException(status_code=409, detail="User sudah menjadi member")
-    db.add(ChatChannelMember(channel_id=ch.id, user_id=parse_uuid(str(new_user_id))))
+    db.add(
+        ChatChannelMember(
+            channel_id=ch.id,
+            user_id=parse_uuid(str(new_user_id)),
+            notify_level=_default_notify_level(ch.channel_type),
+        )
+    )
     db.commit()
     return {"channel_id": str(ch.id), "user_id": str(new_user_id), "added": True}
 
@@ -417,7 +532,8 @@ def send_message(
         f.message_id = msg.id
     db.commit()
     for mentioned_id in mention_ids:
-        _mark_mentioned(db, ch, mentioned_id)
+        _mark_mentioned(db, ch, mentioned_id, sender=user, content=content)
+    _apply_all_level_mentions(db, ch, mention_ids=mention_ids, sender_id=user.id)
     _mark_caught_up(db, ch, user.id)
     _notify_channel(db, ch, "message.created")
 
@@ -823,6 +939,43 @@ def _notify_reaction_channel(db: Session, message_id: str) -> None:
         _notify_channel(db, ch, "message.reaction")
 
 
+# ---------- Pinned posts ----------
+
+
+def toggle_pin(db: Session, user, message_id: str) -> dict:
+    """Syarat sama dengan bisa posting di channel -- bukan cuma admin,
+    meniru default Mattermost (anggota channel bebas pin/unpin)."""
+    msg = db.get(ChatMessage, _parse(message_id))
+    if msg is None or msg.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Pesan tidak ditemukan")
+    ch = db.get(Channel, msg.channel_id)
+    if ch is None:
+        raise HTTPException(status_code=404, detail="Channel tidak ditemukan")
+    _assert_can_post(db, user, ch)
+    msg.is_pinned = not msg.is_pinned
+    msg.pinned_at = datetime.now(UTC) if msg.is_pinned else None
+    msg.pinned_by_id = parse_uuid(str(user.id)) if msg.is_pinned else None
+    db.commit()
+    _notify_channel(db, ch, "message.pinned" if msg.is_pinned else "message.unpinned")
+    return {"message_id": str(msg.id), "is_pinned": msg.is_pinned}
+
+
+def list_pinned_messages(db: Session, user, channel_id: str) -> list[dict]:
+    ch = get_channel_with_access_check(db, user, channel_id)
+    stmt = (
+        select(ChatMessage)
+        .options(joinedload(ChatMessage.reactions), joinedload(ChatMessage.files))
+        .where(
+            ChatMessage.channel_id == ch.id,
+            ChatMessage.is_pinned.is_(True),
+            ChatMessage.deleted_at.is_(None),
+        )
+        .order_by(ChatMessage.pinned_at.desc())
+    )
+    msgs = list(db.execute(stmt).unique().scalars())
+    return [_serialize_message(m, user.id) for m in msgs]
+
+
 # ---------- Read state ----------
 
 
@@ -870,6 +1023,8 @@ def _serialize_message(msg: ChatMessage, current_user_id) -> dict:
         "reactions": {e: len(u) for e, u in reactions.items()},
         "is_own": parse_uuid(str(msg.sender_id)) == parse_uuid(str(current_user_id)),
         "files": [_serialize_file(f) for f in msg.files] if msg.deleted_at is None else [],
+        "is_pinned": msg.is_pinned,
+        "pinned_at": msg.pinned_at.isoformat() if msg.pinned_at else None,
     }
     if hasattr(msg, "message_type"):
         base["message_type"] = getattr(msg, "message_type", "text")
@@ -1295,9 +1450,7 @@ def _validate_mentions(db: Session, user, channel_id: str, content: str) -> None
     """Tolak pesan jika menyebut user di luar scope (karyawan only)."""
     if is_staff(user) or "@" not in content:
         return
-    import re
-
-    mentions = re.findall(r"@([^\s@]+(?:\s+[^\s@]+)?)", content)
+    mentions = _extract_mention_tokens(content)
     if not mentions:
         return
     allowed = {u["id"]: u for u in search_users_for_mention(db, user, "", limit=1000)}
