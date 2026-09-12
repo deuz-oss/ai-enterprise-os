@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Toaster } from "sonner";
 import {
   Ban,
   BarChart3,
@@ -686,6 +687,7 @@ export default function Layout() {
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />
+      <Toaster theme={dark ? "dark" : "light"} position="top-right" richColors closeButton />
     </div>
   );
 }

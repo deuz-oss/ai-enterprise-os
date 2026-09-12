@@ -14,6 +14,7 @@
    sidebar lewat APP_ACCENT_TOKENS di Layout.tsx, bukan lewat token ini.
    ============================================================ */
 :root {
+  color-scheme: light;
   --bg: #f8fafc;
   --bg-elevated: #ffffff;
   --sidebar: #ffffff;
@@ -27,6 +28,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --bg: #0b1220;
   --bg-elevated: #111827;
   --sidebar: #0f172a;

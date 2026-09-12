@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { api } from "../api/client";
 import TiptapEditor from "../components/editor/TiptapEditor";
+import { confirmToast } from "../components/ui";
 
 interface PageRow {
   id: string;
@@ -219,10 +220,11 @@ export default function Pages() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm("Hapus halaman ini beserta sub-halamannya?"))
-                    deletePage.mutate(pageId);
-                }}
+                onClick={() =>
+                  confirmToast("Hapus halaman ini beserta sub-halamannya?", () => deletePage.mutate(pageId), {
+                    confirmLabel: "Hapus",
+                  })
+                }
                 disabled={deletePage.isPending}
                 title="Hapus halaman"
                 className="mt-2 flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"

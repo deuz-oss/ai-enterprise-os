@@ -463,8 +463,8 @@ export default function Accounting() {
                 <tr>
                   <th className="th">Akun</th>
                   <th className="th">Nama</th>
-                  <th className="th">Total Debit</th>
-                  <th className="th">Total Kredit</th>
+                  <th className="th text-right">Total Debit</th>
+                  <th className="th text-right">Total Kredit</th>
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
@@ -474,8 +474,8 @@ export default function Accounting() {
                     <tr key={r.account_code}>
                       <td className="td font-mono text-xs">{r.account_code}</td>
                       <td className="td">{r.account_name}</td>
-                      <td className="td">{formatRupiah(Number(r.total_debit))}</td>
-                      <td className="td">{formatRupiah(Number(r.total_credit))}</td>
+                      <td className="td text-right tabular-nums">{formatRupiah(Number(r.total_debit))}</td>
+                      <td className="td text-right tabular-nums">{formatRupiah(Number(r.total_credit))}</td>
                     </tr>
                   ))}
                 {(trialBalance ?? []).every((r) => r.total_debit === 0 && r.total_credit === 0) && (
@@ -708,9 +708,9 @@ function ApAgingPanel() {
               <th className="th">No. Tagihan</th>
               <th className="th">Vendor</th>
               <th className="th">Jatuh Tempo</th>
-              <th className="th">Hari Terlambat</th>
+              <th className="th text-right">Hari Terlambat</th>
               <th className="th">Bucket</th>
-              <th className="th">Jumlah</th>
+              <th className="th text-right">Jumlah</th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
@@ -719,11 +719,11 @@ function ApAgingPanel() {
                 <td className="td font-mono text-xs">{r.bill_number ?? "-"}</td>
                 <td className="td">{r.vendor_name}</td>
                 <td className="td text-xs">{r.due_date}</td>
-                <td className="td">{r.days_overdue}</td>
+                <td className="td text-right tabular-nums">{r.days_overdue}</td>
                 <td className="td">
                   <span className={AGING_BUCKET_CLS[r.bucket] ?? "pill p-gray"}>{r.bucket}</span>
                 </td>
-                <td className="td font-medium">{formatRupiah(r.total_due)}</td>
+                <td className="td font-medium text-right tabular-nums">{formatRupiah(r.total_due)}</td>
               </tr>
             ))}
             {rows?.length === 0 && (
@@ -915,10 +915,10 @@ function FixedAssetsPanel() {
             <tr>
               <th className="th">Nama</th>
               <th className="th">Perolehan</th>
-              <th className="th">Harga</th>
-              <th className="th">Umur</th>
-              <th className="th">Akumulasi Susut</th>
-              <th className="th">Nilai Buku</th>
+              <th className="th text-right">Harga</th>
+              <th className="th text-right">Umur</th>
+              <th className="th text-right">Akumulasi Susut</th>
+              <th className="th text-right">Nilai Buku</th>
               <th className="th">Susut Terakhir</th>
               <th className="th">Aksi</th>
             </tr>
@@ -928,10 +928,10 @@ function FixedAssetsPanel() {
               <tr key={a.id}>
                 <td className="td font-medium">{a.name}</td>
                 <td className="td text-xs">{a.acquisition_date}</td>
-                <td className="td">{formatRupiah(a.cost)}</td>
-                <td className="td text-xs">{a.useful_life_months} bln</td>
-                <td className="td">{formatRupiah(a.accumulated_depreciation)}</td>
-                <td className="td font-medium">{formatRupiah(a.book_value)}</td>
+                <td className="td text-right tabular-nums">{formatRupiah(a.cost)}</td>
+                <td className="td text-xs text-right tabular-nums">{a.useful_life_months} bln</td>
+                <td className="td text-right tabular-nums">{formatRupiah(a.accumulated_depreciation)}</td>
+                <td className="td font-medium text-right tabular-nums">{formatRupiah(a.book_value)}</td>
                 <td className="td text-xs">{a.last_depreciated_ym ?? "-"}</td>
                 <td className="td">
                   {a.disposed_at ? (
@@ -1096,8 +1096,8 @@ function PurchasesPanel() {
               <th className="th">Vendor</th>
               <th className="th">Tanggal</th>
               <th className="th">Jatuh Tempo</th>
-              <th className="th">Jumlah</th>
-              <th className="th">PPN</th>
+              <th className="th text-right">Jumlah</th>
+              <th className="th text-right">PPN</th>
               <th className="th">Status</th>
               <th className="th">Aksi</th>
             </tr>
@@ -1112,8 +1112,8 @@ function PurchasesPanel() {
                     <td className="td">{b.vendor_name}</td>
                     <td className="td text-xs">{b.entry_date}</td>
                     <td className="td text-xs">{b.due_date ?? "-"}</td>
-                    <td className="td font-medium">{formatRupiah(b.amount + b.ppn_amount)}</td>
-                    <td className="td">{formatRupiah(b.ppn_amount)}</td>
+                    <td className="td font-medium text-right tabular-nums">{formatRupiah(b.amount + b.ppn_amount)}</td>
+                    <td className="td text-right tabular-nums">{formatRupiah(b.ppn_amount)}</td>
                     <td className="td">
                       <span className={st.cls}>{st.label}</span>
                     </td>
@@ -1321,7 +1321,7 @@ function CashBankPanel() {
             <tr>
               <th className="th">Tanggal</th>
               <th className="th">Tipe</th>
-              <th className="th">Jumlah</th>
+              <th className="th text-right">Jumlah</th>
               <th className="th">Keterangan</th>
               <th className="th">Rekonsiliasi</th>
             </tr>
@@ -1331,7 +1331,7 @@ function CashBankPanel() {
               <tr key={t.id}>
                 <td className="td text-xs">{t.tx_date}</td>
                 <td className="td">{BANK_TX_LABELS[t.tx_type] ?? t.tx_type}</td>
-                <td className="td font-medium">{formatRupiah(t.amount)}</td>
+                <td className="td font-medium text-right tabular-nums">{formatRupiah(t.amount)}</td>
                 <td className="td">{t.description ?? "-"}</td>
                 <td className="td">
                   {t.reconciled ? (

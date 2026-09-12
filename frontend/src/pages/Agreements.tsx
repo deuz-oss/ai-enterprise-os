@@ -2,7 +2,7 @@ import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileCheck2, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
-import { Badge, Button, Card, KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { Badge, Button, Card, KpiCard, PillTabs, promptToast, type PillTab } from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
 
@@ -315,10 +315,11 @@ export default function Agreements() {
                           <Button
                             size="sm"
                             variant="danger"
-                            onClick={() => {
-                              const note = window.prompt("Catatan penolakan (wajib):");
-                              if (note) decline.mutate({ id: a.id, note });
-                            }}
+                            onClick={() =>
+                              promptToast("Catatan penolakan (wajib):", (note) => {
+                                if (note) decline.mutate({ id: a.id, note });
+                              })
+                            }
                           >
                             <ThumbsDown className="h-3.5 w-3.5" /> Tolak
                           </Button>

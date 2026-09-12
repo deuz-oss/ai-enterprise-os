@@ -988,11 +988,11 @@ export default function Payroll() {
             <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
               <tr>
                 <th className="th">Karyawan</th>
-                <th className="th">Gaji Pokok</th>
-                <th className="th">Lembur</th>
-                <th className="th">Bruto</th>
-                <th className="th">PPh21 (TER)</th>
-                <th className="th">Diterima</th>
+                <th className="th text-right">Gaji Pokok</th>
+                <th className="th text-right">Lembur</th>
+                <th className="th text-right">Bruto</th>
+                <th className="th text-right">PPh21 (TER)</th>
+                <th className="th text-right">Diterima</th>
               </tr>
             </thead>
             <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
@@ -1002,13 +1002,13 @@ export default function Payroll() {
                 return (
                   <tr key={s.id}>
                     <td className="td">{emp?.full_name ?? "-"}</td>
-                    <td className="td">{formatRupiah(Number(s.base_salary))}</td>
-                    <td className="td">
+                    <td className="td text-right tabular-nums">{formatRupiah(Number(s.base_salary))}</td>
+                    <td className="td text-right tabular-nums">
                       {s.overtime_hours > 0 ? formatRupiah(Number(s.overtime_amount)) : "-"}
                     </td>
-                    <td className="td">{formatRupiah(Number(s.gross))}</td>
-                    <td className="td text-rose-600">-{formatRupiah(Number(s.tax_pph21))}</td>
-                    <td className="td font-semibold">
+                    <td className="td text-right tabular-nums">{formatRupiah(Number(s.gross))}</td>
+                    <td className="td text-rose-600 text-right tabular-nums">-{formatRupiah(Number(s.tax_pph21))}</td>
+                    <td className="td font-semibold text-right tabular-nums">
                       {isNegative ? (
                         <>
                           <span style={{ color: "#b45309" }}>{formatRupiah(Number(s.net_pay))}*</span>
@@ -1134,10 +1134,10 @@ export default function Payroll() {
             <tr>
               <th className="th">Karyawan</th>
               <th className="th">No BPJS TK</th>
-              <th className="th">Gaji Kes (cap)</th>
-              <th className="th">Iuran Perusahaan</th>
-              <th className="th">Potongan Karyawan</th>
-              <th className="th">Total</th>
+              <th className="th text-right">Gaji Kes (cap)</th>
+              <th className="th text-right">Iuran Perusahaan</th>
+              <th className="th text-right">Potongan Karyawan</th>
+              <th className="th text-right">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
@@ -1145,10 +1145,10 @@ export default function Payroll() {
               <tr key={r.employee_id}>
                 <td className="td font-medium">{r.full_name}</td>
                 <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
-                <td className="td">{formatRupiah(r.salary_kesehatan)}</td>
-                <td className="td" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.employer_total)}</td>
-                <td className="td text-rose-600">-{formatRupiah(r.employee_total)}</td>
-                <td className="td font-semibold">{formatRupiah(r.grand_total)}</td>
+                <td className="td text-right tabular-nums">{formatRupiah(r.salary_kesehatan)}</td>
+                <td className="td text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.employer_total)}</td>
+                <td className="td text-rose-600 text-right tabular-nums">-{formatRupiah(r.employee_total)}</td>
+                <td className="td font-semibold text-right tabular-nums">{formatRupiah(r.grand_total)}</td>
               </tr>
             ))}
             {bpjsRecap && bpjsRecap.rows.length > 0 && (
@@ -1156,11 +1156,11 @@ export default function Payroll() {
                 <td className="td" colSpan={3}>
                   Total
                 </td>
-                <td className="td">{formatRupiah(bpjsRecap.summary.employer_total)}</td>
-                <td className="td text-rose-700">
+                <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.employer_total)}</td>
+                <td className="td text-rose-700 text-right tabular-nums">
                   -{formatRupiah(bpjsRecap.summary.employee_total)}
                 </td>
-                <td className="td">{formatRupiah(bpjsRecap.summary.grand_total)}</td>
+                <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.grand_total)}</td>
               </tr>
             )}
             {bpjsRecap?.rows.length === 0 && (

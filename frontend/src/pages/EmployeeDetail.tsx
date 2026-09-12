@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Phone, Tag } from "lucide-react";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, PillTabs } from "../components/ui";
+import { Badge, confirmToast, PillTabs } from "../components/ui";
 import type { EmployeeRow } from "./Employees";
 
 /** Halaman detail karyawan (`/employees/:id`) -- konsolidasi 11 seksi yang
@@ -1447,9 +1447,11 @@ export default function EmployeeDetail() {
                             <option value="nonaktif">nonaktif</option>
                           </select>
                           <button
-                            onClick={() => {
-                              if (confirm("Hapus polis ini?")) deleteInsurance.mutate(ins.id);
-                            }}
+                            onClick={() =>
+                              confirmToast("Hapus polis ini?", () => deleteInsurance.mutate(ins.id), {
+                                confirmLabel: "Hapus",
+                              })
+                            }
                             className="text-xs font-medium text-rose-600 hover:text-rose-800"
                           >
                             Hapus

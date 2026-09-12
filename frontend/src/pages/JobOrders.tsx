@@ -620,8 +620,8 @@ export default function JobOrders() {
               <th className="th">Posisi</th>
               <th className="th">Klien</th>
               <th className="th">Area</th>
-              <th className="th">Kebutuhan</th>
-              <th className="th">Range Gaji</th>
+              <th className="th text-right">Kebutuhan</th>
+              <th className="th text-right">Range Gaji</th>
               <th className="th">Status</th>
               <th className="th">AI Matching</th>
             </tr>
@@ -657,15 +657,17 @@ export default function JobOrders() {
                     </span>
                   )}
                 </td>
-                <td className="td font-medium">
+                <td className="td font-medium max-w-[160px] truncate" title={jo.title}>
                   <Link to={`/job-orders/${jo.id}`} className="hover:opacity-80" style={{ color: "var(--accent)" }}>
                     {jo.title}
                   </Link>
                 </td>
-                <td className="td">{clientName(jo.client_id)}</td>
-                <td className="td">{jo.area ?? "-"}</td>
-                <td className="td">{jo.headcount} orang</td>
-                <td className="td">
+                <td className="td max-w-[180px] truncate" title={clientName(jo.client_id)}>
+                  {clientName(jo.client_id)}
+                </td>
+                <td className="td whitespace-nowrap">{jo.area ?? "-"}</td>
+                <td className="td text-right tabular-nums whitespace-nowrap">{jo.headcount} orang</td>
+                <td className="td text-right tabular-nums whitespace-nowrap">
                   {formatRupiah(jo.salary_min)} – {formatRupiah(jo.salary_max)}
                 </td>
                 <td className="td">
@@ -683,9 +685,9 @@ export default function JobOrders() {
                     ))}
                   </select>
                 </td>
-                <td className="td">
+                <td className="td whitespace-nowrap">
                   <button
-                    className="btn-secondary py-1 text-xs"
+                    className="btn-secondary py-1 text-xs whitespace-nowrap"
                     disabled={match.isPending}
                     onClick={() => {
                       setMatchJoId(jo.id);

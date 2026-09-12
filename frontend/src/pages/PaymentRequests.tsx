@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { CheckCircle2, ClipboardList, Clock, Wallet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, promptToast, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 interface PrDecision {
@@ -327,10 +327,11 @@ export default function PaymentRequests() {
                       </button>
                       {" · "}
                       <button
-                        onClick={() => {
-                          const note = window.prompt("Catatan penolakan (wajib):");
-                          if (note) act.mutate({ id: p.id, action: "reject", note });
-                        }}
+                        onClick={() =>
+                          promptToast("Catatan penolakan (wajib):", (note) => {
+                            if (note) act.mutate({ id: p.id, action: "reject", note });
+                          })
+                        }
                         disabled={act.isPending}
                         className="font-medium text-rose-600 hover:text-rose-800"
                       >
