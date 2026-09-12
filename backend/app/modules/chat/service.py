@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import bindparam, func, select, text, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import parse_uuid
@@ -48,6 +48,134 @@ def _is_member(db: Session, channel_id, user_id) -> bool:
 def is_staff(user) -> bool:
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     return role != "karyawan"
+
+
+def _channel_audience_ids(db: Session, channel: Channel) -> set[str]:
+    """Siapa yang boleh melihat channel ini: semua staff tenant + member eksplisit.
+
+    Meniru aturan `_assert_can_read` (staff bebas akses channel apa pun,
+    karyawan hanya jika jadi member) supaya event WS tidak bocor ke user
+    yang REST endpoint-nya sendiri tidak akan izinkan membaca channel ini.
+    """
+    from app.modules.auth.models import User
+
+    staff_ids = set(
+        str(uid)
+        for uid in db.execute(
+            select(User.id).where(
+                User.tenant_id == channel.tenant_id,
+                User.role.in_(STAFF_ROLES),
+                User.is_active.is_(True),
+            )
+        ).scalars()
+    )
+    member_ids = set(
+        str(uid)
+        for uid in db.execute(
+            select(ChatChannelMember.user_id).where(ChatChannelMember.channel_id == channel.id)
+        ).scalars()
+    )
+    return staff_ids | member_ids
+
+
+def _notify_channel(db: Session, channel: Channel, event: str) -> None:
+    """Signal WS best-effort (tanpa konten pesan) agar client refetch.
+
+    Konten pesan sengaja TIDAK dikirim di payload — client cuma dipicu untuk
+    refetch REST (yang sudah ter-scope akses dengan benar), jadi payload WS
+    aman dilihat siapa pun yang menerimanya secara tidak sengaja.
+    """
+    try:
+        import asyncio
+
+        from app.modules.chat.ws_manager import manager as _ws
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # tanpa event loop aktif (mis. konteks test sync) — lewati notifikasi WS
+        audience = _channel_audience_ids(db, channel)
+        payload = {"event": event, "channel_id": str(channel.id)}
+        loop.create_task(
+            _ws.broadcast(tenant_id=str(channel.tenant_id), payload=payload, user_ids=audience)
+        )
+    except Exception:
+        pass
+
+
+# ---------- Unread counter model (ala Mattermost) ----------
+#
+# unread_count = channel.total_msg_count - member.msg_count (clamp >= 0).
+# Menghindari scan tabel chat_messages tiap render sidebar; baca & tulis O(1).
+
+
+def _get_or_create_member(db: Session, channel: Channel, user_id) -> ChatChannelMember:
+    uid = parse_uuid(str(user_id))
+    member = db.execute(
+        select(ChatChannelMember).where(
+            ChatChannelMember.channel_id == channel.id, ChatChannelMember.user_id == uid
+        )
+    ).scalar_one_or_none()
+    if member is None:
+        member = ChatChannelMember(channel_id=channel.id, user_id=uid, tenant_id=channel.tenant_id)
+        db.add(member)
+        db.flush()
+    return member
+
+
+def _mark_caught_up(db: Session, channel: Channel, user_id) -> None:
+    """Tandai user sudah melihat channel sampai pesan terbaru saat ini."""
+    member = _get_or_create_member(db, channel, user_id)
+    member.msg_count = channel.total_msg_count
+    member.mention_count = 0
+    member.last_viewed_at = datetime.now(UTC)
+    db.commit()
+
+
+def _mark_mentioned(db: Session, channel: Channel, user_id) -> None:
+    member = _get_or_create_member(db, channel, user_id)
+    member.mention_count += 1
+    db.commit()
+
+
+def _resolve_mention_target_ids(
+    db: Session, channel: Channel, content: str, exclude_user_id
+) -> set[str]:
+    """Cari user yang di-@mention di `content`, ter-scope audience channel.
+
+    `@channel`/`@here`/`@all` menandai seluruh audience sebagai di-mention.
+    Pengirim sendiri selalu dikecualikan.
+    """
+    if "@" not in content:
+        return set()
+    import re
+
+    from app.modules.auth.models import User
+
+    raw_mentions = re.findall(r"@([^\s@]+(?:\s+[^\s@]+)?)", content)
+    if not raw_mentions:
+        return set()
+
+    audience_ids = _channel_audience_ids(db, channel)
+    if not audience_ids:
+        return set()
+    audience_uuids = [uid for aid in audience_ids if (uid := parse_uuid(aid)) is not None]
+    users = list(db.execute(select(User).where(User.id.in_(audience_uuids))).scalars())
+
+    targets: set[str] = set()
+    broadcast_all = False
+    for raw in raw_mentions:
+        name = raw.strip().lower()
+        if name in ("channel", "here", "all"):
+            broadcast_all = True
+            continue
+        for u in users:
+            if name in (u.full_name or "").lower() or name in (u.email or "").lower():
+                targets.add(str(u.id))
+    if broadcast_all:
+        targets.update(audience_ids)
+    targets.discard(str(exclude_user_id))
+    return targets
 
 
 def _assert_can_read(db: Session, user, channel: Channel) -> None:
@@ -108,6 +236,15 @@ def list_channels(db: Session, user) -> list[dict]:
         )
         stmt = stmt.where(Channel.id.in_(member_ids))
     channels = list(db.execute(stmt.order_by(Channel.name)).scalars())
+    own_members = {
+        m.channel_id: m
+        for m in db.execute(
+            select(ChatChannelMember).where(
+                ChatChannelMember.user_id == parse_uuid(str(user.id)),
+                ChatChannelMember.channel_id.in_([c.id for c in channels]),
+            )
+        ).scalars()
+    }
     result = []
     for ch in channels:
         member_count = db.scalar(
@@ -119,18 +256,13 @@ def list_channels(db: Session, user) -> list[dict]:
             .order_by(ChatMessage.created_at.desc())
             .limit(1)
         ).scalar_one_or_none()
-        unread = 0
-        if not staff and user.role == "karyawan":
-            read_state = db.execute(
-                select(func.count(ChatMessage.id)).where(
-                    ChatMessage.channel_id == ch.id,
-                    ChatMessage.created_at
-                    > (_last_read_at(db, ch.id, user.id) or datetime(2000, 1, 1)),
-                    ChatMessage.sender_id != parse_uuid(str(user.id)),
-                    ChatMessage.deleted_at.is_(None),
-                )
-            ).scalar()
-            unread = int(read_state or 0)
+        # Model counter ala Mattermost: unread = total_msg_count - msg_count
+        # (seen). User tanpa row member (staff yang belum pernah "melihat"
+        # channel ini) dianggap belum baca apa pun.
+        own_member = own_members.get(ch.id)
+        seen = own_member.msg_count if own_member else 0
+        mentions = own_member.mention_count if own_member else 0
+        unread = max(0, ch.total_msg_count - seen)
         result.append(
             {
                 "id": str(ch.id),
@@ -144,22 +276,10 @@ def list_channels(db: Session, user) -> list[dict]:
                     else (last_msg.content if last_msg else "")
                 ),
                 "unread_count": unread,
+                "mention_count": mentions,
             }
         )
     return result
-
-
-def _last_read_at(db: Session, channel_id, user_id):
-    from app.modules.chat.models import ChatMessageReaction  # noqa
-
-    latest_seen = db.execute(
-        select(func.max(ChatMessage.created_at)).where(
-            ChatMessage.channel_id == channel_id,
-            ChatMessage.sender_id == parse_uuid(str(user_id)),
-            ChatMessage.deleted_at.is_(None),
-        )
-    ).scalar()
-    return latest_seen
 
 
 def get_channel_with_access_check(db: Session, user, channel_id) -> Channel:
@@ -200,8 +320,14 @@ def send_message(
         parent_id=_parse(parent_id) if parent_id else None,
     )
     db.add(msg)
+    ch.total_msg_count += 1
+    mention_ids = _resolve_mention_target_ids(db, ch, content, user.id)
     db.commit()
     db.refresh(msg)
+    for mentioned_id in mention_ids:
+        _mark_mentioned(db, ch, mentioned_id)
+    _mark_caught_up(db, ch, user.id)
+    _notify_channel(db, ch, "message.created")
 
     # Fase 12: slash command dieksekusi server-side; @AEOS memicu asisten AI.
     if content.startswith("/"):
@@ -221,7 +347,7 @@ def send_message(
 
 
 def _post_aeos_reply(
-    db: Session, *, tenant_id, channel: Channel, parent_id, content: str
+    db: Session, *, tenant_id, channel: Channel, parent_id, content: str, viewer_id=None
 ) -> ChatMessage:
     """Posting balasan atas nama bot AEOS (identitas per tenant).
 
@@ -230,6 +356,10 @@ def _post_aeos_reply(
     balasan thread DI BAWAH pesan pemicu, jadi tak pernah muncul di channel
     utama (yang cuma tampilkan pesan top-level) kecuali user tahu harus
     buka thread — @AEOS/slash command jadi seolah tidak menjawab.
+
+    `viewer_id` (opsional): user yang memicu balasan ini langsung ditandai
+    caught-up, karena secara UX dia sedang melihat channel saat bot merespons
+    — tanpa ini balasan bot akan selalu muncul sebagai 1 unread baru baginya.
     """
     from app.modules.ai.collab import ensure_aeos_user
 
@@ -241,8 +371,12 @@ def _post_aeos_reply(
         parent_id=parent_id,
     )
     db.add(msg)
+    channel.total_msg_count += 1
     db.commit()
     db.refresh(msg)
+    if viewer_id is not None:
+        _mark_caught_up(db, channel, viewer_id)
+    _notify_channel(db, channel, "message.created")
     return msg
 
 
@@ -261,6 +395,7 @@ def handle_aeos_question(db: Session, *, user, channel: Channel, trigger_msg: Ch
                 "Fitur AI add-on belum aktif untuk workspace ini. "
                 "Aktifkan trial dari halaman Aplikasi untuk menggunakan @AEOS."
             ),
+            viewer_id=user.id,
         )
         return {"answered": False, "reason": "license", "reply_id": str(reply.id)}
 
@@ -270,7 +405,12 @@ def handle_aeos_question(db: Session, *, user, channel: Channel, trigger_msg: Ch
     if result.get("route_to"):
         text += f"\n\n→ Saran routing: tim {result['route_to']['team_label']}"
     reply = _post_aeos_reply(
-        db, tenant_id=user.tenant_id, channel=channel, parent_id=trigger_msg.parent_id, content=text
+        db,
+        tenant_id=user.tenant_id,
+        channel=channel,
+        parent_id=trigger_msg.parent_id,
+        content=text,
+        viewer_id=user.id,
     )
     return {"answered": True, "reply_id": str(reply.id), "route_to": result.get("route_to")}
 
@@ -283,7 +423,7 @@ def summarize_thread(db: Session, *, user, root_message_id: str) -> dict:
     if root is None or root.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Pesan thread tidak ditemukan")
     channel = get_channel_with_access_check(db, user, root.channel_id)
-    msgs = list_messages(db, user, str(root.channel_id), parent_id=str(root.id), limit=100)
+    msgs, _ = list_messages(db, user, str(root.channel_id), parent_id=str(root.id), limit=100)
     contents = [m.content for m in msgs]
     if len(contents) < 2:
         raise HTTPException(status_code=422, detail="Thread terlalu pendek untuk dirangkum")
@@ -298,6 +438,7 @@ def summarize_thread(db: Session, *, user, root_message_id: str) -> dict:
         channel=channel,
         parent_id=root.id,
         content=f"{header}\n{result['summary']}",
+        viewer_id=user.id,
     )
     return {
         "summary": result["summary"],
@@ -326,7 +467,12 @@ def _handle_slash_command(db: Session, *, user, channel: Channel, cmd_msg: ChatM
 
     def respond(text: str):
         _post_aeos_reply(
-            db, tenant_id=user.tenant_id, channel=channel, parent_id=cmd_msg.parent_id, content=text
+            db,
+            tenant_id=user.tenant_id,
+            channel=channel,
+            parent_id=cmd_msg.parent_id,
+            content=text,
+            viewer_id=user.id,
         )
 
     try:
@@ -461,21 +607,64 @@ def _handle_slash_command(db: Session, *, user, channel: Channel, cmd_msg: ChatM
 
 
 def list_messages(
-    db: Session, user, channel_id: str, parent_id: str | None = None, limit: int = 50
-) -> list[ChatMessage]:
+    db: Session,
+    user,
+    channel_id: str,
+    parent_id: str | None = None,
+    limit: int = 50,
+    before_id: str | None = None,
+) -> tuple[list[ChatMessage], bool]:
+    """Cursor pagination ala Mattermost: `before_id` = id pesan tertua yang
+    sudah dimuat client, dibanding via `(created_at, id)` (bukan cuma
+    `created_at`) supaya beberapa pesan dengan timestamp identik tidak
+    ke-skip/dobel saat scroll ke atas. Return (pesan urut lama->baru, ada
+    histori lebih lama lagi atau tidak).
+    """
     ch = get_channel_with_access_check(db, user, channel_id)
+    limit = max(1, min(limit, 200))
     stmt = (
         select(ChatMessage)
         .options(joinedload(ChatMessage.reactions))
         .where(ChatMessage.channel_id == ch.id, ChatMessage.deleted_at.is_(None))
-        .order_by(ChatMessage.created_at.desc())
-        .limit(limit)
     )
     if parent_id:
         stmt = stmt.where(ChatMessage.parent_id == _parse(parent_id))
     else:
         stmt = stmt.where(ChatMessage.parent_id.is_(None))
-    return list(reversed(db.execute(stmt).unique().scalars().all()))
+
+    if before_id:
+        anchor_id = _parse(before_id)
+        if anchor_id is not None:
+            # Sengaja bandingkan lewat subquery (bukan `anchor.created_at`
+            # dari objek Python yang sudah di-load) -- SQLite menyimpan
+            # DateTime sebagai TEXT tanpa affinity ketat; datetime Python
+            # yang di-roundtrip lalu dikirim ulang sebagai bind parameter
+            # ternyata diserialize BEDA format (dapat suffix `.000000`) dari
+            # representasi asli hasil `func.now()` saat INSERT, jadi
+            # perbandingan tuple jadi string compare yang salah dan selalu
+            # bernilai true (regresi nyata -- ketahuan lewat test cursor
+            # pagination: page tidak pernah berubah, `before_id` diabaikan
+            # begitu saja). Subquery membandingkan nilai kolom vs kolom
+            # langsung di SQL, tanpa lewat roundtrip Python -- aman di
+            # SQLite maupun Postgres.
+            anchor_created_at = (
+                select(ChatMessage.created_at).where(ChatMessage.id == anchor_id).scalar_subquery()
+            )
+            anchor_id_col = (
+                select(ChatMessage.id).where(ChatMessage.id == anchor_id).scalar_subquery()
+            )
+            stmt = stmt.where(
+                tuple_(ChatMessage.created_at, ChatMessage.id)
+                < tuple_(anchor_created_at, anchor_id_col)
+            )
+
+    # Ambil satu ekstra untuk tahu apakah masih ada histori lebih lama,
+    # tanpa query COUNT(*) terpisah.
+    stmt = stmt.order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc()).limit(limit + 1)
+    rows = list(db.execute(stmt).unique().scalars().all())
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return list(reversed(rows)), has_more
 
 
 def edit_message(db: Session, user, message_id: str, content: str) -> ChatMessage:
@@ -488,6 +677,9 @@ def edit_message(db: Session, user, message_id: str, content: str) -> ChatMessag
     msg.edited_at = datetime.now(UTC)
     db.commit()
     db.refresh(msg)
+    ch = db.get(Channel, msg.channel_id)
+    if ch is not None:
+        _notify_channel(db, ch, "message.updated")
     return msg
 
 
@@ -500,6 +692,9 @@ def delete_message(db: Session, user, message_id: str) -> None:
         raise HTTPException(status_code=403, detail="Tidak memiliki izin hapus pesan")
     msg.deleted_at = datetime.now(UTC)
     db.commit()
+    ch = db.get(Channel, msg.channel_id)
+    if ch is not None:
+        _notify_channel(db, ch, "message.deleted")
 
 
 # ---------- Reactions ----------
@@ -516,36 +711,48 @@ def toggle_reaction(db: Session, user, message_id: str, emoji: str) -> dict:
     if existing:
         db.delete(existing)
         db.commit()
+        _notify_reaction_channel(db, message_id)
         return {"message_id": message_id, "emoji": emoji, "active": False}
     reaction = ChatMessageReaction(
         message_id=_parse(message_id), user_id=parse_uuid(str(user.id)), emoji=emoji[:20]
     )
     db.add(reaction)
     db.commit()
+    _notify_reaction_channel(db, message_id)
     return {"message_id": message_id, "emoji": emoji, "active": True}
+
+
+def _notify_reaction_channel(db: Session, message_id: str) -> None:
+    msg = db.get(ChatMessage, _parse(message_id))
+    if msg is None:
+        return
+    ch = db.get(Channel, msg.channel_id)
+    if ch is not None:
+        _notify_channel(db, ch, "message.reaction")
 
 
 # ---------- Read state ----------
 
 
 def mark_all_read(db: Session, user, channel_id: str) -> dict:
+    """ "Lihat" channel: snapshot msg_count ke total saat ini, reset mention.
+
+    Sebelumnya endpoint ini cuma MENGHITUNG unread tanpa menyimpan apa pun —
+    klik "Tandai dibaca" tidak pernah benar-benar mengubah state, jadi badge
+    unread tidak pernah berkurang. Sekarang persisten via `ChatChannelMember`.
+    """
     ch = get_channel_with_access_check(db, user, channel_id)
-    latest = db.execute(
-        select(func.max(ChatMessage.created_at)).where(
-            ChatMessage.channel_id == ch.id, ChatMessage.deleted_at.is_(None)
-        )
-    ).scalar()
-    count = db.execute(
-        select(func.count(ChatMessage.id)).where(
-            ChatMessage.channel_id == ch.id,
-            ChatMessage.sender_id != parse_uuid(str(user.id)),
-            ChatMessage.deleted_at.is_(None),
-            ChatMessage.created_at > (_last_read_at(db, ch.id, user.id) or datetime(2000, 1, 1)),
-        )
-    ).scalar()
-    # Update sender's own messages to simulate read state tracking
-    # (v1 sederhana: set timestamp terakhir dilihat via max created_at milik user)
-    return {"channel_id": str(ch.id), "marked": int(count or 0), "latest": str(latest)}
+    member = _get_or_create_member(db, ch, user.id)
+    marked = max(0, ch.total_msg_count - member.msg_count)
+    member.msg_count = ch.total_msg_count
+    member.mention_count = 0
+    member.last_viewed_at = datetime.now(UTC)
+    db.commit()
+    return {
+        "channel_id": str(ch.id),
+        "marked": marked,
+        "last_viewed_at": member.last_viewed_at.isoformat(),
+    }
 
 
 def _parse(value):
@@ -602,26 +809,11 @@ def send_card_message(
         actions=actions,
     )
     db.add(msg)
+    ch.total_msg_count += 1
     db.commit()
     db.refresh(msg)
-    # Best-effort WS broadcast (polling fallback covers v1)
-    try:
-        import asyncio
-
-        from app.modules.chat.ws_manager import manager as _ws
-
-        coro = _ws.broadcast(
-            channel_id=str(ch.id),
-            payload={"event": "new_message", "message": _serialize_message(msg, user.id)},
-        )
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(coro)
-        except RuntimeError:
-            pass
-    except Exception:
-        pass
+    _mark_caught_up(db, ch, user.id)
+    _notify_channel(db, ch, "message.created")
     return msg
 
 
@@ -692,8 +884,14 @@ def _post_action_result(db: Session, *, user, original_msg: ChatMessage, result:
         parent_id=original_msg.id,
         message_type="system",
     )
+    ch = db.get(Channel, original_msg.channel_id)
+    if ch is not None:
+        ch.total_msg_count += 1
     db.add(reply)
     db.commit()
+    if ch is not None:
+        _mark_caught_up(db, ch, user.id)
+        _notify_channel(db, ch, "message.created")
 
 
 # ---------- Channel otomatis per entitas ----------
@@ -867,7 +1065,9 @@ def post_payroll_status_message(db: Session, run, text: str) -> None:
         tenant_id=ch.tenant_id,
     )
     db.add(msg)
+    ch.total_msg_count += 1
     db.commit()
+    _notify_channel(db, ch, "message.created")
 
 
 # ---------- Mention & Search (PRD sisa) ----------
@@ -876,7 +1076,8 @@ def post_payroll_status_message(db: Session, run, text: str) -> None:
 def search_messages(
     db: Session, user, q: str, channel_id: str | None = None, limit: int = 20
 ) -> list[dict]:  # noqa: E501
-    """Pencarian pesan via ILIKE (PostgreSQL FTS menyusul)."""
+    """Pencarian pesan: full-text search di Postgres (index GIN, ada ranking),
+    ILIKE di SQLite dev/test (tidak ada FTS bawaan)."""
 
     q_clean = q.strip()
     if not q_clean or len(q_clean) < 2:
@@ -890,16 +1091,55 @@ def search_messages(
         allowed_ids = [uid for cid in raw_ids if (uid := parse_uuid(str(cid))) is not None]  # type: ignore[assignment]
         if not allowed_ids:
             return []
-    stmt = (
-        select(ChatMessage)
-        .where(ChatMessage.channel_id.in_(allowed_ids))
-        .where(ChatMessage.deleted_at.is_(None))
-        .where(ChatMessage.content.ilike(f"%{q_clean}%"))
-        .order_by(ChatMessage.created_at.desc())
-        .limit(limit)
-    )
-    msgs = list(db.execute(stmt).scalars().all())
+
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        msgs = _search_messages_fts(db, allowed_ids, q_clean, limit)
+    else:
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.channel_id.in_(allowed_ids))
+            .where(ChatMessage.deleted_at.is_(None))
+            .where(ChatMessage.content.ilike(f"%{q_clean}%"))
+            .order_by(ChatMessage.created_at.desc())
+            .limit(limit)
+        )
+        msgs = list(db.execute(stmt).scalars().all())
     return [_serialize_message(m, user.id) for m in msgs]
+
+
+def _search_messages_fts(db: Session, channel_ids: list, q: str, limit: int) -> list[ChatMessage]:
+    """Full-text search via `to_tsvector('simple', content) @@ websearch_to_tsquery(...)`,
+    dibantu index GIN `ix_chat_messages_search_fts` (migrasi 600bd504ad4e).
+    `websearch_to_tsquery` dipilih (bukan `to_tsquery`) karena mentolerir
+    input bebas dari kotak cari (tanda baca ganjil, dst.) tanpa error.
+    """
+    stmt = text(
+        """
+        SELECT id FROM chat_messages
+        WHERE channel_id IN :channel_ids
+          AND deleted_at IS NULL
+          AND to_tsvector('simple', content) @@ websearch_to_tsquery('simple', :q)
+        ORDER BY ts_rank(to_tsvector('simple', content), websearch_to_tsquery('simple', :q)) DESC
+        LIMIT :limit
+        """
+    ).bindparams(bindparam("channel_ids", expanding=True))
+    rows = db.execute(
+        stmt, {"channel_ids": [str(cid) for cid in channel_ids], "q": q, "limit": limit}
+    ).all()
+    ordered_ids = [parse_uuid(r.id) for r in rows]
+    if not ordered_ids:
+        return []
+    by_id = {
+        m.id: m
+        for m in db.execute(
+            select(ChatMessage)
+            .options(joinedload(ChatMessage.reactions))
+            .where(ChatMessage.id.in_(ordered_ids))
+        )
+        .unique()
+        .scalars()
+    }
+    return [by_id[i] for i in ordered_ids if i in by_id]
 
 
 def search_users_for_mention(db: Session, user, q: str, limit: int = 10) -> list[dict]:

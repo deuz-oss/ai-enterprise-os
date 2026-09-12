@@ -1,8 +1,16 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api } from "../api/client";
 import { ClipboardList, CornerUpLeft, Hash, Lock, MessageCircle, Megaphone } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+
+// Index dasar arbitrer yang besar untuk `firstItemIndex` Virtuoso -- pola
+// resmi mereka untuk "reverse infinite scroll" (chat): begitu halaman
+// histori lebih lama di-prepend, index ini dikurangi sebanyak pesan yang
+// baru ditambahkan, supaya Virtuoso tahu item-item itu geser ke belakang
+// tanpa harus menghitung ulang/geser posisi scroll secara manual.
+const VIRTUOSO_START_INDEX = 1_000_000;
 
 interface ChannelRow {
   id: string;
@@ -12,6 +20,7 @@ interface ChannelRow {
   member_count: number;
   last_message_preview: string;
   unread_count: number;
+  mention_count: number;
 }
 
 interface MessageRow {
@@ -37,7 +46,7 @@ export default function Chat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   const { data: channels } = useQuery({
     queryKey: ["chat-channels"],
@@ -45,15 +54,122 @@ export default function Chat() {
     refetchInterval: 4000,
   });
 
-  const { data: messages } = useQuery({
-    queryKey: ["chat-messages", activeChannel, threadParent],
-    queryFn: () =>
-      api.get<MessageRow[]>(
-        `/chat/channels/${activeChannel}/messages${threadParent ? `?parent_id=${threadParent}` : ""}`
-      ),
+  // Cursor pagination ala Mattermost (before_id + X-Has-More, lihat
+  // backend/app/modules/chat/service.py::list_messages) lewat useInfiniteQuery:
+  // page pertama (pageParam=undefined) = pesan terbaru; page berikutnya =
+  // histori lebih lama. Halaman disimpan urutan fetch (baru->lama), jadi
+  // di-reverse saat dirender agar tampil lama->baru seperti biasa.
+  const messagesQueryKey = ["chat-messages", activeChannel, threadParent] as const;
+
+  const {
+    data: messagePages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: messagesQueryKey,
+    queryFn: async ({ pageParam }: { pageParam?: string }) => {
+      const qs = new URLSearchParams();
+      if (threadParent) qs.set("parent_id", threadParent);
+      if (pageParam) qs.set("before_id", pageParam);
+      const { data, hasMore } = await api.getCursor<MessageRow>(
+        `/chat/channels/${activeChannel}/messages?${qs.toString()}`
+      );
+      return { items: data, hasMore };
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore && lastPage.items.length > 0 ? lastPage.items[0].id : undefined,
     enabled: Boolean(activeChannel),
-    refetchInterval: 2500,
+    // SENGAJA tanpa refetchInterval/invalidateQueries("chat-messages") --
+    // refetch polos akan meminta ulang page pertama (pageParam=undefined =
+    // "N pesan terbaru"), yang JENDELANYA BERGESER begitu ada pesan baru
+    // masuk. Page kedua dst tetap pakai before_id LAMA (di-cache, tidak
+    // ikut refetch) -- pesan yang dulu jadi batas page pertama jadi
+    // "terlempar" ke celah antara dua page dan LENYAP dari tampilan.
+    // Regresi nyata: ketahuan lewat uji manual di browser (kirim pesan
+    // baru sambil sudah scroll ke histori lama -> satu pesan lama hilang).
+    // Solusi: pesan baru di-merge langsung ke cache (append/patch by id),
+    // TIDAK PERNAH mem-fetch ulang "N terbaru" dan membuang isi page
+    // pertama yang sudah ada -- lihat `mergeLatestIntoCache` dkk di bawah.
   });
+
+  const messages = useMemo(
+    () => [...(messagePages?.pages ?? [])].reverse().flatMap((p) => p.items),
+    [messagePages]
+  );
+
+  type MessagesData = typeof messagePages;
+
+  function appendMessageToCache(m: MessageRow) {
+    qc.setQueryData<MessagesData>(messagesQueryKey, (old) => {
+      if (!old) return old;
+      const pages = [...old.pages];
+      const first = pages[0] ?? { items: [], hasMore: false };
+      if (first.items.some((x) => x.id === m.id)) return old;
+      pages[0] = { ...first, items: [...first.items, m] };
+      return { ...old, pages };
+    });
+  }
+
+  function patchMessageInCache(id: string, updater: (m: MessageRow) => MessageRow) {
+    qc.setQueryData<MessagesData>(messagesQueryKey, (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((p) => ({
+          ...p,
+          items: p.items.map((m) => (m.id === id ? updater(m) : m)),
+        })),
+      };
+    });
+  }
+
+  function removeMessageFromCache(id: string) {
+    qc.setQueryData<MessagesData>(messagesQueryKey, (old) => {
+      if (!old) return old;
+      return { ...old, pages: old.pages.map((p) => ({ ...p, items: p.items.filter((m) => m.id !== id) })) };
+    });
+  }
+
+  // Ambil ulang "N pesan terbaru" tapi MERGE ke page pertama yang sudah
+  // ada (tambah/timpa by id), TIDAK PERNAH mengganti isi page pertama
+  // seutuhnya -- jadi jendelanya boleh melebar, tidak pernah membuang
+  // pesan lama yang sudah ter-load dan membuat celah di sambungan
+  // dengan page berikutnya (before_id page itu tetap valid apa adanya).
+  async function mergeLatestIntoCache() {
+    if (!activeChannel) return;
+    const qs = new URLSearchParams();
+    if (threadParent) qs.set("parent_id", threadParent);
+    const { data: fresh } = await api.getCursor<MessageRow>(
+      `/chat/channels/${activeChannel}/messages?${qs.toString()}`
+    );
+    qc.setQueryData<MessagesData>(messagesQueryKey, (old) => {
+      if (!old) return old;
+      const pages = [...old.pages];
+      const first = pages[0] ?? { items: [], hasMore: false };
+      const byId = new Map(first.items.map((m) => [m.id, m]));
+      for (const m of fresh) byId.set(m.id, m);
+      const merged = [
+        ...first.items.map((m) => byId.get(m.id)!),
+        ...fresh.filter((m) => !first.items.some((x) => x.id === m.id)),
+      ];
+      pages[0] = { ...first, items: merged };
+      return { ...old, pages };
+    });
+  }
+
+  // Fallback polling ringan (WS tetap jalur utama) -- pakai merge yang
+  // sama, bukan refetchInterval bawaan useInfiniteQuery, supaya tidak
+  // kena bug celah di atas.
+  useEffect(() => {
+    if (!activeChannel) return;
+    const id = setInterval(() => {
+      mergeLatestIntoCache();
+    }, 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannel, threadParent]);
 
   const { data: searchResults } = useQuery({
     queryKey: ["chat-search", searchQuery, activeChannel],
@@ -77,9 +193,12 @@ export default function Chat() {
 
   const sendMessage = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
-      api.post(`/chat/channels/${activeChannel}/messages`, payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      api.post<MessageRow>(`/chat/channels/${activeChannel}/messages`, payload),
+    onSuccess: (newMessage) => {
+      // Append langsung (bukan refetch/invalidate) -- kita sudah punya
+      // objek pesan lengkap dari response, tidak perlu tanya ulang server
+      // dan berisiko kena bug jendela-geser di atas.
+      appendMessageToCache(newMessage);
       qc.invalidateQueries({ queryKey: ["chat-channels"] });
       if (inputRef.current) inputRef.current.value = "";
     },
@@ -87,19 +206,31 @@ export default function Chat() {
 
   const addReaction = useMutation({
     mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
-      api.post(`/chat/messages/${messageId}/react`, { emoji }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+      api.post<{ message_id: string; emoji: string; active: boolean }>(
+        `/chat/messages/${messageId}/react`,
+        { emoji }
+      ),
+    onSuccess: (result) => {
+      patchMessageInCache(result.message_id, (m) => {
+        const current = m.reactions[result.emoji] ?? 0;
+        const nextCount = result.active ? current + 1 : Math.max(0, current - 1);
+        const reactions = { ...m.reactions };
+        if (nextCount > 0) reactions[result.emoji] = nextCount;
+        else delete reactions[result.emoji];
+        return { ...m, reactions };
+      });
+    },
   });
 
   const deleteMessage = useMutation({
     mutationFn: (messageId: string) => api.delete(`/chat/messages/${messageId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+    onSuccess: (_data, messageId) => removeMessageFromCache(messageId),
   });
 
   const editMessage = useMutation({
     mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
-      api.patch(`/chat/messages/${messageId}`, { content }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+      api.patch<MessageRow>(`/chat/messages/${messageId}`, { content }),
+    onSuccess: (updated) => patchMessageInCache(updated.id, () => updated),
   });
 
   const markRead = useMutation({
@@ -111,7 +242,9 @@ export default function Chat() {
     mutationFn: ({ messageId, actionId }: { messageId: string; actionId: string }) =>
       api.post(`/chat/messages/${messageId}/actions/${actionId}`, {}),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      // Aksi kartu memicu balasan sistem baru (async) -- merge, bukan
+      // refetch mentah, supaya tidak menabrak bug jendela-geser.
+      mergeLatestIntoCache();
       qc.invalidateQueries({ queryKey: ["chat-channels"] });
     },
   });
@@ -128,13 +261,42 @@ export default function Chat() {
   });
   const summarize = useMutation({
     mutationFn: (messageId: string) => api.post(`/chat/messages/${messageId}/summarize`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages"] }),
+    onSuccess: () => mergeLatestIntoCache(),
   });
 
-  // Scroll to bottom on new messages
+  // `firstItemIndex` ala pola resmi Virtuoso untuk chat: berkurang sebanyak
+  // jumlah pesan yang baru di-prepend setiap kali halaman histori lebih
+  // lama termuat, supaya Virtuoso mempertahankan posisi baca tanpa hitung
+  // manual scrollTop/scrollHeight (beda dari pendekatan DOM manual sebelum
+  // virtualisasi ini).
+  const [firstItemIndex, setFirstItemIndex] = useState(VIRTUOSO_START_INDEX);
+  const loadedPageCountRef = useRef(0);
+
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages]);
+    setFirstItemIndex(VIRTUOSO_START_INDEX);
+    loadedPageCountRef.current = 0;
+  }, [activeChannel, threadParent]);
+
+  useEffect(() => {
+    const pageCount = messagePages?.pages.length ?? 0;
+    if (pageCount > loadedPageCountRef.current && loadedPageCountRef.current > 0) {
+      const olderPage = messagePages!.pages[messagePages!.pages.length - 1];
+      setFirstItemIndex((idx) => idx - olderPage.items.length);
+    }
+    loadedPageCountRef.current = pageCount;
+  }, [messagePages]);
+
+  function handleStartReached() {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }
+
+  // Membuka channel = "melihat" — reset unread/mention counter di server
+  // (model counter ala Mattermost, lihat backend/app/modules/chat/service.py).
+  useEffect(() => {
+    if (!activeChannel) return;
+    markRead.mutate(activeChannel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannel]);
 
   // WebSocket real-time (PRD §9.4) — polling tetap sebagai fallback.
   useEffect(() => {
@@ -148,7 +310,23 @@ export default function Chat() {
     let ws: WebSocket | null = null;
     try {
       ws = new WebSocket(wsUrl);
-      ws.onmessage = () => qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      ws.onmessage = (evt) => {
+        qc.invalidateQueries({ queryKey: ["chat-channels"] });
+        let eventChannelId: string | null = null;
+        try {
+          eventChannelId = (JSON.parse(evt.data) as { channel_id?: string }).channel_id ?? null;
+        } catch {
+          // payload tak terduga — tetap refetch pesan channel aktif
+        }
+        if (!eventChannelId || eventChannelId === activeChannel) {
+          // Merge, BUKAN invalidate/refetch mentah -- lihat catatan panjang
+          // di dekat definisi useInfiniteQuery soal bug jendela-geser.
+          mergeLatestIntoCache();
+          // Channel aktif sedang dilihat — jangan biarkan unread menumpuk
+          // untuk pesan yang masuk saat channel ini terbuka.
+          if (activeChannel) markRead.mutate(activeChannel);
+        }
+      };
     } catch {
       // abaikan — polling yang menangani
     }
@@ -165,6 +343,113 @@ export default function Chat() {
     const content = String(form.get("content") || "").trim();
     if (!content || !activeChannel) return;
     sendMessage.mutate({ content, parent_id: threadParent || undefined });
+  }
+
+  function renderMessage(m: MessageRow) {
+    return (
+      <div className="px-4 py-1">
+        <div className="group rounded px-2 py-1.5 transition-colors hover:bg-[var(--hover)]">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              {m.sender_id.slice(0, 8)}… · {new Date(m.created_at).toLocaleString("id-ID")}
+              {m.edited_at && <span className="ml-1 italic">diedit</span>}
+            </span>
+            {m.is_own && !threadParent && (
+              <button
+                onClick={() => setThreadParent(m.id)}
+                className="shrink-0 text-[11px] hover:opacity-80"
+                style={{ color: "var(--accent)" }}
+              >
+                Balas
+              </button>
+            )}
+          </div>
+
+          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--text)" }}>
+            {m.content}
+          </p>
+          {m.message_type === "card" && m.card_data && (
+            <div
+              className="mt-2 rounded-md p-3"
+              style={{
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-elevated)",
+              }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                {m.card_data.title}
+              </p>
+              {m.card_data.body && (
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {m.card_data.body}
+                </p>
+              )}
+              {m.actions && m.actions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {m.actions.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleAction.mutate({ messageId: m.id, actionId: a.id })}
+                      className="rounded px-2.5 py-1 text-xs font-medium"
+                      style={{
+                        backgroundColor: a.style === "primary" ? "var(--accent)" : "var(--bg-elevated)",
+                        color: a.style === "primary" ? "white" : "var(--text)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {Object.entries(m.reactions).map(([emoji, count]) => (
+              <button
+                key={emoji}
+                onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
+                className="rounded-full px-1.5 py-0.5 text-xs"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                {emoji} {count}
+              </button>
+            ))}
+            {EMOJI_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
+                className="rounded px-1 py-0.5 text-xs hover:bg-[var(--hover)]"
+                title={`React ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+            {m.is_own && (
+              <>
+                <button
+                  onClick={() => {
+                    const next = window.prompt("Edit pesan:", m.content);
+                    if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
+                  }}
+                  className="ml-auto text-[11px] hover:opacity-80"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  edit
+                </button>
+                <button
+                  onClick={() => deleteMessage.mutate(m.id)}
+                  className="text-[11px] text-rose-400 hover:text-rose-600"
+                >
+                  hapus
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const activeMeta = channels?.find((c) => c.id === activeChannel);
@@ -233,10 +518,23 @@ export default function Chat() {
                   )}
                   <span className="truncate">{ch.name}</span>
                 </span>
-                {ch.unread_count > 0 && (
-                  <span className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: "var(--accent)" }}>
-                    {ch.unread_count}
+                {ch.mention_count > 0 ? (
+                  <span
+                    className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
+                    style={{ backgroundColor: "var(--accent)" }}
+                    title="Ada mention untuk Anda"
+                  >
+                    @{ch.mention_count}
                   </span>
+                ) : (
+                  ch.unread_count > 0 && (
+                    <span
+                      className="ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                      style={{ backgroundColor: "var(--hover)", color: "var(--text-muted)" }}
+                    >
+                      {ch.unread_count}
+                    </span>
+                  )
                 )}
               </button>
             ))}
@@ -339,116 +637,42 @@ export default function Chat() {
             </div>
           )}
 
-          <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
-            {(messages ?? []).map((m) => (
-              <div
-                key={m.id}
-                className="group rounded px-2 py-1.5 transition-colors hover:bg-[var(--hover)]"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                    {m.sender_id.slice(0, 8)}… · {new Date(m.created_at).toLocaleString("id-ID")}
-                    {m.edited_at && <span className="ml-1 italic">diedit</span>}
-                  </span>
-                  {m.is_own && !threadParent && (
-                    <button
-                      onClick={() => setThreadParent(m.id)}
-                      className="shrink-0 text-[11px] hover:opacity-80"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      Balas
-                    </button>
-                  )}
-                </div>
-
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-sm" style={{ color: "var(--text)" }}>
-                  {m.content}
-                </p>
-                {m.message_type === "card" && m.card_data && (
-                  <div
-                    className="mt-2 rounded-md p-3"
-                    style={{
-                      border: "1px solid var(--border)",
-                      backgroundColor: "var(--bg-elevated)",
-                    }}
-                  >
-                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                      {m.card_data.title}
-                    </p>
-                    {m.card_data.body && (
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                        {m.card_data.body}
-                      </p>
-                    )}
-                    {m.actions && m.actions.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {m.actions.map((a) => (
-                          <button
-                            key={a.id}
-                            onClick={() => handleAction.mutate({ messageId: m.id, actionId: a.id })}
-                            className="rounded px-2.5 py-1 text-xs font-medium"
-                            style={{
-                              backgroundColor: a.style === "primary" ? "var(--accent)" : "var(--bg-elevated)",
-                              color: a.style === "primary" ? "white" : "var(--text)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            {a.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="mt-1 flex flex-wrap items-center gap-1">
-                  {Object.entries(m.reactions).map(([emoji, count]) => (
-                    <button
-                      key={emoji}
-                      onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
-                      className="rounded-full px-1.5 py-0.5 text-xs"
-                      style={{ border: "1px solid var(--border)" }}
-                    >
-                      {emoji} {count}
-                    </button>
-                  ))}
-                  {EMOJI_REACTIONS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => addReaction.mutate({ messageId: m.id, emoji })}
-                      className="rounded px-1 py-0.5 text-xs hover:bg-[var(--hover)]"
-                      title={`React ${emoji}`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                  {m.is_own && (
-                    <>
-                      <button
-                        onClick={() => {
-                          const next = window.prompt("Edit pesan:", m.content);
-                          if (next !== null) editMessage.mutate({ messageId: m.id, content: next });
-                        }}
-                        className="ml-auto text-[11px] hover:opacity-80"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        edit
-                      </button>
-                      <button
-                        onClick={() => deleteMessage.mutate(m.id)}
-                        className="text-[11px] text-rose-400 hover:text-rose-600"
-                      >
-                        hapus
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-            {messages?.length === 0 && (
+          <div className="flex-1" style={{ minHeight: 0 }}>
+            {messages.length === 0 ? (
               <p className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 Belum ada pesan. Mulai percakapan!
               </p>
+            ) : (
+              <Virtuoso
+                key={`${activeChannel}:${threadParent ?? "root"}`}
+                ref={virtuosoRef}
+                style={{ height: "100%" }}
+                data={messages}
+                firstItemIndex={firstItemIndex}
+                initialTopMostItemIndex={messages.length - 1}
+                startReached={handleStartReached}
+                followOutput={(isAtBottom) => (isAtBottom ? "smooth" : false)}
+                alignToBottom
+                computeItemKey={(_index, m) => m.id}
+                components={{
+                  Header: () => (
+                    <>
+                      {isFetchingNextPage && (
+                        <p className="py-1 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                          Memuat pesan lebih lama…
+                        </p>
+                      )}
+                      {!isFetchingNextPage && hasNextPage === false && (
+                        <p className="py-2 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                          — Awal percakapan —
+                        </p>
+                      )}
+                    </>
+                  ),
+                  Footer: () => <div style={{ height: 8 }} />,
+                }}
+                itemContent={(_index, m) => renderMessage(m)}
+              />
             )}
           </div>
 

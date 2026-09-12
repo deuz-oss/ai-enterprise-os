@@ -42,6 +42,9 @@ class Channel(TenantMixin, Base):
     )  # public | private | dm | broadcast
     created_by_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Counter model ala Mattermost: unread = total_msg_count - member.msg_count.
+    # O(1) baca/tulis, tidak perlu scan tabel messages tiap render sidebar.
+    total_msg_count: Mapped[int] = mapped_column(default=0, server_default="0")
 
     members = relationship("ChatChannelMember", back_populates="channel")
     messages = relationship("ChatMessage", back_populates="channel")
@@ -56,6 +59,11 @@ class ChatChannelMember(TenantMixin, Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     is_admin: Mapped[bool] = mapped_column(default=False)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Snapshot channel.total_msg_count saat user terakhir melihat channel;
+    # unread_count = channel.total_msg_count - msg_count (di-clamp ke >= 0).
+    msg_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    mention_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     channel = relationship("Channel", back_populates="members")
 

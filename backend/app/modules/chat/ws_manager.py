@@ -29,15 +29,24 @@ class ChatWSManager:
         self._conns.get(tenant_id, {}).pop(user_id, None)
         logger.info("Chat WS disconnect tenant=%s user=%s", tenant_id[:8], user_id[:8])
 
-    async def broadcast(self, channel_id: str, payload: dict) -> None:
-        """v1: broadcast ke semua tenant (plugin Redis akan menyaring)."""
+    async def broadcast(
+        self, tenant_id: str, payload: dict, user_ids: set[str] | None = None
+    ) -> None:
+        """Kirim ke koneksi milik satu tenant, opsional disaring ke `user_ids`.
+
+        Sebelumnya broadcast() mengirim ke SEMUA tenant tanpa filter — bug
+        kebocoran konten pesan antar tenant lewat WS. Sekarang di-scope ke
+        tenant, dan jika `user_ids` diberikan (audience channel: staff +
+        member eksplisit), hanya user itu yang menerima.
+        """
         text = json.dumps(payload, ensure_ascii=False)
-        for by_tenant in list(self._conns.values()):
-            for ws in list(by_tenant.values()):
-                try:
-                    await ws.send_text(text)
-                except Exception:
-                    pass
+        for uid, ws in list(self._conns.get(tenant_id, {}).items()):
+            if user_ids is not None and uid not in user_ids:
+                continue
+            try:
+                await ws.send_text(text)
+            except Exception:
+                pass
 
     def tenant_store(self) -> dict:
         return self._conns

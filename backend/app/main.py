@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
         # request cross-origin -- ketahuan saat X-Total-Count (Batch 1c,
         # pagination /candidates & /job-orders) selalu null di frontend
         # meski response header-nya benar (dicek via curl/proxy same-origin).
-        expose_headers=["X-Total-Count"],
+        expose_headers=["X-Total-Count", "X-Has-More"],
     )
 
     from app.modules.accounting.router import router as accounting_router

@@ -62,9 +62,24 @@ async function requestPaged<T>(path: string): Promise<PagedResult<T>> {
   return { data: rows, total: totalHeader ? parseInt(totalHeader, 10) : rows.length };
 }
 
+export interface CursorResult<T> {
+  data: T[];
+  hasMore: boolean;
+}
+
+/** Untuk list endpoint cursor-paginated yang kirim header `X-Has-More`
+ * (mis. `GET /chat/channels/{id}/messages?before_id=...`) — beda dari
+ * `getPaged` yang berbasis offset+total count. */
+async function requestCursor<T>(path: string): Promise<CursorResult<T>> {
+  const { resp, data } = await rawRequest(path);
+  const rows = (data as T[]) ?? [];
+  return { data: rows, hasMore: resp.headers.get("x-has-more") === "true" };
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   getPaged: <T>(path: string) => requestPaged<T>(path),
+  getCursor: <T>(path: string) => requestCursor<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body: unknown) =>

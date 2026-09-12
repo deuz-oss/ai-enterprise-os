@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -119,14 +119,22 @@ def add_member(
 @router.get("/channels/{channel_id}/messages")
 def list_messages(
     channel_id: str,
+    response: Response,
     parent_id: str | None = Query(None),
+    before_id: str | None = Query(None, description="Cursor: id pesan tertua yang sudah dimuat"),
     limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    messages = service.list_messages(
-        db, user=user, channel_id=channel_id, parent_id=parent_id, limit=limit
+    messages, has_more = service.list_messages(
+        db,
+        user=user,
+        channel_id=channel_id,
+        parent_id=parent_id,
+        before_id=before_id,
+        limit=limit,
     )
+    response.headers["X-Has-More"] = "true" if has_more else "false"
     return [service._serialize_message(m, user.id) for m in messages]
 
 
