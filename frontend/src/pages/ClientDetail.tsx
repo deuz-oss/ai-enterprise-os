@@ -301,8 +301,8 @@ export default function ClientDetail() {
             <input name="pic_name" defaultValue={client.pic_name ?? ""} placeholder="Nama PIC" className="input" />
             <input name="pic_phone" defaultValue={client.pic_phone ?? ""} placeholder="Telepon PIC" className="input" />
             <input name="pic_email" defaultValue={client.pic_email ?? ""} placeholder="Email PIC" className="input" />
-            <input name="contract_start" type="date" defaultValue={client.contract_start ?? ""} className="input" />
-            <input name="contract_end" type="date" defaultValue={client.contract_end ?? ""} className="input" />
+            <input name="contract_start" type="date" defaultValue={client.contract_start ?? ""} className="input" aria-label="Mulai kontrak" />
+            <input name="contract_end" type="date" defaultValue={client.contract_end ?? ""} className="input" aria-label="Akhir kontrak" />
             <button type="submit" disabled={updateClient.isPending} className="btn sm:col-span-3">
               Simpan Perubahan
             </button>

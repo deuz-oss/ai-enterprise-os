@@ -79,6 +79,7 @@ function ScanFakturCard() {
         type="file"
         accept="image/png,image/jpeg,image/webp"
         className="input text-xs"
+        aria-label="Unggah foto faktur"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) scan.mutate(f);
@@ -172,6 +173,7 @@ function RekonsiliasiCard() {
         type="file"
         accept=".csv,text/csv"
         className="input text-xs"
+        aria-label="Unggah CSV mutasi bank"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) importCsv.mutate(f);
@@ -361,8 +363,8 @@ function CloseChecklistCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs">
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" aria-label="Tahun checklist tutup buku" />
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs" aria-label="Bulan checklist tutup buku">
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -422,8 +424,8 @@ function AnomaliesCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs">
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" aria-label="Tahun deteksi anomali" />
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input w-auto text-xs" aria-label="Bulan deteksi anomali">
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -471,11 +473,12 @@ function ExecutiveSummaryCard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" aria-label="Tahun ringkasan eksekutif" />
           <select
             value={month}
             onChange={(e) => setMonth(e.target.value ? Number(e.target.value) : "")}
             className="input w-auto text-xs"
+            aria-label="Bulan ringkasan eksekutif"
           >
             <option value="">Setahun</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -601,7 +604,7 @@ function LedgerCard() {
           placeholder="Kode akun (mis. 1-1100)"
           className="input text-xs"
         />
-        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" />
+        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-20 text-xs" aria-label="Tahun anomali saldo akun" />
         <button
           className="btn-secondary text-xs"
           disabled={!accountCode}
@@ -696,7 +699,7 @@ function BalanceSheetCard() {
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>Posisi keuangan per tanggal.</p>
         </div>
         <div className="flex items-center gap-2">
-          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="input text-xs" />
+          <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="input text-xs" aria-label="Per tanggal (Neraca)" />
           <button className="btn-secondary text-xs" onClick={() => setActiveAsOf(asOf)}>
             Tampilkan
           </button>

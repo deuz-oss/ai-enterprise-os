@@ -190,7 +190,7 @@ export default function Rates() {
           <form onSubmit={handlePph21} className="card space-y-2">
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru PPh 21</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <input name="effective_from" type="date" required className="input" />
+              <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (PPh 21)" />
               <input name="ptkp_diri" type="number" required placeholder="PTKP diri (Rp)" className="input" />
               <input name="ptkp_kawin" type="number" placeholder="PTKP kawin (Rp)" className="input" />
               <input name="ptkp_tanggungan" type="number" placeholder="PTKP per tanggungan" className="input" />
@@ -258,7 +258,7 @@ export default function Rates() {
           <form onSubmit={handleBpjs} className="card space-y-2">
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru BPJS</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              <input name="effective_from" type="date" required className="input" />
+              <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (BPJS)" />
               <input name="kesehatan_employer" type="number" step="0.0001" placeholder="Kes psk (0.04)" className="input" />
               <input name="kesehatan_employee" type="number" step="0.0001" placeholder="Kes pyd (0.01)" className="input" />
               <input name="kesehatan_cap" type="number" placeholder="Cap kes" className="input" />
@@ -305,7 +305,7 @@ export default function Rates() {
             </table>
           </div>
           <form onSubmit={handleBilling} className="card grid grid-cols-1 gap-2 sm:grid-cols-4">
-            <input name="effective_from" type="date" required className="input" />
+            <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (Billing)" />
             <input name="ppn_rate" type="number" step="0.0001" required placeholder="PPN (0.12)" className="input" />
             <input name="pph23_rate" type="number" step="0.0001" placeholder="PPh23 (0.02)" className="input" />
             <input name="due_days" type="number" required placeholder="Due days" className="input" />

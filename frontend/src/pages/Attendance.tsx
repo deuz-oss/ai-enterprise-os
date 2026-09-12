@@ -161,12 +161,14 @@ export default function Attendance() {
           max={12}
           onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
           className="input w-20"
+          aria-label="Bulan"
         />
         <input
           type="number"
           value={period.year}
           onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
           className="input w-24"
+          aria-label="Tahun"
         />
         {/* C2: toggle Tabel / Kalender ala segmented view */}
         <div
@@ -348,15 +350,15 @@ export default function Attendance() {
           Input Manual
         </h2>
         <form onSubmit={handleManual} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <select name="employee_id" required className="input">
+          <select name="employee_id" required className="input" aria-label="Pilih karyawan">
             {(employees ?? []).map((e) => (
               <option key={e.id} value={e.id}>
                 {e.employee_no} · {e.full_name} ({e.employment_type})
               </option>
             ))}
           </select>
-          <input name="date" type="date" required className="input" />
-          <select name="status" defaultValue="hadir" className="input">
+          <input name="date" type="date" required className="input" aria-label="Tanggal" />
+          <select name="status" defaultValue="hadir" className="input" aria-label="Status kehadiran">
             {Object.entries(STATUS_LABELS).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
@@ -364,8 +366,8 @@ export default function Attendance() {
             ))}
           </select>
           <input name="overtime_hours" type="number" placeholder="Jam lembur" className="input" />
-          <input name="clock_in" type="time" className="input" />
-          <input name="clock_out" type="time" className="input" />
+          <input name="clock_in" type="time" className="input" aria-label="Jam masuk" />
+          <input name="clock_out" type="time" className="input" aria-label="Jam pulang" />
           <input name="notes" placeholder="Catatan" className="input sm:col-span-2" />
           <button className="btn sm:col-span-2">Simpan Record</button>
         </form>
@@ -376,7 +378,7 @@ export default function Attendance() {
           Impor CSV Mesin Fingerprint
         </h2>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept=".csv" className="input w-auto" />
+          <input ref={fileRef} type="file" accept=".csv" className="input w-auto" aria-label="Unggah CSV mesin fingerprint" />
           <button
             className="btn-secondary"
             onClick={() => {

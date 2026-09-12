@@ -264,7 +264,7 @@ export function ScreeningPanel({
             runScreening.mutate(sel.value);
           }}
         >
-          <select name="jo" className="input w-auto py-1 text-xs">
+          <select name="jo" className="input w-auto py-1 text-xs" aria-label="Job order untuk AI screening">
             <option value="">Tanpa job order (nilai umum)</option>
             {jobOrders.map((j) => (
               <option key={j.id} value={j.id}>
@@ -337,8 +337,8 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
         >
           <input name="company" required placeholder="Perusahaan" className="input py-1 text-xs" />
           <input name="position" required placeholder="Posisi" className="input py-1 text-xs" />
-          <input name="start_date" type="date" className="input py-1 text-xs" />
-          <input name="end_date" type="date" className="input py-1 text-xs" />
+          <input name="start_date" type="date" className="input py-1 text-xs" aria-label="Tanggal mulai" />
+          <input name="end_date" type="date" className="input py-1 text-xs" aria-label="Tanggal selesai" />
           <button disabled={createExperience.isPending} className="btn-secondary py-1 text-xs sm:col-span-2">
             + Tambah Pengalaman
           </button>

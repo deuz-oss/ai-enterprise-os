@@ -758,6 +758,7 @@ export default function Chat() {
                   }
                   className="input py-0.5 text-xs"
                   title="Preferensi notifikasi channel ini"
+                  aria-label="Preferensi notifikasi channel ini"
                 >
                   <option value="all">🔔 Semua pesan</option>
                   <option value="mentions">@ Hanya mention</option>

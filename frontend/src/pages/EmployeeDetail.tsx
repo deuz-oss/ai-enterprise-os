@@ -855,8 +855,8 @@ export default function EmployeeDetail() {
                   });
                 }}
               >
-                <input name="start_date" type="date" className="input w-auto" />
-                <input name="end_date" type="date" className="input w-auto" />
+                <input name="start_date" type="date" className="input w-auto" aria-label="Mulai kontrak" />
+                <input name="end_date" type="date" className="input w-auto" aria-label="Akhir kontrak" />
                 <button className="btn-secondary">Tambah Kontrak</button>
               </form>
               <ul className="mt-3 space-y-2">
@@ -1062,12 +1062,12 @@ export default function EmployeeDetail() {
                   uploadDoc.mutate({ empId: id, formData: fd });
                 }}
               >
-                <select ref={docTypeRef} className="input w-auto">
+                <select ref={docTypeRef} className="input w-auto" aria-label="Jenis dokumen">
                   {DOC_TYPES.map((t) => (
                     <option key={t} value={t}>{TYPE_LABELS[t]}</option>
                   ))}
                 </select>
-                <input ref={fileRef} type="file" required className="input w-auto" />
+                <input ref={fileRef} type="file" required className="input w-auto" aria-label="Unggah dokumen HR" />
                 <button className="btn-secondary">Upload</button>
               </form>
               <ul className="mt-3 space-y-2">
@@ -1506,7 +1506,7 @@ export default function EmployeeDetail() {
                           b.fileRef.current.value = "";
                         }}
                       >
-                        <input ref={b.fileRef} type="file" required className="input w-auto py-1 text-xs" />
+                        <input ref={b.fileRef} type="file" required className="input w-auto py-1 text-xs" aria-label={`Unggah kartu ${b.label}`} />
                         <button disabled={uploadBpjsCard.isPending} className="btn-secondary py-1 text-xs">Upload Kartu</button>
                         {b.cardKey && (
                           <button
@@ -1552,14 +1552,14 @@ export default function EmployeeDetail() {
                       });
                     }}
                   >
-                    <select name="provider" defaultValue="prudential" className="input">
+                    <select name="provider" defaultValue="prudential" className="input" aria-label="Penyedia asuransi">
                       {INSURANCE_PROVIDERS.map((p) => (
                         <option key={p} value={p}>{INSURANCE_PROVIDER_LABELS[p]}</option>
                       ))}
                     </select>
                     <input name="policy_no" required placeholder="No. Polis" className="input" />
-                    <input name="start_date" type="date" placeholder="Mulai" className="input" />
-                    <input name="valid_until" type="date" placeholder="Berlaku hingga" className="input" />
+                    <input name="start_date" type="date" placeholder="Mulai" className="input" aria-label="Mulai polis" />
+                    <input name="valid_until" type="date" placeholder="Berlaku hingga" className="input" aria-label="Berlaku hingga" />
                     <button disabled={createInsurance.isPending} className="btn sm:col-span-4">Simpan Polis</button>
                     {createInsurance.error && (
                       <p className="text-sm text-red-600 sm:col-span-4">{(createInsurance.error as Error).message}</p>
@@ -1789,6 +1789,7 @@ export default function EmployeeDetail() {
                   key={`site-${employee.site_id ?? "none"}`}
                   defaultValue={employee.site_id ?? ""}
                   className="input mt-3 w-auto"
+                  aria-label="Lokasi kerja (geofencing absensi)"
                   onChange={(e) =>
                     updateEmployee.mutate({
                       empId: employee.id,
@@ -1831,8 +1832,9 @@ export default function EmployeeDetail() {
                   }}
                 >
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs" style={{ color: "var(--text-muted)" }}>Mulai</label>
+                    <label htmlFor="shift_start_time" className="text-xs" style={{ color: "var(--text-muted)" }}>Mulai</label>
                     <input
+                      id="shift_start_time"
                       name="shift_start_time"
                       type="time"
                       defaultValue={employee.shift_start_time ?? ""}
@@ -1840,8 +1842,9 @@ export default function EmployeeDetail() {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs" style={{ color: "var(--text-muted)" }}>Selesai</label>
+                    <label htmlFor="shift_end_time" className="text-xs" style={{ color: "var(--text-muted)" }}>Selesai</label>
                     <input
+                      id="shift_end_time"
                       name="shift_end_time"
                       type="time"
                       defaultValue={employee.shift_end_time ?? ""}

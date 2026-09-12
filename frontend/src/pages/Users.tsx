@@ -80,7 +80,7 @@ export default function Users() {
         <input name="full_name" required placeholder="Nama lengkap *" className="input" />
         <input name="password" required minLength={8} placeholder="Password min. 8 karakter *" className="input" />
         <div className="flex gap-2">
-          <select name="role" className="input" defaultValue="recruiter">
+          <select name="role" className="input" defaultValue="recruiter" aria-label="Role pengguna baru">
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -121,6 +121,7 @@ export default function Users() {
                     value={u.role}
                     onChange={(e) => updateUser.mutate({ id: u.id, body: { role: e.target.value } })}
                     className="pill p-gray cursor-pointer border-0"
+                    aria-label={`Ubah role ${u.full_name}`}
                   >
                     {ROLES.map((r) => (
                       <option key={r.value} value={r.value}>

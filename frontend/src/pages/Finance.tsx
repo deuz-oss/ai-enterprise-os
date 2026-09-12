@@ -332,7 +332,7 @@ export default function Finance() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
-        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="input w-auto">
+        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="input w-auto" aria-label="Filter klien">
           <option value="">Semua klien</option>
           {(clients ?? []).map((c) => (
             <option key={c.id} value={c.id}>
@@ -564,16 +564,17 @@ export default function Finance() {
             value={cfYear}
             onChange={(e) => setCfYear(Number(e.target.value))}
             className="input w-24"
+            aria-label="Tahun arus kas"
           />
         </div>
         <form onSubmit={handleCashflow} className="mt-3 flex flex-wrap gap-2">
-          <select name="direction" className="input w-auto">
+          <select name="direction" className="input w-auto" aria-label="Arah arus kas">
             <option value="masuk">Masuk</option>
             <option value="keluar">Keluar</option>
           </select>
           <input name="category" required placeholder="Kategori" className="input w-auto" />
           <input name="amount" type="number" required placeholder="Jumlah (Rp)" className="input w-40" />
-          <input name="entry_date" type="date" className="input w-auto" />
+          <input name="entry_date" type="date" className="input w-auto" aria-label="Tanggal entri" />
           <button className="btn-secondary">Catat</button>
         </form>
         <ul className="mt-3 space-y-1 text-sm">
@@ -604,7 +605,7 @@ export default function Finance() {
               runForecast.mutate(Number(form.get("months_ahead")) || 3);
             }}
           >
-            <select name="months_ahead" defaultValue="3" className="input w-auto">
+            <select name="months_ahead" defaultValue="3" className="input w-auto" aria-label="Jangka waktu forecast">
               {[1, 2, 3, 6, 12].map((m) => (
                 <option key={m} value={m}>
                   {m} bulan ke depan

@@ -388,6 +388,7 @@ export default function Leads() {
             setOffset(0);
           }}
           className="input w-auto"
+          aria-label="Filter tahap lead"
         >
           <option value="">Semua tahap</option>
           {STAGES.map((s) => (
@@ -448,6 +449,7 @@ export default function Leads() {
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className={`cursor-pointer border-0 ${STAGE_PILL[lead.stage] ?? "pill p-gray"}`}
+                    aria-label={`Ubah tahap lead ${lead.company_name ?? ""}`}
                   >
                     {STAGES.map((s) => (
                       <option key={s} value={s}>
@@ -569,6 +571,7 @@ export default function Leads() {
                             className="min-w-0 cursor-pointer truncate rounded bg-transparent text-xs"
                             style={{ color: "var(--text-muted)", border: "none", outline: "none" }}
                             title="Pemilik deal"
+                            aria-label="Pemilik deal"
                           >
                             <option value="">Belum ditugaskan</option>
                             {(users ?? []).map((u) => (

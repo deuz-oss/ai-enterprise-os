@@ -314,14 +314,14 @@ export default function Accounting() {
           >
             <input name="code" required placeholder="Kode (mis. 5-6000)" className="input w-auto" />
             <input name="name" required placeholder="Nama akun *" className="input" />
-            <select name="group_type" defaultValue="beban_usaha" className="input w-auto capitalize">
+            <select name="group_type" defaultValue="beban_usaha" className="input w-auto capitalize" aria-label="Kelompok akun">
               {Object.entries(GROUP_LABELS).map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
               ))}
             </select>
-            <select name="normal_balance" defaultValue="debit" className="input w-auto">
+            <select name="normal_balance" defaultValue="debit" className="input w-auto" aria-label="Saldo normal">
               <option value="debit">Debit</option>
               <option value="kredit">Kredit</option>
             </select>
@@ -814,6 +814,7 @@ function FixedAssetsPanel() {
             value={depYear}
             onChange={(e) => setDepYear(Number(e.target.value))}
             className="input w-24"
+            aria-label="Tahun susutan"
           />
           <input
             type="number"
@@ -822,6 +823,7 @@ function FixedAssetsPanel() {
             value={depMonth}
             onChange={(e) => setDepMonth(Number(e.target.value))}
             className="input w-20"
+            aria-label="Bulan susutan"
           />
           <button
             className="btn-secondary"
@@ -1038,7 +1040,7 @@ function PurchasesPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-auto">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-auto" aria-label="Filter status tagihan">
           <option value="">Semua status</option>
           <option value="belum_dibayar">Belum dibayar</option>
           <option value="dibayar">Dibayar</option>
@@ -1238,11 +1240,12 @@ function CashBankPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-24" />
+          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input w-24" aria-label="Tahun mutasi kas/bank" />
           <select
             value={month}
             onChange={(e) => setMonth(e.target.value ? Number(e.target.value) : "")}
             className="input w-auto"
+            aria-label="Bulan mutasi kas/bank"
           >
             <option value="">Semua bulan</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -1255,6 +1258,7 @@ function CashBankPanel() {
             value={reconciledFilter}
             onChange={(e) => setReconciledFilter(e.target.value as "" | "true" | "false")}
             className="input w-auto"
+            aria-label="Filter status rekonsiliasi"
           >
             <option value="">Semua</option>
             <option value="true">Sudah rekonsiliasi</option>

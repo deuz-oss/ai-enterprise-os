@@ -61,6 +61,7 @@ export default function Audit() {
           className="input w-auto"
           value={actionPrefix}
           onChange={(e) => setActionPrefix(e.target.value)}
+          aria-label="Filter jenis aksi"
         >
           <option value="">Semua aksi</option>
           {["auth.", "cv.", "contract.", "employee_document.", "legal_document.", "esign."].map(

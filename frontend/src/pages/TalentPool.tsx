@@ -227,7 +227,7 @@ function BrandingCard() {
       </div>
       {canEdit && (
         <div className="flex items-center gap-2 text-xs">
-          <input ref={fileRef} type="file" accept=".png,.jpg,image/png,image/jpeg" className="input w-auto" />
+          <input ref={fileRef} type="file" accept=".png,.jpg,image/png,image/jpeg" className="input w-auto" aria-label="Unggah logo" />
           <button
             onClick={() => {
               const f = fileRef.current?.files?.[0];
@@ -566,6 +566,7 @@ export default function TalentPool() {
               type="file"
               accept=".pdf,.docx,image/png,image/jpeg,image/webp"
               className="input w-auto"
+              aria-label="Unggah CV kandidat"
             />
             <label className="inline-flex items-center gap-1">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
@@ -614,7 +615,7 @@ export default function TalentPool() {
               placeholder="Skill terstruktur (pisah koma, mis. excel, forklift)"
               className="input sm:col-span-2"
             />
-            <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" title="CV (opsional)" />
+            <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" title="CV (opsional)" aria-label="CV (opsional)" />
 
             <details className="rounded-lg border p-3 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
               <summary className="cursor-pointer text-sm font-medium" style={{ color: "var(--text)" }}>
@@ -666,7 +667,7 @@ export default function TalentPool() {
         <input placeholder="Cari nama…" value={q} onChange={(e) => setQ(e.target.value)} className="input w-40" />
         <input placeholder="Domisili" value={domisili} onChange={(e) => setDomisili(e.target.value)} className="input w-32" />
         <input placeholder="Skill" value={skill} onChange={(e) => setSkill(e.target.value)} className="input w-32" />
-        <select value={readiness} onChange={(e) => setReadiness(e.target.value)} className="input w-auto">
+        <select value={readiness} onChange={(e) => setReadiness(e.target.value)} className="input w-auto" aria-label="Filter kesiapan">
           <option value="">Semua kesiapan</option>
           <option value="segera">Segera</option>
           <option value="n_minggu">n minggu</option>
@@ -682,6 +683,7 @@ export default function TalentPool() {
           }}
           className="input w-auto"
           title="Nilai kecocokan terhadap job order (AI matching native)"
+          aria-label="Filter skor kecocokan job order"
         >
           <option value="">Skor match: semua talent</option>
           {(jobOrders ?? []).map((jo) => (
