@@ -235,7 +235,7 @@ function KpiCard({
       {barPct !== undefined && (
         <div className="mt-3 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
           <div
-            className="h-full rounded-full"
+            className="h-full rounded-full transition-[width] duration-500 ease-out"
             style={{ width: `${Math.min(Math.max(barPct, 0), 100)}%`, backgroundColor: barColor ?? "var(--accent)" }}
           />
         </div>
@@ -436,7 +436,7 @@ export default function Dashboard() {
                       </span>
                       <div className="h-2 flex-1 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
                         <div
-                          className="h-full rounded-full"
+                          className="h-full rounded-full transition-[width] duration-500 ease-out"
                           style={{
                             width: `${pct(count, leadFunnelMax)}%`,
                             backgroundColor:
@@ -638,7 +638,7 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
                   <div
-                    className="h-full rounded-full bg-emerald-500"
+                    className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 ease-out"
                     style={{ width: `${pct(data.people.bpjs_complete, data.people.total_employees)}%` }}
                   />
                 </div>
@@ -653,7 +653,7 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--hover)" }}>
                   <div
-                    className="h-full rounded-full bg-amber-500"
+                    className="h-full rounded-full bg-amber-500 transition-[width] duration-500 ease-out"
                     style={{ width: `${pct(data.people.insurance_complete, data.people.total_employees)}%` }}
                   />
                 </div>

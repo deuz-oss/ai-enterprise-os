@@ -47,26 +47,33 @@ body,
 body {
   background-color: var(--bg);
   color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 @layer components {
   .btn {
     @apply rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
     background-color: var(--accent);
-    transition: filter 0.15s ease;
+    transition: filter 0.15s ease, transform 0.12s ease-out;
   }
   .btn:hover {
     filter: brightness(1.15);
+  }
+  .btn:active {
+    transform: scale(0.97);
   }
   .btn-secondary {
     @apply rounded-lg px-3 py-1.5 text-sm font-medium;
     border: 1px solid var(--border);
     background-color: var(--bg-elevated);
     color: var(--text);
-    transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.12s ease-out;
   }
   .btn-secondary:hover {
     background-color: var(--hover);
+  }
+  .btn-secondary:active {
+    transform: scale(0.97);
   }
   /* Ditambah untuk Button component library (2026-09-03) — variant yang
      belum ada sebelumnya. Sengaja lewat var(--...), bukan hex langsung,
@@ -75,18 +82,24 @@ body {
     @apply rounded-lg px-3 py-1.5 text-sm font-medium;
     background-color: transparent;
     color: var(--text);
-    transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.12s ease-out;
   }
   .btn-ghost:hover {
     background-color: var(--hover);
   }
+  .btn-ghost:active {
+    transform: scale(0.97);
+  }
   .btn-danger {
     @apply rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50;
     background-color: #dc2626;
-    transition: filter 0.15s ease;
+    transition: filter 0.15s ease, transform 0.12s ease-out;
   }
   .btn-danger:hover {
     filter: brightness(1.1);
+  }
+  .btn-danger:active {
+    transform: scale(0.97);
   }
   .input {
     @apply w-full rounded-lg px-3 py-2 text-sm focus:outline-none;
@@ -154,4 +167,15 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

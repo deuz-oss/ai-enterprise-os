@@ -302,23 +302,26 @@ export default function PlatformTenants() {
       </form>
 
       {provisioned && (
-        <div className="card border-l-4 border-emerald-500">
-          <h2 className="font-semibold text-emerald-700">
-            Tenant "{provisioned.name}" dibuat
-          </h2>
-          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
-            Kredensial admin pertama — tampilkan <b>sekali ini saja</b>, teruskan ke klien:
-          </p>
-          <div className="mt-2 flex flex-wrap gap-4 font-mono text-sm">
-            <span>Email: {provisioned.admin_email}</span>
-            <span>Password: {provisioned.admin_initial_password}</span>
+        <div className="card p-green flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="flex-1">
+            <h2 className="font-semibold">
+              Tenant "{provisioned.name}" dibuat
+            </h2>
+            <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+              Kredensial admin pertama — tampilkan <b>sekali ini saja</b>, teruskan ke klien:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-4 font-mono text-sm">
+              <span>Email: {provisioned.admin_email}</span>
+              <span>Password: {provisioned.admin_initial_password}</span>
+            </div>
+            <button
+              className="btn-secondary mt-3 text-xs"
+              onClick={() => setProvisioned(null)}
+            >
+              Saya sudah menyimpan
+            </button>
           </div>
-          <button
-            className="btn-secondary mt-3 text-xs"
-            onClick={() => setProvisioned(null)}
-          >
-            Saya sudah menyimpan
-          </button>
         </div>
       )}
 
