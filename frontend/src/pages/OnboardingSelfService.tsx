@@ -67,12 +67,12 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
+    <main className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-2xl font-bold text-[var(--text)]">Data Onboarding</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -288,18 +288,24 @@ export default function OnboardingSelfService() {
               value={maritalStatus}
               onChange={(e) => setMaritalStatus(e.target.value)}
               className="input"
+              aria-label="Status pernikahan"
             >
               <option value="tk">Belum Menikah (TK)</option>
               <option value="k">Menikah (K)</option>
             </select>
-            <input
-              type="number"
-              min={0}
-              placeholder="Jumlah Tanggungan"
-              value={dependents}
-              onChange={(e) => setDependents(Number(e.target.value) || 0)}
-              className="input"
-            />
+            <div className="flex flex-col gap-1">
+              <label htmlFor="dependents" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Jumlah Tanggungan
+              </label>
+              <input
+                id="dependents"
+                type="number"
+                min={0}
+                value={dependents}
+                onChange={(e) => setDependents(Number(e.target.value) || 0)}
+                className="input"
+              />
+            </div>
           </div>
 
           <h3 className="font-semibold" style={{ color: "var(--text)" }}>
@@ -411,6 +417,7 @@ export default function OnboardingSelfService() {
               type="file"
               accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
               className="input w-auto py-1 text-xs"
+              aria-label={`Unggah ${DOC_TYPE_LABEL[key] ?? key}`}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) uploadDoc.mutate({ documentType: key, file });

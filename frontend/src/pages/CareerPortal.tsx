@@ -33,12 +33,12 @@ interface PublicJobOrderDetail extends PublicJobOrder {
 
 function CareerShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--bg)] px-4 py-10">
+    <main className="min-h-screen bg-[var(--bg)] px-4 py-10">
       <div className="mx-auto max-w-3xl space-y-6">
         <h1 className="text-2xl font-bold text-[var(--text)]">Karir</h1>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -168,7 +168,7 @@ export function CareerDetail() {
           <input name="full_name" required placeholder="Nama Lengkap *" className="input w-full" />
           <input name="email" type="email" required placeholder="Email *" className="input w-full" />
           <input name="phone" placeholder="No. HP" className="input w-full" />
-          <input name="file" type="file" required accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="input w-full" />
+          <input name="file" type="file" required accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="input w-full" aria-label="Unggah CV" />
           {jo.screening_questions.map((q) => (
             <div key={q.id}>
               <label className="text-sm text-[var(--text)]">{q.prompt}</label>

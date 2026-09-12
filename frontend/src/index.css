@@ -38,6 +38,15 @@
   --cat-workforce: #059669;
   --cat-finance: #d97706;
   --cat-administration: #475569;
+  /* Warna teks header tabel (.th) di atas --hover. --text-muted (#64748b)
+     vs --hover (#f1f5f9) cuma 4.25:1, gagal AA (butuh 4.5:1) -- gagal di
+     LITERALLY SETIAP tabel di app, ditemukan lewat audit axe-core
+     2026-09-12 (baru ketahuan sekarang karena color-contrast sebelumnya
+     disaring sebagai noise akibat flakiness lingkungan dev/HMR). Token
+     terpisah dari --text-muted supaya tidak mengubah puluhan pemakaian
+     --text-muted lain yang belum diverifikasi kontrasnya satu-satu.
+     Versi dark tidak perlu diubah (5.6:1, sudah lolos AA). */
+  --th-color: #55627a;
 }
 
 .dark {
@@ -61,6 +70,7 @@
   --cat-workforce: #6ee7b7;
   --cat-finance: #fdba74;
   --cat-administration: #cbd5e1;
+  --th-color: var(--text-muted);
 }
 
 html,
@@ -181,7 +191,7 @@ body {
   .th {
     @apply px-3 py-2.5 text-left text-xs font-medium;
     background-color: var(--hover);
-    color: var(--text-muted);
+    color: var(--th-color);
   }
   .td {
     @apply px-3 py-2.5 text-sm;
