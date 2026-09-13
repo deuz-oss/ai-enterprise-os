@@ -307,6 +307,11 @@ class Lead(TenantMixin, Base):
 
 class LeadActivity(TenantMixin, Base):
     __tablename__ = "lead_activities"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "external_source", "external_id", name="uq_lead_activity_external"
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id"), index=True)
@@ -320,6 +325,12 @@ class LeadActivity(TenantMixin, Base):
     # `completed_at` null berarti belum selesai/masih pending.
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Fase 47 -- dedup untuk aktivitas hasil sync Gmail/Calendar (mis.
+    # `external_source="gmail"`, `external_id=<message id>`); NULL untuk
+    # aktivitas yang diketik manual staf. `UniqueConstraint` mengizinkan
+    # banyak baris NULL/NULL (perilaku standar SQL, bukan celah).
+    external_source: Mapped[str | None] = mapped_column(String(20), default=None)
+    external_id: Mapped[str | None] = mapped_column(String(255), default=None, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     lead: Mapped[Lead] = relationship(back_populates="activities")

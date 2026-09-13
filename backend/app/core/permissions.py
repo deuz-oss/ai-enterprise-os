@@ -55,6 +55,7 @@ dengan siapa yang benar-benar boleh akses.
 
 CLIENTS_ROLES = ("business_dev", "management")
 PRESALES_ROLES = ("business_dev", "management")
+AI_PRESALES_ROLES = ("business_dev", "management")
 
 # ---------- Recruitment ----------
 

@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permissions import AI_FINANCE_ROLES, AI_HR_ROLES, AI_RECRUITMENT_ROLES
+from app.core.permissions import (
+    AI_FINANCE_ROLES,
+    AI_HR_ROLES,
+    AI_PRESALES_ROLES,
+    AI_RECRUITMENT_ROLES,
+)
 from app.core.security import get_current_user, require_roles
 from app.modules.ai import forecast as forecast_service
 from app.modules.ai import rag as rag_service
@@ -16,6 +21,7 @@ from app.modules.ai.schemas import (
     ForecastOut,
     ForecastRequest,
     IndexedContractOut,
+    LeadBriefOut,
     MatchResultOut,
     ScreeningOut,
     ScreeningRequest,
@@ -90,3 +96,21 @@ finance_router = APIRouter(
 def cash_flow_forecast(payload: ForecastRequest | None = None, db: Session = Depends(get_db)):
     months_ahead = payload.months_ahead if payload else 3
     return forecast_service.forecast_cash_flow(db, months_ahead)
+
+
+# Fase 48 -- ringkasan AI lead → domain presales.
+presales_router = APIRouter(
+    prefix="/ai",
+    tags=["ai"],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*AI_PRESALES_ROLES))],
+)
+
+
+@presales_router.post("/leads/{lead_id}/brief", response_model=LeadBriefOut)
+def generate_lead_brief(lead_id: UUID, db: Session = Depends(get_db)):
+    return ai_service.generate_lead_brief(db, lead_id)
+
+
+@presales_router.get("/leads/{lead_id}/brief", response_model=LeadBriefOut | None)
+def get_lead_brief(lead_id: UUID, db: Session = Depends(get_db)):
+    return ai_service.get_latest_lead_brief(db, lead_id)

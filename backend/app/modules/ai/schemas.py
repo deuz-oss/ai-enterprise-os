@@ -98,6 +98,16 @@ class ForecastOut(BaseModel):
     model: str
 
 
+class LeadBriefOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    lead_id: UUID
+    summary: str
+    model: str
+    created_at: datetime
+
+
 def _load_list(raw: str | None) -> list[str]:
     if not raw:
         return []

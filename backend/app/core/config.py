@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     efaktur_npkp: str | None = None
     efaktur_retry_max: int = 3
 
+    # Fase 47 -- sync Gmail/Google Calendar ke Activity lead (per-user,
+    # dipicu manual per lead -- TIDAK ada scheduler background di codebase
+    # ini). GOOGLE_OAUTH_CLIENT_ID kosong => fitur nonaktif (endpoint 503),
+    # sama pola dengan AI_BASE_URL/SMTP_HOST. Perlu OAuth app didaftarkan
+    # sendiri di Google Cloud Console -- di luar cakupan kode ini.
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
+
     # Gateway pembayaran Opsi G (Fase 28). "" (nonaktif) | "sandbox" | "xendit".
     payment_provider: str = ""
     xendit_api_key: str | None = None
@@ -129,6 +138,9 @@ class Settings(BaseSettings):
         "efaktur_npkp",
         "xendit_api_key",
         "xendit_webhook_token",
+        "google_oauth_client_id",
+        "google_oauth_client_secret",
+        "google_oauth_redirect_uri",
         mode="before",
     )
     @classmethod
@@ -141,6 +153,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def frontend_base_url(self) -> str:
+        """Dipakai untuk redirect balik browser setelah OAuth callback
+        (Fase 47) -- origin pertama di CORS_ORIGINS (yang sudah wajib diisi
+        untuk dev/prod), bukan env var terpisah baru."""
+        origins = self.cors_origin_list
+        return origins[0] if origins else "http://localhost:5173"
 
     @property
     def data_root(self) -> Path:
@@ -189,6 +209,14 @@ class Settings(BaseSettings):
     def email_enabled(self) -> bool:
         """Notifikasi email aktif bila SMTP_HOST diisi."""
         return bool(self.smtp_host)
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        return bool(
+            self.google_oauth_client_id
+            and self.google_oauth_client_secret
+            and self.google_oauth_redirect_uri
+        )
 
 
 @lru_cache

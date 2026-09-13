@@ -403,6 +403,84 @@ def test_create_lead_without_company_id_or_name_rejected(client):
     assert resp.status_code == 422
 
 
+def test_lead_brief_not_configured_returns_503(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Butuh Ringkasan")
+    settings = get_settings()
+    with patch.object(settings, "ai_base_url", None):
+        resp = client.post(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers)
+    assert resp.status_code == 503
+
+
+def test_lead_brief_generate_persists_and_get_returns_latest(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Ringkasan Sukses")
+    client.post(
+        f"/api/v1/leads/{lead['id']}/activities",
+        headers=headers,
+        json={"activity_type": "telepon", "content": "Diskusi harga awal"},
+    )
+
+    with patch("app.modules.ai.service.chat_completion") as llm:
+        llm.return_value = "Lead ini sedang tahap awal, PIC Budi, sudah diskusi harga."
+        resp = client.post(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["lead_id"] == lead["id"]
+    assert "Budi" in body["summary"]
+    assert body["model"]
+
+    # Prompt harus dibangun dari data lead sungguhan (bukan model self-knowledge).
+    prompt_arg = llm.call_args[0][1]
+    assert "PT Ringkasan Sukses" in prompt_arg
+    assert "Diskusi harga awal" in prompt_arg
+
+    fetched = client.get(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers)
+    assert fetched.status_code == 200
+    assert fetched.json()["id"] == body["id"]
+
+
+def test_lead_brief_get_returns_null_when_none_generated(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Belum Ada Ringkasan")
+    resp = client.get(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+
+def test_lead_brief_regenerate_keeps_latest_as_newest(client):
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    from app.modules.ai.models import LeadBrief
+
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Ringkasan Ulang")
+
+    with patch("app.modules.ai.service.chat_completion") as llm:
+        llm.return_value = "Ringkasan pertama."
+        first = client.post(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers).json()
+        llm.return_value = "Ringkasan kedua, lebih baru."
+        second = client.post(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers).json()
+
+    assert first["id"] != second["id"]
+
+    # SQLite server_default now() cuma presisi detik -- dua POST berurutan di
+    # test bisa dapat created_at sama persis. Mundurkan brief pertama biar
+    # urutan "latest" tidak bergantung pada timing eksekusi test.
+    db = client.testing_session()
+    try:
+        older = db.get(LeadBrief, UUID(first["id"]))
+        older.created_at = datetime.now(UTC) - timedelta(hours=1)
+        db.commit()
+    finally:
+        db.close()
+
+    latest = client.get(f"/api/v1/ai/leads/{lead['id']}/brief", headers=headers).json()
+    assert latest["id"] == second["id"]
+    assert latest["summary"] == "Ringkasan kedua, lebih baru."
+
+
 def test_lead_defaults_to_idr_currency(client):
     headers = _auth_header(client)
     lead = _create_lead(client, headers)

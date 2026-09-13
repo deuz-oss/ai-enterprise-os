@@ -58,6 +58,9 @@ def create_app() -> FastAPI:
         hr_router as ai_hr_router,
     )
     from app.modules.ai.router import (
+        presales_router as ai_presales_router,
+    )
+    from app.modules.ai.router import (
         recruitment_router as ai_recruitment_router,
     )
     from app.modules.ai_interview.router import public_router as ai_interview_public_router
@@ -86,6 +89,8 @@ def create_app() -> FastAPI:
     from app.modules.hrd.router import employees_view_router as hrd_employees_view_router
     from app.modules.hrd.router import onboarding_public_router
     from app.modules.hrd.router import router as hrd_router
+    from app.modules.integrations.router import public_router as google_integration_public_router
+    from app.modules.integrations.router import router as google_integration_router
     from app.modules.job_portal.router import router as job_portal_router
     from app.modules.notifications.router import router as notifications_router
     from app.modules.pages import router as pages_router
@@ -203,6 +208,11 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(
+        ai_presales_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    app.include_router(
         hrd_router,
         prefix="/api/v1",
         dependencies=[Depends(require_active_subscription())],
@@ -231,6 +241,14 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_active_subscription())],
     )
     app.include_router(esign_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
+    app.include_router(
+        google_integration_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    # callback: diakses lewat redirect browser dari Google, tanpa guard lisensi
+    # (sama pola esign_webhook_router) -- keamanannya ditanggung `state` JWT.
+    app.include_router(google_integration_public_router, prefix="/api/v1")
     app.include_router(billing_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
     app.include_router(billing_router, prefix="/api/v1")
     app.include_router(billing_subscribe_router, prefix="/api/v1")

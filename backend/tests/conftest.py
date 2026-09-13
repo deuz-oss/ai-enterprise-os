@@ -18,6 +18,13 @@ os.environ["LIVEKIT_URL"] = ""
 os.environ["LIVEKIT_API_KEY"] = ""
 os.environ["LIVEKIT_API_SECRET"] = ""
 os.environ["STT_BASE_URL"] = ""
+# Same reasoning for Fase 47 Google OAuth sync -- force "not configured" so
+# tests never attempt a real Google token exchange even if a developer's
+# .env has real GOOGLE_OAUTH_* set. Tests that need it configured
+# monkeypatch these on the Settings singleton explicitly.
+os.environ["GOOGLE_OAUTH_CLIENT_ID"] = ""
+os.environ["GOOGLE_OAUTH_CLIENT_SECRET"] = ""
+os.environ["GOOGLE_OAUTH_REDIRECT_URI"] = ""
 
 import pytest
 from app.core.database import Base, get_db

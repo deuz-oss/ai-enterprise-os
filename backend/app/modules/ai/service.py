@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.llm import chat_completion
 from app.core.storage import get_object
-from app.modules.ai.models import AIScreening, ScreeningVerdict
+from app.modules.ai.models import AIScreening, LeadBrief, ScreeningVerdict
 from app.modules.ai.schemas import MatchItemOut, MatchResultOut, ScreeningOut
 from app.modules.ai.textutils import extract_document_text
 from app.modules.recruitment.models import Candidate, CandidateStatus, JobOrder
@@ -218,3 +218,75 @@ def match_job_order(db: Session, job_order_id: UUID) -> MatchResultOut:
     return MatchResultOut(
         job_order_id=job_order.id, evaluated=len(items), reused=reused, results=items
     )
+
+
+# ---------------- Fase 48 -- ringkasan AI lead presales ----------------
+
+_MAX_LEAD_ACTIVITIES_IN_PROMPT = 10
+
+_LEAD_BRIEF_SYSTEM_PROMPT = (
+    "Anda asisten sales internal perusahaan outsourcing Indonesia. Rangkum "
+    "data lead/calon klien berikut jadi briefing singkat (3-5 kalimat, "
+    "bahasa Indonesia, tanpa markdown) untuk staf sales yang akan follow-up: "
+    "status terkini, PIC & peran yang relevan, apa yang sudah dibahas, dan "
+    "saran langkah berikutnya. PENTING: HANYA gunakan informasi yang "
+    "diberikan di bawah -- JANGAN mengarang fakta apa pun tentang "
+    "perusahaan yang tidak disebutkan di data ini."
+)
+
+
+def _lead_brief_prompt(lead) -> str:
+    lines = [
+        f"Perusahaan: {lead.company_name} ({lead.industry or 'industri tidak diketahui'})",
+        f"Tahap pipeline: {lead.stage.value}",
+        f"Nilai potensi: {lead.estimated_value if lead.estimated_value is not None else '-'} "
+        f"{lead.currency}",
+        f"Pemilik deal: {lead.owner_name or '(belum ditugaskan)'}",
+    ]
+    if lead.notes:
+        lines.append(f"Catatan: {lead.notes}")
+    if lead.lead_contacts:
+        lines.append("Kontak yang terlibat di deal ini:")
+        lines += [
+            f"- {lc.contact.name} ({lc.role or 'peran tidak ditentukan'})"
+            for lc in lead.lead_contacts
+        ]
+    recent = sorted(lead.activities, key=lambda a: a.created_at, reverse=True)
+    recent = recent[:_MAX_LEAD_ACTIVITIES_IN_PROMPT]
+    if recent:
+        lines.append("Aktivitas terbaru (terbaru duluan):")
+        lines += [f"- [{a.activity_type.value}] {a.content}" for a in recent]
+    else:
+        lines.append("Belum ada aktivitas tercatat.")
+    return "\n".join(lines)
+
+
+def generate_lead_brief(db: Session, lead_id: UUID) -> LeadBrief:
+    """Buat ringkasan AI baru untuk satu lead -- lihat docstring
+    `LeadBrief` soal kenapa ini SENGAJA merangkum data yang sudah ada,
+    bukan "riset" fakta baru tentang perusahaan."""
+    from app.modules.presales.service import get_lead  # cross-module, pola sama clients<->presales
+
+    lead = get_lead(db, str(lead_id))
+    summary = chat_completion(
+        _LEAD_BRIEF_SYSTEM_PROMPT,
+        _lead_brief_prompt(lead),
+        json_mode=False,
+        feature="ai.presales_lead_brief",
+    )
+    brief = LeadBrief(
+        lead_id=lead.id, summary=str(summary).strip() or "-", model=get_settings().ai_model
+    )
+    db.add(brief)
+    db.commit()
+    db.refresh(brief)
+    return brief
+
+
+def get_latest_lead_brief(db: Session, lead_id: UUID) -> LeadBrief | None:
+    return db.scalars(
+        select(LeadBrief)
+        .where(LeadBrief.lead_id == lead_id)
+        .order_by(LeadBrief.created_at.desc())
+        .limit(1)
+    ).first()

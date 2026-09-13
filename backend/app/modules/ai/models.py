@@ -75,6 +75,27 @@ class AIDocumentChunk(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class LeadBrief(TenantMixin, Base):
+    """Fase 48 -- ringkasan AI atas satu lead presales, dirangkum dari data
+    yang SUDAH ADA di Aeos (notes, aktivitas, kontak & peran, field sales-
+    ops) -- BUKAN riset fakta eksternal seperti "AI enrichment" trycompai/
+    crm (agent riset web + evidence-scoring FactBand VERIFIED/PROBABLE/
+    POSSIBLE). Aeos tidak punya kapabilitas web search/scraping (`core/
+    llm.py` cuma chat completion polos), jadi meniru fitur itu apa adanya
+    -- minta LLM "cari tahu" fakta perusahaan dari nama saja -- berisiko
+    tinggi berhalusinasi utk perusahaan kecil Indonesia yang nyaris pasti
+    tidak ada di data training model. Fitur ini sengaja dibatasi merangkum
+    data yang staf sendiri sudah masukkan, bukan menciptakan fakta baru."""
+
+    __tablename__ = "ai_lead_briefs"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    lead_id: Mapped[UUID] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 def _load_list(raw: str | None) -> list[str]:
     if not raw:
         return []

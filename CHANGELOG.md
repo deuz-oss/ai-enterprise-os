@@ -6,6 +6,20 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 48: CRM — Ringkasan AI Lead
+
+- Redesain dari "AI enrichment" trycompai/crm (agent riset web + evidence-scoring) yang tadinya ditandai out-of-scope: `core/llm.py` Aeos tidak punya web search/tool-calling, jadi meniru apa adanya berisiko halusinasi fakta perusahaan. Diganti: LLM cuma merangkum data yang staf sendiri sudah masukkan (catatan, aktivitas, kontak & peran, nilai potensi) -- bukan riset fakta baru.
+- Tabel baru `ai_lead_briefs` (riwayat ringkasan, pola sama `AIScreening`). Endpoint `POST/GET /ai/leads/{lead_id}/brief` (guard `AI_PRESALES_ROLES`, di dalam `ai/router.py` existing).
+- UI: seksi "Ringkasan AI" di panel detail Lead -- tombol "Buat Ringkasan AI"/"Buat Ulang Ringkasan". Diverifikasi hidup di browser dengan AI sungguhan: ringkasan yang dihasilkan berpijak pada data lead asli.
+
+### Added — Fase 47: CRM — sync Gmail/Google Calendar ke Activity lead
+
+- Modul baru `integrations/` (OAuth per-user, bukan tenant-wide): koneksi Google milik staf sendiri, tabel baru `google_mailbox_connections`. Config `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` kosong => fitur nonaktif (503), pola sama `AI_BASE_URL`/`SMTP_HOST`.
+- Sync manual per-lead (tombol "Sync Lead Ini") -- BUKAN polling otomatis, mengikuti konvensi codebase ini yang memang tidak punya scheduler background sama sekali.
+- `LeadActivity` dapat `external_source`/`external_id` untuk dedup sync berulang. Endpoint `GET/POST /integrations/google/*` (authorize, callback publik, status, connection, sync/{lead_id}).
+- 2 bug ditemukan & diperbaiki lewat 11 tes yang mock API Google: callback OAuth kehilangan konteks tenant (di-fix lewat `state` JWT bawa tenant_id), dan datetime naive dari SQLite bikin perbandingan kedaluwarsa token error.
+- UI: seksi "Sync Google" di panel detail Lead. Belum diverifikasi ke Google sungguhan (perlu OAuth app + akun asli, di luar cakupan sesi ini).
+
 ### Added — Fase 46: CRM — multi-currency untuk nilai potensi lead
 
 - `Lead` dapat `currency` (ISO 4217, default IDR) dan `fx_rate_to_idr` (kurs manual snapshot, bukan API live), terinspirasi `Deal.amount/currency/baseAmount/baseCurrency/fxRate` trycompai/crm.

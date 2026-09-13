@@ -1642,6 +1642,80 @@ integrasi API kurs live, murni kurs manual snapshot yang diisi staf.
   detail Lead dapat field "Mata Uang" edit-di-tempat -- ganti ke currency
   asing memicu prompt isi kurs sebelum tersimpan.
 
+### Fase 47 — CRM: Sync Gmail/Google Calendar ke Activity Lead — ✅ Selesai (2026-09-13)
+
+Item terakhir gap list trycompai/crm, dan yang paling berat -- butuh OAuth
+app terdaftar sendiri di Google Cloud Console (di luar cakupan kode ini).
+Modul baru `integrations/` (bukan di dalam `presales/`, mengikuti pola
+`esign/` yang juga modul terpisah walau dipicu dari presales).
+
+- **Keputusan arsitektur, berdasar riset codebase nyata dulu sebelum
+  membangun** (bukan asumsi): (1) tidak ada scheduler background sama
+  sekali di codebase ini (dikonfirmasi dari komentar `billing/
+  cycle_close.py` soal keputusan Fase 28) -- jadi sync ini **manual
+  per-lead** (tombol "Sync Lead Ini"), BUKAN polling otomatis berkala.
+  (2) Koneksi Google **milik staf sendiri** (per-user), bukan tenant-wide
+  -- tidak ada pola existing untuk ini, didesain baru. (3) Token disimpan
+  apa adanya di DB (tidak dienkripsi), konsisten dengan postur keamanan
+  kredensial eksternal yang sudah ada (PrivyID username/password juga
+  plaintext env var) -- bukan standar baru yang diperkenalkan.
+- Config baru `GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` -- kosong =>
+  fitur nonaktif (503), pola sama persis `AI_BASE_URL`/`SMTP_HOST`.
+- Tabel baru `google_mailbox_connections` (token akun Google per staf);
+  `LeadActivity` dapat `external_source`/`external_id` untuk dedup supaya
+  sync berulang tidak menduplikasi entri yang sudah pernah diimpor.
+  Endpoint: `GET /integrations/google/authorize`, `GET .../callback`
+  (publik, tanpa Bearer -- redirect browser dari Google, keamanan
+  ditanggung `state` JWT bertanda tangan), `GET .../status`,
+  `DELETE .../connection`, `POST .../sync/{lead_id}`.
+- Sync menarik Gmail (email dari/ke kontak lead) dan Google Calendar
+  (agenda yang melibatkan kontak lead) dalam window sejak sync terakhir
+  (atau 90 hari kalau baru pertama), mencatat sebagai `LeadActivity`.
+- **2 bug nyata ditemukan & diperbaiki lewat tes** (bukan lewat Google
+  sungguhan -- kredensial produksi tidak tersedia di sesi ini): (1)
+  callback OAuth tidak punya header Authorization (redirect browser dari
+  Google), jadi konteks tenant tidak pernah terisi -- diperbaiki dengan
+  menyisipkan `tenant_id` ke `state` JWT dan mengisi konteks manual di
+  callback. (2) SQLite menyimpan datetime timezone-aware sebagai naive,
+  bikin perbandingan kedaluwarsa token error -- diperbaiki dengan pola
+  normalisasi yang sama yang sudah dipakai di modul lain untuk masalah
+  yang sama.
+- UI: seksi "Sync Google" di panel detail Lead -- tombol hubungkan/putus
+  akun, status koneksi + waktu sync terakhir, tombol sync per lead.
+- **Belum diverifikasi langsung ke Google sungguhan** (perlu OAuth app +
+  akun Google asli) -- 11 tes otomatis meng-mock seluruh pemanggilan API
+  Google untuk memvalidasi logikanya; status "belum dikonfigurasi"
+  (503 + pesan jelas) sudah diverifikasi hidup di browser.
+
+### Fase 48 — CRM: Ringkasan AI Lead — ✅ Selesai (2026-09-13)
+
+Trycompai/crm punya "AI enrichment" (agent riset web + evidence-scoring
+`ContactFact`/`FactBand` VERIFIED/PROBABLE/POSSIBLE) yang tadinya ditandai
+di luar cakupan Aeos. Setelah ditanya kenapa tidak dibangun, fitur ini
+**didesain ulang jadi lebih sempit & aman** alih-alih diporting apa adanya:
+
+- **Alasan tidak meniru trycompai persis**: `core/llm.py` di Aeos cuma
+  chat completion polos -- **tidak ada web search/scraping/tool-calling**
+  sama sekali. Meniru "AI enrichment" (minta LLM "cari tahu" fakta
+  perusahaan dari nama saja) berisiko tinggi berhalusinasi untuk
+  perusahaan kecil Indonesia yang nyaris pasti tidak ada di data training
+  model manapun -- bisa menyesatkan staf sales dengan fakta palsu yang
+  terdengar meyakinkan.
+- **Redesain**: LLM cuma merangkum data yang staf sendiri SUDAH masukkan
+  ke Aeos (catatan, aktivitas terbaru, kontak & peran, field sales-ops,
+  nilai potensi + mata uang) jadi briefing 3-5 kalimat siap pakai untuk
+  follow-up -- bukan "riset" fakta baru. System prompt eksplisit melarang
+  LLM mengarang informasi di luar data yang diberikan.
+- Tabel baru `ai_lead_briefs` (riwayat ringkasan tersimpan, pola sama
+  `AIScreening`); endpoint `POST/GET /ai/leads/{lead_id}/brief` (guard
+  `AI_PRESALES_ROLES`, ikut pola router AI existing -- `presales_router`
+  di dalam `ai/router.py`, bukan modul terpisah).
+- UI: seksi "Ringkasan AI" di panel detail Lead -- tampilkan ringkasan
+  tersimpan terakhir + tombol "Buat Ringkasan AI"/"Buat Ulang Ringkasan".
+- **Diverifikasi hidup di browser dengan AI sungguhan** (bukan cuma
+  mock): ringkasan yang dihasilkan terbukti berpijak pada data lead asli
+  (nilai potensi & jumlah TKI yang disebut cocok dengan data di tabel
+  pipeline), bukan karangan.
 
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa

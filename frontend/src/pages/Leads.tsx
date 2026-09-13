@@ -1,5 +1,6 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api, downloadFile, formatCurrency, formatRupiah } from "../api/client";
 import {
   Briefcase,
@@ -15,6 +16,8 @@ import {
   List,
   MapPin,
   MessageSquareText,
+  RefreshCw,
+  Sparkles,
   User,
   Users,
   X,
@@ -139,6 +142,27 @@ interface SuppressedEntry {
   reason: string;
 }
 
+// Fase 47 -- koneksi Google (Gmail + Calendar) milik staf sendiri, dipakai
+// untuk sync email/meeting ke Activity lead secara manual per lead.
+interface GoogleStatus {
+  connected: boolean;
+  google_email: string | null;
+  last_synced_at: string | null;
+}
+
+interface GoogleSyncResult {
+  emails_imported: number;
+  events_imported: number;
+}
+
+interface LeadBrief {
+  id: string;
+  lead_id: string;
+  summary: string;
+  model: string;
+  created_at: string;
+}
+
 interface Contact {
   id: string;
   company_id: string;
@@ -259,6 +283,34 @@ export default function Leads() {
     queryKey: ["suppressed-contacts"],
     queryFn: () => api.get<SuppressedEntry[]>("/suppressed-contacts"),
   });
+  const { data: googleStatus } = useQuery({
+    queryKey: ["google-status"],
+    queryFn: () => api.get<GoogleStatus>("/integrations/google/status"),
+  });
+  const { data: leadBrief } = useQuery({
+    queryKey: ["lead-brief", selectedId],
+    queryFn: () => api.get<LeadBrief | null>(`/ai/leads/${selectedId}/brief`),
+    enabled: !!selectedId,
+  });
+
+  // Fase 47 -- setelah redirect balik dari consent Google (lihat
+  // `integrations/router.py::callback`), tampilkan toast sekali lalu
+  // bersihkan query param supaya tidak terulang saat refresh manual.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google_connected") === "1") {
+      toast.success("Akun Google berhasil dihubungkan.");
+      qc.invalidateQueries({ queryKey: ["google-status"] });
+      params.delete("google_connected");
+      const newSearch = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        window.location.pathname + (newSearch ? `?${newSearch}` : "")
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // KPI row (§2 archetype F) -- archetype F spec menyebut 4 kartu contoh
   // (total nilai, win rate, target, estimasi komisi), tapi "target" dan
@@ -383,6 +435,43 @@ export default function Leads() {
   const deleteSavedView = useMutation({
     mutationFn: (viewId: string) => api.delete(`/leads/saved-views/${viewId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-views"] }),
+  });
+
+  const connectGoogle = useMutation({
+    mutationFn: () => api.get<{ authorize_url: string }>("/integrations/google/authorize"),
+    onSuccess: (data) => {
+      // Navigasi penuh (bukan fetch) -- ini consent screen Google, harus
+      // meninggalkan app kita sepenuhnya lalu kembali lewat redirect callback.
+      window.location.href = data.authorize_url;
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const disconnectGoogle = useMutation({
+    mutationFn: () => api.delete("/integrations/google/connection"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["google-status"] }),
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const syncGoogleLead = useMutation({
+    mutationFn: (leadId: string) =>
+      api.post<GoogleSyncResult>(`/integrations/google/sync/${leadId}`, {}),
+    onSuccess: (result, leadId) => {
+      qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+      qc.invalidateQueries({ queryKey: ["google-status"] });
+      toast.success(
+        `Sync selesai: ${result.emails_imported} email, ${result.events_imported} agenda baru.`
+      );
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
+  const generateLeadBrief = useMutation({
+    mutationFn: (leadId: string) => api.post<LeadBrief>(`/ai/leads/${leadId}/brief`, {}),
+    onSuccess: (brief) => {
+      qc.setQueryData(["lead-brief", brief.lead_id], brief);
+    },
+    onError: (err) => toast.error((err as Error).message),
   });
 
   const addLeadContact = useMutation({
@@ -1303,6 +1392,104 @@ export default function Leads() {
               description="Field tambahan yang dikonfigurasi untuk semua lead (mis. Tipe Layanan) -- hapus/tambah field di sini berlaku untuk seluruh pipeline, bukan cuma lead ini."
             />
           )}
+
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Ringkasan AI</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            Rangkuman singkat dari catatan, aktivitas, dan kontak lead ini yang sudah tercatat
+            di Aeos -- bukan riset fakta baru tentang perusahaan.
+          </p>
+          <div className="mt-3">
+            {leadBrief ? (
+              <div
+                className="rounded-lg border p-3 text-sm"
+                style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              >
+                <p className="whitespace-pre-wrap">{leadBrief.summary}</p>
+                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Dibuat{" "}
+                  {new Date(leadBrief.created_at).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                Belum ada ringkasan untuk lead ini.
+              </p>
+            )}
+            <button
+              type="button"
+              className="btn-secondary mt-3 flex items-center gap-1.5"
+              disabled={generateLeadBrief.isPending}
+              onClick={() => selectedId && generateLeadBrief.mutate(selectedId)}
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${generateLeadBrief.isPending ? "animate-pulse" : ""}`} />
+              {generateLeadBrief.isPending
+                ? "Membuat ringkasan..."
+                : leadBrief
+                  ? "Buat Ulang Ringkasan"
+                  : "Buat Ringkasan AI"}
+            </button>
+          </div>
+
+          <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Sync Google</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            Tarik email &amp; jadwal Google Calendar yang melibatkan kontak lead ini jadi
+            Aktivitas -- akun Google milik Anda sendiri, dipicu manual per lead (bukan sync
+            otomatis berkala).
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {!googleStatus?.connected ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={connectGoogle.isPending}
+                onClick={() => connectGoogle.mutate()}
+              >
+                Hubungkan Akun Google
+              </button>
+            ) : (
+              <>
+                <span className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  Terhubung: <b style={{ color: "var(--text)" }}>{googleStatus.google_email}</b>
+                  {googleStatus.last_synced_at && (
+                    <>
+                      {" "}
+                      · sync terakhir{" "}
+                      {new Date(googleStatus.last_synced_at).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary flex items-center gap-1.5"
+                  disabled={syncGoogleLead.isPending}
+                  onClick={() => selectedId && syncGoogleLead.mutate(selectedId)}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${syncGoogleLead.isPending ? "animate-spin" : ""}`} />
+                  {syncGoogleLead.isPending ? "Menyinkronkan..." : "Sync Lead Ini"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs hover:underline"
+                  style={{ color: "var(--text-muted)" }}
+                  onClick={() =>
+                    confirmToast("Putuskan koneksi akun Google?", () => disconnectGoogle.mutate())
+                  }
+                >
+                  Putuskan
+                </button>
+              </>
+            )}
+          </div>
 
           <h2 className="mt-6 font-semibold" style={{ color: "var(--text)" }}>Aktivitas</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
