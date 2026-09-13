@@ -33,6 +33,7 @@ import Quotations from "./pages/Quotations";
 import Rates from "./pages/Rates";
 import Referral from "./pages/Referral";
 import ResetPassword from "./pages/ResetPassword";
+import SuppressedContacts from "./pages/SuppressedContacts";
 import TalentPool from "./pages/TalentPool";
 import TalentPoolDetail from "./pages/TalentPoolDetail";
 import Pages from "./pages/Pages";
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/quotations" element={<Quotations />} />
             <Route path="/agreements" element={<Agreements />} />
+            <Route path="/suppressed-contacts" element={<SuppressedContacts />} />
             <Route path="/job-orders" element={<JobOrders />} />
             <Route path="/job-orders/:id" element={<JobOrderDetail />} />
             <Route path="/candidates" element={<Navigate to="/talent-pool" replace />} />

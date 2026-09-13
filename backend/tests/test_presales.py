@@ -3,7 +3,27 @@ from unittest.mock import patch
 from app.core.config import get_settings
 from app.modules.presales.rendering import render_document_docx, render_document_pdf
 
-from tests.conftest import _auth_header
+from tests.conftest import _auth_header, _login_header, _seed_user_idempotent
+
+
+def _second_user_header(client, email="staf2@outsourcing.co.id", role="business_dev"):
+    """Staf kedua di tenant default yang sama (Fase 44: uji privat vs
+    dibagikan) -- `_auth_header` harus dipanggil dulu di test yang sama
+    supaya tenant default sudah ada."""
+    from app.core.bootstrap import ensure_default_tenant
+    from app.modules.auth.schemas import UserCreate
+
+    db = client.testing_session()
+    try:
+        default_tenant = ensure_default_tenant(db)
+        _seed_user_idempotent(
+            db,
+            UserCreate(email=email, full_name="Staf Dua", password="rahasia-123", role=role),
+            tenant_id=default_tenant.id,
+        )
+    finally:
+        db.close()
+    return _login_header(client, email, "rahasia-123")
 
 
 def _create_lead(client, headers, name="PT Maju Jaya", contact_email=None):
@@ -205,6 +225,140 @@ def test_due_tasks_overdue_only_filter(client):
     ).json()
     assert len(overdue) == 1
     assert overdue[0]["content"] == "Sudah lewat"
+
+
+def test_suppress_company_lifecycle(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Kompetitor Sekarang")
+
+    created = client.post(
+        "/api/v1/suppressed-contacts",
+        headers=headers,
+        json={"company_id": lead["company_id"], "reason": "Sudah jadi klien kompetitor"},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["label"] == "PT Kompetitor Sekarang"
+    assert body["company_id"] == lead["company_id"]
+
+    listed = client.get("/api/v1/suppressed-contacts", headers=headers).json()
+    assert len(listed) == 1
+
+    deleted = client.delete(f"/api/v1/suppressed-contacts/{body['id']}", headers=headers)
+    assert deleted.status_code == 204
+    assert client.get("/api/v1/suppressed-contacts", headers=headers).json() == []
+
+
+def test_suppress_contact_lifecycle(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Ada Kontak Disupresi")
+    contact = client.get(
+        f"/api/v1/companies/{lead['company_id']}/contacts", headers=headers
+    ).json()[0]
+
+    created = client.post(
+        "/api/v1/suppressed-contacts",
+        headers=headers,
+        json={"contact_id": contact["id"], "reason": "Minta opt-out"},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["label"] == "Budi (PT Ada Kontak Disupresi)"
+
+
+def test_suppressed_contact_requires_exactly_one_target(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Salah Isi")
+
+    neither = client.post(
+        "/api/v1/suppressed-contacts", headers=headers, json={"reason": "tanpa target"}
+    )
+    assert neither.status_code == 422
+
+    contact = client.get(
+        f"/api/v1/companies/{lead['company_id']}/contacts", headers=headers
+    ).json()[0]
+    both = client.post(
+        "/api/v1/suppressed-contacts",
+        headers=headers,
+        json={
+            "company_id": lead["company_id"],
+            "contact_id": contact["id"],
+            "reason": "dua-duanya",
+        },
+    )
+    assert both.status_code == 422
+
+
+def test_suppressed_contact_duplicate_rejected(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers, "PT Duplikat Suppress")
+    client.post(
+        "/api/v1/suppressed-contacts",
+        headers=headers,
+        json={"company_id": lead["company_id"], "reason": "pertama"},
+    )
+    dup = client.post(
+        "/api/v1/suppressed-contacts",
+        headers=headers,
+        json={"company_id": lead["company_id"], "reason": "kedua"},
+    )
+    assert dup.status_code == 409
+
+
+def test_filter_leads_by_owner(client):
+    headers = _auth_header(client)
+    me = client.get("/api/v1/auth/me", headers=headers).json()
+    lead_mine = _create_lead(client, headers, "PT Milik Saya")
+    _create_lead(client, headers, "PT Tanpa Owner")
+    client.patch(f"/api/v1/leads/{lead_mine['id']}", headers=headers, json={"owner_id": me["id"]})
+
+    result = client.get("/api/v1/leads", headers=headers, params={"owner_id": me["id"]}).json()
+    assert len(result) == 1
+    assert result[0]["company_name"] == "PT Milik Saya"
+
+
+def test_saved_view_private_vs_shared(client):
+    """Fase 44: view privat cuma kelihatan oleh pembuatnya; view yang
+    dibagikan (`is_shared`) kelihatan oleh staf lain di tenant yang sama."""
+    headers = _auth_header(client)
+    other_headers = _second_user_header(client)
+
+    private_view = client.post(
+        "/api/v1/leads/saved-views",
+        headers=headers,
+        json={"name": "Punya Saya", "filters": {"stage": "lead"}, "is_shared": False},
+    )
+    assert private_view.status_code == 201, private_view.text
+
+    shared_view = client.post(
+        "/api/v1/leads/saved-views",
+        headers=headers,
+        json={"name": "Tim", "filters": {"stage": "deal"}, "is_shared": True},
+    )
+    assert shared_view.status_code == 201
+
+    mine = client.get("/api/v1/leads/saved-views", headers=headers).json()
+    assert {v["name"] for v in mine} == {"Punya Saya", "Tim"}
+
+    others_view = client.get("/api/v1/leads/saved-views", headers=other_headers).json()
+    assert {v["name"] for v in others_view} == {"Tim"}
+
+
+def test_saved_view_delete_only_by_creator(client):
+    headers = _auth_header(client)
+    other_headers = _second_user_header(client)
+    view = client.post(
+        "/api/v1/leads/saved-views",
+        headers=headers,
+        json={"name": "Milik Admin", "filters": {}, "is_shared": True},
+    ).json()
+
+    forbidden = client.delete(f"/api/v1/leads/saved-views/{view['id']}", headers=other_headers)
+    assert forbidden.status_code == 403
+
+    allowed = client.delete(f"/api/v1/leads/saved-views/{view['id']}", headers=headers)
+    assert allowed.status_code == 204
+    assert client.get("/api/v1/leads/saved-views", headers=headers).json() == []
 
 
 def test_search_leads(client):

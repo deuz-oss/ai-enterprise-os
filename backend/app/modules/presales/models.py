@@ -432,3 +432,74 @@ class CustomFieldValue(TenantMixin, Base):
     )
 
     field_definition: Mapped[CustomFieldDefinition] = relationship()
+
+
+class SavedLeadView(TenantMixin, Base):
+    """Fase 44 -- kombinasi filter Pipeline (tahap/pemilik/pencarian/mode
+    tampilan) yang disimpan supaya bisa dipanggil ulang, opsional
+    dibagikan ke tim (`is_shared`). `filters` disimpan JSON string (pola
+    sama `QuotationTemplate.field_schema`) karena bentuknya bisa
+    bertambah field seiring waktu tanpa migrasi kolom baru tiap kali."""
+
+    __tablename__ = "saved_lead_views"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(120))
+    filters: Mapped[str] = mapped_column(Text)  # JSON: {stage?, owner_id?, q?, view?}
+    is_shared: Mapped[bool] = mapped_column(default=False)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    creator: Mapped["User"] = relationship()
+
+    @property
+    def creator_name(self) -> str:
+        return self.creator.full_name if self.creator else "?"
+
+
+class SuppressedContact(TenantMixin, Base):
+    """Fase 45 -- company/contact yang ditandai "jangan hubungi lagi"
+    (opt-out, sudah jadi klien kompetitor, komplain, dst.), terinspirasi
+    `SuppressedDomain`/`SuppressedContact` trycompai/crm. Menunjuk SALAH
+    SATU dari `company_id` (blok seluruh company) atau `contact_id`
+    (blok satu orang saja) -- divalidasi XOR di service layer.
+
+    BEDA SENGAJA dari `blacklist.BlacklistEntry` (kandidat rekrutmen) yang
+    pakai alur approval berjenjang (menunggu_review -> disetujui/ditolak):
+    blacklist kandidat itu keputusan berdampak reputasi yang butuh review
+    manajemen, sedangkan suppression di sini administratif ringan dan
+    gampang dibatalkan -- siapa pun role presales bisa tandai/lepas
+    sendiri, langsung aktif tanpa approval. Juga TIDAK memblokir hard di
+    `create_lead`/impor CSV (sama seperti blacklist kandidat -- murni
+    daftar + peringatan visual, bukan gate keras yang bisa menghalangi
+    kerja staf kalau memang perlu menghubungi lagi dengan alasan sah)."""
+
+    __tablename__ = "suppressed_contacts"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    company_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), default=None, index=True
+    )
+    contact_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("contacts.id", ondelete="CASCADE"), default=None, index=True
+    )
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    company: Mapped["Company | None"] = relationship()
+    contact: Mapped["Contact | None"] = relationship()
+    creator: Mapped["User"] = relationship()
+
+    @property
+    def creator_name(self) -> str:
+        return self.creator.full_name if self.creator else "?"
+
+    @property
+    def label(self) -> str:
+        if self.contact is not None:
+            company_name = self.contact.company.name if self.contact.company else "?"
+            return f"{self.contact.name} ({company_name})"
+        if self.company is not None:
+            return self.company.name
+        return "?"

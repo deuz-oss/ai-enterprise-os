@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
@@ -30,6 +30,8 @@ from app.modules.presales.models import (
     Quotation,
     QuotationStatus,
     QuotationTemplate,
+    SavedLeadView,
+    SuppressedContact,
 )
 from app.modules.presales.schemas import (
     AgreementCreate,
@@ -53,6 +55,8 @@ from app.modules.presales.schemas import (
     QuotationCreate,
     QuotationTemplateCreate,
     QuotationTemplateUpdate,
+    SavedLeadViewCreate,
+    SuppressedContactCreate,
 )
 
 logger = logging.getLogger(__name__)
@@ -862,11 +866,13 @@ def list_leads(
     db: Session,
     stage: LeadStage | None = None,
     q: str | None = None,
+    owner_id: str | None = None,
     limit: int = 200,
     offset: int = 0,
 ) -> tuple[list[Lead], int]:
     """`limit` default 200, pola sama seperti `recruitment.list_candidates`
-    (Batch 1c)."""
+    (Batch 1c). `owner_id` (Fase 44) -- filter "lead saya" / per staf,
+    dipakai juga oleh saved views."""
     stmt = (
         select(Lead).join(Company, Lead.company_id == Company.id).order_by(Lead.created_at.desc())
     )
@@ -874,6 +880,8 @@ def list_leads(
         stmt = stmt.where(Lead.stage == stage)
     if q:
         stmt = stmt.where(Company.name.ilike(f"%{q}%"))
+    if owner_id:
+        stmt = stmt.where(Lead.owner_id == parse_uuid(owner_id))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = list(db.execute(stmt.limit(limit).offset(offset)).scalars())
     return rows, total
@@ -1021,6 +1029,98 @@ def update_lead_contact(
 def remove_lead_contact(db: Session, lead_contact_id: str) -> None:
     lc = _get_lead_contact(db, lead_contact_id)
     db.delete(lc)
+    db.commit()
+
+
+# ---------------- Saved lead views (Fase 44) ----------------
+
+
+def create_saved_view(db: Session, *, user, payload: SavedLeadViewCreate) -> SavedLeadView:
+    view = SavedLeadView(
+        id=uuid4(),
+        name=payload.name,
+        filters=json.dumps(payload.filters),
+        is_shared=payload.is_shared,
+        created_by=user.id,
+    )
+    db.add(view)
+    db.commit()
+    db.refresh(view)
+    return view
+
+
+def list_saved_views(db: Session, *, user) -> list[SavedLeadView]:
+    """Punya sendiri (privat/dibagikan) + semua yang dibagikan staf lain --
+    beda dari most-list-endpoints yang tidak mem-filter per user, di sini
+    sengaja karena view privat orang lain memang bukan urusan staf ini."""
+    stmt = (
+        select(SavedLeadView)
+        .where(or_(SavedLeadView.is_shared.is_(True), SavedLeadView.created_by == user.id))
+        .order_by(SavedLeadView.created_at.desc())
+    )
+    return list(db.execute(stmt).scalars())
+
+
+def delete_saved_view(db: Session, *, user, view_id: str) -> None:
+    view = db.get(SavedLeadView, parse_uuid(view_id))
+    if view is None:
+        raise HTTPException(status_code=404, detail="Tampilan tersimpan tidak ditemukan")
+    if view.created_by != user.id:
+        raise HTTPException(
+            status_code=403, detail="Hanya pembuat yang bisa menghapus tampilan ini"
+        )
+    db.delete(view)
+    db.commit()
+
+
+# ---------------- Suppressed contacts (Fase 45) ----------------
+
+
+def create_suppressed_contact(
+    db: Session, *, user, payload: SuppressedContactCreate
+) -> SuppressedContact:
+    if bool(payload.company_id) == bool(payload.contact_id):
+        raise HTTPException(
+            status_code=422,
+            detail="Isi salah satu: company_id ATAU contact_id (tidak boleh keduanya atau kosong)",
+        )
+    if payload.company_id is not None:
+        _get_company(db, str(payload.company_id))
+    if payload.contact_id is not None:
+        _get_contact(db, str(payload.contact_id))
+
+    existing = db.execute(
+        select(SuppressedContact).where(
+            SuppressedContact.company_id == payload.company_id,
+            SuppressedContact.contact_id == payload.contact_id,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Sudah ada di suppression list")
+
+    entry = SuppressedContact(
+        id=uuid4(),
+        company_id=payload.company_id,
+        contact_id=payload.contact_id,
+        reason=payload.reason,
+        created_by=user.id,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def list_suppressed_contacts(db: Session) -> list[SuppressedContact]:
+    stmt = select(SuppressedContact).order_by(SuppressedContact.created_at.desc())
+    return list(db.execute(stmt).scalars())
+
+
+def delete_suppressed_contact(db: Session, entry_id: str) -> None:
+    entry = db.get(SuppressedContact, parse_uuid(entry_id))
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Entri suppression tidak ditemukan")
+    db.delete(entry)
     db.commit()
 
 

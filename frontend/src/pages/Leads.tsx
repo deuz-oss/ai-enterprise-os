@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import { Badge, KpiCard } from "../components/ui";
+import { confirmToast } from "../components/ui/dialogToast";
 import { Pagination } from "../components/Pagination";
 import { CustomFieldsSection } from "../components/CustomFieldsSection";
 
@@ -115,6 +116,26 @@ interface DueTask {
   owner_name: string | null;
 }
 
+// Fase 44 -- kombinasi filter Pipeline yang disimpan, opsional dibagikan.
+interface SavedView {
+  id: string;
+  name: string;
+  filters: Record<string, string>;
+  is_shared: boolean;
+  created_by: string;
+  creator_name: string;
+  created_at: string;
+}
+
+// Fase 45 -- company/contact yang ditandai "jangan hubungi lagi".
+interface SuppressedEntry {
+  id: string;
+  company_id: string | null;
+  contact_id: string | null;
+  label: string;
+  reason: string;
+}
+
 interface Contact {
   id: string;
   company_id: string;
@@ -167,18 +188,25 @@ export default function Leads() {
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [offset, setOffset] = useState(0);
   const [stageFilter, setStageFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSaveViewForm, setShowSaveViewForm] = useState(false);
   const [expandedContactFields, setExpandedContactFields] = useState<Record<string, boolean>>({});
   const pageLimit = 50;
   // Tabel (satu halaman) terpisah dari `leadsLookup` (semua lead) --
   // papan Kanban, drag-and-drop, dan panel detail (bisa dipilih dari
   // tabel MAUPUN papan) semuanya butuh dataset penuh, bukan satu halaman.
-  // Filter tahap cuma berlaku di tabel -- papan sudah mengelompokkan
-  // per tahap secara visual, memfilternya di sana tidak masuk akal.
+  // Filter tahap/owner/pencarian cuma berlaku di tabel -- papan sudah
+  // mengelompokkan per tahap secara visual, memfilternya di sana tidak
+  // masuk akal.
   const { data: leadsPage } = useQuery({
-    queryKey: ["leads", offset, stageFilter],
+    queryKey: ["leads", offset, stageFilter, ownerFilter, searchQuery],
     queryFn: () =>
       api.getPaged<Lead>(
-        `/leads?limit=${pageLimit}&offset=${offset}${stageFilter ? `&stage=${stageFilter}` : ""}`
+        `/leads?limit=${pageLimit}&offset=${offset}` +
+          (stageFilter ? `&stage=${stageFilter}` : "") +
+          (ownerFilter ? `&owner_id=${ownerFilter}` : "") +
+          (searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : "")
       ),
   });
   const leadsTable = leadsPage?.data;
@@ -217,6 +245,16 @@ export default function Leads() {
   const { data: dueTasks } = useQuery({
     queryKey: ["due-tasks"],
     queryFn: () => api.get<DueTask[]>("/leads/activities/due"),
+  });
+  const { data: savedViews } = useQuery({
+    queryKey: ["saved-views"],
+    queryFn: () => api.get<SavedView[]>("/leads/saved-views"),
+  });
+  // Fase 45 -- daftar suppression diambil penuh (biasanya kecil) supaya
+  // panel detail lead bisa cek cocok/tidak tanpa endpoint "check" terpisah.
+  const { data: suppressedEntries } = useQuery({
+    queryKey: ["suppressed-contacts"],
+    queryFn: () => api.get<SuppressedEntry[]>("/suppressed-contacts"),
   });
 
   // KPI row (§2 archetype F) -- archetype F spec menyebut 4 kartu contoh
@@ -318,6 +356,28 @@ export default function Leads() {
       qc.invalidateQueries({ queryKey: ["lead-activities", selectedId] });
       qc.invalidateQueries({ queryKey: ["due-tasks"] });
     },
+  });
+
+  const applySavedView = (v: SavedView) => {
+    setStageFilter(v.filters.stage ?? "");
+    setOwnerFilter(v.filters.owner_id ?? "");
+    setSearchQuery(v.filters.q ?? "");
+    if (v.filters.view === "papan" || v.filters.view === "tabel") setView(v.filters.view);
+    setOffset(0);
+  };
+
+  const createSavedView = useMutation({
+    mutationFn: (body: { name: string; filters: Record<string, string>; is_shared: boolean }) =>
+      api.post("/leads/saved-views", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["saved-views"] });
+      setShowSaveViewForm(false);
+    },
+  });
+
+  const deleteSavedView = useMutation({
+    mutationFn: (viewId: string) => api.delete(`/leads/saved-views/${viewId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-views"] }),
   });
 
   const addLeadContact = useMutation({
@@ -538,23 +598,130 @@ export default function Leads() {
         </CalloutBlock>
       )}
 
-      {view === "tabel" && (
-        <select
-          value={stageFilter}
-          onChange={(e) => {
-            setStageFilter(e.target.value);
-            setOffset(0);
-          }}
-          className="input w-auto"
-          aria-label="Filter tahap lead"
-        >
-          <option value="">Semua tahap</option>
-          {STAGES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+      {(savedViews ?? []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Tampilan Tersimpan:
+          </span>
+          {(savedViews ?? []).map((v) => (
+            <span
+              key={v.id}
+              className="flex items-center gap-1 rounded-full py-1 pl-3 pr-1 text-xs"
+              style={{ backgroundColor: "var(--hover)" }}
+            >
+              <button type="button" onClick={() => applySavedView(v)} className="hover:underline">
+                {v.name}
+                {v.is_shared && <span style={{ color: "var(--text-muted)" }}> · tim</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  confirmToast(`Hapus tampilan tersimpan "${v.name}"?`, () =>
+                    deleteSavedView.mutate(v.id)
+                  )
+                }
+                className="rounded p-0.5 hover:opacity-70"
+                style={{ color: "var(--text-muted)" }}
+                aria-label={`Hapus tampilan ${v.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
           ))}
-        </select>
+        </div>
+      )}
+
+      {view === "tabel" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setOffset(0);
+            }}
+            placeholder="Cari nama perusahaan..."
+            className="input w-auto"
+            aria-label="Cari lead"
+          />
+          <select
+            value={stageFilter}
+            onChange={(e) => {
+              setStageFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="input w-auto"
+            aria-label="Filter tahap lead"
+          >
+            <option value="">Semua tahap</option>
+            {STAGES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            value={ownerFilter}
+            onChange={(e) => {
+              setOwnerFilter(e.target.value);
+              setOffset(0);
+            }}
+            className="input w-auto"
+            aria-label="Filter pemilik deal"
+          >
+            <option value="">Semua pemilik</option>
+            {(users ?? []).map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name}
+              </option>
+            ))}
+          </select>
+          {!showSaveViewForm ? (
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() => setShowSaveViewForm(true)}
+            >
+              + Simpan Tampilan Ini
+            </button>
+          ) : (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const name = (form.elements.namedItem("view_name") as HTMLInputElement).value.trim();
+                const isShared = (form.elements.namedItem("view_shared") as HTMLInputElement).checked;
+                if (!name) return;
+                const filters: Record<string, string> = { view };
+                if (stageFilter) filters.stage = stageFilter;
+                if (ownerFilter) filters.owner_id = ownerFilter;
+                if (searchQuery) filters.q = searchQuery;
+                createSavedView.mutate({ name, filters, is_shared: isShared });
+              }}
+            >
+              <input
+                name="view_name"
+                required
+                placeholder="Nama tampilan (mis. Lead Saya)"
+                className="input w-auto text-xs"
+                autoFocus
+              />
+              <label className="flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <input type="checkbox" name="view_shared" /> Bagikan ke tim
+              </label>
+              <button className="btn text-xs" disabled={createSavedView.isPending}>
+                Simpan
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={() => setShowSaveViewForm(false)}
+              >
+                Batal
+              </button>
+            </form>
+          )}
+        </div>
       )}
 
       {/* ===== View Tabel ===== */}
@@ -851,6 +1018,22 @@ export default function Leads() {
                 {convertLead.error && convertLead.variables === lead.id && (
                   <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(convertLead.error as Error).message}</p>
                 )}
+                {(() => {
+                  const companyMatch = (suppressedEntries ?? []).find(
+                    (s) => s.company_id === lead.company_id
+                  );
+                  const contactMatch = (suppressedEntries ?? []).find((s) =>
+                    (leadContacts ?? []).some((lc) => lc.contact.id === s.contact_id)
+                  );
+                  const match = companyMatch ?? contactMatch;
+                  if (!match) return null;
+                  return (
+                    <CalloutBlock tone="warning">
+                      <b>{match.label}</b> ada di Suppression List: {match.reason}. Boleh tetap
+                      dihubungi kalau memang ada alasan sah -- ini cuma pengingat, bukan blokir.
+                    </CalloutBlock>
+                  );
+                })()}
                 <PropertiesPanel className="mt-4 max-w-xl">
                   <PropertyRow icon={User} label="PIC">
                     {lead.contact_name ?? "—"}

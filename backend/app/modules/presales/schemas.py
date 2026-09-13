@@ -415,3 +415,45 @@ class FunnelStats(BaseModel):
     total_leads: int
     won_leads: int
     lost_leads: int
+
+
+class SavedLeadViewCreate(BaseModel):
+    name: str
+    filters: dict[str, str]
+    is_shared: bool = False
+
+
+class SavedLeadViewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    filters: dict[str, str]
+    is_shared: bool
+    created_by: UUID
+    creator_name: str
+    created_at: datetime
+
+    @field_validator("filters", mode="before")
+    @classmethod
+    def _parse_filters(cls, v: object) -> object:
+        return json.loads(v) if isinstance(v, str) else v
+
+
+class SuppressedContactCreate(BaseModel):
+    company_id: UUID | None = None
+    contact_id: UUID | None = None
+    reason: str
+
+
+class SuppressedContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    company_id: UUID | None
+    contact_id: UUID | None
+    label: str
+    reason: str
+    created_by: UUID
+    creator_name: str
+    created_at: datetime

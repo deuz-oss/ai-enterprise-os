@@ -103,6 +103,9 @@ def create_app() -> FastAPI:
     )
     from app.modules.presales.router import quotations_router as presales_quotations_router
     from app.modules.presales.router import router as presales_router
+    from app.modules.presales.router import (
+        suppressed_contacts_router as presales_suppressed_contacts_router,
+    )
     from app.modules.rates.router import router as rates_router
     from app.modules.recruitment.router import router as recruitment_router
     from app.modules.talentpool.router import branding_admin_router as talentpool_branding_router
@@ -124,6 +127,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         presales_custom_fields_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    app.include_router(
+        presales_suppressed_contacts_router,
         prefix="/api/v1",
         dependencies=[Depends(require_active_subscription())],
     )

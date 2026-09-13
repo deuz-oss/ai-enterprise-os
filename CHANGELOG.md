@@ -6,6 +6,19 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 45: CRM — suppression list (company/contact "jangan hubungi lagi")
+
+- Tabel baru `suppressed_contacts` (menunjuk company ATAU contact, XOR), terinspirasi `SuppressedDomain`/`SuppressedContact` trycompai/crm. Beda sengaja dari "Black Lists" rekrutmen yang sudah ada: administratif ringan, aktif langsung tanpa approval, tidak memblokir hard proses lain — murni daftar + peringatan visual.
+- Endpoint `GET/POST /suppressed-contacts`, `DELETE /suppressed-contacts/{id}`.
+- UI: halaman baru `/suppressed-contacts` (nav CRM), banner peringatan kuning di panel detail Lead kalau company/kontaknya ada di daftar ini.
+
+### Added — Fase 44: CRM — tampilan Pipeline tersimpan (Saved Views)
+
+- Tabel baru `saved_lead_views` (filter tersimpan: tahap/pemilik/pencarian/mode tampilan, opsional dibagikan ke tim), terinspirasi `SavedView` trycompai/crm.
+- Sekalian menutup 2 celah UI nyata: input pencarian nama perusahaan (backend sudah lama dukung `q`, belum pernah ada UI-nya) dan filter "Pemilik" deal.
+- Endpoint `GET/POST /leads/saved-views`, `DELETE /leads/saved-views/{id}` (privat vs dibagikan; hanya pembuat yang bisa hapus).
+- UI: pill "Tampilan Tersimpan" di atas tabel Pipeline untuk menerapkan/menghapus, tombol "+ Simpan Tampilan Ini".
+
 ### Added — Fase 43: CRM — follow-up terjadwal & widget "Tugas Jatuh Tempo"
 
 - `LeadActivity` dapat `due_at`/`completed_at` + tipe aktivitas baru `tugas`, terinspirasi `Activity.dueAt`/`completedAt` trycompai/crm.

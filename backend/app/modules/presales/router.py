@@ -46,6 +46,10 @@ from app.modules.presales.schemas import (
     QuotationTemplateCreate,
     QuotationTemplateOut,
     QuotationTemplateUpdate,
+    SavedLeadViewCreate,
+    SavedLeadViewOut,
+    SuppressedContactCreate,
+    SuppressedContactOut,
 )
 
 router = APIRouter(
@@ -407,16 +411,47 @@ def set_custom_field_value(payload: CustomFieldValueIn, db: Session = Depends(ge
     }
 
 
+# Fase 45 -- daftar company/contact "jangan hubungi lagi". Router terpisah,
+# prefix sendiri, sama pola companies_router/custom_fields_router di atas.
+suppressed_contacts_router = APIRouter(
+    prefix="/suppressed-contacts",
+    tags=["presales"],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*PRESALES_ROLES))],
+)
+
+
+@suppressed_contacts_router.get("", response_model=list[SuppressedContactOut])
+def list_suppressed_contacts(db: Session = Depends(get_db)):
+    return service.list_suppressed_contacts(db)
+
+
+@suppressed_contacts_router.post(
+    "", response_model=SuppressedContactOut, status_code=status.HTTP_201_CREATED
+)
+def create_suppressed_contact(
+    payload: SuppressedContactCreate, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.create_suppressed_contact(db, user=user, payload=payload)
+
+
+@suppressed_contacts_router.delete("/{entry_id}", status_code=204)
+def delete_suppressed_contact(entry_id: str, db: Session = Depends(get_db)):
+    service.delete_suppressed_contact(db, entry_id)
+
+
 @router.get("", response_model=list[LeadOut])
 def list_leads(
     response: Response,
     stage: LeadStage | None = None,
     q: str | None = Query(None, max_length=100),
+    owner_id: str | None = None,
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    rows, total = service.list_leads(db, stage=stage, q=q, limit=limit, offset=offset)
+    rows, total = service.list_leads(
+        db, stage=stage, q=q, owner_id=owner_id, limit=limit, offset=offset
+    )
     response.headers["X-Total-Count"] = str(total)
     return rows
 
@@ -424,6 +459,27 @@ def list_leads(
 @router.get("/funnel", response_model=FunnelStats)
 def funnel(db: Session = Depends(get_db)):
     return service.funnel_stats(db)
+
+
+# Fase 44 -- tampilan pipeline tersimpan. Terdaftar SEBELUM `/{lead_id}` di
+# bawah (pola sama `/funnel` di atas) -- keduanya path 1-segmen literal,
+# kalau didaftar SESUDAH `/{lead_id}` maka "saved-views" akan ketangkap
+# sebagai nilai `lead_id` duluan dan endpoint ini tidak pernah tercapai.
+@router.get("/saved-views", response_model=list[SavedLeadViewOut])
+def list_saved_views(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return service.list_saved_views(db, user=user)
+
+
+@router.post("/saved-views", response_model=SavedLeadViewOut, status_code=status.HTTP_201_CREATED)
+def create_saved_view(
+    payload: SavedLeadViewCreate, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    return service.create_saved_view(db, user=user, payload=payload)
+
+
+@router.delete("/saved-views/{view_id}", status_code=204)
+def delete_saved_view(view_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    service.delete_saved_view(db, user=user, view_id=view_id)
 
 
 @router.post("", response_model=LeadOut, status_code=status.HTTP_201_CREATED)

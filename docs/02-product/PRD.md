@@ -1571,6 +1571,54 @@ sudah terjadi) sekarang bisa juga jadi tugas terjadwal.
   (di bawah baris KPI) — daftar lintas lead, klik nama company langsung
   buka detail lead itu, checkbox tandai selesai tanpa pindah halaman.
 
+### Fase 44 — CRM: Tampilan Pipeline Tersimpan (Saved Views) — ✅ Selesai (2026-09-13)
+
+Item kelima gap list, terinspirasi `SavedView` trycompai/crm. Kombinasi
+filter Pipeline (tahap/pemilik/pencarian/mode tampilan) bisa disimpan
+dan dipanggil ulang, opsional dibagikan ke tim.
+
+- Dua celah UI nyata ditutup sekalian karena baru terlihat justru saat
+  merancang fitur ini: input pencarian nama perusahaan (backend sudah
+  lama dukung param `q`, tidak pernah punya UI) dan filter "Pemilik"
+  (kolom `Lead.owner_id` sudah ada, filternya baru ditambah di
+  `service.list_leads`).
+- Tabel baru `saved_lead_views` (name/filters JSON/is_shared/created_by).
+  Endpoint `GET/POST /leads/saved-views`, `DELETE
+  /leads/saved-views/{id}` — didaftarkan SEBELUM `/{lead_id}` di router
+  (pola sama `/leads/funnel`) supaya tidak ketangkap sebagai path
+  parameter.
+- Visibilitas: view privat cuma kelihatan pembuatnya; `is_shared=true`
+  kelihatan semua staf presales di tenant yang sama. Hanya pembuat yang
+  bisa menghapus (403 kalau bukan).
+- UI: pill "Tampilan Tersimpan" di atas tabel Pipeline — klik untuk
+  menerapkan filter tersimpan, tombol × untuk hapus (`confirmToast`).
+  "+ Simpan Tampilan Ini" menyimpan kombinasi filter yang sedang aktif.
+
+### Fase 45 — CRM: Suppression List (Company/Contact "Jangan Hubungi Lagi") — ✅ Selesai (2026-09-13)
+
+Item keenam gap list, terinspirasi `SuppressedDomain`/`SuppressedContact`
+trycompai/crm. Menandai company atau kontak spesifik supaya staf lain
+tidak follow-up ulang tanpa sadar (opt-out, sudah jadi klien kompetitor,
+komplain, dst.).
+
+- Tabel baru `suppressed_contacts` — menunjuk salah satu dari
+  `company_id` (blok seluruh company) atau `contact_id` (blok satu
+  orang saja), divalidasi XOR di service layer.
+- **Beda sengaja** dari fitur "Black Lists" rekrutmen yang sudah ada
+  (alur approval berjenjang menunggu_review→disetujui/ditolak, khusus
+  kandidat): suppression company/contact di sini administratif ringan,
+  aktif langsung tanpa approval, dan gampang dibatalkan siapa saja role
+  presales — bukan keputusan berdampak reputasi. Sama seperti Black
+  Lists rekrutmen, TIDAK memblokir hard proses lain (create lead/impor
+  CSV tetap jalan) — murni daftar + peringatan visual.
+- Endpoint `GET/POST /suppressed-contacts`, `DELETE
+  /suppressed-contacts/{id}`.
+- UI: halaman baru `/suppressed-contacts` ("Suppression List" di nav
+  CRM) — pilih company atau satu kontak, isi alasan, daftar dengan
+  tombol "Lepas". Panel detail Lead (`Leads.tsx`) menampilkan banner
+  kuning kalau company/kontak lead yang sedang dibuka ada di daftar ini,
+  eksplisit menyebut "cuma pengingat, bukan blokir".
+
 
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa
