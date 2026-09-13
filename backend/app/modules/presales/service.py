@@ -693,6 +693,21 @@ def send_agreement_email(
 # ---------------- Lead ----------------
 
 
+def _resolve_fx_rate(currency: str, fx_rate: float | None) -> float:
+    """Fase 46 -- IDR selalu kurs 1 (paksa, abaikan input klien kalau ada
+    supaya tidak bisa dipalsukan); currency asing wajib kurs eksplisit
+    > 0 dari staf -- tidak ada default diam-diam yang bisa salah kaprah
+    menyamakan 1 USD = 1 IDR."""
+    if currency == "IDR":
+        return 1.0
+    if fx_rate is None or fx_rate <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail=f"fx_rate_to_idr wajib diisi (> 0) untuk currency {currency}",
+        )
+    return fx_rate
+
+
 def create_lead(db: Session, payload: LeadCreate) -> Lead:
     if payload.company_id is not None:
         company = _get_company(db, str(payload.company_id))
@@ -716,11 +731,14 @@ def create_lead(db: Session, payload: LeadCreate) -> Lead:
             )
 
     now = datetime.now(UTC)
+    fx_rate = _resolve_fx_rate(payload.currency, payload.fx_rate_to_idr)
     lead = Lead(
         id=uuid4(),
         company_id=company.id,
         estimated_headcount=payload.estimated_headcount,
         estimated_value=payload.estimated_value,
+        currency=payload.currency,
+        fx_rate_to_idr=fx_rate,
         stage=payload.stage,
         notes=payload.notes,
         stage_changed_at=now,
@@ -900,6 +918,19 @@ def update_lead(db: Session, lead_id: str, payload: LeadUpdate) -> Lead:
     if "stage" in data and data["stage"] != lead.stage:
         lead.stage_changed_at = now
         lead.last_activity_at = now
+    # Fase 46 -- ganti ke currency asing WAJIB sertakan fx_rate_to_idr di
+    # request yang sama -- tidak boleh diam-diam pakai kurs lama/stale
+    # (mis. bekas 1.0 dari IDR) yang jadi salah kaprah menyamakan nilainya.
+    if "currency" in data:
+        fx_rate_provided = data.get("fx_rate_to_idr")
+        if data["currency"] != "IDR" and fx_rate_provided is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"fx_rate_to_idr wajib diisi (> 0) untuk currency {data['currency']}",
+            )
+        data["fx_rate_to_idr"] = _resolve_fx_rate(data["currency"], fx_rate_provided)
+    elif "fx_rate_to_idr" in data:
+        data["fx_rate_to_idr"] = _resolve_fx_rate(lead.currency, data["fx_rate_to_idr"])
     for field, value in data.items():
         setattr(lead, field, value)
     db.commit()
@@ -1125,11 +1156,14 @@ def delete_suppressed_contact(db: Session, entry_id: str) -> None:
 
 
 def funnel_stats(db: Session) -> FunnelStats:
+    # Fase 46 -- jumlah dalam IDR (estimated_value * fx_rate_to_idr), BUKAN
+    # `estimated_value` mentah -- lead currency asing kalau dijumlah apa
+    # adanya akan mencampur satuan uang berbeda jadi satu angka yang salah.
     rows = db.execute(
         select(
             Lead.stage,
             func.count(Lead.id),
-            func.coalesce(func.sum(Lead.estimated_value), 0.0),
+            func.coalesce(func.sum(Lead.estimated_value * Lead.fx_rate_to_idr), 0.0),
         ).group_by(Lead.stage)
     ).all()
     counts = {s: int(c) for s, c, _ in rows}

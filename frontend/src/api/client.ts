@@ -132,3 +132,18 @@ export function formatRupiah(value: number | null | undefined): string {
     maximumFractionDigits: 0,
   }).format(value);
 }
+
+// Fase 46 -- multi-currency (Lead.currency), dipakai selain formatRupiah
+// yang tetap IDR-only untuk modul lain (payroll/finance/accounting).
+export function formatCurrency(
+  value: number | null | undefined,
+  currency: string | null | undefined
+): string {
+  if (value === null || value === undefined) return "-";
+  if (!currency || currency === "IDR") return formatRupiah(value);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(value);
+}

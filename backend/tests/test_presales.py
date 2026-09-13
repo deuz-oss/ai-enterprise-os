@@ -403,6 +403,88 @@ def test_create_lead_without_company_id_or_name_rejected(client):
     assert resp.status_code == 422
 
 
+def test_lead_defaults_to_idr_currency(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+    assert lead["currency"] == "IDR"
+    assert lead["fx_rate_to_idr"] == 1
+    assert lead["estimated_value_idr"] == lead["estimated_value"]
+
+
+def test_create_lead_foreign_currency_requires_fx_rate(client):
+    headers = _auth_header(client)
+    missing_rate = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json={"company_name": "PT Ekspor Jaya", "estimated_value": 1000, "currency": "usd"},
+    )
+    assert missing_rate.status_code == 422
+
+    with_rate = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json={
+            "company_name": "PT Ekspor Jaya",
+            "estimated_value": 1000,
+            "currency": "usd",
+            "fx_rate_to_idr": 15800,
+        },
+    )
+    assert with_rate.status_code == 201, with_rate.text
+    body = with_rate.json()
+    assert body["currency"] == "USD"
+    assert body["fx_rate_to_idr"] == 15800
+    assert body["estimated_value_idr"] == 1000 * 15800
+
+
+def test_update_lead_currency_requires_fx_rate_in_same_request(client):
+    headers = _auth_header(client)
+    lead = _create_lead(client, headers)
+
+    missing_rate = client.patch(
+        f"/api/v1/leads/{lead['id']}", headers=headers, json={"currency": "sgd"}
+    )
+    assert missing_rate.status_code == 422
+
+    ok = client.patch(
+        f"/api/v1/leads/{lead['id']}",
+        headers=headers,
+        json={"currency": "sgd", "fx_rate_to_idr": 11500},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["currency"] == "SGD"
+    assert ok.json()["fx_rate_to_idr"] == 11500
+
+    back_to_idr = client.patch(
+        f"/api/v1/leads/{lead['id']}", headers=headers, json={"currency": "idr"}
+    )
+    assert back_to_idr.status_code == 200
+    assert back_to_idr.json()["fx_rate_to_idr"] == 1
+
+
+def test_funnel_stats_sums_in_idr_across_currencies(client):
+    headers = _auth_header(client)
+    client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json={"company_name": "PT IDR Saja", "estimated_value": 100_000_000, "stage": "lead"},
+    )
+    client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json={
+            "company_name": "PT Pakai USD",
+            "estimated_value": 10_000,
+            "currency": "USD",
+            "fx_rate_to_idr": 15_000,
+            "stage": "lead",
+        },
+    )
+    funnel = client.get("/api/v1/leads/funnel", headers=headers).json()
+    lead_stage = next(s for s in funnel["stages"] if s["stage"] == "lead")
+    assert lead_stage["total_estimated_value"] == 100_000_000 + 10_000 * 15_000
+
+
 def test_lead_source_default_manual(client):
     """Fase 20 item 5 (revisi) -- `company_source` di `LeadOut` default
     "manual" untuk lead yang dibuat lewat form biasa (bukan impor CSV)."""

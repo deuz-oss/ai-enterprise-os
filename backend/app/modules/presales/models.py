@@ -215,6 +215,16 @@ class Lead(TenantMixin, Base):
     company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), index=True)
     estimated_headcount: Mapped[int | None] = mapped_column(default=None)
     estimated_value: Mapped[float | None] = mapped_column(Numeric(16, 2), default=None)
+    # Fase 46 -- multi-currency, terinspirasi `Deal.amount/currency/baseAmount/
+    # baseCurrency/fxRate` trycompai/crm, disederhanakan untuk kebutuhan Aeos
+    # (IDR-sentris): `estimated_value` tetap dalam `currency` aslinya (apa
+    # adanya, tidak dikonversi), `fx_rate_to_idr` snapshot kurs SAAT lead
+    # dibuat/diedit (diisi manual staf, BUKAN API kurs live -- tidak ada bukti
+    # kebutuhan nyata untuk update kurs otomatis/historis di CRM outsourcing
+    # lokal ini). `estimated_value_idr` (property) memberi angka IDR yang bisa
+    # dijumlah lintas currency untuk KPI/funnel -- lihat `service.funnel_stats`.
+    currency: Mapped[str] = mapped_column(String(3), default="IDR")
+    fx_rate_to_idr: Mapped[float] = mapped_column(Numeric(18, 6), default=1)
     stage: Mapped[LeadStage] = mapped_column(
         Enum(LeadStage, native_enum=False, length=50), default=LeadStage.lead, index=True
     )
@@ -249,6 +259,11 @@ class Lead(TenantMixin, Base):
     @property
     def owner_name(self) -> str | None:
         return self.owner.full_name if self.owner else None
+
+    # Fase 46 -- nilai dalam IDR untuk agregasi lintas currency (KPI/funnel).
+    @property
+    def estimated_value_idr(self) -> float:
+        return float(self.estimated_value or 0) * float(self.fx_rate_to_idr or 1)
 
     # ---- Kompatibilitas mundur (Fase 20 refactor, 2026-09-04) ----
     # `company_name`/`contact_*` dulunya kolom tertanam di Lead. Sekarang

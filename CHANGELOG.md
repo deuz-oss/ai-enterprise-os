@@ -6,6 +6,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 46: CRM — multi-currency untuk nilai potensi lead
+
+- `Lead` dapat `currency` (ISO 4217, default IDR) dan `fx_rate_to_idr` (kurs manual snapshot, bukan API live), terinspirasi `Deal.amount/currency/baseAmount/baseCurrency/fxRate` trycompai/crm.
+- Fix bug nyata: `funnel_stats` sebelumnya menjumlah `estimated_value` mentah lintas currency -- sekarang menjumlah nilai IDR-nya (`estimated_value * fx_rate_to_idr`) supaya tidak mencampur satuan uang.
+- Validasi: IDR selalu kurs 1 (tidak bisa di-override); ganti ke currency asing wajib sertakan kurs di request yang sama.
+- UI: tampilan per-lead format sesuai currency aslinya, semua agregat (KPI/kanban) pakai nilai IDR. Field "Mata Uang" edit-di-tempat di panel detail Lead.
+
 ### Added — Fase 45: CRM — suppression list (company/contact "jangan hubungi lagi")
 
 - Tabel baru `suppressed_contacts` (menunjuk company ATAU contact, XOR), terinspirasi `SuppressedDomain`/`SuppressedContact` trycompai/crm. Beda sengaja dari "Black Lists" rekrutmen yang sudah ada: administratif ringan, aktif langsung tanpa approval, tidak memblokir hard proses lain — murni daftar + peringatan visual.

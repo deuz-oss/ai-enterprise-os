@@ -234,14 +234,26 @@ class LeadCreate(BaseModel):
     contact_email: str | None = None
     estimated_headcount: int | None = None
     estimated_value: float | None = None
+    # Fase 46 -- multi-currency. `currency` default "IDR" (perilaku lama
+    # tidak berubah kalau tidak diisi); `fx_rate_to_idr` cuma relevan kalau
+    # currency bukan IDR, divalidasi di service layer (harus > 0).
+    currency: str = "IDR"
+    fx_rate_to_idr: float | None = None
     stage: LeadStage = LeadStage.lead
     notes: str | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _uppercase_currency(cls, v: str) -> str:
+        return v.upper()
 
 
 class LeadUpdate(BaseModel):
     company_id: UUID | None = None
     estimated_headcount: int | None = None
     estimated_value: float | None = None
+    currency: str | None = None
+    fx_rate_to_idr: float | None = None
     stage: LeadStage | None = None
     notes: str | None = None
     # Pemilik deal (§1.8 kartu Kanban) -- kolom `owner_id` sudah ada di model
@@ -253,6 +265,11 @@ class LeadUpdate(BaseModel):
     # staf isi lewat panel detail setelahnya.
     expected_close_date: date | None = None
     closed_reason: str | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _uppercase_currency(cls, v: str | None) -> str | None:
+        return v.upper() if v else v
 
 
 class LeadOut(BaseModel):
@@ -267,6 +284,9 @@ class LeadOut(BaseModel):
     contact_email: str | None
     estimated_headcount: int | None
     estimated_value: float | None
+    currency: str
+    fx_rate_to_idr: float
+    estimated_value_idr: float
     stage: LeadStage
     owner_id: UUID | None = None
     owner_name: str | None = None

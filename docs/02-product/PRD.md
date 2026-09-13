@@ -1619,6 +1619,29 @@ komplain, dst.).
   kuning kalau company/kontak lead yang sedang dibuka ada di daftar ini,
   eksplisit menyebut "cuma pengingat, bukan blokir".
 
+### Fase 46 — CRM: Multi-Currency untuk Nilai Potensi Lead — ✅ Selesai (2026-09-13)
+
+Item ketujuh gap list, terinspirasi
+`Deal.amount/currency/baseAmount/baseCurrency/fxRate` trycompai/crm,
+disederhanakan untuk kebutuhan Aeos yang IDR-sentris — tidak ada
+integrasi API kurs live, murni kurs manual snapshot yang diisi staf.
+
+- 2 kolom baru di `Lead`: `currency` (kode ISO 4217, default "IDR" --
+  baris lama otomatis tetap IDR tanpa migrasi data), `fx_rate_to_idr`
+  (kurs manual saat lead dibuat/diedit, default 1 untuk IDR).
+- **Perbaikan bug nyata sekalian ditemukan**: `funnel_stats` sebelumnya
+  menjumlah `estimated_value` mentah lintas semua lead -- kalau ada
+  currency campuran, penjumlahan itu mencampur satuan uang jadi angka
+  yang salah. Sekarang menjumlah `estimated_value * fx_rate_to_idr`.
+- Validasi: IDR selalu dipaksa kurs 1 (tidak bisa di-override klien);
+  ganti currency ke asing WAJIB sertakan `fx_rate_to_idr` di request
+  yang sama -- tidak boleh diam-diam pakai kurs lama/stale.
+- UI: semua tampilan per-lead (tabel/kanban/panel detail) format sesuai
+  currency aslinya; semua agregat (KPI, total kolom kanban) pakai nilai
+  IDR-nya supaya pipeline currency campuran tetap terjumlah benar. Panel
+  detail Lead dapat field "Mata Uang" edit-di-tempat -- ganti ke currency
+  asing memicu prompt isi kurs sebelum tersimpan.
+
 
 
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa

@@ -1,6 +1,6 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile, formatRupiah } from "../api/client";
+import { api, downloadFile, formatCurrency, formatRupiah } from "../api/client";
 import {
   Briefcase,
   Building2,
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import { Badge, KpiCard } from "../components/ui";
-import { confirmToast } from "../components/ui/dialogToast";
+import { confirmToast, promptToast } from "../components/ui/dialogToast";
 import { Pagination } from "../components/Pagination";
 import { CustomFieldsSection } from "../components/CustomFieldsSection";
 
@@ -35,6 +35,9 @@ export interface Lead {
   contact_email: string | null;
   estimated_headcount: number | null;
   estimated_value: number | null;
+  currency: string;
+  fx_rate_to_idr: number;
+  estimated_value_idr: number;
   stage: string;
   notes: string | null;
   owner_id: string | null;
@@ -266,8 +269,10 @@ export default function Leads() {
   const activeLeads = allLeads.filter((l) => l.stage !== "deal" && l.stage !== "gagal");
   const wonLeads = allLeads.filter((l) => l.stage === "deal");
   const lostLeads = allLeads.filter((l) => l.stage === "gagal");
-  const pipelineValue = activeLeads.reduce((sum, l) => sum + Number(l.estimated_value ?? 0), 0);
-  const wonValue = wonLeads.reduce((sum, l) => sum + Number(l.estimated_value ?? 0), 0);
+  // Fase 46 -- pakai estimated_value_idr (bukan estimated_value mentah)
+  // supaya lead currency asing tidak mencampur satuan uang saat dijumlah.
+  const pipelineValue = activeLeads.reduce((sum, l) => sum + Number(l.estimated_value_idr ?? 0), 0);
+  const wonValue = wonLeads.reduce((sum, l) => sum + Number(l.estimated_value_idr ?? 0), 0);
   const winRateDenom = wonLeads.length + lostLeads.length;
   const winRate = winRateDenom > 0 ? Math.round((wonLeads.length / winRateDenom) * 100) : null;
 
@@ -771,7 +776,7 @@ export default function Leads() {
                 </td>
                 <td className="td">{lead.contact_name ?? "-"}</td>
                 <td className="td">{lead.estimated_headcount ?? "-"}</td>
-                <td className="td">{formatRupiah(lead.estimated_value)}</td>
+                <td className="td">{formatCurrency(lead.estimated_value, lead.currency)}</td>
                 <td className="td">
                   <select
                     value={lead.stage}
@@ -813,7 +818,7 @@ export default function Leads() {
         <div className="flex gap-3 overflow-x-auto pb-2">
           {STAGES.map((stage) => {
             const cards = (leadsLookup ?? []).filter((l) => l.stage === stage);
-            const total = cards.reduce((s, l) => s + Number(l.estimated_value ?? 0), 0);
+            const total = cards.reduce((s, l) => s + Number(l.estimated_value_idr ?? 0), 0);
             const isOver = dragOverStage === stage;
             return (
               <div
@@ -888,7 +893,7 @@ export default function Leads() {
                         {lead.estimated_headcount ? ` · ${lead.estimated_headcount} TKI` : ""}
                       </p>
                       <p className="mt-1 text-xs font-medium">
-                        {formatRupiah(lead.estimated_value)}
+                        {formatCurrency(lead.estimated_value, lead.currency)}
                       </p>
                       {/* Avatar + pemilik deal, chip status kontekstual dari `notes` (§1.8) */}
                       <div
@@ -1042,7 +1047,49 @@ export default function Leads() {
                     {lead.estimated_headcount ?? "—"}
                   </PropertyRow>
                   <PropertyRow icon={CircleDollarSign} label="Nilai Potensi">
-                    {formatRupiah(lead.estimated_value)}
+                    {formatCurrency(lead.estimated_value, lead.currency)}
+                    {lead.currency !== "IDR" && (
+                      <span className="ml-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                        (≈ {formatRupiah(lead.estimated_value_idr)})
+                      </span>
+                    )}
+                  </PropertyRow>
+                  <PropertyRow icon={CircleDollarSign} label="Mata Uang">
+                    <div className="flex items-center gap-2">
+                      <input
+                        defaultValue={lead.currency}
+                        maxLength={3}
+                        placeholder="IDR"
+                        className="input w-20 py-1 text-sm uppercase"
+                        aria-label="Kode mata uang (ISO 4217)"
+                        onBlur={(e) => {
+                          const currency = e.target.value.trim().toUpperCase();
+                          if (!currency || currency === lead.currency) return;
+                          if (currency === "IDR") {
+                            updateLeadFields.mutate({ id: lead.id, body: { currency } });
+                            return;
+                          }
+                          promptToast(
+                            `Kurs ${currency} ke IDR saat ini (mis. 1 ${currency} = berapa Rupiah)?`,
+                            (value) => {
+                              const fxRate = Number(value);
+                              if (fxRate > 0) {
+                                updateLeadFields.mutate({
+                                  id: lead.id,
+                                  body: { currency, fx_rate_to_idr: fxRate },
+                                });
+                              }
+                            },
+                            { placeholder: "mis. 15800" }
+                          );
+                        }}
+                      />
+                      {lead.currency !== "IDR" && (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          kurs: {lead.fx_rate_to_idr.toLocaleString("id-ID")}
+                        </span>
+                      )}
+                    </div>
                   </PropertyRow>
                   <PropertyRow icon={MapPin} label="Tahapan">
                     <div className="flex items-center gap-2">
