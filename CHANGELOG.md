@@ -6,6 +6,25 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 50: HRD — gap-fill profil karyawan dari audit MYOHRIS
+
+- Field identitas baru di `Employee`: `email`, `birthdate`, `birthplace`, `gender`, `kk_no`, `religion`, `blood_type`, `education`, `current_position` -- yang punya padanan di `Candidate` (`birthdate`/`gender`/`education`/`current_position`/`blood_type`/`birthplace`, sejak Fase 24) sekarang disalin otomatis saat onboarding, bukan ditinggal begitu saja.
+- Kontak darurat jadi tabel one-to-many (`employee_emergency_contacts`, CRUD sendiri) menggantikan 3 kolom flat yang cuma nampung satu kontak; data lama di-backfill sbg kontak utama.
+- `placement_client_name`/`placement_job_title` (properti model, join lewat placement->job_order->client) supaya klien penempatan karyawan eksternal kebaca di profil.
+- `ptkp_label` (computed, reuse rumus `payroll/tax.py`) supaya status PTKP kebaca langsung di profil.
+- Kontrak kerja bisa diperpanjang (`POST /contracts/{id}/extend`) dengan rantai riwayat (`previous_contract_id`); `contract_type` (PKWT/PKWTT) + validasi total durasi PKWT maksimal 5 tahun termasuk semua perpanjangan (UU Cipta Kerja), dihitung dari kontrak AWAL rantai. Validasi & guard "cuma kontrak terbaru boleh diperpanjang" ditegakkan di satu tempat (`create_contract`) supaya berlaku di semua jalur yang menulis `previous_contract_id`/`contract_type`/tanggal -- bukan cuma endpoint `/extend`, termasuk: `PATCH /contracts/{id}` langsung, `previous_contract_id` yang ditulis manual lewat `POST /contracts` biasa (bisa bikin cabang ganda atau rantai lintas-karyawan kalau tidak dicek), dan penghapusan kontrak yang masih dirujuk perpanjangannya (409, bukan sukses diam-diam meninggalkan referensi menggantung -- SQLite tidak menegakkan FK secara default).
+- `division`/`position` jadi field live di `Employee` (dulu cuma snapshot before/after di `EmployeeMovement`); mencatat movement baru sekarang otomatis mensinkron grade/level/division/position ke Employee.
+- UI Employee Detail: header menampilkan jabatan/divisi/tanggal masuk/kontrak aktif + link klien penempatan; baris Data Pribadi, Rekening Bank (field sudah ada di backend tapi sebelumnya tidak ada UI sama sekali), PTKP; kartu Kontak Darurat; tab Absensi baru (rekap bulanan + tabel harian per karyawan, reuse endpoint attendance/payroll yang sudah ada); badge rantai perpanjangan & PKWT/PKWTT di tab Kontrak Kerja.
+- Migrasi: `7fffe60cc637`, `9a1c2e3f4b5d`, `2b3c4d5e6f7a`, `3c4d5e6f7a8b` -- semua tervalidasi lewat `test_upgrade_head_identik_dengan_create_all`.
+- Sengaja tidak termasuk: field `manager_id` (atasan langsung) -- dilewati atas keputusan eksplisit.
+- Diverifikasi hidup di browser (data dummy) untuk semua alur: isi field baru, tambah/hapus/jadikan-utama kontak darurat, buat & perpanjang kontrak PKWT sampai kena batas 5 tahun, tab Absensi menampilkan rekap nyata.
+
+### Fixed — Fase 49: Absensi — RBAC endpoint tulis/baca tanpa pembatasan role
+
+- `POST/GET /attendance/records` dan `POST /attendance/import` sebelumnya cuma dicek `get_current_user` tanpa `require_roles` sama sekali -- role `karyawan` bisa melihat rekap absensi siapa pun atau memalsukan record lewat form admin. Menu sidebar "Absensi" juga tidak punya `roles` (beda dari item admin lain di `NAV_ITEMS`), jadi celah ini juga terlihat di UI.
+- Command Palette (Ctrl/Cmd+K) punya daftar `QUICK_ACTIONS` internal terpisah yang tidak ikut difilter role sama sekali -- lolos dari fix sidebar di atas. Dipindah ke `Layout.tsx` supaya reuse logika filter role yang sama dengan `NAV_ITEMS`, bukan sumber ganda yang gampang divergen lagi.
+- Ditambahkan `ATTENDANCE_ROLES` (admin/hr/operations/management) di `core/permissions.py`, diterapkan ke ketiga endpoint + nav item + terdaftar di `test_rbac_matrix.py`. Tes HTTP eksplisit ditambahkan yang membuktikan role karyawan mendapat 403 di ketiga endpoint tersebut.
+
 ### Added — Fase 48: CRM — Ringkasan AI Lead
 
 - Redesain dari "AI enrichment" trycompai/crm (agent riset web + evidence-scoring) yang tadinya ditandai out-of-scope: `core/llm.py` Aeos tidak punya web search/tool-calling, jadi meniru apa adanya berisiko halusinasi fakta perusahaan. Diganti: LLM cuma merangkum data yang staf sendiri sudah masukkan (catatan, aktivitas, kontak & peran, nilai potensi) -- bukan riset fakta baru.

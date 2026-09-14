@@ -722,37 +722,92 @@ def _pkwt_chain_start_date(db: Session, contract_id) -> date | None:
     return current.start_date if current else None
 
 
+def _validate_pkwt_duration(
+    db: Session,
+    *,
+    contract_type,
+    previous_contract_id,
+    start_date: date | None,
+    end_date: date | None,
+) -> None:
+    """Dipanggil dari create/extend/update -- semua jalur yang bisa
+    mengubah tanggal atau contract_type sebuah kontrak PKWT wajib lewat
+    sini, bukan cuma jalur create (temuan cek-gap: `update_contract`
+    sebelumnya bisa dipakai buat lompat lewat batas 5 tahun tanpa
+    tervalidasi sama sekali)."""
+    if contract_type != ContractType.pkwt or not end_date:
+        return
+    chain_start = start_date
+    if previous_contract_id:
+        root_start = _pkwt_chain_start_date(db, previous_contract_id)
+        if root_start is not None:
+            chain_start = root_start
+    if not chain_start:
+        return
+    max_end = chain_start + relativedelta(years=5)
+    if end_date > max_end:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Total durasi PKWT (termasuk semua perpanjangan) maksimal 5 tahun "
+                f"sejak {chain_start.isoformat()} (UU Cipta Kerja) -- akhir kontrak "
+                f"tidak boleh melewati {max_end.isoformat()}"
+            ),
+        )
+
+
 def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> EmploymentContract:
     employee = _get_employee(db, employee_id)
     data = payload.model_dump()
     if data.get("start_date") and data.get("end_date") and data["end_date"] < data["start_date"]:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
 
+    # Cek-gap: aturan "cuma kontrak terbaru dalam rantai boleh diperpanjang"
+    # sebelumnya cuma dicek di `extend_contract` -- tapi `previous_contract_id`
+    # adalah field publik di `ContractCreate`, jadi bisa dilewati dgn manggil
+    # endpoint POST /{employee_id}/contracts langsung (bukan lewat /extend),
+    # membuat cabang ganda di rantai riwayat. Dicek di sini supaya berlaku
+    # di SEMUA jalur yang menulis previous_contract_id, bukan cuma satu.
+    if data.get("previous_contract_id"):
+        prev_contract = db.get(EmploymentContract, data["previous_contract_id"])
+        if prev_contract is None:
+            raise HTTPException(status_code=404, detail="Kontrak yang diperpanjang tidak ditemukan")
+        # Cek-gap: previous_contract_id ditulis lewat POST biasa tanpa
+        # validasi employee_id-nya cocok -- bisa membuat rantai lintas
+        # karyawan (kontrak A milik karyawan X tercatat "perpanjangan dari"
+        # kontrak milik karyawan Y).
+        if prev_contract.employee_id != employee.id:
+            raise HTTPException(
+                status_code=422,
+                detail="Kontrak yang diperpanjang bukan milik karyawan ini",
+            )
+        already_extended = db.execute(
+            select(EmploymentContract.id).where(
+                EmploymentContract.previous_contract_id == data["previous_contract_id"]
+            )
+        ).first()
+        if already_extended:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Kontrak ini sudah pernah diperpanjang -- "
+                    "perpanjang dari kontrak perpanjangan terakhir"
+                ),
+            )
+
     # Perpanjangan tanpa contract_type eksplisit mewarisi tipe kontrak yang
     # diperpanjang -- masuk akal, PKWT diperpanjang tetap PKWT kecuali
     # sengaja diubah.
     if data.get("previous_contract_id") and data.get("contract_type") is None:
-        prev = db.get(EmploymentContract, data["previous_contract_id"])
-        if prev is not None:
-            data["contract_type"] = prev.contract_type
+        data["contract_type"] = prev_contract.contract_type
 
-    if data.get("contract_type") == ContractType.pkwt and data.get("end_date"):
-        chain_start = data.get("start_date")
-        if data.get("previous_contract_id"):
-            root_start = _pkwt_chain_start_date(db, data["previous_contract_id"])
-            if root_start is not None:
-                chain_start = root_start
-        if chain_start:
-            max_end = chain_start + relativedelta(years=5)
-            if data["end_date"] > max_end:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"Total durasi PKWT (termasuk semua perpanjangan) maksimal 5 tahun "
-                        f"sejak {chain_start.isoformat()} (UU Cipta Kerja) -- akhir kontrak "
-                        f"tidak boleh melewati {max_end.isoformat()}"
-                    ),
-                )
+    _validate_pkwt_duration(
+        db,
+        contract_type=data.get("contract_type"),
+        previous_contract_id=data.get("previous_contract_id"),
+        start_date=data.get("start_date"),
+        end_date=data.get("end_date"),
+    )
 
     auto_no = not (data.get("contract_no") or "").strip()
 
@@ -775,21 +830,11 @@ def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> E
 
 def extend_contract(db: Session, contract_id: str, payload: ContractCreate) -> EmploymentContract:
     """Buat kontrak baru sbg perpanjangan `contract_id` -- rantai riwayat
-    (`previous_contract_id`), bukan menimpa kontrak lama. Cuma kontrak
-    PALING BARU dalam satu rantai yang boleh diperpanjang lagi (cegah
-    cabang ganda yang membingungkan tampilan riwayat)."""
+    (`previous_contract_id`), bukan menimpa kontrak lama. Guard "cuma
+    kontrak terbaru boleh diperpanjang" ditegakkan di `create_contract`
+    (satu tempat, berlaku juga kalau previous_contract_id ditulis langsung
+    lewat POST /contracts biasa)."""
     old = _get_contract(db, contract_id)
-    already_extended = db.execute(
-        select(EmploymentContract.id).where(EmploymentContract.previous_contract_id == old.id)
-    ).first()
-    if already_extended:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Kontrak ini sudah pernah diperpanjang -- "
-                "perpanjang dari kontrak perpanjangan terakhir"
-            ),
-        )
     data = payload.model_dump()
     data["previous_contract_id"] = old.id
     return create_contract(db, str(old.employee_id), ContractCreate(**data))
@@ -806,6 +851,16 @@ def update_contract(db: Session, contract_id: str, payload: ContractUpdate) -> E
         setattr(contract, field, value)
     if contract.start_date and contract.end_date and contract.end_date < contract.start_date:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
+    # Cek-gap: PATCH langsung (ubah end_date atau tandai contract_type=pkwt
+    # belakangan) sebelumnya bisa melewati batas 5 tahun tanpa tervalidasi
+    # sama sekali -- validasi ini sebelumnya cuma ada di create/extend.
+    _validate_pkwt_duration(
+        db,
+        contract_type=contract.contract_type,
+        previous_contract_id=contract.previous_contract_id,
+        start_date=contract.start_date,
+        end_date=contract.end_date,
+    )
     if contract.sign_status == ContractSignStatus.signed and contract.signed_at is None:
         contract.signed_at = datetime.now(UTC)
     db.commit()
@@ -815,6 +870,23 @@ def update_contract(db: Session, contract_id: str, payload: ContractUpdate) -> E
 
 def delete_contract(db: Session, contract_id: str) -> None:
     contract = _get_contract(db, contract_id)
+    # Cek-gap: kontrak yang sudah diperpanjang (dirujuk previous_contract_id
+    # kontrak lain) tidak boleh dihapus -- FK-nya tidak divalidasi SQLite
+    # secara default, jadi tanpa guard ini penghapusan sukses diam-diam tapi
+    # meninggalkan previous_contract_id menggantung (rantai riwayat rusak).
+    referenced_by = db.execute(
+        select(EmploymentContract.contract_no).where(
+            EmploymentContract.previous_contract_id == contract.id
+        )
+    ).first()
+    if referenced_by:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Kontrak ini sudah diperpanjang jadi {referenced_by[0]} -- "
+                "hapus kontrak perpanjangannya dulu sebelum menghapus ini"
+            ),
+        )
     db.delete(contract)
     db.commit()
 

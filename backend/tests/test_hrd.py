@@ -204,6 +204,79 @@ def test_contract_extend_builds_renewal_chain(client):
     assert len(listed) == 3
 
 
+def test_double_extension_blocked_even_via_plain_create_endpoint(client):
+    """Cek-gap: `previous_contract_id` adalah field publik di ContractCreate,
+    jadi guard "cuma kontrak terbaru boleh diperpanjang" harus tetap
+    tertegak walau dilewati lewat POST /{employee_id}/contracts biasa
+    (bukan lewat /extend) -- sebelumnya guard ini cuma ada di fungsi
+    extend_contract, jadi bisa dilewati begitu saja lewat endpoint lain."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Karim Hidayat"}
+    ).json()
+
+    original = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01", "end_date": "2026-06-30"},
+    ).json()
+    first_extension = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2026-07-01", "end_date": "2026-12-31"},
+    ).json()
+
+    # Coba bikin cabang kedua dari kontrak yang sama, lewat POST biasa
+    # (bukan /extend) dengan previous_contract_id ditulis manual di body.
+    branch_attempt = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={
+            "start_date": "2026-07-01",
+            "end_date": "2026-12-31",
+            "previous_contract_id": original["id"],
+        },
+    )
+    assert branch_attempt.status_code == 409
+    assert "sudah pernah diperpanjang" in branch_attempt.json()["detail"]
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/contracts", headers=headers).json()
+    assert len(listed) == 2
+    assert first_extension["id"] in [c["id"] for c in listed]
+
+
+def test_cannot_link_previous_contract_from_another_employee(client):
+    """Cek-gap: previous_contract_id ditulis lewat POST biasa tanpa validasi
+    employee_id-nya cocok -- tanpa guard ini bisa membuat rantai kontrak
+    lintas karyawan (kontrak milik karyawan A tercatat "perpanjangan dari"
+    kontrak milik karyawan B)."""
+    headers = _auth_header(client)
+    emp_a = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Lestari Wijaya"}
+    ).json()
+    emp_b = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Maulana Rizki"}
+    ).json()
+
+    contract_b = client.post(
+        f"/api/v1/employees/{emp_b['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01", "end_date": "2026-06-30"},
+    ).json()
+
+    cross_link = client.post(
+        f"/api/v1/employees/{emp_a['id']}/contracts",
+        headers=headers,
+        json={
+            "start_date": "2026-07-01",
+            "end_date": "2026-12-31",
+            "previous_contract_id": contract_b["id"],
+        },
+    )
+    assert cross_link.status_code == 422
+    assert "bukan milik karyawan ini" in cross_link.json()["detail"]
+
+
 def test_upload_hr_document_versions(client):
     headers = _auth_header(client)
     emp = client.post(
@@ -743,6 +816,79 @@ def test_pkwt_duration_limit_enforced_across_extensions(client):
         json={"start_date": "2020-01-01", "end_date": "2035-01-01", "contract_type": "pkwtt"},
     )
     assert permanent.status_code == 201, permanent.text
+
+
+def test_pkwt_duration_limit_enforced_on_direct_update_too(client):
+    """Cek-gap: validasi batas 5 tahun sebelumnya cuma jalan di
+    create/extend -- PATCH /contracts/{id} bisa dipakai buat lompat lewat
+    batas tanpa tervalidasi sama sekali (ubah end_date, atau tandai
+    contract_type=pkwt belakangan pada kontrak yang durasinya sudah
+    kelewat)."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Indra Kusuma"}
+    ).json()
+
+    contract = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2022-01-01", "end_date": "2024-12-31", "contract_type": "pkwt"},
+    ).json()
+
+    # PATCH end_date langsung melewati batas 5 tahun dari 2022-01-01 -> ditolak.
+    over_limit = client.patch(
+        f"/api/v1/employees/contracts/{contract['id']}",
+        headers=headers,
+        json={"end_date": "2027-06-30"},
+    )
+    assert over_limit.status_code == 422
+    assert "5 tahun" in over_limit.json()["detail"]
+
+    # Kontrak PKWTT lama yang durasinya sudah kelewat 5 tahun, ditandai PKWT
+    # belakangan lewat PATCH -- juga harus ditolak, bukan cuma dibiarkan lolos.
+    old_contract = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2018-01-01", "end_date": "2026-01-01"},
+    ).json()
+    retro_tag = client.patch(
+        f"/api/v1/employees/contracts/{old_contract['id']}",
+        headers=headers,
+        json={"contract_type": "pkwt"},
+    )
+    assert retro_tag.status_code == 422
+    assert "5 tahun" in retro_tag.json()["detail"]
+
+
+def test_cannot_delete_contract_still_referenced_by_extension(client):
+    """Cek-gap: menghapus kontrak yang sudah diperpanjang (dirujuk
+    previous_contract_id kontrak lain) sebelumnya tidak dicegah sama sekali
+    -- SQLite tidak menegakkan FK secara default, jadi hapus sukses diam-diam
+    tapi meninggalkan previous_contract_id menggantung (rantai riwayat rusak
+    tanpa error apa pun)."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Joko Santoso"}
+    ).json()
+
+    original = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01", "end_date": "2026-06-30"},
+    ).json()
+    extended = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2026-07-01", "end_date": "2026-12-31"},
+    ).json()
+
+    blocked = client.delete(f"/api/v1/employees/contracts/{original['id']}", headers=headers)
+    assert blocked.status_code == 409
+    assert extended["contract_no"] in blocked.json()["detail"]
+
+    # Kontrak yang TIDAK dirujuk siapa pun (ujung rantai) tetap boleh dihapus.
+    allowed = client.delete(f"/api/v1/employees/contracts/{extended['id']}", headers=headers)
+    assert allowed.status_code == 204
 
 
 def test_vaccine_records_crud(client):
