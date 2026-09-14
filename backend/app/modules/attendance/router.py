@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permissions import ATTENDANCE_SELFIE_ROLES
+from app.core.permissions import ATTENDANCE_ROLES, ATTENDANCE_SELFIE_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.attendance import service
 from app.modules.attendance.schemas import AttendanceRecordIn, AttendanceRecordOut
@@ -30,6 +30,7 @@ def list_records(
     employee_id: str | None = Query(None),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
+    _role=Depends(require_roles(*ATTENDANCE_ROLES)),
 ):
     return service.list_records(db, year=year, month=month, employee_id=employee_id)
 
@@ -39,6 +40,7 @@ def upsert_record(
     payload: AttendanceRecordIn,
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
+    _role=Depends(require_roles(*ATTENDANCE_ROLES)),
 ):
     """Input/update manual satu hari; agregasi bulanan dihitung ulang otomatis."""
     record, _inserted = service.upsert_record(db, payload)
@@ -50,6 +52,7 @@ async def import_csv(
     file: UploadFile,
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
+    _role=Depends(require_roles(*ATTENDANCE_ROLES)),
 ):
     """Impor CSV fingerprint; kembalikan jumlah sukses + daftar baris gagal."""
     result = await service.import_csv(db, file)

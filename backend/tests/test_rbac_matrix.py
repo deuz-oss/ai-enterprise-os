@@ -37,6 +37,7 @@ REGISTRY_AREAS = {
     "HRD_ROLES": permissions.HRD_ROLES,
     "ESIGN_ROLES": permissions.ESIGN_ROLES,
     "BPJS_ROLES": permissions.BPJS_ROLES,
+    "ATTENDANCE_ROLES": permissions.ATTENDANCE_ROLES,
     "ATTENDANCE_SELFIE_ROLES": permissions.ATTENDANCE_SELFIE_ROLES,
     "AI_HR_ROLES": permissions.AI_HR_ROLES,
     "PAYROLL_ROLES": permissions.PAYROLL_ROLES,

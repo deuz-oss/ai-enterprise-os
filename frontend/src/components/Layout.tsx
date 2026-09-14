@@ -111,7 +111,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["admin", "recruiter", "management"],
   },
   { to: "/employees", label: "Karyawan", bundle: "workforce" },
-  { to: "/attendance", label: "Absensi", bundle: "workforce" },
+  {
+    to: "/attendance",
+    label: "Absensi",
+    bundle: "workforce",
+    roles: ["admin", "hr", "operations", "management"],
+  },
   { to: "/chat", label: "Chat" },
   // Payroll sengaja di Workforce, bukan Finance & Accounting -- keputusan
   // desain Fase 28 (docs/design/design.md §7), beda dari pengelompokan
@@ -341,7 +346,68 @@ export default function Layout() {
     });
   }
 
+  // Aksi cepat command palette -- role-nya HARUS ikut filter yang sama
+  // dengan `visibleItems` di atas (bukan daftar independen di
+  // CommandPalette.tsx seperti sebelumnya), supaya mis. karyawan yang buka
+  // Ctrl/Cmd+K di /chat tidak melihat jalan pintas ke halaman yang justru
+  // disembunyikan dari sidebar-nya sendiri.
+  const quickActionDefs: {
+    id: string;
+    label: string;
+    emoji: string;
+    to?: string;
+    roles?: string[];
+    action?: () => void;
+  }[] = [
+    {
+      id: "qa-new-page",
+      label: "Buat halaman baru",
+      emoji: "➕",
+      action: () => {
+        api
+          .post<{ id: string }>("/pages", { title: "Tanpa judul" })
+          .then((created) => navigate(`/pages/${created.id}`));
+      },
+    },
+    { id: "qa-chat", label: "Buka Chat (Tanya @AEOS)", emoji: "💬", to: "/chat" },
+    {
+      id: "qa-attendance",
+      label: "Absensi hari ini",
+      emoji: "📅",
+      to: "/attendance",
+      roles: ["admin", "hr", "operations", "management"],
+    },
+    {
+      id: "qa-pr",
+      label: "Payment Request",
+      emoji: "🧾",
+      to: "/payment-requests",
+      roles: ["admin", "operations", "hr", "finance", "management"],
+    },
+    {
+      id: "qa-talent",
+      label: "Talent Pool",
+      emoji: "🧬",
+      to: "/talent-pool",
+      roles: ["admin", "recruiter", "operations", "hr", "management"],
+    },
+  ];
+  const visibleQuickActions = quickActionDefs.filter((qa) => {
+    if (isPlatform) return false;
+    if (isKaryawan && !(qa.to && KARYAWAN_ALLOWED_PATHS.includes(qa.to))) return false;
+    if (qa.roles && !(me.data && qa.roles.includes(me.data.role))) return false;
+    return true;
+  });
+
   const paletteItems: PaletteItem[] = [
+    ...visibleQuickActions.map((qa) => ({
+      id: qa.id,
+      label: qa.label,
+      emoji: qa.emoji,
+      group: "Aksi cepat",
+      to: qa.to,
+      action: qa.action,
+    })),
     ...groups.flatMap((g) =>
       g.items.map((i) => ({
         id: i.to,

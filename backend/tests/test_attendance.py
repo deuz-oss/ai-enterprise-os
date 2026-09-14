@@ -168,6 +168,33 @@ def test_template_download(client):
     assert "employee_no;date;clock_in" in resp.text
 
 
+def test_karyawan_role_blocked_from_admin_attendance_endpoints(client):
+    """Karyawan (ESS) tidak boleh baca/tulis rekap absensi tenant lewat
+    endpoint admin -- cuma lewat /me/attendance* yang di-scope ke diri
+    sendiri. Sebelumnya endpoint ini cuma cek `get_current_user` tanpa role,
+    jadi karyawan bisa memalsukan/melihat absensi siapa pun."""
+    admin = _auth_header(client)
+    emp = _employee(client, admin)
+    from tests.test_ess import _create_karyawan
+
+    karyawan = _create_karyawan(client)
+
+    listed = client.get(
+        "/api/v1/attendance/records", headers=karyawan, params={"year": 2026, "month": 8}
+    )
+    assert listed.status_code == 403
+
+    written = _record(client, karyawan, emp["id"])
+    assert written.status_code == 403
+
+    imported = client.post(
+        "/api/v1/attendance/import",
+        headers=karyawan,
+        files={"file": ("fingerprint.csv", b"employee_no;date\n", "text/csv")},
+    )
+    assert imported.status_code == 403
+
+
 def test_approved_leave_creates_attendance_records(client):
     admin = _auth_header(client)
     emp = _employee(client, admin, "Pemohon Sakit")

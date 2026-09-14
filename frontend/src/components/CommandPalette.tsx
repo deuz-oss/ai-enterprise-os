@@ -19,35 +19,6 @@ interface EntityHit {
   to: string;
 }
 
-const QUICK_ACTIONS = (navigate: ReturnType<typeof useNavigate>): PaletteItem[] => [
-  {
-    id: "qa-new-page",
-    label: "Buat halaman baru",
-    emoji: "➕",
-    group: "Aksi cepat",
-    action: async () => {
-      const created = await api.post<{ id: string }>("/pages", { title: "Tanpa judul" });
-      navigate(`/pages/${created.id}`);
-    },
-  },
-  { id: "qa-chat", label: "Buka Chat (Tanya @AEOS)", emoji: "💬", group: "Aksi cepat", to: "/chat" },
-  { id: "qa-attendance", label: "Absensi hari ini", emoji: "📅", group: "Aksi cepat", to: "/attendance" },
-  {
-    id: "qa-pr",
-    label: "Payment Request",
-    emoji: "🧾",
-    group: "Aksi cepat",
-    to: "/payment-requests",
-  },
-  {
-    id: "qa-talent",
-    label: "Talent Pool",
-    emoji: "🧬",
-    group: "Aksi cepat",
-    to: "/talent-pool",
-  },
-];
-
 /** C1: pencarian entitas lintas app (debounce) → hit navigasi ke section. */
 function useEntitySearch(query: string, enabled: boolean): EntityHit[] {
   const [hits, setHits] = useState<EntityHit[]>([]);
@@ -139,7 +110,6 @@ export default function CommandPalette({
   }, [open]);
 
   const entityHits = useEntitySearch(query, open);
-  const quickActions = useMemo(() => QUICK_ACTIONS(navigate), [navigate]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -147,12 +117,8 @@ export default function CommandPalette({
       !q ||
       i.label.toLowerCase().includes(q) ||
       (i.group ?? "").toLowerCase().includes(q);
-    return [
-      ...quickActions.filter(match),
-      ...items.filter(match),
-      ...(q.length >= 2 ? entityHits : []),
-    ];
-  }, [items, query, quickActions, entityHits]);
+    return [...items.filter(match), ...(q.length >= 2 ? entityHits : [])];
+  }, [items, query, entityHits]);
 
   useEffect(() => {
     if (active >= results.length) setActive(0);
