@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, AlertTriangle, Award, Banknote, Calendar, Gift, Home, IdCard, Pencil, Phone, Tag } from "lucide-react";
+import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import { Badge, confirmToast, PillTabs } from "../components/ui";
@@ -13,6 +13,16 @@ import type { EmployeeRow } from "./Employees";
  * 3 antrean admin lintas-karyawan (Tanya Kontrak AI, Koreksi Absensi,
  * Pengajuan Cuti/Izin) SENGAJA tetap di halaman list -- itu inbox org-wide,
  * bukan konten per-karyawan. */
+
+interface EmergencyContactRow {
+  id: string;
+  employee_id: string;
+  name: string;
+  relation: string | null;
+  phone: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
 
 interface InsuranceRow {
   id: string;
@@ -56,6 +66,8 @@ interface ContractRow {
   signed_at: string | null;
   file_name: string | null;
   template_id: string | null;
+  previous_contract_id: string | null;
+  contract_type: string | null;
 }
 
 interface ContractTemplateField {
@@ -211,7 +223,15 @@ const WARNING_LETTER_LABELS: Record<string, string> = {
 
 const MOVEMENT_TYPES = ["mutasi", "promosi", "demosi", "lainnya"];
 
-type TabKey = "ringkasan" | "kontrak" | "dokumen" | "payroll" | "riwayat" | "bpjs-asuransi" | "cuti-akun";
+type TabKey =
+  | "ringkasan"
+  | "kontrak"
+  | "dokumen"
+  | "payroll"
+  | "absensi"
+  | "riwayat"
+  | "bpjs-asuransi"
+  | "cuti-akun";
 
 /** Baris properti dengan mode lihat/edit terpisah (audit UI/UX 2026-09-12:
  * field ini dulu selalu tampil sebagai form siap-ketik, terasa "selalu
@@ -262,13 +282,56 @@ function EditableRow({
   );
 }
 
+// Nilai backend `MaritalStatus` ("tk"/"k", lihat hrd/models.py) -- juga
+// dipakai `TaxProfile.marital_status` (payroll/tax.py) buat hitung PTKP,
+// jadi JANGAN diubah tanpa menyesuaikan backend.
+const MARITAL_LABELS: Record<string, string> = {
+  tk: "Belum Kawin (TK)",
+  k: "Kawin (K)",
+};
+
+// Tier 2: tab Absensi di Employee Detail -- reuse label status yang sama
+// dgn halaman Absensi admin (`Attendance.tsx`), di-scope ke satu karyawan.
+const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
+  hadir: "Hadir",
+  terlambat: "Terlambat",
+  izin: "Izin",
+  sakit: "Sakit",
+  cuti: "Cuti",
+  alpa: "Alpa",
+  libur: "Libur",
+  dinas_luar: "Dinas Luar",
+};
+
+interface AttendanceDailyRow {
+  id: string;
+  date: string;
+  status: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  overtime_hours: number;
+  source: string;
+}
+
+interface AttendanceSummaryRow {
+  id: string;
+  employee_id: string;
+  present_days: number;
+  overtime_hours: number;
+  client_approved: boolean;
+}
+
 export default function EmployeeDetail() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>("ringkasan");
   type SummaryEditKey =
+    | "email"
     | "salary"
+    | "marital"
+    | "bank"
     | "grade"
+    | "personal"
     | "emergency"
     | "citizen_address"
     | "residential_address"
@@ -283,6 +346,12 @@ export default function EmployeeDetail() {
   const docTypeRef = useRef<HTMLSelectElement>(null);
   const bpjsKesehatanFileRef = useRef<HTMLInputElement>(null);
   const bpjsKetenagakerjaanFileRef = useRef<HTMLInputElement>(null);
+  const [extendingContractId, setExtendingContractId] = useState<string | null>(null);
+  const [attPeriod, setAttPeriod] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  });
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
   const [showWarningLetterForm, setShowWarningLetterForm] = useState(false);
   const warningLetterFileRef = useRef<HTMLInputElement>(null);
@@ -309,6 +378,23 @@ export default function EmployeeDetail() {
     queryFn: () => api.get<ContractRow[]>(`/employees/${id}/contracts`),
     enabled: Boolean(id) && !isOpsOnly,
   });
+  const { data: attendanceRecords } = useQuery({
+    queryKey: ["employee-attendance-records", id, attPeriod],
+    queryFn: () =>
+      api.get<AttendanceDailyRow[]>(
+        `/attendance/records?year=${attPeriod.year}&month=${attPeriod.month}&employee_id=${id}`
+      ),
+    enabled: Boolean(id) && !isOpsOnly && tab === "absensi",
+  });
+  const { data: attendanceSummaries } = useQuery({
+    queryKey: ["employee-attendance-summary", id, attPeriod],
+    queryFn: () =>
+      api.get<AttendanceSummaryRow[]>(
+        `/payroll/attendance?year=${attPeriod.year}&month=${attPeriod.month}`
+      ),
+    enabled: Boolean(id) && !isOpsOnly && tab === "absensi",
+  });
+  const attendanceSummary = (attendanceSummaries ?? []).find((s) => s.employee_id === id) ?? null;
   const { data: documents } = useQuery({
     queryKey: ["employee-docs", id],
     queryFn: () => api.get<HrDoc[]>(`/employees/${id}/documents`),
@@ -343,6 +429,11 @@ export default function EmployeeDetail() {
     queryKey: ["leave-balance", id],
     queryFn: () =>
       api.get<LeaveBalanceRow | null>(`/employees/${id}/leave-balance?year=${new Date().getFullYear()}`),
+    enabled: Boolean(id) && !isOpsOnly,
+  });
+  const { data: emergencyContacts } = useQuery({
+    queryKey: ["employee-emergency-contacts", id],
+    queryFn: () => api.get<EmergencyContactRow[]>(`/employees/${id}/emergency-contacts`),
     enabled: Boolean(id) && !isOpsOnly,
   });
   const { data: insurances } = useQuery({
@@ -409,6 +500,29 @@ export default function EmployeeDetail() {
     onSuccess: invalidate,
   });
 
+  const invalidateEmergencyContacts = () =>
+    qc.invalidateQueries({ queryKey: ["employee-emergency-contacts", id] });
+
+  const createEmergencyContact = useMutation({
+    mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
+      api.post(`/employees/${empId}/emergency-contacts`, body),
+    onSuccess: () => {
+      setShowEmergencyForm(false);
+      invalidateEmergencyContacts();
+    },
+  });
+
+  const updateEmergencyContact = useMutation({
+    mutationFn: ({ contactId, body }: { contactId: string; body: Record<string, unknown> }) =>
+      api.patch(`/employees/emergency-contacts/${contactId}`, body),
+    onSuccess: invalidateEmergencyContacts,
+  });
+
+  const deleteEmergencyContact = useMutation({
+    mutationFn: (contactId: string) => api.delete(`/employees/emergency-contacts/${contactId}`),
+    onSuccess: invalidateEmergencyContacts,
+  });
+
   const invalidateInsurances = () => qc.invalidateQueries({ queryKey: ["employee-insurances", id] });
 
   const createInsurance = useMutation({
@@ -441,6 +555,15 @@ export default function EmployeeDetail() {
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.post(`/employees/${empId}/contracts`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employee-contracts", id] }),
+  });
+
+  const extendContract = useMutation({
+    mutationFn: ({ contractId, body }: { contractId: string; body: Record<string, unknown> }) =>
+      api.post(`/employees/contracts/${contractId}/extend`, body),
+    onSuccess: () => {
+      setExtendingContractId(null);
+      qc.invalidateQueries({ queryKey: ["employee-contracts", id] });
+    },
   });
 
   const signContract = useMutation({
@@ -576,6 +699,15 @@ export default function EmployeeDetail() {
     );
   }
 
+  // Tier 2: kontrak yang periodenya mencakup hari ini -- ditampilkan di
+  // header supaya "sedang di bawah kontrak apa" kebaca tanpa buka tab
+  // Kontrak Kerja.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const activeContract =
+    (contracts ?? []).find(
+      (c) => c.start_date && c.start_date <= todayIso && (!c.end_date || c.end_date >= todayIso)
+    ) ?? null;
+
   return (
     <div className="space-y-4">
       <Link
@@ -600,10 +732,36 @@ export default function EmployeeDetail() {
           <p className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
             {employee.employee_no}
           </p>
+          {employee.placement_client_name && (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <Link
+                to={`/clients/${employee.placement_client_id}`}
+                className="hover:underline"
+                style={{ color: "var(--accent)" }}
+              >
+                {employee.placement_client_name}
+              </Link>
+              {employee.placement_job_title ? ` — ${employee.placement_job_title}` : ""}
+            </p>
+          )}
           <div className="flex flex-wrap gap-1.5">
             <Badge tone={employee.status === "aktif" ? "success" : "neutral"}>{employee.status}</Badge>
             {employee.payroll_locked && <Badge tone="warning">Payroll Terkunci</Badge>}
+            {(employee.grade || employee.level) && (
+              <Badge tone="neutral">{[employee.grade, employee.level].filter(Boolean).join(" / ")}</Badge>
+            )}
           </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {[
+              employee.position,
+              employee.division,
+              employee.join_date && `Masuk ${employee.join_date}`,
+              activeContract &&
+                `Kontrak aktif: ${activeContract.start_date ?? "?"} s/d ${activeContract.end_date ?? "-"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
         </div>
       </div>
 
@@ -627,6 +785,7 @@ export default function EmployeeDetail() {
               { key: "kontrak", label: "Kontrak Kerja", count: contracts?.length ?? 0 },
               { key: "dokumen", label: "Dokumen HR", count: documents?.length ?? 0 },
               { key: "payroll", label: "Payroll", count: payslips?.length ?? 0 },
+              { key: "absensi", label: "Absensi" },
               { key: "riwayat", label: "Riwayat" },
               { key: "bpjs-asuransi", label: "BPJS & Asuransi" },
               { key: "cuti-akun", label: "Cuti & Akun" },
@@ -636,6 +795,7 @@ export default function EmployeeDetail() {
           />
 
           {tab === "ringkasan" && (
+            <>
             <div className="card">
               <PropertiesPanel className="max-w-2xl">
                 <PropertyRow icon={IdCard} label="No. Induk">
@@ -645,6 +805,37 @@ export default function EmployeeDetail() {
                   <span className="font-mono text-xs">{employee.referral_code ?? "—"}</span>
                 </PropertyRow>
                 <PropertyRow icon={Phone} label="Telepon">{employee.phone ?? "—"}</PropertyRow>
+                <EditableRow
+                  icon={Mail}
+                  label="Email"
+                  editing={editingField === "email"}
+                  onEdit={() => setEditingField("email")}
+                  onCancel={() => setEditingField(null)}
+                  view={employee.email ?? "—"}
+                >
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      updateEmployee.mutate(
+                        { empId: id, body: { email: form.get("email") || null } },
+                        { onSuccess: () => setEditingField(null) }
+                      );
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      name="email"
+                      type="email"
+                      defaultValue={employee.email ?? ""}
+                      className="input w-auto py-1 text-xs"
+                    />
+                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
+                      Simpan
+                    </button>
+                  </form>
+                </EditableRow>
                 <PropertyRow icon={Calendar} label="Tanggal Masuk">{employee.join_date ?? "—"}</PropertyRow>
                 <PropertyRow icon={Tag} label="Status">
                   <span className={`badge ${employee.status === "aktif" ? "pill p-green" : "pill p-gray"}`}>
@@ -697,49 +888,14 @@ export default function EmployeeDetail() {
                   </form>
                 </EditableRow>
                 <EditableRow
-                  icon={Award}
-                  label="Grade / Level"
-                  editing={editingField === "grade"}
-                  onEdit={() => setEditingField("grade")}
-                  onCancel={() => setEditingField(null)}
-                  view={[employee.grade, employee.level].filter(Boolean).join(" / ") || "—"}
-                >
-                  <form
-                    className="flex flex-wrap items-center gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = new FormData(e.currentTarget);
-                      updateEmployee.mutate(
-                        {
-                          empId: id,
-                          body: { grade: form.get("grade") || null, level: form.get("level") || null },
-                        },
-                        { onSuccess: () => setEditingField(null) }
-                      );
-                    }}
-                  >
-                    <input autoFocus name="grade" defaultValue={employee.grade ?? ""} placeholder="Grade" className="input w-auto py-1 text-xs" />
-                    <input name="level" defaultValue={employee.level ?? ""} placeholder="Level" className="input w-auto py-1 text-xs" />
-                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
-                      Simpan
-                    </button>
-                  </form>
-                </EditableRow>
-                <EditableRow
-                  icon={AlertTriangle}
-                  label="Kontak Darurat"
-                  editing={editingField === "emergency"}
-                  onEdit={() => setEditingField("emergency")}
+                  icon={UserRound}
+                  label="Status Perkawinan"
+                  editing={editingField === "marital"}
+                  onEdit={() => setEditingField("marital")}
                   onCancel={() => setEditingField(null)}
                   view={
-                    employee.emergency_contact_name
-                      ? [
-                          employee.emergency_contact_name,
-                          employee.emergency_contact_relation && `(${employee.emergency_contact_relation})`,
-                          employee.emergency_contact_phone,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
+                    employee.marital_status
+                      ? `${MARITAL_LABELS[employee.marital_status] ?? employee.marital_status} · ${employee.dependents} tanggungan`
                       : "—"
                   }
                 >
@@ -752,9 +908,67 @@ export default function EmployeeDetail() {
                         {
                           empId: id,
                           body: {
-                            emergency_contact_name: form.get("emergency_contact_name") || null,
-                            emergency_contact_relation: form.get("emergency_contact_relation") || null,
-                            emergency_contact_phone: form.get("emergency_contact_phone") || null,
+                            marital_status: form.get("marital_status") || null,
+                            dependents: Number(form.get("dependents") || 0),
+                          },
+                        },
+                        { onSuccess: () => setEditingField(null) }
+                      );
+                    }}
+                  >
+                    <select
+                      autoFocus
+                      name="marital_status"
+                      defaultValue={employee.marital_status ?? ""}
+                      className="input w-auto py-1 text-xs"
+                    >
+                      <option value="">— pilih —</option>
+                      <option value="tk">Belum Kawin (TK)</option>
+                      <option value="k">Kawin (K)</option>
+                    </select>
+                    <input
+                      name="dependents"
+                      type="number"
+                      min="0"
+                      max="3"
+                      defaultValue={employee.dependents}
+                      placeholder="Tanggungan"
+                      className="input w-24 py-1 text-xs"
+                      aria-label="Jumlah tanggungan"
+                    />
+                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
+                      Simpan
+                    </button>
+                  </form>
+                </EditableRow>
+                <PropertyRow icon={Percent} label="PTKP">
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    {employee.ptkp_label ?? "— (isi status kawin & tanggungan dulu)"}
+                  </span>
+                </PropertyRow>
+                <EditableRow
+                  icon={CreditCard}
+                  label="Rekening Bank"
+                  editing={editingField === "bank"}
+                  onEdit={() => setEditingField("bank")}
+                  onCancel={() => setEditingField(null)}
+                  view={
+                    employee.bank_name || employee.bank_account
+                      ? [employee.bank_name, employee.bank_account].filter(Boolean).join(" · ")
+                      : "—"
+                  }
+                >
+                  <form
+                    className="flex flex-wrap items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      updateEmployee.mutate(
+                        {
+                          empId: id,
+                          body: {
+                            bank_name: form.get("bank_name") || null,
+                            bank_account: form.get("bank_account") || null,
                           },
                         },
                         { onSuccess: () => setEditingField(null) }
@@ -763,24 +977,157 @@ export default function EmployeeDetail() {
                   >
                     <input
                       autoFocus
-                      name="emergency_contact_name"
-                      defaultValue={employee.emergency_contact_name ?? ""}
-                      placeholder="Nama"
+                      name="bank_name"
+                      defaultValue={employee.bank_name ?? ""}
+                      placeholder="Nama Bank"
                       className="input w-auto py-1 text-xs"
                     />
                     <input
-                      name="emergency_contact_relation"
-                      defaultValue={employee.emergency_contact_relation ?? ""}
-                      placeholder="Hubungan"
-                      className="input w-auto py-1 text-xs"
-                    />
-                    <input
-                      name="emergency_contact_phone"
-                      defaultValue={employee.emergency_contact_phone ?? ""}
-                      placeholder="Telepon"
+                      name="bank_account"
+                      defaultValue={employee.bank_account ?? ""}
+                      placeholder="No. Rekening"
                       className="input w-auto py-1 text-xs"
                     />
                     <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
+                      Simpan
+                    </button>
+                  </form>
+                </EditableRow>
+                <EditableRow
+                  icon={Award}
+                  label="Jabatan / Divisi / Grade"
+                  editing={editingField === "grade"}
+                  onEdit={() => setEditingField("grade")}
+                  onCancel={() => setEditingField(null)}
+                  view={
+                    [employee.position, employee.division, [employee.grade, employee.level].filter(Boolean).join("/")]
+                      .filter(Boolean)
+                      .join(" · ") || "—"
+                  }
+                >
+                  <form
+                    className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      updateEmployee.mutate(
+                        {
+                          empId: id,
+                          body: {
+                            position: form.get("position") || null,
+                            division: form.get("division") || null,
+                            grade: form.get("grade") || null,
+                            level: form.get("level") || null,
+                          },
+                        },
+                        { onSuccess: () => setEditingField(null) }
+                      );
+                    }}
+                  >
+                    <input autoFocus name="position" defaultValue={employee.position ?? ""} placeholder="Jabatan" className="input py-1 text-xs" />
+                    <input name="division" defaultValue={employee.division ?? ""} placeholder="Divisi" className="input py-1 text-xs" />
+                    <input name="grade" defaultValue={employee.grade ?? ""} placeholder="Grade" className="input py-1 text-xs" />
+                    <input name="level" defaultValue={employee.level ?? ""} placeholder="Level" className="input py-1 text-xs" />
+                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs sm:col-span-4">
+                      Simpan
+                    </button>
+                  </form>
+                </EditableRow>
+                <EditableRow
+                  icon={UserRound}
+                  label="Data Pribadi"
+                  editing={editingField === "personal"}
+                  onEdit={() => setEditingField("personal")}
+                  onCancel={() => setEditingField(null)}
+                  view={
+                    [
+                      employee.birthdate &&
+                        `${employee.birthdate}${employee.birthplace ? `, ${employee.birthplace}` : ""}`,
+                      employee.gender,
+                      employee.religion,
+                      employee.blood_type && `Gol. darah ${employee.blood_type}`,
+                      employee.kk_no && `No. KK ${employee.kk_no}`,
+                      employee.education,
+                      employee.current_position && `Jabatan sblm direkrut: ${employee.current_position}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "—"
+                  }
+                >
+                  <form
+                    className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      updateEmployee.mutate(
+                        {
+                          empId: id,
+                          body: {
+                            birthdate: form.get("birthdate") || null,
+                            birthplace: form.get("birthplace") || null,
+                            gender: form.get("gender") || null,
+                            religion: form.get("religion") || null,
+                            blood_type: form.get("blood_type") || null,
+                            kk_no: form.get("kk_no") || null,
+                            education: form.get("education") || null,
+                            current_position: form.get("current_position") || null,
+                          },
+                        },
+                        { onSuccess: () => setEditingField(null) }
+                      );
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      name="birthdate"
+                      type="date"
+                      defaultValue={employee.birthdate ?? ""}
+                      className="input py-1 text-xs"
+                      aria-label="Tanggal lahir"
+                    />
+                    <input
+                      name="birthplace"
+                      defaultValue={employee.birthplace ?? ""}
+                      placeholder="Tempat lahir"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="gender"
+                      defaultValue={employee.gender ?? ""}
+                      placeholder="Jenis kelamin"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="religion"
+                      defaultValue={employee.religion ?? ""}
+                      placeholder="Agama"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="blood_type"
+                      defaultValue={employee.blood_type ?? ""}
+                      placeholder="Gol. darah"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="kk_no"
+                      defaultValue={employee.kk_no ?? ""}
+                      placeholder="No. Kartu Keluarga"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="education"
+                      defaultValue={employee.education ?? ""}
+                      placeholder="Pendidikan"
+                      className="input py-1 text-xs"
+                    />
+                    <input
+                      name="current_position"
+                      defaultValue={employee.current_position ?? ""}
+                      placeholder="Jabatan sblm direkrut"
+                      className="input py-1 text-xs"
+                    />
+                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs sm:col-span-4">
                       Simpan
                     </button>
                   </form>
@@ -839,6 +1186,87 @@ export default function EmployeeDetail() {
                 ))}
               </PropertiesPanel>
             </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold" style={{ color: "var(--text)" }}>Kontak Darurat</h2>
+                <button className="btn-secondary text-xs" onClick={() => setShowEmergencyForm(!showEmergencyForm)}>
+                  {showEmergencyForm ? "Tutup" : "+ Tambah Kontak"}
+                </button>
+              </div>
+              {showEmergencyForm && (
+                <form
+                  className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    createEmergencyContact.mutate({
+                      empId: id,
+                      body: {
+                        name: form.get("name"),
+                        relation: form.get("relation") || null,
+                        phone: form.get("phone") || null,
+                        is_primary: (emergencyContacts ?? []).length === 0,
+                      },
+                    });
+                  }}
+                >
+                  <input name="name" required placeholder="Nama" className="input" />
+                  <input name="relation" placeholder="Hubungan (mis. Suami/Ibu)" className="input" />
+                  <input name="phone" placeholder="Telepon" className="input" />
+                  <button disabled={createEmergencyContact.isPending} className="btn sm:col-span-4">Simpan Kontak</button>
+                  {createEmergencyContact.error && (
+                    <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-4">
+                      {(createEmergencyContact.error as Error).message}
+                    </p>
+                  )}
+                </form>
+              )}
+              <ul className="mt-3 space-y-2">
+                {(emergencyContacts ?? []).map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg p-3 text-sm"
+                    style={{ backgroundColor: "var(--hover)" }}
+                  >
+                    <div>
+                      <p className="font-medium" style={{ color: "var(--text)" }}>
+                        {c.name}
+                        {c.is_primary && <span className="badge pill p-green ml-2">Utama</span>}
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {[c.relation, c.phone].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!c.is_primary && (
+                        <button
+                          type="button"
+                          onClick={() => updateEmergencyContact.mutate({ contactId: c.id, body: { is_primary: true } })}
+                          className="text-xs font-medium hover:opacity-80"
+                          style={{ color: "var(--accent)" }}
+                        >
+                          Jadikan Utama
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => deleteEmergencyContact.mutate(c.id)}
+                        className="text-xs font-medium text-red-600 hover:opacity-80 dark:text-red-400"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {emergencyContacts?.length === 0 && (
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                    Belum ada kontak darurat.
+                  </p>
+                )}
+              </ul>
+            </div>
+            </>
           )}
 
           {tab === "kontrak" && (
@@ -851,24 +1279,55 @@ export default function EmployeeDetail() {
                   const form = new FormData(e.currentTarget);
                   addContract.mutate({
                     empId: id,
-                    body: { start_date: form.get("start_date") || null, end_date: form.get("end_date") || null, notes: null },
+                    body: {
+                      start_date: form.get("start_date") || null,
+                      end_date: form.get("end_date") || null,
+                      contract_type: form.get("contract_type") || null,
+                      notes: null,
+                    },
                   });
                 }}
               >
                 <input name="start_date" type="date" className="input w-auto" aria-label="Mulai kontrak" />
                 <input name="end_date" type="date" className="input w-auto" aria-label="Akhir kontrak" />
+                <select name="contract_type" className="input w-auto" defaultValue="" aria-label="Jenis kontrak">
+                  <option value="">Jenis kontrak (opsional)</option>
+                  <option value="pkwt">PKWT</option>
+                  <option value="pkwtt">PKWTT</option>
+                </select>
                 <button className="btn-secondary">Tambah Kontrak</button>
               </form>
+              {addContract.error && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                  {(addContract.error as Error).message}
+                </p>
+              )}
               <ul className="mt-3 space-y-2">
                 {(contracts ?? []).map((c) => {
                   const req = (esignRequests ?? []).find((r) => r.contract_id === c.id);
                   const active = req && ["terkirim", "dilihat"].includes(req.status);
                   const selectedContractTemplate = contractTemplates?.find((t) => t.id === generateTemplateId);
+                  const parentContract = c.previous_contract_id
+                    ? (contracts ?? []).find((p) => p.id === c.previous_contract_id)
+                    : null;
+                  const isExtended = (contracts ?? []).some((other) => other.previous_contract_id === c.id);
                   return (
                     <li key={c.id} className="rounded-lg p-3 text-sm" style={{ backgroundColor: "var(--hover)" }}>
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium" style={{ color: "var(--text)" }}>{c.contract_no}</p>
+                          <p className="font-medium" style={{ color: "var(--text)" }}>
+                            {c.contract_no}
+                            {c.contract_type && (
+                              <span className="badge pill p-blue ml-2 text-[10px] font-normal uppercase">
+                                {c.contract_type}
+                              </span>
+                            )}
+                            {parentContract && (
+                              <span className="badge pill p-gray ml-2 text-[10px] font-normal">
+                                Perpanjangan dari {parentContract.contract_no}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs" style={{ color: "var(--th-color)" }}>
                             {c.start_date ?? "?"} s/d {c.end_date ?? "-"}
                             {c.file_name ? ` · ${c.file_name}` : ""}
@@ -925,8 +1384,59 @@ export default function EmployeeDetail() {
                           ) : (
                             <span className="badge pill p-green">ditandatangani</span>
                           )}
+                          {!isExtended && (
+                            <button
+                              type="button"
+                              onClick={() => setExtendingContractId(extendingContractId === c.id ? null : c.id)}
+                              className="btn-secondary text-xs"
+                            >
+                              {extendingContractId === c.id ? "Batal" : "Perpanjang"}
+                            </button>
+                          )}
                         </div>
                       </div>
+
+                      {extendingContractId === c.id && (
+                        <form
+                          className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border p-3"
+                          style={{ borderColor: "var(--border)" }}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = new FormData(e.currentTarget);
+                            extendContract.mutate({
+                              contractId: c.id,
+                              body: {
+                                start_date: form.get("start_date") || null,
+                                end_date: form.get("end_date") || null,
+                                notes: null,
+                              },
+                            });
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            name="start_date"
+                            type="date"
+                            required
+                            className="input w-auto py-1 text-xs"
+                            aria-label="Mulai kontrak perpanjangan"
+                          />
+                          <input
+                            name="end_date"
+                            type="date"
+                            className="input w-auto py-1 text-xs"
+                            aria-label="Akhir kontrak perpanjangan"
+                          />
+                          <button disabled={extendContract.isPending} className="btn py-1 text-xs">
+                            Simpan Perpanjangan
+                          </button>
+                          {extendContract.error && (
+                            <p className="w-full text-xs text-red-600 dark:text-red-400">
+                              {(extendContract.error as Error).message}
+                            </p>
+                          )}
+                        </form>
+                      )}
 
                       {!c.template_id && (
                         <div className="mt-2">
@@ -1282,6 +1792,98 @@ export default function EmployeeDetail() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === "absensi" && (
+            <div className="space-y-4">
+              <div className="card">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-semibold" style={{ color: "var(--text)" }}>Rekap Bulanan</h2>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={attPeriod.month}
+                      onChange={(e) => setAttPeriod({ ...attPeriod, month: Number(e.target.value) })}
+                      className="input w-20"
+                      aria-label="Bulan"
+                    />
+                    <input
+                      type="number"
+                      value={attPeriod.year}
+                      onChange={(e) => setAttPeriod({ ...attPeriod, year: Number(e.target.value) })}
+                      className="input w-24"
+                      aria-label="Tahun"
+                    />
+                  </div>
+                </div>
+                {attendanceSummary ? (
+                  <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Hari Hadir</p>
+                      <p className="font-medium" style={{ color: "var(--text)" }}>{attendanceSummary.present_days}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Jam Lembur</p>
+                      <p className="font-medium" style={{ color: "var(--text)" }}>{attendanceSummary.overtime_hours} jam</p>
+                    </div>
+                    <div>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Status Validasi</p>
+                      <p className="font-medium" style={{ color: "var(--text)" }}>
+                        {attendanceSummary.client_approved ? "Tervalidasi" : "Menunggu"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+                    Belum ada rekap untuk periode ini.
+                  </p>
+                )}
+              </div>
+
+              <div className="card overflow-x-auto p-0">
+                <table className="w-full">
+                  <thead style={{ backgroundColor: "var(--hover)" }}>
+                    <tr>
+                      <th className="th">Tanggal</th>
+                      <th className="th">Status</th>
+                      <th className="th">Clock-in/out</th>
+                      <th className="th">Lembur</th>
+                      <th className="th">Sumber</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                    {(attendanceRecords ?? []).map((r) => (
+                      <tr key={r.id}>
+                        <td className="td font-mono text-xs">{r.date}</td>
+                        <td className="td">
+                          <span className="pill p-gray">{ATTENDANCE_STATUS_LABELS[r.status] ?? r.status}</span>
+                        </td>
+                        <td className="td text-xs">
+                          {r.clock_in
+                            ? new Date(r.clock_in).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+                            : "—"}{" "}
+                          /{" "}
+                          {r.clock_out
+                            ? new Date(r.clock_out).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </td>
+                        <td className="td">{r.overtime_hours}</td>
+                        <td className="td text-xs">{r.source}</td>
+                      </tr>
+                    ))}
+                    {attendanceRecords?.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                          Belum ada record absensi untuk periode ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -52,6 +52,55 @@ def test_onboard_from_placement_creates_employee(client):
     assert dup.status_code == 409
 
 
+def test_onboard_copies_identity_fields_from_candidate(client):
+    """Tier 1/2 gap-fill: birthdate/gender/education/current_position/
+    blood_type/birthplace disalin dari Candidate saat onboarding (bukan
+    ditinggal begitu saja seperti sebelum perbaikan ini)."""
+    headers = _auth_header(client)
+    client_resp = client.post(
+        "/api/v1/clients", headers=headers, json={"name": "PT Identity Klien"}
+    )
+    client_id = client_resp.json()["id"]
+    jo = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=headers,
+        json={"client_id": client_id, "title": "Staff Gudang", "headcount": 1},
+    ).json()
+    cand = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={
+            "full_name": "Gita Permata",
+            "phone": "081211110000",
+            "email": "gita@contoh.co.id",
+            "gender": "Perempuan",
+            "birthdate": "1997-03-10",
+            "birthplace": "Bandung",
+            "blood_type": "O",
+            "education": "S1 Akuntansi",
+            "current_position": "Staff Admin",
+        },
+    ).json()
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=headers,
+        json={"candidate_id": cand["id"], "job_order_id": jo["id"]},
+    ).json()
+
+    onboarded = client.post(
+        "/api/v1/employees/onboard", headers=headers, json={"placement_id": placement["id"]}
+    )
+    assert onboarded.status_code == 201, onboarded.text
+    body = onboarded.json()
+    assert body["email"] == "gita@contoh.co.id"
+    assert body["gender"] == "Perempuan"
+    assert body["birthdate"] == "1997-03-10"
+    assert body["birthplace"] == "Bandung"
+    assert body["blood_type"] == "O"
+    assert body["education"] == "S1 Akuntansi"
+    assert body["current_position"] == "Staff Admin"
+
+
 def test_create_employee_generated_no_and_search(client):
     headers = _auth_header(client)
     first = client.post("/api/v1/employees", headers=headers, json={"full_name": "Budi Santoso"})
@@ -106,6 +155,53 @@ def test_contract_lifecycle_sign_and_expiring(client):
 
     again = client.post(f"/api/v1/employees/contracts/{contract['id']}/sign", headers=headers)
     assert again.status_code == 409
+
+
+def test_contract_extend_builds_renewal_chain(client):
+    """Tier 2 gap-fill (audit MYOHRIS "Extensions"): kontrak bisa diperpanjang,
+    membentuk rantai riwayat lewat `previous_contract_id`."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Farah Yuliana"}
+    ).json()
+
+    original = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01", "end_date": "2026-06-30"},
+    ).json()
+    assert original["previous_contract_id"] is None
+
+    extended = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2026-07-01", "end_date": "2026-12-31"},
+    )
+    assert extended.status_code == 201, extended.text
+    extended_body = extended.json()
+    assert extended_body["previous_contract_id"] == original["id"]
+    assert extended_body["contract_no"].startswith("KON/")
+
+    # Kontrak yang sudah diperpanjang tidak boleh diperpanjang lagi langsung --
+    # harus lewat kontrak perpanjangan terakhir.
+    again = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2027-01-01", "end_date": "2027-06-30"},
+    )
+    assert again.status_code == 409
+
+    # Tapi memperpanjang kontrak perpanjangan terakhir itu sendiri boleh.
+    chained = client.post(
+        f"/api/v1/employees/contracts/{extended_body['id']}/extend",
+        headers=headers,
+        json={"start_date": "2027-01-01", "end_date": "2027-06-30"},
+    )
+    assert chained.status_code == 201, chained.text
+    assert chained.json()["previous_contract_id"] == extended_body["id"]
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/contracts", headers=headers).json()
+    assert len(listed) == 3
 
 
 def test_upload_hr_document_versions(client):
@@ -494,9 +590,6 @@ def test_employee_fase26_fields_roundtrip(client):
             "full_name": "Nadia Kusuma",
             "grade": "G3",
             "level": "Senior",
-            "emergency_contact_name": "Rudi Kusuma",
-            "emergency_contact_relation": "Suami",
-            "emergency_contact_phone": "081200000000",
             "citizen_address": {"province": "Jawa Barat", "city": "Bandung"},
             "residential_address": {"province": "DKI Jakarta", "city": "Jakarta Selatan"},
         },
@@ -505,7 +598,6 @@ def test_employee_fase26_fields_roundtrip(client):
     body = created.json()
     assert body["grade"] == "G3"
     assert body["level"] == "Senior"
-    assert body["emergency_contact_name"] == "Rudi Kusuma"
     assert body["citizen_address"] == {"province": "Jawa Barat", "city": "Bandung"}
     assert body["residential_address"] == {"province": "DKI Jakarta", "city": "Jakarta Selatan"}
     assert body["payroll_locked"] is False
@@ -518,6 +610,62 @@ def test_employee_fase26_fields_roundtrip(client):
     assert updated.status_code == 200, updated.text
     assert updated.json()["grade"] == "G4"
     assert updated.json()["residential_address"] == {"province": "Jawa Barat"}
+
+
+def test_employee_emergency_contacts_crud(client):
+    """Kontak darurat one-to-many (dulu 3 kolom flat, hanya nampung satu)."""
+    headers = _auth_header(client)
+    emp = client.post("/api/v1/employees", headers=headers, json={"full_name": "Wulan Sari"}).json()
+
+    empty = client.get(f"/api/v1/employees/{emp['id']}/emergency-contacts", headers=headers)
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    first = client.post(
+        f"/api/v1/employees/{emp['id']}/emergency-contacts",
+        headers=headers,
+        json={
+            "name": "Budi Sari",
+            "relation": "Suami",
+            "phone": "081200000001",
+            "is_primary": True,
+        },
+    )
+    assert first.status_code == 201, first.text
+    assert first.json()["is_primary"] is True
+
+    second = client.post(
+        f"/api/v1/employees/{emp['id']}/emergency-contacts",
+        headers=headers,
+        json={"name": "Ratna Sari", "relation": "Ibu", "phone": "081200000002", "is_primary": True},
+    ).json()
+    assert second["is_primary"] is True
+
+    listed = client.get(f"/api/v1/employees/{emp['id']}/emergency-contacts", headers=headers).json()
+    assert len(listed) == 2
+    # Menandai kontak kedua utama otomatis melepas status utama kontak pertama.
+    primaries = [c["is_primary"] for c in listed]
+    assert primaries.count(True) == 1
+    assert next(c for c in listed if c["id"] == second["id"])["is_primary"] is True
+
+    patched = client.patch(
+        f"/api/v1/employees/emergency-contacts/{second['id']}",
+        headers=headers,
+        json={"phone": "081299999999"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["phone"] == "081299999999"
+
+    deleted = client.delete(
+        f"/api/v1/employees/emergency-contacts/{first.json()['id']}", headers=headers
+    )
+    assert deleted.status_code == 204
+
+    remaining = client.get(
+        f"/api/v1/employees/{emp['id']}/emergency-contacts", headers=headers
+    ).json()
+    assert len(remaining) == 1
+    assert remaining[0]["id"] == second["id"]
 
 
 def test_employee_movements_crud(client):
@@ -533,6 +681,8 @@ def test_employee_movements_crud(client):
             "movement_type": "promosi",
             "previous_grade": "G2",
             "new_grade": "G3",
+            "new_division": "Operations",
+            "new_position": "Senior Staff",
             "effective_date": "2026-06-01",
         },
     )
@@ -542,6 +692,57 @@ def test_employee_movements_crud(client):
     listed = client.get(f"/api/v1/employees/{emp['id']}/movements", headers=headers)
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+    # Tier 3 gap-fill: movement mensinkron field live di Employee, bukan
+    # cuma jadi entri log yang tidak pernah dibaca ulang.
+    refreshed = client.get(f"/api/v1/employees/{emp['id']}", headers=headers).json()
+    assert refreshed["grade"] == "G3"
+    assert refreshed["division"] == "Operations"
+    assert refreshed["position"] == "Senior Staff"
+
+
+def test_pkwt_duration_limit_enforced_across_extensions(client):
+    """Tier 3 gap-fill: PKWT dibatasi total durasi 5 tahun TERMASUK semua
+    perpanjangan (UU Cipta Kerja) -- dihitung dari tanggal mulai kontrak
+    AWAL rantai, bukan kontrak perpanjangan terakhir."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Hasan Wibowo"}
+    ).json()
+
+    original = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2022-01-01", "end_date": "2024-12-31", "contract_type": "pkwt"},
+    ).json()
+    assert original["contract_type"] == "pkwt"
+
+    # Perpanjangan ke 2026-12-31 -> total 5 tahun persis dari 2022-01-01, masih boleh.
+    within_limit = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2025-01-01", "end_date": "2026-12-31"},
+    )
+    assert within_limit.status_code == 201, within_limit.text
+    # contract_type diwarisi otomatis dari kontrak yang diperpanjang.
+    assert within_limit.json()["contract_type"] == "pkwt"
+
+    # Perpanjangan lagi sampai lewat 5 tahun (2027-01-01) harus ditolak.
+    over_limit = client.post(
+        f"/api/v1/employees/contracts/{within_limit.json()['id']}/extend",
+        headers=headers,
+        json={"start_date": "2027-01-01", "end_date": "2027-06-30"},
+    )
+    assert over_limit.status_code == 422
+    assert "5 tahun" in over_limit.json()["detail"]
+
+    # PKWTT tidak dibatasi -- kontrak baru & perpanjangan panjang harus lolos.
+    permanent = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2020-01-01", "end_date": "2035-01-01", "contract_type": "pkwtt"},
+    )
+    assert permanent.status_code == 201, permanent.text
 
 
 def test_vaccine_records_crud(client):

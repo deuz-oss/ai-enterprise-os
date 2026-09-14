@@ -5,6 +5,7 @@ import secrets
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
+from dateutil.relativedelta import relativedelta
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,7 @@ from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
 from app.modules.hrd.models import (
     ContractSignStatus,
+    ContractType,
     Employee,
     EmployeeDocument,
     EmployeeMovement,
@@ -243,13 +245,23 @@ def onboard_from_placement(db: Session, payload: OnboardCreate) -> Employee:
         employee_no = _generate_employee_no(db)
     _ensure_unique_employee_no(db, employee_no)
 
+    candidate = placement.candidate
     employee = Employee(
         placement_id=placement.id,
         employee_no=employee_no,
-        full_name=placement.candidate.full_name,
-        phone=data.get("phone") or placement.candidate.phone,
+        full_name=candidate.full_name,
+        phone=data.get("phone") or candidate.phone,
         join_date=data.get("join_date"),
         status=EmployeeStatus.active,
+        # Snapshot dari profil kandidat -- sekali salin saat onboarding,
+        # tidak disinkron ulang otomatis kalau kandidat diedit sesudahnya.
+        email=candidate.email,
+        birthdate=candidate.birthdate,
+        birthplace=candidate.birthplace,
+        gender=candidate.gender,
+        blood_type=candidate.blood_type,
+        education=candidate.education,
+        current_position=candidate.current_position,
     )
     db.add(employee)
     db.flush()
@@ -427,7 +439,23 @@ def apply_onboarding_invite(db: Session, *, user, invite_id: str) -> Employee:
 
     submitted = json.loads(invite.submitted_data_json) if invite.submitted_data_json else {}
     submitted.pop("consent", None)
+    # Kontak darurat sekarang tabel terpisah (one-to-many, lihat
+    # EmployeeEmergencyContact), bukan kolom flat Employee -- dikeluarkan
+    # dari EmployeeUpdate lalu dirutekan ke `create_emergency_contact`.
+    contact_name = (submitted.pop("emergency_contact_name", None) or "").strip()
+    contact_relation = submitted.pop("emergency_contact_relation", None)
+    contact_phone = submitted.pop("emergency_contact_phone", None)
     employee = update_employee(db, str(employee.id), EmployeeUpdate(**submitted))
+    if contact_name:
+        from app.modules.hrd.schemas import EmergencyContactCreate
+
+        create_emergency_contact(
+            db,
+            str(employee.id),
+            EmergencyContactCreate(
+                name=contact_name, relation=contact_relation, phone=contact_phone, is_primary=True
+            ),
+        )
 
     documents = list(
         db.execute(
@@ -680,11 +708,52 @@ def _generate_contract_no(db: Session, employee: Employee) -> str:
     return f"{prefix}{max_seq + 1:02d}"
 
 
+def _pkwt_chain_start_date(db: Session, contract_id) -> date | None:
+    """Jalan mundur lewat `previous_contract_id` sampai akar rantai --
+    tanggal mulai akar itulah acuan batas 5 tahun PKWT (UU Cipta Kerja),
+    bukan tanggal mulai kontrak perpanjangan yang mana pun."""
+    current = db.get(EmploymentContract, contract_id)
+    seen: set = set()
+    while (
+        current is not None and current.previous_contract_id is not None and current.id not in seen
+    ):
+        seen.add(current.id)
+        current = db.get(EmploymentContract, current.previous_contract_id)
+    return current.start_date if current else None
+
+
 def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> EmploymentContract:
     employee = _get_employee(db, employee_id)
     data = payload.model_dump()
     if data.get("start_date") and data.get("end_date") and data["end_date"] < data["start_date"]:
         raise HTTPException(status_code=422, detail="Tanggal akhir kontrak sebelum tanggal mulai")
+
+    # Perpanjangan tanpa contract_type eksplisit mewarisi tipe kontrak yang
+    # diperpanjang -- masuk akal, PKWT diperpanjang tetap PKWT kecuali
+    # sengaja diubah.
+    if data.get("previous_contract_id") and data.get("contract_type") is None:
+        prev = db.get(EmploymentContract, data["previous_contract_id"])
+        if prev is not None:
+            data["contract_type"] = prev.contract_type
+
+    if data.get("contract_type") == ContractType.pkwt and data.get("end_date"):
+        chain_start = data.get("start_date")
+        if data.get("previous_contract_id"):
+            root_start = _pkwt_chain_start_date(db, data["previous_contract_id"])
+            if root_start is not None:
+                chain_start = root_start
+        if chain_start:
+            max_end = chain_start + relativedelta(years=5)
+            if data["end_date"] > max_end:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Total durasi PKWT (termasuk semua perpanjangan) maksimal 5 tahun "
+                        f"sejak {chain_start.isoformat()} (UU Cipta Kerja) -- akhir kontrak "
+                        f"tidak boleh melewati {max_end.isoformat()}"
+                    ),
+                )
+
     auto_no = not (data.get("contract_no") or "").strip()
 
     max_attempts = 5 if auto_no else 1
@@ -702,6 +771,28 @@ def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> E
                 raise HTTPException(status_code=409, detail="Nomor kontrak sudah dipakai") from None
     db.refresh(contract)
     return contract
+
+
+def extend_contract(db: Session, contract_id: str, payload: ContractCreate) -> EmploymentContract:
+    """Buat kontrak baru sbg perpanjangan `contract_id` -- rantai riwayat
+    (`previous_contract_id`), bukan menimpa kontrak lama. Cuma kontrak
+    PALING BARU dalam satu rantai yang boleh diperpanjang lagi (cegah
+    cabang ganda yang membingungkan tampilan riwayat)."""
+    old = _get_contract(db, contract_id)
+    already_extended = db.execute(
+        select(EmploymentContract.id).where(EmploymentContract.previous_contract_id == old.id)
+    ).first()
+    if already_extended:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Kontrak ini sudah pernah diperpanjang -- "
+                "perpanjang dari kontrak perpanjangan terakhir"
+            ),
+        )
+    data = payload.model_dump()
+    data["previous_contract_id"] = old.id
+    return create_contract(db, str(old.employee_id), ContractCreate(**data))
 
 
 def list_contracts(db: Session, employee_id: str) -> list[EmploymentContract]:
@@ -1144,6 +1235,18 @@ def create_employee_movement(
         employee_id=employee.id, created_by=created_by, **payload.model_dump()
     )
     db.add(movement)
+    # Tier 3 gap-fill: movement adalah sumber kebenaran perubahan, jadi
+    # field live di Employee (grade/level/division/position) disinkron ke
+    # `new_*` di sini -- sebelumnya movement cuma jadi log, field live-nya
+    # (grade/level, Fase 26) TIDAK PERNAH ikut berubah otomatis.
+    if payload.new_grade is not None:
+        employee.grade = payload.new_grade
+    if payload.new_level is not None:
+        employee.level = payload.new_level
+    if payload.new_division is not None:
+        employee.division = payload.new_division
+    if payload.new_position is not None:
+        employee.position = payload.new_position
     db.commit()
     db.refresh(movement)
     return movement
@@ -1200,6 +1303,77 @@ def contract_file_download_url(db: Session, contract_id: str) -> str:
         detail={"file_name": contract.file_name},
     )
     return storage.presigned_get_url(contract.object_key)
+
+
+# ---------- Kontak Darurat — one-to-many (sebelumnya 3 kolom flat) ----------
+
+
+def _get_emergency_contact(db: Session, contact_id: str):
+    from app.modules.hrd.models import EmployeeEmergencyContact
+
+    contact = db.get(EmployeeEmergencyContact, parse_uuid(contact_id))
+    if not contact:
+        raise HTTPException(status_code=404, detail="Kontak darurat tidak ditemukan")
+    return contact
+
+
+def list_emergency_contacts(db: Session, employee_id: str):
+    from app.modules.hrd.models import EmployeeEmergencyContact
+
+    _get_employee(db, employee_id)
+    stmt = (
+        select(EmployeeEmergencyContact)
+        .where(EmployeeEmergencyContact.employee_id == parse_uuid(employee_id))
+        .order_by(EmployeeEmergencyContact.created_at)
+    )
+    return list(db.execute(stmt).scalars())
+
+
+def _unset_other_primary_contacts(db: Session, employee_id, exclude_id=None) -> None:
+    """`is_primary` cuma penanda tampilan (satu yang menonjol di ringkasan),
+    bukan constraint unik DB -- dijaga di sini supaya tidak ada dua kontak
+    "utama" sekaligus yang membingungkan di UI."""
+    from app.modules.hrd.models import EmployeeEmergencyContact
+
+    stmt = select(EmployeeEmergencyContact).where(
+        EmployeeEmergencyContact.employee_id == employee_id,
+        EmployeeEmergencyContact.is_primary.is_(True),
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(EmployeeEmergencyContact.id != exclude_id)
+    for other in db.execute(stmt).scalars():
+        other.is_primary = False
+
+
+def create_emergency_contact(db: Session, employee_id: str, payload):
+    from app.modules.hrd.models import EmployeeEmergencyContact
+
+    employee = _get_employee(db, employee_id)
+    data = payload.model_dump()
+    contact = EmployeeEmergencyContact(employee_id=employee.id, **data)
+    db.add(contact)
+    if contact.is_primary:
+        _unset_other_primary_contacts(db, employee.id)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+def update_emergency_contact(db: Session, contact_id: str, payload):
+    contact = _get_emergency_contact(db, contact_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(contact, field, value)
+    if contact.is_primary:
+        _unset_other_primary_contacts(db, contact.employee_id, exclude_id=contact.id)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+def delete_emergency_contact(db: Session, contact_id: str):
+    contact = _get_emergency_contact(db, contact_id)
+    db.delete(contact)
+    db.commit()
 
 
 # ---------- Employee Insurances — PRD v3.0 one-to-many ----------

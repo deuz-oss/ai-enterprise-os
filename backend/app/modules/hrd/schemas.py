@@ -2,10 +2,11 @@ import json
 from datetime import date, datetime, time
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from app.modules.hrd.models import (
     ContractSignStatus,
+    ContractType,
     EmployeeStatus,
     EmploymentType,
     HrDocumentType,
@@ -25,6 +26,15 @@ class EmployeeCreate(BaseModel):
     bpjs_kesehatan_no: str | None = None
     bpjs_ketenagakerjaan_no: str | None = None
     phone: str | None = None
+    email: str | None = None
+    birthdate: date | None = None
+    birthplace: str | None = None
+    gender: str | None = None
+    kk_no: str | None = None
+    religion: str | None = None
+    blood_type: str | None = None
+    education: str | None = None
+    current_position: str | None = None
     address: str | None = None
     bank_name: str | None = None
     bank_account: str | None = None
@@ -36,9 +46,8 @@ class EmployeeCreate(BaseModel):
     employment_type: EmploymentType = EmploymentType.eksternal
     grade: str | None = None
     level: str | None = None
-    emergency_contact_name: str | None = None
-    emergency_contact_relation: str | None = None
-    emergency_contact_phone: str | None = None
+    division: str | None = None
+    position: str | None = None
     citizen_address: dict = {}
     residential_address: dict = {}
 
@@ -51,6 +60,15 @@ class EmployeeUpdate(BaseModel):
     bpjs_kesehatan_no: str | None = None
     bpjs_ketenagakerjaan_no: str | None = None
     phone: str | None = None
+    email: str | None = None
+    birthdate: date | None = None
+    birthplace: str | None = None
+    gender: str | None = None
+    kk_no: str | None = None
+    religion: str | None = None
+    blood_type: str | None = None
+    education: str | None = None
+    current_position: str | None = None
     address: str | None = None
     bank_name: str | None = None
     bank_account: str | None = None
@@ -74,9 +92,8 @@ class EmployeeUpdate(BaseModel):
     bpjs_ketenagakerjaan_valid_until: date | None = None
     grade: str | None = None
     level: str | None = None
-    emergency_contact_name: str | None = None
-    emergency_contact_relation: str | None = None
-    emergency_contact_phone: str | None = None
+    division: str | None = None
+    position: str | None = None
     citizen_address: dict | None = None
     residential_address: dict | None = None
 
@@ -93,6 +110,15 @@ class EmployeeOut(BaseModel):
     bpjs_kesehatan_no: str | None
     bpjs_ketenagakerjaan_no: str | None
     phone: str | None
+    email: str | None = None
+    birthdate: date | None = None
+    birthplace: str | None = None
+    gender: str | None = None
+    kk_no: str | None = None
+    religion: str | None = None
+    blood_type: str | None = None
+    education: str | None = None
+    current_position: str | None = None
     address: str | None
     bank_name: str | None
     bank_account: str | None
@@ -112,9 +138,8 @@ class EmployeeOut(BaseModel):
     bpjs_ketenagakerjaan_card_key: str | None = None
     grade: str | None = None
     level: str | None = None
-    emergency_contact_name: str | None = None
-    emergency_contact_relation: str | None = None
-    emergency_contact_phone: str | None = None
+    division: str | None = None
+    position: str | None = None
     citizen_address: dict = {}
     residential_address: dict = {}
     payroll_locked: bool = False
@@ -123,8 +148,57 @@ class EmployeeOut(BaseModel):
     site_id: UUID | None = None
     shift_start_time: time | None = None
     shift_end_time: time | None = None
+    # Klien & job order asal (lewat `placement_id`) -- read-only, dibaca dari
+    # properti model (`hrd/models.py::Employee.placement_client_*`), TIDAK
+    # ada di Create/Update (immutable, cuma keisi lewat `/employees/onboard`).
+    placement_client_id: UUID | None = None
+    placement_client_name: str | None = None
+    placement_job_order_id: UUID | None = None
+    placement_job_title: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ptkp_label(self) -> str | None:
+        """Label PTKP (mis. "K/1") dari status kawin+tanggungan -- dihitung
+        di sini (bukan disimpan), reuse rumus kategori `payroll/tax.py`
+        supaya satu sumber kebenaran dgn perhitungan pajak sesungguhnya."""
+        if self.marital_status is None:
+            return None
+        from app.modules.payroll.tax import TaxProfile
+
+        key = TaxProfile(
+            marital_status=self.marital_status.value, dependents=self.dependents
+        ).ptkp_key
+        status, deps = key.split("_")
+        return f"{status.upper()}/{deps}"
+
+
+class EmergencyContactCreate(BaseModel):
+    name: str
+    relation: str | None = None
+    phone: str | None = None
+    is_primary: bool = False
+
+
+class EmergencyContactUpdate(BaseModel):
+    name: str | None = None
+    relation: str | None = None
+    phone: str | None = None
+    is_primary: bool | None = None
+
+
+class EmergencyContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    employee_id: UUID
+    name: str
+    relation: str | None
+    phone: str | None
+    is_primary: bool
+    created_at: datetime
 
 
 class InsuranceCreate(BaseModel):
@@ -228,6 +302,10 @@ class ContractCreate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     notes: str | None = None
+    contract_type: ContractType | None = None
+    # Diisi via POST /contracts/{id}/extend (lihat router) -- bukan
+    # diketik manual lewat form Tambah Kontrak biasa.
+    previous_contract_id: UUID | None = None
 
 
 class ContractUpdate(BaseModel):
@@ -236,6 +314,7 @@ class ContractUpdate(BaseModel):
     end_date: date | None = None
     notes: str | None = None
     sign_status: ContractSignStatus | None = None
+    contract_type: ContractType | None = None
 
 
 class ContractOut(BaseModel):
@@ -253,6 +332,8 @@ class ContractOut(BaseModel):
     file_size: int
     notes: str | None
     template_id: UUID | None = None
+    previous_contract_id: UUID | None = None
+    contract_type: ContractType | None = None
     created_at: datetime
 
 

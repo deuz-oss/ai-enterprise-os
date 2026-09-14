@@ -12,10 +12,23 @@ export interface EmployeeRow {
   employee_no: string;
   full_name: string;
   phone: string | null;
+  email: string | null;
+  birthdate: string | null;
+  birthplace: string | null;
+  gender: string | null;
+  kk_no: string | null;
+  religion: string | null;
+  blood_type: string | null;
+  education: string | null;
+  current_position: string | null;
+  bank_name: string | null;
+  bank_account: string | null;
   ktp_no: string | null;
   npwp_no: string | null;
   join_date: string | null;
   status: string;
+  marital_status: string | null;
+  dependents: number;
   base_salary: number;
   user_id: string | null;
   bpjs_kesehatan_no: string | null;
@@ -28,9 +41,8 @@ export interface EmployeeRow {
   bpjs_ketenagakerjaan_card_key: string | null;
   grade: string | null;
   level: string | null;
-  emergency_contact_name: string | null;
-  emergency_contact_relation: string | null;
-  emergency_contact_phone: string | null;
+  division: string | null;
+  position: string | null;
   citizen_address: Record<string, string>;
   residential_address: Record<string, string>;
   payroll_locked: boolean;
@@ -39,6 +51,11 @@ export interface EmployeeRow {
   site_id: string | null;
   shift_start_time: string | null;
   shift_end_time: string | null;
+  placement_client_id: string | null;
+  placement_client_name: string | null;
+  placement_job_order_id: string | null;
+  placement_job_title: string | null;
+  ptkp_label: string | null;
 }
 
 interface LeaveRequestRow {

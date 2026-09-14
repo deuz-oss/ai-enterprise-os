@@ -97,8 +97,15 @@ def test_onboarding_invite_full_lifecycle_submit_to_apply(client):
     assert employee["ktp_no"] == "3201010101010001"
     assert employee["npwp_no"] == "09.123.456.7-890.000"
     assert employee["bank_name"] == "BCA"
-    assert employee["emergency_contact_name"] == "Sari"
     assert employee["citizen_address"]["city"] == "Jakarta Selatan"
+
+    contacts = client.get(
+        f"/api/v1/employees/{employee['id']}/emergency-contacts", headers=headers
+    ).json()
+    assert len(contacts) == 1
+    assert contacts[0]["name"] == "Sari"
+    assert contacts[0]["relation"] == "Ibu"
+    assert contacts[0]["is_primary"] is True
 
     docs = client.get(f"/api/v1/employees/{employee['id']}/documents", headers=headers)
     assert docs.status_code == 200

@@ -52,6 +52,17 @@ class ContractSignStatus(str, enum.Enum):
     signed = "ditandatangani"
 
 
+class ContractType(str, enum.Enum):
+    """Tier 3 gap-fill: PKWT (waktu tertentu) dibatasi total durasi
+    maksimal 5 tahun TERMASUK semua perpanjangan (UU Cipta Kerja/PP 35/2021,
+    ps. 8) -- divalidasi di `service.py::extend_contract`/`create_contract`.
+    PKWTT (waktu tidak tertentu/permanen) tidak dibatasi. Nullable -- kontrak
+    lama yang belum diklasifikasi tidak terdampak/tidak divalidasi."""
+
+    pkwt = "pkwt"
+    pkwtt = "pkwtt"
+
+
 class HrDocumentType(str, enum.Enum):
     ktp = "ktp"
     npwp = "npwp"
@@ -114,6 +125,27 @@ class EmployeeInsurance(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class EmployeeEmergencyContact(TenantMixin, Base):
+    """Kontak darurat one-to-many per karyawan -- dulu 3 kolom flat
+    (`emergency_contact_name/relation/phone`) yang cuma nampung SATU kontak,
+    diganti tabel terpisah karena karyawan bisa punya lebih dari satu (mis.
+    pasangan + orang tua). `is_primary` murni penanda tampilan (di-unset
+    otomatis di kontak lain saat satu ditandai utama, lihat
+    `service.py::_unset_other_primary_contacts`) -- bukan constraint DB."""
+
+    __tablename__ = "employee_emergency_contacts"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    relation: Mapped[str | None] = mapped_column(String(100), default=None)
+    phone: Mapped[str | None] = mapped_column(String(60), default=None)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    employee: Mapped["Employee"] = relationship(back_populates="emergency_contacts")
+
+
 class Employee(TenantMixin, Base):
     __tablename__ = "employees"
     __table_args__ = (UniqueConstraint("tenant_id", "employee_no", name="uq_employee_tenant_no"),)
@@ -155,6 +187,26 @@ class Employee(TenantMixin, Base):
     insurance_card_key: Mapped[str | None] = mapped_column(String(500), default=None)
     insurance_policy_key: Mapped[str | None] = mapped_column(String(500), default=None)
     phone: Mapped[str | None] = mapped_column(String(60))
+    email: Mapped[str | None] = mapped_column(String(255), default=None)
+    # Data pribadi (Tier 1 gap-fill dari audit MYOHRIS) -- birthdate/gender/
+    # education disalin dari Candidate saat onboarding (lihat
+    # `onboard_from_placement`), lalu bisa diedit manual lewat sini
+    # setelahnya (tidak disinkron ulang ke Candidate). `current_position`
+    # SENGAJA berarti posisi/jabatan SEBELUM direkrut (snapshot dari profil
+    # kandidat) -- bukan jabatan di perusahaan ini sekarang (itu `grade`/
+    # `level` + riwayat `EmployeeMovement`), supaya tidak tertukar makna.
+    birthdate: Mapped[date | None] = mapped_column(Date, default=None)
+    birthplace: Mapped[str | None] = mapped_column(String(120), default=None)
+    gender: Mapped[str | None] = mapped_column(String(20), default=None)
+    # Tier 2 gap-fill lanjutan (audit MYOHRIS): kk_no/religion/blood_type
+    # bukan field baru di Candidate -- blood_type & birthplace di atas SUDAH
+    # ada dari Fase 24, cuma belum pernah dibawa ke Employee. kk_no/religion
+    # memang baru di kedua sisi.
+    kk_no: Mapped[str | None] = mapped_column(String(50), default=None)
+    religion: Mapped[str | None] = mapped_column(String(50), default=None)
+    blood_type: Mapped[str | None] = mapped_column(String(5), default=None)
+    education: Mapped[str | None] = mapped_column(String(100), default=None)
+    current_position: Mapped[str | None] = mapped_column(String(120), default=None)
     address: Mapped[str | None] = mapped_column(String(500))
     bank_name: Mapped[str | None] = mapped_column(String(100))
     bank_account: Mapped[str | None] = mapped_column(String(100))
@@ -187,9 +239,15 @@ class Employee(TenantMixin, Base):
     # (bukan satu field dipecah), belum ada padanan sebelumnya.
     grade: Mapped[str | None] = mapped_column(String(50), default=None)
     level: Mapped[str | None] = mapped_column(String(50), default=None)
-    emergency_contact_name: Mapped[str | None] = mapped_column(String(255), default=None)
-    emergency_contact_relation: Mapped[str | None] = mapped_column(String(100), default=None)
-    emergency_contact_phone: Mapped[str | None] = mapped_column(String(60), default=None)
+    # Tier 3 gap-fill (audit MYOHRIS): divisi & jabatan SEKARANG, live field --
+    # sebelumnya cuma ada sbg snapshot before/after di `EmployeeMovement`
+    # (riwayat mutasi), jadi utk tahu "divisi apa SEKARANG" harus buka tab
+    # Riwayat dan cari entri terakhir. Disinkron otomatis dari `new_division`/
+    # `new_position` tiap kali movement baru dicatat (lihat
+    # `service.py::create_employee_movement`), tapi tetap bisa dikoreksi
+    # manual lewat PATCH langsung tanpa movement (mis. perbaikan data lama).
+    division: Mapped[str | None] = mapped_column(String(120), default=None)
+    position: Mapped[str | None] = mapped_column(String(120), default=None)
     # `address` di atas tetap alamat flat lama (legacy/fallback) -- ini
     # alamat terstruktur baru, KTP vs domisili dipisah (JSON blob per pola
     # `JobOrder.benefits_json`): {province, city, district, postal_code, detail}.
@@ -231,6 +289,31 @@ class Employee(TenantMixin, Base):
         cascade="all, delete-orphan",
         order_by="VaccineRecord.vaccinated_at",
     )
+    emergency_contacts: Mapped[list["EmployeeEmergencyContact"]] = relationship(
+        back_populates="employee",
+        cascade="all, delete-orphan",
+        order_by="EmployeeEmergencyContact.created_at",
+    )
+    # Read-only lintas modul -- klien & job order asal karyawan ini
+    # direkrut (lihat properti `placement_client_*`/`placement_job_*` di
+    # bawah). Tanpa `back_populates` karena Placement tidak butuh nav balik.
+    placement = relationship("Placement", lazy="selectin", viewonly=True)
+
+    @property
+    def placement_client_id(self) -> UUID | None:
+        return self.placement.job_order.client_id if self.placement else None
+
+    @property
+    def placement_client_name(self) -> str | None:
+        return self.placement.job_order.client.name if self.placement else None
+
+    @property
+    def placement_job_order_id(self) -> UUID | None:
+        return self.placement.job_order_id if self.placement else None
+
+    @property
+    def placement_job_title(self) -> str | None:
+        return self.placement.job_order.title if self.placement else None
 
     @property
     def citizen_address(self) -> dict:
@@ -303,6 +386,18 @@ class EmploymentContract(TenantMixin, Base):
         ForeignKey("employment_contract_templates.id"), default=None
     )
     field_values: Mapped[str | None] = mapped_column(Text, default=None)  # JSON dict
+    # Tier 2 gap-fill (audit MYOHRIS "Extensions"): tandai kontrak ini
+    # perpanjangan dari kontrak sebelumnya -- NULL = kontrak awal. Rantai
+    # ini dipakai buat tampilkan riwayat perpanjangan berurutan (Kontrak
+    # Awal -> Perpanjangan 1 -> ...), bukan cuma daftar datar tak berurut.
+    previous_contract_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("employment_contracts.id"), default=None
+    )
+    # Tier 3 gap-fill: klasifikasi PKWT/PKWTT + validasi batas durasi (lihat
+    # `ContractType`). NULL = belum diklasifikasi, tidak divalidasi.
+    contract_type: Mapped[ContractType | None] = mapped_column(
+        Enum(ContractType, native_enum=False, length=20), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     employee: Mapped[Employee] = relationship(back_populates="contracts")

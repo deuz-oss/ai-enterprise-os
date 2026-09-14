@@ -26,6 +26,9 @@ from app.modules.hrd.schemas import (
     ContractOut,
     ContractUpdate,
     DocumentOut,
+    EmergencyContactCreate,
+    EmergencyContactOut,
+    EmergencyContactUpdate,
     EmployeeCreate,
     EmployeeMovementCreate,
     EmployeeMovementOut,
@@ -342,6 +345,12 @@ def delete_contract(contract_id: str, db: Session = Depends(get_db)):
     service.delete_contract(db, contract_id)
 
 
+@router.post("/contracts/{contract_id}/extend", response_model=ContractOut, status_code=201)
+def extend_contract(contract_id: str, payload: ContractCreate, db: Session = Depends(get_db)):
+    """Buat kontrak baru sbg perpanjangan -- riwayat rantai, bukan menimpa."""
+    return service.extend_contract(db, contract_id, payload)
+
+
 @router.post("/contracts/{contract_id}/sign", response_model=ContractOut)
 def sign_contract(contract_id: str, db: Session = Depends(get_db)):
     return service.sign_contract(db, contract_id)
@@ -501,6 +510,32 @@ def unlock_employee_payroll(employee_id: str, db: Session = Depends(get_db)):
 
 
 # ---------- Asuransi one-to-many — PRD v3.0 Workforce ----------
+
+
+@router.get("/{employee_id}/emergency-contacts", response_model=list[EmergencyContactOut])
+def list_emergency_contacts(employee_id: str, db: Session = Depends(get_db)):
+    return service.list_emergency_contacts(db, employee_id)
+
+
+@router.post(
+    "/{employee_id}/emergency-contacts", response_model=EmergencyContactOut, status_code=201
+)
+def create_emergency_contact(
+    employee_id: str, payload: EmergencyContactCreate, db: Session = Depends(get_db)
+):
+    return service.create_emergency_contact(db, employee_id, payload)
+
+
+@router.patch("/emergency-contacts/{contact_id}", response_model=EmergencyContactOut)
+def update_emergency_contact(
+    contact_id: str, payload: EmergencyContactUpdate, db: Session = Depends(get_db)
+):
+    return service.update_emergency_contact(db, contact_id, payload)
+
+
+@router.delete("/emergency-contacts/{contact_id}", status_code=204)
+def delete_emergency_contact(contact_id: str, db: Session = Depends(get_db)):
+    service.delete_emergency_contact(db, contact_id)
 
 
 @router.get("/{employee_id}/insurances", response_model=list[InsuranceOut])
