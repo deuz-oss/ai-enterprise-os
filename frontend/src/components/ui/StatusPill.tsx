@@ -23,7 +23,7 @@ interface StatusMeta {
   tone: StatusTone;
 }
 
-type StatusDomain = "payment_request" | "invoice" | "margin" | "employee";
+type StatusDomain = "payment_request" | "invoice" | "margin" | "employee" | "payroll_run";
 
 const DOMAIN_STATUS_MAP: Record<StatusDomain, Record<string, StatusMeta>> = {
   // PaymentRequests.tsx — dulu `STATUS_BADGE` lokal di file itu.
@@ -51,6 +51,16 @@ const DOMAIN_STATUS_MAP: Record<StatusDomain, Record<string, StatusMeta>> = {
   employee: {
     aktif: { label: "Aktif", tone: "success" },
     resign: { label: "Resign", tone: "neutral" },
+  },
+  // Payroll.tsx tabel daftar run -- dulu `STATUS_LABELS` lokal di file itu
+  // (DES-003, rollout pola tabel §5a). Baca-saja (bukan select interaktif).
+  payroll_run: {
+    draft: { label: "Draft", tone: "neutral" },
+    submitted_to_client: { label: "Menunggu Klien", tone: "warning" },
+    client_rejected: { label: "Ditolak Klien", tone: "danger" },
+    client_approved: { label: "Disetujui Klien", tone: "success" },
+    finance_processing: { label: "Proses Finance", tone: "info" },
+    final: { label: "Final", tone: "neutral" },
   },
 };
 

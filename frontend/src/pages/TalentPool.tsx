@@ -5,7 +5,7 @@ import { api, downloadFile, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
 import { CheckCircle2, Clock, Dna, FileCheck2, Palette, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { confirmToast, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { PLACEMENT_STAGE_META as PLACEMENT_STAGE_LABEL } from "../lib/pipelineStages";
 import type { JobOrder } from "./JobOrders";
 
@@ -240,7 +240,7 @@ function BrandingCard() {
           </button>
           {b.has_logo && (
             <button
-              onClick={() => removeLogo.mutate()}
+              onClick={() => confirmToast("Hapus logo perusahaan ini?", () => removeLogo.mutate())}
               disabled={removeLogo.isPending}
               className="hover:text-rose-600"
               style={{ color: "var(--text-muted)" }}
@@ -552,117 +552,6 @@ export default function TalentPool() {
 
       <PillTabs tabs={tpStatusTabs} value={tpStatusTab} onChange={setTpStatusTab} />
 
-      <div className="card space-y-3 p-4">
-        <h3 className="text-sm font-semibold">Tambah Kandidat</h3>
-
-        <div className="space-y-2">
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            Punya CV? Unggah di sini — sistem membaca datanya otomatis (PDF, hasil scan, DOCX,
-            atau foto). File asli tersimpan sebagai bukti sumber.
-          </p>
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.docx,image/png,image/jpeg,image/webp"
-              className="input w-auto"
-              aria-label="Unggah CV kandidat"
-            />
-            <label className="inline-flex items-center gap-1">
-              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-              Persetujuan pemrosesan data pribadi (UU PDP)
-            </label>
-            <button
-              onClick={() => {
-                const f = fileRef.current?.files?.[0];
-                if (f) intake.mutate(f);
-              }}
-              disabled={!consent || intake.isPending}
-              className="btn disabled:opacity-40"
-            >
-              {intake.isPending ? "Memproses…" : "Proses dengan AI"}
-            </button>
-          </div>
-          {!consent && (
-            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-              Centang persetujuan untuk mengaktifkan tombol.
-            </p>
-          )}
-          {intake.error && <p className="text-xs text-red-600 dark:text-red-400">{(intake.error as Error).message}</p>}
-        </div>
-
-        <div className="flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
-          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
-          <span className="text-[11px]">atau isi manual kalau belum ada CV</span>
-          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
-        </div>
-
-        <button className="btn-secondary text-xs" onClick={() => setShowCreateForm((v) => !v)}>
-          {showCreateForm ? "Tutup form manual" : "+ Kandidat Manual"}
-        </button>
-        {showCreateForm && (
-          <form onSubmit={handleCreateCandidate} className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
-            <input name="full_name" required placeholder="Nama lengkap *" className="input" />
-            <input name="phone" placeholder="Telepon" className="input" />
-            <input name="city" placeholder="Kota" className="input" />
-            <input name="education" placeholder="Pendidikan terakhir" className="input" />
-            <input name="expected_salary" type="number" placeholder="Ekspektasi gaji (Rp)" className="input" />
-            <input name="source" placeholder="Sumber (referral/loker/dll)" className="input" />
-            <input name="referral_code" placeholder="Kode referral (jika ada)" className="input" />
-            <input name="skills" placeholder="Skill (teks bebas)" className="input" />
-            <input
-              name="skills_list"
-              placeholder="Skill terstruktur (pisah koma, mis. excel, forklift)"
-              className="input sm:col-span-2"
-            />
-            <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" title="CV (opsional)" aria-label="CV (opsional)" />
-
-            <details className="rounded-lg border p-3 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
-              <summary className="cursor-pointer text-sm font-medium" style={{ color: "var(--text)" }}>
-                Detail Tambahan (opsional)
-              </summary>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <select name="gender" defaultValue="" className="input">
-                  <option value="">Jenis kelamin</option>
-                  <option value="L">Laki-laki</option>
-                  <option value="P">Perempuan</option>
-                </select>
-                <input name="current_position" placeholder="Posisi saat ini" className="input" />
-                <input name="birthdate" type="date" placeholder="Tanggal lahir" className="input" />
-                <input name="birthplace" placeholder="Tempat lahir" className="input" />
-                <input name="ktp_no" placeholder="No. KTP" className="input" />
-                <select name="marital_status" defaultValue="" className="input">
-                  <option value="">Status pernikahan</option>
-                  <option value="tk">Belum menikah</option>
-                  <option value="k">Menikah</option>
-                </select>
-                <select name="blood_type" defaultValue="" className="input">
-                  <option value="">Golongan darah</option>
-                  {["A", "B", "AB", "O"].map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-                <input name="religion" placeholder="Agama" className="input" />
-                <input name="school" placeholder="Sekolah/kampus" className="input" />
-                <input name="education_level" placeholder="Jenjang pendidikan" className="input" />
-                <input name="job_level" placeholder="Level posisi" className="input" />
-                <input name="position_pool" placeholder="Kategori posisi diminati" className="input" />
-                <input name="languages" placeholder="Bahasa (pisah koma, mis. Indonesia, Inggris)" className="input" />
-                <input name="address" placeholder="Alamat" className="input sm:col-span-3" />
-                <textarea name="description" placeholder="Bio singkat" className="input sm:col-span-3" rows={2} />
-              </div>
-            </details>
-
-            <button type="submit" disabled={createCandidate.isPending} className="btn sm:col-span-3">
-              Simpan Kandidat
-            </button>
-            {createCandidate.error && (
-              <p className="text-xs text-red-600 dark:text-red-400 sm:col-span-3">{(createCandidate.error as Error).message}</p>
-            )}
-          </form>
-        )}
-      </div>
-
       <form onSubmit={handleFilter} className="card flex flex-wrap items-center gap-2 p-4 text-xs">
         <input placeholder="Cari nama…" value={q} onChange={(e) => setQ(e.target.value)} className="input w-40" />
         <input placeholder="Domisili" value={domisili} onChange={(e) => setDomisili(e.target.value)} className="input w-32" />
@@ -818,6 +707,122 @@ export default function TalentPool() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Dipindah ke bawah daftar/pencarian (DES-012, audit desain
+          2026-09-15) -- tugas yang lebih sering (cari kandidat existing,
+          "Total Talent" di KPI row menandakan ini halaman browse-first)
+          seharusnya tidak kalah posisi dari tugas yang lebih jarang (buat
+          baru). Isi form tidak berubah sama sekali, cuma posisinya. */}
+      <div className="card space-y-3 p-4">
+        <h3 className="text-sm font-semibold">Tambah Kandidat</h3>
+
+        <div className="space-y-2">
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Punya CV? Unggah di sini — sistem membaca datanya otomatis (PDF, hasil scan, DOCX,
+            atau foto). File asli tersimpan sebagai bukti sumber.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx,image/png,image/jpeg,image/webp"
+              className="input w-auto"
+              aria-label="Unggah CV kandidat"
+            />
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              Persetujuan pemrosesan data pribadi (UU PDP)
+            </label>
+            <button
+              onClick={() => {
+                const f = fileRef.current?.files?.[0];
+                if (f) intake.mutate(f);
+              }}
+              disabled={!consent || intake.isPending}
+              className="btn disabled:opacity-40"
+            >
+              {intake.isPending ? "Memproses…" : "Proses dengan AI"}
+            </button>
+          </div>
+          {!consent && (
+            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              Centang persetujuan untuk mengaktifkan tombol.
+            </p>
+          )}
+          {intake.error && <p className="text-xs text-red-600 dark:text-red-400">{(intake.error as Error).message}</p>}
+        </div>
+
+        <div className="flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+          <span className="text-[11px]">atau isi manual kalau belum ada CV</span>
+          <div className="h-px flex-1" style={{ backgroundColor: "var(--border)" }} />
+        </div>
+
+        <button className="btn-secondary text-xs" onClick={() => setShowCreateForm((v) => !v)}>
+          {showCreateForm ? "Tutup form manual" : "+ Kandidat Manual"}
+        </button>
+        {showCreateForm && (
+          <form onSubmit={handleCreateCandidate} className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
+            <input name="full_name" required placeholder="Nama lengkap *" className="input" />
+            <input name="phone" placeholder="Telepon" className="input" />
+            <input name="city" placeholder="Kota" className="input" />
+            <input name="education" placeholder="Pendidikan terakhir" className="input" />
+            <input name="expected_salary" type="number" placeholder="Ekspektasi gaji (Rp)" className="input" />
+            <input name="source" placeholder="Sumber (referral/loker/dll)" className="input" />
+            <input name="referral_code" placeholder="Kode referral (jika ada)" className="input" />
+            <input name="skills" placeholder="Skill (teks bebas)" className="input" />
+            <input
+              name="skills_list"
+              placeholder="Skill terstruktur (pisah koma, mis. excel, forklift)"
+              className="input sm:col-span-2"
+            />
+            <input ref={cvRef} type="file" accept=".pdf,.doc,.docx" className="input" title="CV (opsional)" aria-label="CV (opsional)" />
+
+            <details className="rounded-lg border p-3 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
+              <summary className="cursor-pointer text-sm font-medium" style={{ color: "var(--text)" }}>
+                Detail Tambahan (opsional)
+              </summary>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select name="gender" defaultValue="" className="input">
+                  <option value="">Jenis kelamin</option>
+                  <option value="L">Laki-laki</option>
+                  <option value="P">Perempuan</option>
+                </select>
+                <input name="current_position" placeholder="Posisi saat ini" className="input" />
+                <input name="birthdate" type="date" placeholder="Tanggal lahir" className="input" />
+                <input name="birthplace" placeholder="Tempat lahir" className="input" />
+                <input name="ktp_no" placeholder="No. KTP" className="input" />
+                <select name="marital_status" defaultValue="" className="input">
+                  <option value="">Status pernikahan</option>
+                  <option value="tk">Belum menikah</option>
+                  <option value="k">Menikah</option>
+                </select>
+                <select name="blood_type" defaultValue="" className="input">
+                  <option value="">Golongan darah</option>
+                  {["A", "B", "AB", "O"].map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+                <input name="religion" placeholder="Agama" className="input" />
+                <input name="school" placeholder="Sekolah/kampus" className="input" />
+                <input name="education_level" placeholder="Jenjang pendidikan" className="input" />
+                <input name="job_level" placeholder="Level posisi" className="input" />
+                <input name="position_pool" placeholder="Kategori posisi diminati" className="input" />
+                <input name="languages" placeholder="Bahasa (pisah koma, mis. Indonesia, Inggris)" className="input" />
+                <input name="address" placeholder="Alamat" className="input sm:col-span-3" />
+                <textarea name="description" placeholder="Bio singkat" className="input sm:col-span-3" rows={2} />
+              </div>
+            </details>
+
+            <button type="submit" disabled={createCandidate.isPending} className="btn sm:col-span-3">
+              Simpan Kandidat
+            </button>
+            {createCandidate.error && (
+              <p className="text-xs text-red-600 dark:text-red-400 sm:col-span-3">{(createCandidate.error as Error).message}</p>
+            )}
+          </form>
+        )}
       </div>
     </div>
   );

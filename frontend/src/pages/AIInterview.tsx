@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { MessagesSquare } from "lucide-react";
+import { Archive, CheckCircle2, FileEdit, MessagesSquare } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -103,6 +104,10 @@ export default function AIInterview() {
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates"),
   });
   const selected = templates?.find((t) => t.id === selectedId) ?? null;
+  const allTemplates = templates ?? [];
+  const aktifCount = allTemplates.filter((t) => t.status === "aktif").length;
+  const draftCount = allTemplates.filter((t) => t.status === "draft").length;
+  const arsipCount = allTemplates.filter((t) => t.status === "arsip").length;
   const { data: responses } = useQuery({
     queryKey: ["ai-interview-responses", selectedId],
     queryFn: () => api.get<InterviewResponse[]>(`/ai-interview/responses?template_id=${selectedId}`),
@@ -189,6 +194,15 @@ export default function AIInterview() {
         <button className="btn" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Tutup" : "+ Template Baru"}
         </button>
+      </div>
+
+      {/* KPI row -- pola yang sudah dipakai lintas modul lain, sebelumnya
+          belum diterapkan di halaman ini (DES-013, audit desain 2026-09-15). */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KpiCard label="Total Template" value={allTemplates.length} icon={MessagesSquare} iconTone="info" />
+        <KpiCard label="Aktif" value={aktifCount} icon={CheckCircle2} iconTone="success" />
+        <KpiCard label="Draft" value={draftCount} icon={FileEdit} iconTone="neutral" />
+        <KpiCard label="Arsip" value={arsipCount} icon={Archive} iconTone="neutral" />
       </div>
 
       {showForm && (

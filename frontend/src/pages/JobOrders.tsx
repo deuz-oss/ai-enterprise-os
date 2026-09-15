@@ -1,8 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
-import { PageHeader } from "../components/workspace";
-import { confirmToast, KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { confirmToast, HeaderCanvas, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -203,6 +202,12 @@ export default function JobOrders() {
   // open/screening/interview_klien/dst) sudah dihapus dari UI ini
   // sebelumnya atas permintaan eksplisit (dianggap membingungkan
   // berdampingan dengan business_status), tidak dikembalikan di sini.
+  // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
+  // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
+  });
   const { data: jobOrdersAll } = useQuery({
     queryKey: ["job-orders", clientFilter],
     queryFn: () =>
@@ -321,22 +326,27 @@ export default function JobOrders() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <PageHeader icon={Magnet} title="Job Orders" />
-        <button
-          className="btn"
-          onClick={() => {
-            setShowForm(!showForm);
-            setExtracted(null);
-            setIsPublic(false);
-            setQuestions([]);
-            setWorkingDays([]);
-          }}
-          disabled={!clients?.length}
-        >
-          {showForm ? "Tutup" : "+ Job Order Baru"}
-        </button>
-      </div>
+      <HeaderCanvas
+        name={me?.full_name?.split(" ")[0]}
+        headline="Job Orders"
+        subtext={`${allRows.length} job order · ${openCount} dibuka · ${filledCount} terisi`}
+        showRangePicker={false}
+        actions={
+          <button
+            className="btn"
+            onClick={() => {
+              setShowForm(!showForm);
+              setExtracted(null);
+              setIsPublic(false);
+              setQuestions([]);
+              setWorkingDays([]);
+            }}
+            disabled={!clients?.length}
+          >
+            {showForm ? "Tutup" : "+ Job Order Baru"}
+          </button>
+        }
+      />
 
       <HrDocumentSettingsCard />
 
@@ -631,7 +641,7 @@ export default function JobOrders() {
           <tbody className="divide-y divide-[var(--border)]">
             {jobOrders.map((jo) => (
               <tr key={jo.id} className="hover:bg-[var(--hover)]">
-                <td className="td">
+                <td className="td py-1.5">
                   {jo.has_source_document ? (
                     <a
                       href="#"
@@ -659,20 +669,20 @@ export default function JobOrders() {
                     </span>
                   )}
                 </td>
-                <td className="td font-medium max-w-[160px] truncate" title={jo.title}>
+                <td className="td py-1.5 font-medium max-w-[160px] truncate" title={jo.title}>
                   <Link to={`/job-orders/${jo.id}`} className="hover:opacity-80" style={{ color: "var(--accent)" }}>
                     {jo.title}
                   </Link>
                 </td>
-                <td className="td max-w-[180px] truncate" title={clientName(jo.client_id)}>
+                <td className="td py-1.5 max-w-[180px] truncate" title={clientName(jo.client_id)}>
                   {clientName(jo.client_id)}
                 </td>
-                <td className="td whitespace-nowrap">{jo.area ?? "-"}</td>
-                <td className="td text-right tabular-nums whitespace-nowrap">{jo.headcount} orang</td>
-                <td className="td text-right tabular-nums whitespace-nowrap">
+                <td className="td py-1.5 whitespace-nowrap">{jo.area ?? "-"}</td>
+                <td className="td py-1.5 text-right tabular-nums whitespace-nowrap">{jo.headcount} orang</td>
+                <td className="td py-1.5 text-right tabular-nums whitespace-nowrap">
                   {formatRupiah(jo.salary_min)} – {formatRupiah(jo.salary_max)}
                 </td>
-                <td className="td">
+                <td className="td py-1.5">
                   <select
                     value={jo.business_status}
                     onChange={(e) => {
@@ -697,7 +707,7 @@ export default function JobOrders() {
                     ))}
                   </select>
                 </td>
-                <td className="td whitespace-nowrap">
+                <td className="td py-1.5 whitespace-nowrap">
                   <button
                     className="btn-secondary py-1 text-xs whitespace-nowrap"
                     disabled={match.isPending}

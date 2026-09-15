@@ -35,9 +35,24 @@ interface HeaderCanvasProps {
   /** Tampilkan date-range picker kanan atas (presentasional, lihat catatan di atas). Default true. */
   showRangePicker?: boolean;
   onRangeChange?: (range: DateRangeOption) => void;
+  /** Slot aksi kanan atas (mis. tombol "+ Tambah Baru") -- ditambah saat
+   * rollout pola ini ke halaman selain Dashboard (DES-004, audit desain
+   * 2026-09-15), yang masing-masing punya primary action sendiri dan TIDAK
+   * butuh date-range picker (belum filter data apa pun di halaman manapun,
+   * lihat catatan di atas -- menambah 2 elemen presentasional-doang di
+   * halaman non-dashboard cuma menambah noise). Dirender berdampingan
+   * dengan range picker kalau keduanya sama-sama aktif. */
+  actions?: ReactNode;
 }
 
-export function HeaderCanvas({ name, headline, subtext, showRangePicker = true, onRangeChange }: HeaderCanvasProps) {
+export function HeaderCanvas({
+  name,
+  headline,
+  subtext,
+  showRangePicker = true,
+  onRangeChange,
+  actions,
+}: HeaderCanvasProps) {
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState<DateRangeOption>("30 hari terakhir");
 
@@ -58,41 +73,46 @@ export function HeaderCanvas({ name, headline, subtext, showRangePicker = true, 
         )}
       </div>
 
-      {showRangePicker && (
-        <div className="relative shrink-0">
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm"
-            style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)", color: "var(--text)" }}
-            title="Rentang tanggal (belum memfilter data — menunggu dukungan backend)"
-          >
-            <Calendar className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
-            {range}
-            <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
-          </button>
-          {open && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-              <div
-                className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg shadow-lg"
-                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
+      {(actions || showRangePicker) && (
+        <div className="flex shrink-0 items-center gap-2">
+          {actions}
+          {showRangePicker && (
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setOpen((v) => !v)}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm"
+                style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)", color: "var(--text)" }}
+                title="Rentang tanggal (belum memfilter data — menunggu dukungan backend)"
               >
-                {RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => {
-                      setRange(opt);
-                      setOpen(false);
-                      onRangeChange?.(opt);
-                    }}
-                    className="block w-full cursor-pointer px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
-                    style={{ color: opt === range ? "var(--accent)" : "var(--text)" }}
+                <Calendar className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+                {range}
+                <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
+              </button>
+              {open && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+                  <div
+                    className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg shadow-lg"
+                    style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
                   >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </>
+                    {RANGE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => {
+                          setRange(opt);
+                          setOpen(false);
+                          onRangeChange?.(opt);
+                        }}
+                        className="block w-full cursor-pointer px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"
+                        style={{ color: opt === range ? "var(--accent)" : "var(--text)" }}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { initials } from "../components/workspace";
-import { Badge, PillTabs } from "../components/ui";
+import { Badge, PillTabs, confirmToast } from "../components/ui";
 
 interface ClientDetailData {
   id: string;
@@ -471,7 +471,13 @@ export default function ClientDetail() {
                   <button
                     className="btn-secondary text-rose-600 dark:text-rose-400"
                     disabled={revokePortalAccess.isPending}
-                    onClick={() => revokePortalAccess.mutate()}
+                    onClick={() =>
+                      confirmToast(
+                        "Cabut akses portal klien ini? Klien tidak akan bisa login ke portalnya lagi sampai link baru dibuat.",
+                        () => revokePortalAccess.mutate(),
+                        { confirmLabel: "Cabut Akses" }
+                      )
+                    }
                   >
                     Cabut Akses
                   </button>
@@ -532,7 +538,9 @@ export default function ClientDetail() {
                   <button
                     className="btn-secondary text-rose-600 dark:text-rose-400"
                     disabled={deleteSite.isPending}
-                    onClick={() => deleteSite.mutate(s.id)}
+                    onClick={() =>
+                      confirmToast(`Hapus site "${s.name}"?`, () => deleteSite.mutate(s.id))
+                    }
                   >
                     Hapus
                   </button>

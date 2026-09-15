@@ -204,6 +204,51 @@ def test_contract_extend_builds_renewal_chain(client):
     assert len(listed) == 3
 
 
+def test_expiring_contracts_excludes_past_and_superseded(client):
+    """Fix DES-001 (audit desain 2026-09-15): endpoint /contracts/expiring
+    sebelumnya tidak punya batas bawah tanggal (kontrak yang sudah
+    bertahun-tahun kedaluwarsa ikut lolos) dan tidak sadar rantai
+    perpanjangan (kontrak lama yang sudah digantikan `previous_contract_id`
+    ikut dianggap "akan berakhir") -- kombinasi keduanya + clamp
+    `max(days_left, 0)` bikin kontrak kedaluwarsa tampil "0 hari lagi"."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Gilang Saputra"}
+    ).json()
+
+    # Kontrak sudah lama berakhir -- tidak boleh muncul sebagai "akan berakhir".
+    client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2020-01-01", "end_date": "2020-12-31"},
+    )
+
+    # Kontrak yang sudah diperpanjang (superseded) -- yang boleh muncul cuma
+    # link terakhir di rantainya, bukan yang lama ini.
+    original = client.post(
+        f"/api/v1/employees/{emp['id']}/contracts",
+        headers=headers,
+        json={"start_date": "2026-01-01", "end_date": "2026-06-30"},
+    ).json()
+    within = (date.today() + timedelta(days=15)).isoformat()
+    extended = client.post(
+        f"/api/v1/employees/contracts/{original['id']}/extend",
+        headers=headers,
+        json={"start_date": "2026-07-01", "end_date": within},
+    ).json()
+
+    expiring = client.get(
+        "/api/v1/employees/contracts/expiring",
+        headers=headers,
+        params={"within_days": 30},
+    ).json()
+    contract_ids = {c["contract_id"] for c in expiring}
+    assert original["id"] not in contract_ids
+    assert extended["id"] in contract_ids
+    matched = next(c for c in expiring if c["contract_id"] == extended["id"])
+    assert matched["days_left"] >= 0
+
+
 def test_double_extension_blocked_even_via_plain_create_endpoint(client):
     """Cek-gap: `previous_contract_id` adalah field publik di ContractCreate,
     jadi guard "cuma kontrak terbaru boleh diperpanjang" harus tetap

@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { AlertCircle, Landmark, ShieldAlert, Users, Wallet } from "lucide-react";
-import { PageHeader, CalloutBlock } from "../components/workspace";
-import { Button, confirmToast, KpiCard, PreflightAlert } from "../components/ui";
+import { AlertCircle, Landmark, ShieldAlert, Users } from "lucide-react";
+import { CalloutBlock } from "../components/workspace";
+import { Button, confirmToast, HeaderCanvas, KpiCard, PreflightAlert, StatusPill } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 
@@ -389,7 +389,11 @@ function SaltabTable({ runId }: { runId: string | null }) {
                         </button>
                         {c.source === "manual" && !_CORE_COMPONENT_CODES.has(c.code) && (
                           <button
-                            onClick={() => deleteComponent.mutate(c.id)}
+                            onClick={() =>
+                              confirmToast(`Hapus komponen "${c.name}"?`, () =>
+                                deleteComponent.mutate(c.id)
+                              )
+                            }
                             disabled={deleteComponent.isPending}
                             className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
                           >
@@ -595,6 +599,12 @@ export default function Payroll() {
     queryKey: ["runs"],
     queryFn: () => api.get<RunRow[]>("/payroll/runs"),
   });
+  // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
+  // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
+  });
   const { data: slips } = useQuery({
     queryKey: ["slips", selectedRunId],
     queryFn: () => api.get<SlipRow[]>(`/payroll/runs/${selectedRunId}/slips`),
@@ -681,15 +691,6 @@ export default function Payroll() {
     onSuccess: () => setShowSendSaltab(false),
   });
 
-  const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-    draft: { label: "Draft", cls: "pill p-gray" },
-    submitted_to_client: { label: "Menunggu Klien", cls: "pill p-yellow" },
-    client_rejected: { label: "Ditolak Klien", cls: "pill p-red" },
-    client_approved: { label: "Disetujui Klien", cls: "pill p-green" },
-    finance_processing: { label: "Proses Finance", cls: "pill p-blue" },
-    final: { label: "Final", cls: "pill p-gray" },
-  };
-
   function handleAttendance(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -704,8 +705,12 @@ export default function Payroll() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PageHeader icon={Wallet} title="Payroll" />
+      <HeaderCanvas
+        name={me?.full_name?.split(" ")[0]}
+        headline="Payroll"
+        subtext={`${activeEmployees.length} karyawan aktif · ${runs?.length ?? 0} run tercatat`}
+        showRangePicker={false}
+        actions={
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -778,7 +783,8 @@ export default function Payroll() {
             + Run Payrol
           </button>
         </div>
-      </div>
+        }
+      />
 
       {totalAnomalies > 0 && !alertDismissed && (
         <PreflightAlert
@@ -910,21 +916,20 @@ export default function Payroll() {
           </thead>
           <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
             {(runs ?? []).map((r) => {
-              const badge = STATUS_LABELS[r.status] ?? { label: r.status, cls: "pill p-gray" };
               return (
                 <tr key={r.id}>
-                  <td className="td font-medium">
+                  <td className="td py-1.5 font-medium">
                     {String(r.month).padStart(2, "0")}/{r.year}
                   </td>
-                  <td className="td text-xs">
+                  <td className="td py-1.5 text-xs">
                     {r.run_type === "proyek"
                       ? `Proyek · ${clients?.find((c) => c.id === r.client_id)?.name ?? "klien"}`
                       : "Internal"}
                   </td>
-                  <td className="td">
-                    <span className={`${badge.cls}`}>{badge.label}</span>
+                  <td className="td py-1.5">
+                    <StatusPill domain="payroll_run" status={r.status} />
                   </td>
-                  <td className="td space-x-2 whitespace-nowrap text-sm">
+                  <td className="td py-1.5 space-x-2 whitespace-nowrap text-sm">
                     <button onClick={() => setSelectedRunId(r.id)} style={{ color: "var(--accent)" }} className="font-medium hover:opacity-80">
                       Slip Gaji
                     </button>

@@ -3,6 +3,7 @@ import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, S
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { confirmToast } from "../components/ui";
 import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
@@ -212,6 +213,17 @@ export default function Accounting() {
 
       {tab === "jurnal" && (
         <>
+          {/* JournalList (daftar) didahulukan dari form "buat baru" (DES-012,
+              audit desain 2026-09-15) -- browse daftar jurnal existing adalah
+              tugas yang lebih sering daripada bikin entri baru setiap buka
+              tab ini. Isi form tidak berubah, cuma posisinya. */}
+          <JournalList
+            year={year}
+            onPost={(id) => postEntry.mutate(id)}
+            onReverse={(id, reason) => reverseEntry.mutate({ id, reason })}
+            onDelete={(id) => deleteEntry.mutate(id)}
+          />
+
           <form onSubmit={handleCreate} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold" style={{ color: "var(--text)" }}>Jurnal Umum Baru</h2>
@@ -286,13 +298,6 @@ export default function Accounting() {
               </button>
             </div>
           </form>
-
-          <JournalList
-            year={year}
-            onPost={(id) => postEntry.mutate(id)}
-            onReverse={(id, reason) => reverseEntry.mutate({ id, reason })}
-            onDelete={(id) => deleteEntry.mutate(id)}
-          />
         </>
       )}
 
@@ -626,9 +631,9 @@ function JournalList({
               <td className="td">
                 {e.status === "memorial" && (
                   <button
-                    onClick={() => {
-                      if (confirm(`Hapus jurnal draft "${e.description}"?`)) onDelete(e.id);
-                    }}
+                    onClick={() =>
+                      confirmToast(`Hapus jurnal draft "${e.description}"?`, () => onDelete(e.id))
+                    }
                     className="text-xs font-medium text-red-600 dark:text-red-400 hover:opacity-80"
                   >
                     Hapus

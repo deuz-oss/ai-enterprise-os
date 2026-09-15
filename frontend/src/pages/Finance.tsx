@@ -543,11 +543,11 @@ export default function Finance() {
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {aging!.map((a) => (
-              <li key={a.invoice_id} className="flex justify-between rounded-lg bg-rose-50 p-2">
+              <li key={a.invoice_id} className="flex justify-between rounded-lg bg-rose-50 p-2 dark:bg-rose-500/10">
                 <span>
                   {a.client_name} · {a.invoice_no}
                 </span>
-                <span className="font-medium text-rose-700">
+                <span className="font-medium text-rose-700 dark:text-rose-400">
                   {formatRupiah(a.total_due)} · {a.days_overdue} hari ({a.bucket})
                 </span>
               </li>
@@ -680,8 +680,8 @@ export default function Finance() {
             {(forecast.risks.length > 0 || forecast.recommendations.length > 0) && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {forecast.risks.length > 0 && (
-                  <div className="rounded-lg bg-rose-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+                  <div className="rounded-lg bg-rose-50 p-3 dark:bg-rose-500/10">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">
                       Risiko
                     </p>
                     <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -692,8 +692,8 @@ export default function Finance() {
                   </div>
                 )}
                 {forecast.recommendations.length > 0 && (
-                  <div className="rounded-lg bg-emerald-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  <div className="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-500/10">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
                       Rekomendasi
                     </p>
                     <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>

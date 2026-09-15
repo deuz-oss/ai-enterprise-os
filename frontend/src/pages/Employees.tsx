@@ -2,9 +2,9 @@ import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
-import { Clock, IdCard, Lock, Users as UsersIcon } from "lucide-react";
-import { CalloutBlock, PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, StatusPill, type PillTab } from "../components/ui";
+import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
+import { CalloutBlock } from "../components/workspace";
+import { HeaderCanvas, KpiCard, PillTabs, StatusPill, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface EmployeeRow {
@@ -177,7 +177,7 @@ export default function Employees() {
   // yang pasti gagal.
   const { data: me } = useQuery({
     queryKey: ["me"],
-    queryFn: () => api.get<{ role: string }>("/auth/me"),
+    queryFn: () => api.get<{ role: string; full_name: string }>("/auth/me"),
   });
   const isOpsOnly = me?.role === "operations";
   const { data: expiring } = useQuery({
@@ -268,12 +268,17 @@ export default function Employees() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <PageHeader icon={IdCard} title="Karyawan" />
-        <button className="btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Tutup" : "+ Karyawan Baru"}
-        </button>
-      </div>
+      <HeaderCanvas
+        name={me?.full_name?.split(" ")[0]}
+        headline="Karyawan"
+        subtext={`${allEmployees.length} karyawan terdaftar · ${activeCount} aktif`}
+        showRangePicker={false}
+        actions={
+          <button className="btn" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Tutup" : "+ Karyawan Baru"}
+          </button>
+        }
+      />
 
       {showForm && (
         <form onSubmit={handleCreate} className="card grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -315,7 +320,14 @@ export default function Employees() {
       {!isOpsOnly && (
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold" style={{ color: "var(--text)" }}>Tanya Kontrak (AI)</h2>
+          {/* Penanda ikon Sparkles disamakan dengan FAB "Tanya AEOS AI" &
+              "AI Executive Digest" Dashboard.tsx (DES-002, audit desain
+              2026-09-15) -- supaya semua titik masuk AI kebaca sebagai satu
+              kapabilitas yang sama, bukan fitur-fitur lepas tak berhubungan. */}
+          <h2 className="flex items-center gap-1.5 font-semibold" style={{ color: "var(--text)" }}>
+            <Sparkles className="h-4 w-4 shrink-0" style={{ color: "var(--accent)" }} />
+            Tanya Kontrak (AI)
+          </h2>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
             {indexed?.length
               ? `${indexed.length} kontrak terindeks`

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,7 +29,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { Badge, Button, Card, PillTabs } from "../components/ui";
+import { Badge, Button, Card, confirmToast, PillTabs } from "../components/ui";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
 import type { ClientRow } from "./Clients";
@@ -209,6 +209,32 @@ export default function JobOrderDetail() {
     queryFn: () => api.get<Placement[]>(`/recruitment/placements?job_order_id=${id}`),
     enabled: Boolean(id),
   });
+  // Kanban kandidat bisa terlihat kosong kalau satu-satunya tahap terisi
+  // ada jauh di kolom ke-N yang tergeser scroll horizontal (DES-009, audit
+  // desain 2026-09-15) -- auto-scroll ke kolom terisi pertama begitu data
+  // termuat, sekali saja per kunjungan halaman (bukan tiap kali placements
+  // refetch, supaya tidak "menarik" scroll user yang sedang lihat kolom lain).
+  const kanbanScrollRef = useRef<HTMLDivElement>(null);
+  const scrolledToOccupiedRef = useRef(false);
+  useEffect(() => {
+    // Kanban-nya cuma ter-mount di DOM saat tab "candidates" aktif -- kalau
+    // effect ini jalan duluan waktu tab masih "info" (mount awal), ref-nya
+    // masih null. Tanpa dependency `tab`, effect itu tidak akan jalan lagi
+    // begitu user pindah ke tab Candidates -- jadi WAJIB re-run per pindah tab,
+    // dan baru tandai "selesai" setelah container-nya benar-benar ada.
+    if (!jo || !placements || scrolledToOccupiedRef.current) return;
+    const container = kanbanScrollRef.current;
+    if (!container) return;
+    scrolledToOccupiedRef.current = true;
+    const cols = kanbanColumns(jo.requires_ojt);
+    const firstOccupiedIdx = cols.findIndex((col) =>
+      placements.some((p) => col.statuses.includes(p.status))
+    );
+    if (firstOccupiedIdx > 0) {
+      const colEl = container.children[firstOccupiedIdx] as HTMLElement | undefined;
+      colEl?.scrollIntoView({ inline: "start", block: "nearest" });
+    }
+  }, [jo, placements, tab]);
   const { data: candidates } = useQuery({
     queryKey: ["candidates-lookup"],
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates?limit=1000"),
@@ -549,7 +575,7 @@ export default function JobOrderDetail() {
         </Card>
       )}
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div ref={kanbanScrollRef} className="flex gap-3 overflow-x-auto pb-2">
         {columns.map((col) => {
           const cards = (placements ?? []).filter((p) => col.statuses.includes(p.status));
           return (
@@ -846,7 +872,13 @@ export default function JobOrderDetail() {
                     size="sm"
                     variant="danger"
                     loading={revokeOnboardingInvite.isPending}
-                    onClick={() => revokeOnboardingInvite.mutate(currentInvite.id)}
+                    onClick={() =>
+                      confirmToast(
+                        "Batalkan link onboarding ini? Kandidat tidak akan bisa mengisi data lagi lewat link tersebut.",
+                        () => revokeOnboardingInvite.mutate(currentInvite.id),
+                        { confirmLabel: "Batalkan Link" }
+                      )
+                    }
                   >
                     Batalkan Link
                   </Button>

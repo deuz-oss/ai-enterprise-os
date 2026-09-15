@@ -6,6 +6,47 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Fase 56: DES-015 — 4 aksi destruktif lain tanpa konfirmasi
+
+Ditemukan saat sweep DES-008 (Sprint 1) tapi sengaja tidak difix saat itu (di luar scope yang disepakati) -- dikerjakan sekarang atas permintaan eksplisit.
+
+- `revokePortalAccess` (`ClientDetail.tsx`) -- cabut akses portal klien, sebelumnya langsung jalan tanpa konfirmasi. Paling severe: klien bisa mendadak tidak bisa login ke portalnya sendiri karena satu misklik.
+- `revokeOnboardingInvite` (`JobOrderDetail.tsx`) -- tombolnya sudah `variant="danger"` (merah) tapi itu cuma gaya visual, bukan konfirmasi sungguhan.
+- `removeLeadContact` (`Leads.tsx`) -- hapus kontak dari lead.
+- `removeLogo` (`TalentPool.tsx`) -- hapus logo klien, severity paling rendah (cuma gambar).
+
+Semua dibungkus `confirmToast()`, pola identik dengan DES-008. Diverifikasi live pada `revokePortalAccess` (yang paling severe): toast konfirmasi "Cabut akses portal klien ini? Klien tidak akan bisa login ke portalnya lagi sampai link baru dibuat." muncul, klik Batal mempertahankan akses. `tsc --noEmit` + `npm run build` bersih.
+
+### Fixed — Fase 55: Sprint 4 audit desain 2026-09-15 (polish — badge dark-mode, urutan form, zero-state, AI UX)
+
+- **DES-005**: badge `bg-{hue}-50/100 + text-{hue}-600/700` yang tidak pernah dimigrasi dark mode sama sekali (`Finance.tsx` kotak risiko/rekomendasi/aging, `AccountingAi.tsx` badge status jurnal AI, `TalentPoolPanels.tsx` badge "CV belum diunggah") ditambah pasangan `dark:bg-{hue}-500/10 dark:text-{hue}-400`, mengikuti pola `CALLOUT_TONES` yang sudah ada di `components/workspace.tsx`. Sweep app-wide mengonfirmasi tidak ada instance lain -- ketemu 1 bonus: `Pages.tsx` tombol hapus halaman (`hover:bg-rose-50` tanpa varian dark).
+- **DES-012**: form "buat baru" dipindah ke bawah daftar/pencarian existing di Talent Pool (`Tambah Kandidat`) dan Accounting tab Jurnal (`Jurnal Umum Baru`) -- isi form tidak berubah sama sekali, cuma urutan render, karena browse adalah tugas yang lebih sering di kedua halaman ini.
+- **DES-006**: kartu KPI "Revenue MTD" (Dashboard) sekarang bilang "Belum ada invoice — buat dari Quotation" saat tenant benar-benar belum punya invoice sama sekali, bukan cuma "0 invoice tercatat" yang tidak membedakan "baru mulai" dari "genuinely nol".
+- **DES-002**: widget "Tanya Kontrak (AI)" di Employees.tsx dapat ikon `Sparkles` yang sama dengan FAB "Tanya AEOS AI" dan kartu "AI Executive Digest" Dashboard -- supaya ketiganya kebaca sebagai satu kapabilitas AI, bukan fitur lepas-lepas. `@AEOS` di Chat sudah punya hint yang cukup lewat placeholder input pesannya sendiri, tidak disentuh.
+- Validasi: `tsc --noEmit` + `npm run build` bersih di tiap tahap; diverifikasi live browser (Finance dark mode, Talent Pool, Accounting Jurnal, Dashboard, Employees).
+
+### Fixed — Fase 54: Sprint 3 audit desain 2026-09-15 (lanjutkan rollout design system)
+
+Bukan temuan baru — menuntaskan rollout pola dashboard yang sudah direncanakan sejak 2026-09-12 (`design.md` §5a) tapi belum sempat menjangkau semua halaman target.
+
+- **DES-004** (`HeaderCanvas`): diterapkan ke `JobOrders.tsx`, `Employees.tsx`, `Payroll.tsx` (sebelumnya cuma Dashboard.tsx). Komponen `HeaderCanvas` ditambah prop opsional `actions?: ReactNode` (backward-compatible -- Dashboard.tsx yang tidak mengisinya tetap sama persis) supaya tiap halaman bisa taruh primary action (tombol "+ Job Order Baru", dst.) atau filter sendiri berdampingan dengan header, tanpa perlu date-range picker (`showRangePicker={false}` di ketiga halaman ini -- belum ada kebutuhan filter tanggal, beda dari Dashboard).
+- **DES-003** (restyle tabel): `JobOrders.tsx` dan tabel run `Payroll.tsx` dapat perlakuan `py-1.5` per-sel (32-36px target, sama seperti `Employees.tsx`) -- avatar+nama TIDAK ditambahkan (barisnya job order/payroll run, bukan orang, jadi pattern itu genuinely tidak relevan). `StatusPill` dapat domain baru `payroll_run` menggantikan `STATUS_LABELS` lokal di `Payroll.tsx`.
+- **DES-013**: AI Interview (`AIInterview.tsx`) dapat KPI row (Total Template/Aktif/Draft/Arsip) yang sebelumnya tidak ada sama sekali di halaman ini, beda dari hampir semua modul lain. Filter tabs SENGAJA tidak ditambahkan -- daftar template biasanya cuma segelintir baris, filter tidak menambah nilai di list sekecil itu.
+- Validasi: `tsc --noEmit` + `npm run build` bersih di tiap tahap; diverifikasi live browser (light mode) di keempat halaman.
+
+### Fixed — Fase 53: Sprint 2 audit desain 2026-09-15 (bracket PPh21, Kanban, label Referral)
+
+- **DES-010**: form "Versi Baru PPh 21" (Rates) sebelumnya minta admin ketik 4 tabel bracket pajak (Pasal 17 + TER A/B/C, TER masing-masing ~26-27 baris di kode Python) lewat textarea JSON mentah tanpa validasi apa pun -- salah ketik sekali berarti salah potong PPh 21 semua karyawan tanpa ketahuan sampai payroll jalan. Diganti `BracketRowsEditor` (baru, lokal di `Rates.tsx`): baris per-bracket (batas atas Rp + tarif %, checkbox "tak terbatas" cuma di baris terakhir), validasi ascending + tarif 0-100% sebelum submit, tidak ada JSON yang terekspos ke user. Form juga sekarang otomatis terisi dari versi PALING BARU yang sudah ada (`pph21.data[0]`) begitu dibuka, jadi admin EDIT tabel existing (26-27 baris) alih-alih ngetik dari nol.
+- **DES-009**: Kanban Job Orders (tab Candidates) bisa terlihat kosong padahal kandidatnya ada, cuma tersembunyi di kolom tahap ke-9 yang perlu discroll horizontal jauh. Ditambah auto-scroll ke kolom terisi pertama begitu data termuat (`JobOrderDetail.tsx`) -- terverifikasi live di job order "Operator Produksi" yang jadi bukti temuan aslinya.
+- **DES-011**: input nominal reward di Referral tidak pernah menampilkan placeholder-nya ("Nominal reward (Rp)") karena `defaultValue`-nya `0` (bukan string kosong) -- placeholder browser cuma tampil saat field genuinely kosong, jadi field ini terlihat seperti angka polos tanpa arti. Diganti jadi `<label>` persisten yang selalu terlihat, bukan bergantung ke placeholder.
+- Validasi: `tsc --noEmit` + `npm run build` bersih (frontend-only, tidak ada perubahan backend di sprint ini).
+
+### Fixed — Fase 52: Sprint 1 audit desain 2026-09-15 (reminder kontrak & konfirmasi hapus)
+
+- **DES-001**: `GET /employees/contracts/expiring` tidak punya batas bawah tanggal dan tidak sadar rantai perpanjangan kontrak -- kontrak yang sudah kedaluwarsa bertahun-tahun lalu, atau yang sudah digantikan lewat `previous_contract_id` (Tier 2), tetap ikut tampil di banner "Reminder Kontrak ≤30 hari" (Karyawan) & KPI "Kontrak Akan Berakhir" (Overview) sebagai "0 hari lagi" karena `max(days_left, 0)` menutupi tanggal yang sudah lewat. Diperbaiki: tambah `end_date >= today`, exclude kontrak yang direferensikan sebagai `previous_contract_id` kontrak lain, hapus clamp. Diverifikasi live: banner & KPI yang sebelumnya salah tampil sekarang kosong/benar untuk data dummy yang memicu bug ini.
+- **DES-008**: 6 tombol hapus (bukan 5 -- ditemukan 1 lagi saat perbaikan) langsung memanggil `mutate()` tanpa dialog konfirmasi sama sekali, atau (khusus `Accounting.tsx`) pakai `window.confirm()` native alih-alih `confirmToast()` yang sudah jadi standar app sejak audit 2026-09-12. Dibungkus `confirmToast()` di `Chat.tsx` (hapus pesan), `EmployeeDetail.tsx` (hapus kontak darurat), `ClientDetail.tsx` (hapus site), `TalentPoolPanels.tsx` (hapus pengalaman kerja), `Payroll.tsx` (hapus komponen payroll), `Accounting.tsx` (hapus jurnal draft). Diverifikasi live di EmployeeDetail. Sweep lanjutan menemukan 4 aksi destruktif lain yang masih tanpa konfirmasi (`revokePortalAccess`, `revokeOnboardingInvite`, `removeLeadContact`, `removeLogo`) -- sengaja TIDAK diperbaiki di fase ini, dicatat sbg DES-015 di `docs/design/PRODUCT_DESIGN_AUDIT-2026-09-15.md` menunggu approval terpisah.
+- Regresi backend: `test_expiring_contracts_excludes_past_and_superseded` (baru, `test_hrd.py`); full suite + ruff + mypy + `tsc --noEmit` bersih.
+
 ### Added — Fase 51: HRD — validasi otomatis rekening bank karyawan (api.co.id)
 
 - Integrasi vendor opsional baru `app/core/bank_validation/` (adapter interface + factory `get_adapter()`, provider `""`/`sandbox`/`api_co_id`) -- mirror persis pola `app/core/payment/` (Xendit) yang sudah ada. api.co.id dipilih (Rp 50rb/bulan flat, bukan platform disbursement penuh) setelah riset provider mana yang paling murah/gampang diintegrasikan.

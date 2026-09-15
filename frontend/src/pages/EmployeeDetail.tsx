@@ -1290,7 +1290,11 @@ export default function EmployeeDetail() {
                       )}
                       <button
                         type="button"
-                        onClick={() => deleteEmergencyContact.mutate(c.id)}
+                        onClick={() =>
+                          confirmToast(`Hapus kontak darurat "${c.name}"?`, () =>
+                            deleteEmergencyContact.mutate(c.id)
+                          )
+                        }
                         className="text-xs font-medium text-red-600 hover:opacity-80 dark:text-red-400"
                       >
                         Hapus

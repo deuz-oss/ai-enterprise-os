@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../api/client";
 import { AiResultCard, type Screening } from "../components/Ai";
 import { CalloutBlock } from "../components/workspace";
+import { confirmToast } from "../components/ui";
 import type { JobOrder } from "./JobOrders";
 
 /** Panel-panel detail kandidat -- pindahan dari `TalentPool.tsx` (dulu baris
@@ -252,7 +253,7 @@ export function ScreeningPanel({
           Screening AI
         </span>
         {!cvFileName && (
-          <span className="badge border-0 bg-red-100 text-red-600">
+          <span className="badge border-0 bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400">
             CV belum diunggah — unggah dulu agar AI bisa menilai
           </span>
         )}
@@ -358,7 +359,14 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
                   {exp.start_date ?? "?"} s/d {exp.end_date ?? "sekarang"}
                 </p>
               </div>
-              <button onClick={() => deleteExperience.mutate(exp.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
+              <button
+                onClick={() =>
+                  confirmToast(`Hapus pengalaman "${exp.position} · ${exp.company}"?`, () =>
+                    deleteExperience.mutate(exp.id)
+                  )
+                }
+                className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
+              >
                 Hapus
               </button>
             </li>

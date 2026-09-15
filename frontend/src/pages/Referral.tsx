@@ -143,14 +143,21 @@ export default function Referral() {
             />
             Aktifkan program referral
           </label>
-          <input
-            name="reward_amount"
-            type="number"
-            min={0}
-            defaultValue={setting?.reward_amount ?? 0}
-            placeholder="Nominal reward (Rp)"
-            className="input w-56"
-          />
+          <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            Nominal reward per referral (Rp)
+            {/* Label persisten, bukan cuma placeholder (DES-011, audit desain
+                2026-09-15) -- defaultValue-nya 0 (bukan kosong), jadi
+                placeholder tidak pernah kelihatan sama sekali (placeholder
+                cuma tampil saat field genuinely kosong), field ini terlihat
+                seperti angka polos tanpa arti sebelumnya. */}
+            <input
+              name="reward_amount"
+              type="number"
+              min={0}
+              defaultValue={setting?.reward_amount ?? 0}
+              className="input w-56"
+            />
+          </label>
           <button disabled={saveSetting.isPending} className="btn">
             Simpan Pengaturan
           </button>

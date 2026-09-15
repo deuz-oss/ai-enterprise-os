@@ -294,10 +294,10 @@ koreksi §5 di atas: laporkan apa yang benar-benar jalan, bukan rencana):
 | Item | Status |
 |---|---|
 | `KpiCard` — ikon lingkaran + prop `delta` | ✅ Komponen selesai, berlaku otomatis di 15 halaman existing yang sudah pakai (lihat §4a). Prop `delta` TIDAK dipasang di mana pun (belum ada sumber data delta asli). |
-| `StatusPill` (baru) | ✅ Komponen selesai. Migrasi baca-saja: `payment_request`, `invoice`, `margin`, `employee` (4 domain, 4 file). Job Order status (select interaktif) dan Placement pipeline (sistem dot multi-tahap) sengaja tidak dimigrasikan — lihat §4a. |
-| `HeaderCanvas` (baru) | ✅ Komponen selesai. Diterapkan: **Dashboard.tsx**. Belum diterapkan: Job Orders, Employees, Payroll (waktu tidak cukup di sesi ini). |
+| `StatusPill` (baru) | ✅ Komponen selesai. Migrasi baca-saja: `payment_request`, `invoice`, `margin`, `employee`, **`payroll_run`** (2026-09-15, `Payroll.tsx` — dulu `STATUS_LABELS` lokal). Job Order status (select interaktif) dan Placement pipeline (sistem dot multi-tahap) sengaja tidak dimigrasikan — lihat §4a. |
+| `HeaderCanvas` (baru) | ✅ Komponen selesai. Diterapkan: **Dashboard.tsx**, **Job Orders.tsx**, **Employees.tsx**, **Payroll.tsx** (3 terakhir 2026-09-15, DES-004). Komponen ditambah prop `actions?: ReactNode` (backward-compatible, opsional) supaya tiap halaman bisa taruh primary action/filter sendiri berdampingan dengan date-range picker -- ketiga halaman ini `showRangePicker={false}` (belum ada kebutuhan filter tanggal, bukan dashboard). |
 | `DonutChart` (baru) | ✅ Selesai — library recharts (dipilih via `/pick-ui-library` yang dijalankan user). Diterapkan di Dashboard.tsx "Status Kandidat". Diverifikasi live light & dark mode. |
-| Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-36px) | ✅ **`Employees.tsx`** tabel utama (34.67px diverifikasi live) dan **`Dashboard.tsx`** tabel invoice (parsial — tanpa avatar, tidak relevan untuk baris invoice). Tabel lain di app (~18+) belum disentuh. |
+| Restyle tabel (avatar+nama, `tabular-nums`, `StatusPill`, tinggi baris 32-36px) | ✅ **`Employees.tsx`** tabel utama (34.67px diverifikasi live), **`Dashboard.tsx`** tabel invoice (parsial), **`JobOrders.tsx`** & **`Payroll.tsx`** tabel run (2026-09-15, DES-003 -- `py-1.5` per-cell, avatar TIDAK relevan di kedua tabel ini karena barisnya bukan orang/job order & payroll run, bukan orang). Tabel lain di app (~16+) belum disentuh. |
 | Sidebar — restyle ikon & warna | ✅ Ikon: konfirmasi sudah 100% lucide-react konsisten (tidak ada perubahan library, sudah benar sebelumnya). Warna nav aktif: fill solid → tint lembut + teks `var(--accent)`, ikon kategori tetap tampil saat aktif. Struktur/urutan menu tidak berubah (diverifikasi baca kode `NAV_ITEMS`/`CATEGORY_ORDER` tidak tersentuh). |
 
 **Verifikasi yang sudah dilakukan** (bukan cuma baca kode): `npx tsc
@@ -311,13 +311,22 @@ hilang, lihat catatan di §4a) — ketahuan & diperbaiki lewat pengecekan
 network request + log dev server, bukan diasumsikan "pasti kepasang
 otomatis".
 
-**Yang masih terbuka untuk sesi lanjutan:** HeaderCanvas di 3 halaman
-lain (Job Orders, Employees, Payroll), restyle tabel di halaman selain
-Employees/Dashboard, dan migrasi StatusPill ke domain lain kalau
-ditemukan status baca-saja lain yang genuinely 3-5 state datar (bukan
-select interaktif atau sistem multi-tahap). DonutChart sudah selesai
-(lihat baris di atas) — satu-satunya item Bagian 1 yang sempat blocked
-di sesi ini, sekarang tuntas setelah user menjalankan `/pick-ui-library`.
+**Update 2026-09-15 (Sprint 3, audit desain — DES-003/004/013):**
+HeaderCanvas rollout ke Job Orders/Employees/Payroll selesai; restyle
+tabel diperluas ke tabel run Job Orders & Payroll; StatusPill dapat
+domain `payroll_run` baru. Diverifikasi live (light+dark tidak
+disentuh ulang, tapi struktur/isi dicek langsung di browser tiap
+halaman) + `tsc --noEmit` + `npm run build` bersih.
+
+**Yang masih terbuka untuk sesi lanjutan:** restyle tabel di ~16+
+tabel lain di app yang belum disentuh (tabel per-employee lain di
+Payroll.tsx sendiri seperti Rekap Iuran BPJS, Absensi & Lembur;
+tabel-tabel di Finance/Accounting/dll), dan migrasi StatusPill ke
+domain lain kalau ditemukan status baca-saja lain yang genuinely 3-5
+state datar (bukan select interaktif atau sistem multi-tahap).
+DonutChart sudah selesai (lihat baris di atas) — satu-satunya item
+Bagian 1 yang sempat blocked di sesi 2026-09-12, sekarang tuntas
+setelah user menjalankan `/pick-ui-library`.
 
 Semua item di atas + fix kontras §5b di bawah digabung jadi satu commit
 (`4334225`) karena keduanya menumpuk file yang sama sebelum sempat
@@ -361,12 +370,19 @@ kedua tema.
 `CalloutBlock`/`CALLOUT_TONES` di `components/workspace.tsx` — teks
 pesan aslinya sudah pakai `style={{color: "var(--text)"}}`, cuma ikon
 yang inherit warna tone, dan ikon cuma butuh kontras non-teks 3:1 yang
-tetap lolos. Juga badge `bg-{hue}-50/100` + teks `{hue}-600/700` yang
-match (`AccountingAi.tsx` status badge, `TalentPoolPanels.tsx:255`,
-`Finance.tsx` kotak risiko/rekomendasi/aging) — itu masalah "belum
-pernah dimigrasi dark mode sama sekali" (kedua sisi statis, tidak ada
-`dark:` di manapun), beda kategori dari kontras-teks-di-atas-latar-netral
-yang diperbaiki di sini. Dicatat sebagai gap terbuka berikutnya.
+tetap lolos.
+
+**Update 2026-09-15 (Sprint 4, DES-005 — fixed):** badge
+`bg-{hue}-50/100` + teks `{hue}-600/700` yang match (`AccountingAi.tsx`
+status badge, `TalentPoolPanels.tsx:255`, `Finance.tsx` kotak
+risiko/rekomendasi/aging) — masalah "belum pernah dimigrasi dark mode
+sama sekali" (kedua sisi statis, tidak ada `dark:` di manapun), beda
+kategori dari kontras-teks-di-atas-latar-netral yang diperbaiki di
+atas. Ditambah pasangan `dark:bg-{hue}-500/10 dark:text-{hue}-400`
+mengikuti pola yang sudah ada di `CALLOUT_TONES`. Sweep app-wide
+(`grep bg-{hue}-50/100`) mengonfirmasi tidak ada instance lain yang
+tertinggal, plus 1 bonus catch: `Pages.tsx` tombol hapus halaman
+punya `hover:bg-rose-50` tanpa varian dark.
 
 ## 6. Prinsip Kerja Ke Depan
 

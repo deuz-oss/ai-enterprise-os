@@ -1158,14 +1158,31 @@ def generate_contract_document(
 
 
 def expiring_contracts(db: Session, within_days: int) -> list[dict]:
-    """Kontrak karyawan aktif yang berakhir dalam `within_days` ke depan."""
-    limit = date.today() + timedelta(days=within_days)
+    """Kontrak karyawan aktif yang berakhir dalam `within_days` ke depan.
+
+    Dua bug ditemukan lewat audit desain 2026-09-15: (1) query ini tidak
+    punya batas bawah tanggal, jadi kontrak yang SUDAH kedaluwarsa
+    (kadang bertahun-tahun lalu) ikut lolos; (2) tidak sadar rantai
+    perpanjangan (`previous_contract_id`, Tier 2) -- kontrak lama yang
+    sudah digantikan kontrak baru tetap ikut dianggap "akan berakhir".
+    Kombinasi keduanya + `max(days_left, 0)` di bawah membuat kontrak
+    yang sudah lewat 2 tahun tampil sebagai "0 hari lagi" di banner
+    HR -- diperbaiki dengan batas bawah `end_date >= today` dan
+    exclude kontrak yang direferensikan sebagai `previous_contract_id`
+    kontrak lain (bukan link terakhir di rantainya).
+    """
     today = date.today()
+    limit = today + timedelta(days=within_days)
+    superseded_ids = select(EmploymentContract.previous_contract_id).where(
+        EmploymentContract.previous_contract_id.is_not(None)
+    )
     stmt = (
         select(EmploymentContract, Employee)
         .join(Employee, EmploymentContract.employee_id == Employee.id)
         .where(EmploymentContract.end_date.is_not(None))
+        .where(EmploymentContract.end_date >= today)
         .where(EmploymentContract.end_date <= limit)
+        .where(EmploymentContract.id.not_in(superseded_ids))
         .where(Employee.status == EmployeeStatus.active)
         .order_by(EmploymentContract.end_date)
     )
@@ -1180,7 +1197,7 @@ def expiring_contracts(db: Session, within_days: int) -> list[dict]:
                 "employee_name": employee.full_name,
                 "employee_no": employee.employee_no,
                 "end_date": contract.end_date,
-                "days_left": max(days_left, 0),
+                "days_left": days_left,
             }
         )
     return results

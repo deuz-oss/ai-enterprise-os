@@ -215,7 +215,15 @@ function RekonsiliasiCard() {
                 {ln.amount_out ? formatRupiah(ln.amount_out) : "—"}
               </td>
               <td className="td">
-                <span className={`badge ${ln.status === "usulan" ? "bg-amber-100 text-amber-700" : ln.status === "tercocok" ? "bg-emerald-100 text-emerald-700" : ""}`}>
+                <span
+                  className={`badge ${
+                    ln.status === "usulan"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                      : ln.status === "tercocok"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                        : ""
+                  }`}
+                >
                   {STATUS_LABEL[ln.status] ?? ln.status}
                   {ln.status === "usulan" && ` ${Math.round(ln.match_score * 100)}%`}
                 </span>
@@ -375,7 +383,13 @@ function CloseChecklistCard() {
       </div>
       {checklist.data && (
         <>
-          <span className={`badge ${checklist.data.ready_to_close ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+          <span
+            className={`badge ${
+              checklist.data.ready_to_close
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+            }`}
+          >
             {checklist.data.ready_to_close ? "Siap ditutup" : `${checklist.data.errors} error, ${checklist.data.warnings} warning`}
           </span>
           <ul className="space-y-1.5 text-xs">

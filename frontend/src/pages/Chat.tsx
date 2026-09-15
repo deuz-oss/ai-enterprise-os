@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { promptToast } from "../components/ui";
+import { confirmToast, promptToast } from "../components/ui";
 
 // Index dasar arbitrer yang besar untuk `firstItemIndex` Virtuoso -- pola
 // resmi mereka untuk "reverse infinite scroll" (chat): begitu halaman
@@ -586,7 +586,9 @@ export default function Chat() {
                   edit
                 </button>
                 <button
-                  onClick={() => deleteMessage.mutate(m.id)}
+                  onClick={() =>
+                    confirmToast("Hapus pesan ini?", () => deleteMessage.mutate(m.id))
+                  }
                   className="text-[11px] text-rose-400 hover:text-rose-600"
                 >
                   hapus

@@ -1322,7 +1322,11 @@ export default function Leads() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => removeLeadContact.mutate(lc.id)}
+                        onClick={() =>
+                          confirmToast(`Hapus "${lc.contact.name}" dari lead ini?`, () =>
+                            removeLeadContact.mutate(lc.id)
+                          )
+                        }
                         className="rounded p-1 hover:opacity-70"
                         style={{ color: "var(--text-muted)" }}
                         aria-label={`Hapus ${lc.contact.name} dari lead ini`}

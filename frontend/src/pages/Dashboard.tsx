@@ -384,7 +384,18 @@ export default function Dashboard() {
           value={formatRupiah(data.finance.revenue_mtd)}
           icon={DollarSign}
           iconTone="warning"
-          context={`${data.finance.invoices_total} invoice tercatat`}
+          // Zero-state khusus (DES-006, audit desain 2026-09-15): "0 invoice
+          // tercatat" akurat tapi tidak bedakan "tenant baru belum mulai"
+          // dari "genuinely nol" -- kasih arah aksi selanjutnya.
+          context={
+            data.finance.invoices_total === 0 ? (
+              <span title="Belum ada invoice — buat dari Quotation yang sudah Deal">
+                Belum ada invoice — buat dari Quotation
+              </span>
+            ) : (
+              `${data.finance.invoices_total} invoice tercatat`
+            )
+          }
           progressPct={revenueShare}
         />
         <KpiCard
