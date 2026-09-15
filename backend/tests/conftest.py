@@ -25,6 +25,15 @@ os.environ["STT_BASE_URL"] = ""
 os.environ["GOOGLE_OAUTH_CLIENT_ID"] = ""
 os.environ["GOOGLE_OAUTH_CLIENT_SECRET"] = ""
 os.environ["GOOGLE_OAUTH_REDIRECT_URI"] = ""
+# Sama alasan -- validasi rekening bank (api.co.id). BANK_VALIDATION_PROVIDER
+# kalau diisi "sandbox" di .env developer (utk uji manual browser) tetap
+# tidak berbahaya (sandbox tidak pernah panggil jaringan), TAPI kalau nanti
+# diisi "api_co_id" + API key asli, tanpa blank ini setiap tes yang menyentuh
+# field bank karyawan diam-diam akan memanggil vendor berbayar sungguhan.
+# Tes yang butuh sandbox aktif eksplisit patch sendiri (lihat
+# test_hrd.py::_bank_validation_sandbox).
+os.environ["BANK_VALIDATION_PROVIDER"] = ""
+os.environ["BANK_VALIDATION_API_KEY"] = ""
 
 import pytest
 from app.core.database import Base, get_db

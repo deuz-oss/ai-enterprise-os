@@ -441,6 +441,12 @@ export default function EmployeeDetail() {
     queryFn: () => api.get<InsuranceRow[]>(`/employees/${id}/insurances`),
     enabled: Boolean(id) && !isOpsOnly,
   });
+  const { data: bankOptions, isError: bankOptionsError } = useQuery({
+    queryKey: ["employees", "bank-options"],
+    queryFn: () => api.get<{ code: string; name: string }[]>("/employees/bank-options"),
+    enabled: !isOpsOnly,
+    retry: false,
+  });
   const { data: warningLetters } = useQuery({
     queryKey: ["employee-warning-letters", id],
     queryFn: () => api.get<WarningLetterRow[]>(`/employees/${id}/warning-letters`),
@@ -953,9 +959,29 @@ export default function EmployeeDetail() {
                   onEdit={() => setEditingField("bank")}
                   onCancel={() => setEditingField(null)}
                   view={
-                    employee.bank_name || employee.bank_account
-                      ? [employee.bank_name, employee.bank_account].filter(Boolean).join(" · ")
-                      : "—"
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>
+                        {employee.bank_name || employee.bank_account
+                          ? [employee.bank_name, employee.bank_account].filter(Boolean).join(" · ")
+                          : "—"}
+                      </span>
+                      {employee.bank_account_verified_at ? (
+                        employee.bank_account_verified ? (
+                          <span className="badge pill p-green text-[10px]">
+                            ✓ Terverifikasi
+                            {employee.bank_account_verified_name
+                              ? ` (nama di bank: ${employee.bank_account_verified_name})`
+                              : ""}
+                          </span>
+                        ) : (
+                          <span className="badge pill p-red text-[10px]">
+                            ⚠ Rekening tidak ditemukan/tidak aktif
+                          </span>
+                        )
+                      ) : employee.bank_code ? (
+                        <span className="badge pill p-gray text-[10px]">belum diverifikasi</span>
+                      ) : null}
+                    </span>
                   }
                 >
                   <form
@@ -963,11 +989,14 @@ export default function EmployeeDetail() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       const form = new FormData(e.currentTarget);
+                      const code = (form.get("bank_code") as string) || "";
+                      const picked = (bankOptions ?? []).find((b) => b.code === code);
                       updateEmployee.mutate(
                         {
                           empId: id,
                           body: {
-                            bank_name: form.get("bank_name") || null,
+                            bank_code: code || null,
+                            bank_name: picked ? picked.name : employee.bank_name,
                             bank_account: form.get("bank_account") || null,
                           },
                         },
@@ -975,13 +1004,23 @@ export default function EmployeeDetail() {
                       );
                     }}
                   >
-                    <input
+                    <select
                       autoFocus
-                      name="bank_name"
-                      defaultValue={employee.bank_name ?? ""}
-                      placeholder="Nama Bank"
+                      name="bank_code"
+                      defaultValue={employee.bank_code ?? ""}
                       className="input w-auto py-1 text-xs"
-                    />
+                      aria-label="Pilih bank"
+                      disabled={bankOptionsError || !bankOptions?.length}
+                    >
+                      <option value="">
+                        {bankOptionsError ? "gagal memuat daftar bank" : "— pilih bank —"}
+                      </option>
+                      {(bankOptions ?? []).map((b) => (
+                        <option key={b.code} value={b.code}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       name="bank_account"
                       defaultValue={employee.bank_account ?? ""}

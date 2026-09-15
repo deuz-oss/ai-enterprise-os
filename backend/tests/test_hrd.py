@@ -685,6 +685,131 @@ def test_employee_fase26_fields_roundtrip(client):
     assert updated.json()["residential_address"] == {"province": "Jawa Barat"}
 
 
+def _bank_validation_sandbox():
+    """Flip BANK_VALIDATION_PROVIDER=sandbox -- pola sama
+    `test_esign.py::_sandbox_settings`."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    return patch.object(settings, "bank_validation_provider", "sandbox")
+
+
+def test_bank_validation_off_by_default_fields_stay_null(client):
+    """Fitur nonaktif (BANK_VALIDATION_PROVIDER kosong, default) -- simpan
+    bank_code/bank_account tetap sukses, tapi 3 field verified tidak
+    pernah terisi."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Novita Sari"}
+    ).json()
+
+    updated = client.patch(
+        f"/api/v1/employees/{emp['id']}",
+        headers=headers,
+        json={"bank_code": "bank_bri", "bank_account": "1234567891"},
+    )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["bank_code"] == "bank_bri"
+    assert body["bank_account"] == "1234567891"
+    assert body["bank_account_verified"] is False
+    assert body["bank_account_verified_name"] is None
+    assert body["bank_account_verified_at"] is None
+
+
+def test_bank_validation_sandbox_success_sets_verified(client):
+    """Provider sandbox + nomor rekening yang lolos aturan sandbox (tidak
+    diakhiri '0') -> verified=True, nama ter-mask & timestamp terisi."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Okta Pratama"}
+    ).json()
+
+    with _bank_validation_sandbox():
+        updated = client.patch(
+            f"/api/v1/employees/{emp['id']}",
+            headers=headers,
+            json={"bank_code": "bank_bri", "bank_account": "1234567891"},
+        )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["bank_account_verified"] is True
+    assert body["bank_account_verified_name"] == "San**** Box****"
+    assert body["bank_account_verified_at"] is not None
+
+
+def test_bank_validation_reset_on_edit(client):
+    """Edit ulang bank_account (sumber berubah) -> verifikasi lama direset
+    dulu, lalu dihitung ulang. Nomor baru yang valid -> verified=True dgn
+    verified_at BARU (bukan bekas timestamp lama). Nomor baru yang gagal
+    aturan sandbox -> verified=False, verified_name=None."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Putri Handayani"}
+    ).json()
+
+    with _bank_validation_sandbox():
+        first = client.patch(
+            f"/api/v1/employees/{emp['id']}",
+            headers=headers,
+            json={"bank_code": "bank_bri", "bank_account": "1234567891"},
+        ).json()
+        assert first["bank_account_verified"] is True
+        first_verified_at = first["bank_account_verified_at"]
+
+        again_valid = client.patch(
+            f"/api/v1/employees/{emp['id']}",
+            headers=headers,
+            json={"bank_account": "1234567892"},
+        ).json()
+        assert again_valid["bank_account_verified"] is True
+        assert again_valid["bank_account_verified_at"] != first_verified_at
+
+        now_invalid = client.patch(
+            f"/api/v1/employees/{emp['id']}",
+            headers=headers,
+            json={"bank_account": "1234567890"},  # diakhiri "0" -> gagal sandbox
+        ).json()
+        assert now_invalid["bank_account_verified"] is False
+        assert now_invalid["bank_account_verified_name"] is None
+
+
+def test_bank_validation_provider_error_does_not_block_save(client):
+    """Provider gagal (exception) -- PATCH data karyawan utama TETAP sukses
+    (best-effort, pola sama core/geocoding.py), cuma field verified yang
+    tidak terisi."""
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Qori Ramadhan"}
+    ).json()
+
+    with (
+        _bank_validation_sandbox(),
+        patch("app.modules.hrd.service.bank_validation.get_adapter") as mock_get,
+    ):
+        mock_get.return_value.validate_account.side_effect = Exception("boom")
+        updated = client.patch(
+            f"/api/v1/employees/{emp['id']}",
+            headers=headers,
+            json={"bank_code": "bank_bri", "bank_account": "1234567891"},
+        )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["bank_code"] == "bank_bri"
+    assert body["bank_account"] == "1234567891"
+    assert body["bank_account_verified"] is False
+    assert body["bank_account_verified_at"] is None
+
+
+def test_bank_options_endpoint(client):
+    headers = _auth_header(client)
+    with _bank_validation_sandbox():
+        resp = client.get("/api/v1/employees/bank-options", headers=headers)
+    assert resp.status_code == 200, resp.text
+    codes = [b["code"] for b in resp.json()]
+    assert "bank_bri" in codes
+
+
 def test_employee_emergency_contacts_crud(client):
     """Kontak darurat one-to-many (dulu 3 kolom flat, hanya nampung satu)."""
     headers = _auth_header(client)

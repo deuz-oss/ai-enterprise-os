@@ -210,6 +210,17 @@ class Employee(TenantMixin, Base):
     address: Mapped[str | None] = mapped_column(String(500))
     bank_name: Mapped[str | None] = mapped_column(String(100))
     bank_account: Mapped[str | None] = mapped_column(String(100))
+    # Validasi rekening bank (integrasi api.co.id) -- `bank_code` slug
+    # kanonik provider (mis. "bank_bri"), berdampingan dgn `bank_name` teks
+    # bebas lama di atas (TIDAK di-backfill, data lama biarkan apa adanya
+    # sampai HR pilih ulang bank via dropdown baru). 3 field `*_verified*`
+    # server-computed-only, direset tiap kali bank_code/bank_account
+    # berubah -- mirror reset `AttendanceSummary.client_approved` di
+    # `attendance/service.py::recompute_month_summary`.
+    bank_code: Mapped[str | None] = mapped_column(String(50), default=None)
+    bank_account_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    bank_account_verified_name: Mapped[str | None] = mapped_column(String(255), default=None)
+    bank_account_verified_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     join_date: Mapped[date | None] = mapped_column(Date, default=None)
     marital_status: Mapped[MaritalStatus | None] = mapped_column(
         Enum(MaritalStatus, native_enum=False, length=50), default=None

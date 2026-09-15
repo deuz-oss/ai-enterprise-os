@@ -72,6 +72,7 @@ class EmployeeUpdate(BaseModel):
     address: str | None = None
     bank_name: str | None = None
     bank_account: str | None = None
+    bank_code: str | None = None
     join_date: date | None = None
     status: EmployeeStatus | None = None
     marital_status: MaritalStatus | None = None
@@ -122,6 +123,10 @@ class EmployeeOut(BaseModel):
     address: str | None
     bank_name: str | None
     bank_account: str | None
+    bank_code: str | None = None
+    bank_account_verified: bool = False
+    bank_account_verified_name: str | None = None
+    bank_account_verified_at: datetime | None = None
     join_date: date | None
     marital_status: MaritalStatus | None
     dependents: int
@@ -173,6 +178,13 @@ class EmployeeOut(BaseModel):
         ).ptkp_key
         status, deps = key.split("_")
         return f"{status.upper()}/{deps}"
+
+
+class BankOptionOut(BaseModel):
+    """Satu bank dari daftar provider validasi rekening (`GET /employees/bank-options`)."""
+
+    code: str
+    name: str
 
 
 class EmergencyContactCreate(BaseModel):

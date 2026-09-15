@@ -23,6 +23,10 @@ export interface EmployeeRow {
   current_position: string | null;
   bank_name: string | null;
   bank_account: string | null;
+  bank_code: string | null;
+  bank_account_verified: boolean;
+  bank_account_verified_name: string | null;
+  bank_account_verified_at: string | null;
   ktp_no: string | null;
   npwp_no: string | null;
   join_date: string | null;

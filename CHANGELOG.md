@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 51: HRD — validasi otomatis rekening bank karyawan (api.co.id)
+
+- Integrasi vendor opsional baru `app/core/bank_validation/` (adapter interface + factory `get_adapter()`, provider `""`/`sandbox`/`api_co_id`) -- mirror persis pola `app/core/payment/` (Xendit) yang sudah ada. api.co.id dipilih (Rp 50rb/bulan flat, bukan platform disbursement penuh) setelah riset provider mana yang paling murah/gampang diintegrasikan.
+- `Employee` dapat 4 field baru: `bank_code` (slug bank kanonik provider, berdampingan dgn `bank_name` teks bebas lama yg TIDAK di-backfill) dan 3 field server-computed `bank_account_verified`/`_name`/`_at`.
+- Validasi jalan **otomatis** saat HR menyimpan `bank_code`+`bank_account` di form edit karyawan (bukan tombol terpisah) -- best-effort, pola sama `core/geocoding.py::reverse_geocode`: kegagalan/nonaktifnya provider TIDAK PERNAH menggagalkan simpan data karyawan utama. Mengubah `bank_code`/`bank_account` lagi otomatis mereset status verifikasi lama sebelum dihitung ulang.
+- Endpoint baru `GET /employees/bank-options` -- daftar bank diambil LIVE dari provider (`GET /validation/bank/available`), bukan di-hardcode (hindari risiko salah slug).
+- UI: field "Nama Bank" yg dulu teks bebas jadi `<select>` terisi dari endpoint di atas; badge status "✓ Terverifikasi (nama di bank: ...)" / "⚠ Rekening tidak ditemukan/tidak aktif" / "belum diverifikasi" di Employee Detail.
+- Nama pemilik rekening dari api.co.id SENGAJA tersamar sebagian (kebijakan privasi provider, mis. "Rif\*\*\*\* Eln\*\*\*\*") -- tidak ada logika pencocokan nama otomatis, HR yang eyeball manual.
+- Migrasi `4d5e6f7a8b9c`, tervalidasi lewat `test_upgrade_head_identik_dengan_create_all`. Di luar cakupan (sengaja): form onboarding self-service kandidat, wiring ke anomali Payroll, adapter Xendit utk bank validation (trivial ditambah nanti, reuse `xendit_api_key` yg sudah ada).
+- Cek-gap saat implementasi: `BANK_VALIDATION_PROVIDER` sempat lupa didaftarkan di `conftest.py` (daftar provider berbayar yang di-blank paksa utk tiap test run, pola sama `AI_BASE_URL`/`GOOGLE_OAUTH_*`) -- tanpa ini, kalau developer set `api_co_id`+API key asli di `.env` lokalnya, seluruh test suite diam-diam akan memanggil vendor berbayar sungguhan. Ditemukan lewat test suite penuh yang gagal 1 kasus, diperbaiki di akar.
+
 ### Added — Fase 50: HRD — gap-fill profil karyawan dari audit MYOHRIS
 
 - Field identitas baru di `Employee`: `email`, `birthdate`, `birthplace`, `gender`, `kk_no`, `religion`, `blood_type`, `education`, `current_position` -- yang punya padanan di `Candidate` (`birthdate`/`gender`/`education`/`current_position`/`blood_type`/`birthplace`, sejak Fase 24) sekarang disalin otomatis saat onboarding, bukan ditinggal begitu saja.

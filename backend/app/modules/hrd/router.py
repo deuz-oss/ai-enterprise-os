@@ -21,6 +21,7 @@ from app.modules.ess.schemas import (
 from app.modules.hrd import service
 from app.modules.hrd.models import EmployeeStatus, HrDocumentType, WarningLetterType
 from app.modules.hrd.schemas import (
+    BankOptionOut,
     ContractCreate,
     ContractGenerateDocumentIn,
     ContractOut,
@@ -167,6 +168,14 @@ def request_onboarding_resubmission(
 def selfservice_accounts(db: Session = Depends(get_db)):
     """Akun role karyawan yang belum tertaut — kandidat untuk diaktifkan."""
     return ess_service.list_selfservice_accounts(db)
+
+
+@router.get("/bank-options", response_model=list[BankOptionOut])
+def list_bank_options():
+    """Daftar bank dari provider validasi rekening, utk dropdown pilih bank
+    di form edit karyawan. Wajib dideklarasikan sebelum GET /{employee_id}
+    (di bawah) supaya "bank-options" tidak ketangkap sbg path-param."""
+    return service.list_bank_options()
 
 
 @router.get("/leave-requests", response_model=list[LeaveOut])

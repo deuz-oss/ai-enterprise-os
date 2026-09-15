@@ -11,7 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import storage
+from app.core import bank_validation, storage
+from app.core.config import get_settings
 from app.core.database import assert_not_referenced, parse_uuid
 from app.modules import audit
 from app.modules.hrd.models import (
@@ -173,9 +174,49 @@ def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> E
         data["user_id"] = _resolve_linked_user(db, employee, data["user_id"])
     for field, value in data.items():
         setattr(employee, field, value)
+    if "bank_code" in data or "bank_account" in data:
+        # Sumber berubah -> verifikasi lama jadi basi, reset dulu (pola sama
+        # AttendanceSummary.client_approved di attendance/service.py). Kalau
+        # nilai baru VALID, reset ini langsung ketimpa True+nama di commit
+        # yang sama (tidak ada flicker ke status basi).
+        employee.bank_account_verified = False
+        employee.bank_account_verified_name = None
+        employee.bank_account_verified_at = None
+        _revalidate_bank_account(db, employee)
     db.commit()
     db.refresh(employee)
     return employee
+
+
+def _revalidate_bank_account(db: Session, employee: Employee) -> None:
+    """Best-effort (pola sama core/geocoding.py::reverse_geocode) --
+    kegagalan provider validasi rekening TIDAK BOLEH menggagalkan simpan
+    data karyawan utama."""
+    if not (employee.bank_code and employee.bank_account):
+        return
+    if not get_settings().bank_validation_configured:
+        return
+    try:
+        result = bank_validation.get_adapter().validate_account(
+            bank_code=employee.bank_code,
+            account_number=employee.bank_account,
+            account_name=employee.full_name,
+        )
+        employee.bank_account_verified = result.is_valid
+        employee.bank_account_verified_name = result.masked_name
+        employee.bank_account_verified_at = datetime.now(UTC)
+    except Exception:  # noqa: BLE001 - best-effort, jangan gagalkan simpan karyawan
+        logger.warning("Validasi rekening bank gagal utk employee %s", employee.id, exc_info=True)
+
+
+def list_bank_options() -> list[bank_validation.BankOption]:
+    """Daftar bank dari provider validasi -- dipicu eksplisit user buka form
+    (BUKAN side-effect diam-diam), jadi TIDAK dibungkus try/except di sini
+    seperti `_revalidate_bank_account`: kalau vendor gagal, biarkan
+    502 menjalar supaya frontend bisa tampilkan pesan error yang jelas."""
+    if not get_settings().bank_validation_configured:
+        return []
+    return bank_validation.get_adapter().list_banks()
 
 
 def _resolve_linked_user(db: Session, employee: Employee, user_id: UUID | None) -> UUID | None:

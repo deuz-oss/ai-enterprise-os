@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     # `billing/router.py::_verify_xendit_token`.
     xendit_webhook_token: str | None = None
 
+    # Validasi rekening bank karyawan (cek status/nama tersamar ke bank
+    # sebelum payroll). "" (nonaktif) | "sandbox" | "api_co_id" (Rp50rb/bulan
+    # flat, lihat app/core/bank_validation/). Provider bisa ditambah lagi
+    # nanti (mis. `xendit`, yg sudah dikonfigurasi utk billing di atas & juga
+    # punya produk Bank Name Validator) tanpa ubah logika bisnis -- tinggal
+    # tambah adapter baru.
+    bank_validation_provider: str = ""
+    bank_validation_api_key: str | None = None
+
     @field_validator(
         "database_url",
         "storage_endpoint",
@@ -141,6 +150,7 @@ class Settings(BaseSettings):
         "google_oauth_client_id",
         "google_oauth_client_secret",
         "google_oauth_redirect_uri",
+        "bank_validation_api_key",
         mode="before",
     )
     @classmethod
@@ -204,6 +214,10 @@ class Settings(BaseSettings):
     @property
     def payment_configured(self) -> bool:
         return self.payment_provider in ("sandbox", "xendit")
+
+    @property
+    def bank_validation_configured(self) -> bool:
+        return self.bank_validation_provider in ("sandbox", "api_co_id")
 
     @property
     def email_enabled(self) -> bool:
