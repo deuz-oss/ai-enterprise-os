@@ -835,12 +835,13 @@ def create_contract(db: Session, employee_id: str, payload: ContractCreate) -> E
                     "perpanjang dari kontrak perpanjangan terakhir"
                 ),
             )
-
-    # Perpanjangan tanpa contract_type eksplisit mewarisi tipe kontrak yang
-    # diperpanjang -- masuk akal, PKWT diperpanjang tetap PKWT kecuali
-    # sengaja diubah.
-    if data.get("previous_contract_id") and data.get("contract_type") is None:
-        data["contract_type"] = prev_contract.contract_type
+        # Perpanjangan tanpa contract_type eksplisit mewarisi tipe kontrak
+        # yang diperpanjang -- masuk akal, PKWT diperpanjang tetap PKWT
+        # kecuali sengaja diubah. Digabung ke blok ini (bukan `if` terpisah
+        # spt sebelumnya) supaya akses `prev_contract.contract_type` tetap
+        # dlm scope yg sama tempat None sudah disingkirkan (mypy union-attr).
+        if data.get("contract_type") is None:
+            data["contract_type"] = prev_contract.contract_type
 
     _validate_pkwt_duration(
         db,
