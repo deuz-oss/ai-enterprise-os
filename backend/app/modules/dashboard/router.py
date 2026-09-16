@@ -29,6 +29,21 @@ def overview(db: Session = Depends(get_db)):
     # --- Sales CRM ---
     lead_rows = db.execute(select(Lead.stage, func.count(Lead.id)).group_by(Lead.stage)).all()
     leads = {stage.value: count for stage, count in lead_rows}
+    # Nilai pipeline (Rp) -- "sinyal bisnis apa yang belum muncul" (audit
+    # desain 2026-09-15): dashboard sebelumnya cuma hitung JUMLAH lead per
+    # tahap, tidak pernah nilai Rp-nya, padahal field-nya sudah ada
+    # (Lead.estimated_value + fx_rate_to_idr, dipakai Leads.tsx sbg "Total
+    # Nilai Pipeline"). Dijumlah di Python (bukan SQL SUM langsung) supaya
+    # logika "estimated_value * fx_rate_to_idr, fallback 1" identik persis
+    # dgn property `Lead.estimated_value_idr` -- exclude won/lost, sama
+    # seperti `activeLeads` di Leads.tsx (pipeline = yang masih berjalan).
+    pipeline_value_idr = 0.0
+    for est_value, fx_rate in db.execute(
+        select(Lead.estimated_value, Lead.fx_rate_to_idr).where(
+            Lead.stage.notin_([LeadStage.won, LeadStage.lost])
+        )
+    ).all():
+        pipeline_value_idr += float(est_value or 0) * float(fx_rate or 1)
     open_job_orders = (
         db.execute(
             select(func.count(JobOrder.id)).where(
@@ -53,6 +68,28 @@ def overview(db: Session = Depends(get_db)):
             ).scalar()
             or 0
         )
+        # Turnover BULAN INI -- "sinyal bisnis apa yang belum muncul" (audit
+        # desain 2026-09-15): sebelumnya cuma ada hitungan statis total
+        # resign sepanjang masa (tidak actionable), sekarang bisa per
+        # periode krn `Employee.resigned_at` baru ditambah (lihat models.py
+        # & migrasi 5e6f7a8b9c0d). Baris resign LAMA (sebelum kolom ini ada)
+        # sengaja tidak dihitung di sini -- resigned_at-nya NULL, bukan
+        # backfill tebakan.
+        resigned_this_month = 0
+        try:
+            month_start = date.today().replace(day=1)
+            resigned_this_month = (
+                db.execute(
+                    select(func.count(Employee.id)).where(
+                        Employee.status == EmployeeStatus.resigned,
+                        Employee.resigned_at.is_not(None),
+                        Employee.resigned_at >= month_start,
+                    )
+                ).scalar()
+                or 0
+            )
+        except Exception:
+            db.rollback()
         # Dokumen expiry ≤14 hari & BPJS/asuransi completeness
         expiring_contracts = 0
         try:
@@ -102,7 +139,7 @@ def overview(db: Session = Depends(get_db)):
         db.rollback()
         total_employees = active_employees = expiring_contracts = bpjs_complete = (
             insurance_complete
-        ) = 0
+        ) = resigned_this_month = 0
 
     # --- Payroll ---
     # PayrollRunStatus asli: draft/submitted_to_client/client_rejected/
@@ -262,12 +299,57 @@ def overview(db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
 
+    # --- Revenue trend, 6 bulan terakhir termasuk bulan berjalan ---
+    # Ditambah atas permintaan user (audit desain Dashboard 2026-09-15):
+    # sebelumnya cuma ada revenue_mtd (1 angka), tidak cukup utk grafik
+    # tren yang FE minta. Bucketing dilakukan di Python (bukan SQL
+    # date_trunc/strftime) supaya portable lintas SQLite (dev) & Postgres
+    # (docker/prod) -- dua dialek fungsi tanggal itu tidak saling kompatibel
+    # dan tidak ada satu pun query month-grouping lain di codebase ini yang
+    # bisa dicontoh secara aman.
+    revenue_by_month: list[dict] = []
+    try:
+        from app.modules.finance.models import Invoice, InvoiceStatus
+
+        today = date.today()
+        month_starts: list[date] = []
+        y, m = today.year, today.month
+        for _ in range(6):
+            month_starts.append(date(y, m, 1))
+            m -= 1
+            if m == 0:
+                m = 12
+                y -= 1
+        month_starts.reverse()
+        earliest = month_starts[0]
+
+        paid_rows = db.execute(
+            select(Invoice.paid_at, Invoice.total_due).where(
+                Invoice.status == InvoiceStatus.paid,
+                Invoice.paid_at.is_not(None),
+                Invoice.paid_at >= earliest,
+            )
+        ).all()
+        buckets = {(d.year, d.month): 0.0 for d in month_starts}
+        for paid_at, total_due in paid_rows:
+            key = (paid_at.year, paid_at.month)
+            if key in buckets:
+                buckets[key] += float(total_due or 0)
+        revenue_by_month = [
+            {"month": d.strftime("%Y-%m"), "revenue": buckets[(d.year, d.month)]}
+            for d in month_starts
+        ]
+    except Exception:
+        db.rollback()
+
     return {
         "leads": {
             "total": sum(leads.values()),
             "won": leads.get(LeadStage.won.value, 0),
+            "lost": leads.get(LeadStage.lost.value, 0),
             "by_stage": leads,
             "funnel": [{"stage": s.value, "count": leads.get(s.value, 0)} for s in LeadStage],
+            "pipeline_value_idr": pipeline_value_idr,
         },
         "clients": db.execute(select(func.count(Client.id))).scalar() or 0,
         "documents": db.execute(select(func.count(LegalDocument.id))).scalar() or 0,
@@ -288,9 +370,10 @@ def overview(db: Session = Depends(get_db)):
             "expiring_contracts_14d": int(expiring_contracts),
             "bpjs_complete": int(bpjs_complete),
             "insurance_complete": int(insurance_complete),
+            "resigned_this_month": int(resigned_this_month),
         },
         "payroll": payroll_summary,
-        "finance": finance_summary,
+        "finance": {**finance_summary, "revenue_by_month": revenue_by_month},
         "accounting": accounting_health,
         "recruitment_talent": {
             "job_orders_by_stage": job_orders_by_stage,

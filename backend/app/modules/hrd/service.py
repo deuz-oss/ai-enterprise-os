@@ -172,8 +172,18 @@ def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> E
         employee.employee_no = new_no
     if "user_id" in data:
         data["user_id"] = _resolve_linked_user(db, employee, data["user_id"])
+    previous_status = employee.status
     for field, value in data.items():
         setattr(employee, field, value)
+    if "status" in data and employee.status != previous_status:
+        # resigned_at otomatis -- dibutuhkan utk turnover PER PERIODE di
+        # Dashboard (lihat catatan di models.py), bukan sekadar hitungan
+        # statis. Diaktifkan lagi (rehire) -> tanggal resign lama sudah
+        # tidak relevan, dikosongkan lagi.
+        if employee.status == EmployeeStatus.resigned:
+            employee.resigned_at = date.today()
+        elif previous_status == EmployeeStatus.resigned:
+            employee.resigned_at = None
     if "bank_code" in data or "bank_account" in data:
         # Sumber berubah -> verifikasi lama jadi basi, reset dulu (pola sama
         # AttendanceSummary.client_approved di attendance/service.py). Kalau

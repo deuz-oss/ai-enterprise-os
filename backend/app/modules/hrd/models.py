@@ -246,6 +246,14 @@ class Employee(TenantMixin, Base):
         default=EmployeeStatus.active,
         index=True,
     )
+    # Kapan status berubah jadi resign -- otomatis diisi di
+    # `service.py::update_employee` saat status bertransisi ke resigned,
+    # dikosongkan lagi kalau diaktifkan ulang (rehire). Ditambah supaya
+    # turnover bisa dihitung PER PERIODE (mis. "resign bulan ini"), bukan
+    # cuma hitungan statis total resign sepanjang masa (Dashboard, audit
+    # desain 2026-09-15 -- permintaan user "sinyal bisnis apa yang belum
+    # muncul", sebelumnya field ini tidak ada sama sekali).
+    resigned_at: Mapped[date | None] = mapped_column(Date, default=None)
     # Fase 26 -- Employee Detail: grade & level 2 konsep hierarki terpisah
     # (bukan satu field dipecah), belum ada padanan sebelumnya.
     grade: Mapped[str | None] = mapped_column(String(50), default=None)
