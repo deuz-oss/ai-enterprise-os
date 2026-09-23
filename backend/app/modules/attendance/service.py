@@ -211,8 +211,9 @@ def _parse_status(value: str) -> AttendanceStatus:
 
 async def import_csv(db: Session, file: UploadFile) -> ImportResultOut:
     """Impor CSV fingerprint; baris gagal dilaporkan tanpa menghentikan lainnya."""
-    raw = await file.read()
-    text = raw.decode("utf-8-sig")
+    from app.core.csv_upload import read_csv_text
+
+    text = await read_csv_text(file)
     sample = text.splitlines()[0] if text.splitlines() else ""
     delimiter = ";" if sample.count(";") >= sample.count(",") else ","
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)

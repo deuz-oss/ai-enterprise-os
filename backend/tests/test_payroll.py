@@ -38,6 +38,19 @@ def test_compute_ter_bracket_and_zero():
     assert compute_ter(big, TaxProfile("k", 3)) < compute_ter(big, TaxProfile("tk", 0))
 
 
+def test_compute_ter_rounds_half_up_not_bankers():
+    """5.500.200 x 0,25% = 13.750,5. `round()` float (banker's) memberi
+    13.750; aturan rupiah yang benar setengah-ke-atas = 13.751."""
+    assert compute_ter(5_500_200, TaxProfile("tk", 0)) == 13_751
+
+
+def test_pasal17_pkp_rounded_down_to_thousands():
+    """PKP dibulatkan ke bawah ribuan penuh sebelum tarif diterapkan."""
+    profile = TaxProfile("tk", 0)
+    # PKP 10.000.999 -> 10.000.000 x 5% = 500.000 (bukan 500.049,95)
+    assert compute_pasal17_annual(54_000_000 + 10_000_999, profile) == 500_000
+
+
 def test_compute_pasal17_progressive():
     profile = TaxProfile("tk", 0)  # PTKP 54jt
     # PKP tepat di lapisan pertama: 60jt * 5%
@@ -469,7 +482,16 @@ def test_add_and_delete_saltab_component(client):
 
     row2 = _saltab_row(client, headers, run["id"], emp["id"])
     thp_after = row2["total_earnings"] - row2["total_deductions"]
-    assert thp_after == thp_before + 500_000
+    # Bonus ikut bruto TER: 6.000.000 (TER A 0,75% = 45.000) -> 6.500.000
+    # (TER A 1% = 65.000). Dulu PPh 21 lama dipertahankan (kurang potong).
+    tax_row2 = next(c["amount"] for c in row2["components"] if c["code"] == "pph21")
+    assert tax_row2 == 65_000
+    # Agregat tersimpan di slip ikut benar (dulu komponen baru terhitung dobel).
+    slips = client.get(f"/api/v1/payroll/runs/{run['id']}/slips", headers=headers).json()
+    slip = next(s for s in slips if s["employee_id"] == emp["id"])
+    assert slip["gross"] == 6_500_000
+    assert slip["net_pay"] == 6_500_000 - 65_000
+    assert thp_after == thp_before + 500_000 - (65_000 - 45_000)
     assert any(c["code"] == "bonus" and c["source"] == "manual" for c in row2["components"])
 
     deleted = client.delete(f"/api/v1/payroll/saltab/components/{comp_id}", headers=headers)
@@ -477,7 +499,7 @@ def test_add_and_delete_saltab_component(client):
 
     row3 = _saltab_row(client, headers, run["id"], emp["id"])
     thp_final = row3["total_earnings"] - row3["total_deductions"]
-    assert thp_final == thp_before
+    assert thp_final == thp_before  # pajak kembali ke 45.000
     assert not any(c["code"] == "bonus" for c in row3["components"])
 
 
@@ -575,3 +597,58 @@ def test_salary_hold_then_release_to_next_period(client):
         f"/api/v1/payroll/employees/{emp['id']}/holds", headers=headers, params={"status": "held"}
     ).json()
     assert still_held == []
+
+
+def test_saltab_rejects_reserved_code_and_hold_edit(client):
+    """Kode sistem (mis. `pph21`) tidak boleh dipakai komponen manual --
+    dulu deduction ber-kode pph21 menimpa pajak asli. Nominal tahan gaji
+    juga tidak boleh diubah dari grid (harus sama dgn SalaryHold)."""
+    headers = _auth_header(client)
+    emp = _create_employee(client, headers, name="Rudi Reserved", salary=6_000_000)
+    run = _create_run(client, headers, year=2026, month=10)
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    row = _saltab_row(client, headers, run["id"], emp["id"])
+
+    spoof = client.post(
+        f"/api/v1/payroll/slips/{row['payslip_id']}/components",
+        headers=headers,
+        json={"ctype": "deduction", "code": "pph21", "name": "PPh", "amount": 1},
+    )
+    assert spoof.status_code == 422
+
+    held = client.post(
+        f"/api/v1/payroll/slips/{row['payslip_id']}/holds",
+        headers=headers,
+        json={"amount": 100_000, "reason": "uji"},
+    )
+    assert held.status_code == 201, held.text
+    hold_comp = next(
+        c
+        for c in _saltab_row(client, headers, run["id"], emp["id"])["components"]
+        if c["code"] == "tahan_gaji"
+    )
+    edit = client.patch(
+        f"/api/v1/payroll/saltab/components/{hold_comp['id']}",
+        headers=headers,
+        json={"amount": 1},
+    )
+    assert edit.status_code == 409
+
+    too_much = client.post(
+        f"/api/v1/payroll/slips/{row['payslip_id']}/holds",
+        headers=headers,
+        json={"amount": 999_000_000, "reason": "melebihi"},
+    )
+    assert too_much.status_code == 422
+
+
+def test_generate_rejects_negative_inputs(client):
+    headers = _auth_header(client)
+    _create_employee(client, headers, name="Neni Negatif", salary=6_000_000)
+    run = _create_run(client, headers, year=2026, month=10)
+    resp = client.post(
+        f"/api/v1/payroll/runs/{run['id']}/generate",
+        headers=headers,
+        json={"allowance": -1_000_000},
+    )
+    assert resp.status_code == 422

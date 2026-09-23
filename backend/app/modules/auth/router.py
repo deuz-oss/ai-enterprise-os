@@ -14,7 +14,7 @@ from app.core.security import (
 )
 from app.core.tenancy import get_request_meta
 from app.modules import audit
-from app.modules.auth.models import User
+from app.modules.auth.models import User, UserRole
 from app.modules.auth.schemas import (
     ChangePasswordIn,
     ForgotPasswordAckOut,
@@ -325,6 +325,10 @@ def update_user(
         raise HTTPException(status_code=422, detail="Tidak bisa menonaktifkan akun sendiri")
     if user.id == admin.id and "role" in data and data["role"] != user.role:
         raise HTTPException(status_code=422, detail="Tidak bisa mengubah role akun sendiri")
+
+    if data.get("role") == UserRole.platform_admin:
+        # Lihat create_user: role platform hanya untuk akun tanpa tenant.
+        raise HTTPException(status_code=422, detail="Role tidak valid untuk akun ini")
 
     new_password = data.pop("new_password", None)
     for field, value in data.items():

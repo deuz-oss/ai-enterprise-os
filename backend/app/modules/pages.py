@@ -51,12 +51,6 @@ def _assert_staff(user) -> None:
         raise HTTPException(status_code=403, detail="Halaman hanya untuk staf internal")
 
 
-def _staff(user) -> bool:
-    from app.modules.chat.service import STAFF_ROLES
-
-    return getattr(user.role, "value", user.role) in STAFF_ROLES
-
-
 def _get_page(db: Session, page_id: str) -> WorkspacePage:
     page = db.get(WorkspacePage, parse_uuid(page_id))
     if page is None:
@@ -80,6 +74,9 @@ def _serialize(page: WorkspacePage, *, with_content: bool = True) -> dict:
 @router.get("")
 def list_pages(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Daftar halaman tenant untuk sidebar page tree."""
+    # Wiki internal: dulu hanya tulis yg dibatasi, isi semua halaman tetap
+    # terbaca akun karyawan outsourcing (UI sendiri tak pernah membukanya).
+    _assert_staff(user)
     rows = (
         db.execute(select(WorkspacePage).order_by(WorkspacePage.created_at.desc())).scalars().all()
     )
@@ -107,6 +104,7 @@ def create_page(payload: dict, db: Session = Depends(get_db), user=Depends(get_c
 
 @router.get("/{page_id}")
 def get_page(page_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    _assert_staff(user)
     return _serialize(_get_page(db, page_id))
 
 

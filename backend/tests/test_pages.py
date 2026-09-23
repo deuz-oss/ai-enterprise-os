@@ -93,3 +93,5 @@ def test_page_cyle_ditolak_dan_karyawan_dilarang(client):
     assert forbidden_create.status_code == 403
     forbidden_delete = client.delete(f"/api/v1/pages/{a['id']}", headers=worker)
     assert forbidden_delete.status_code == 403
+    assert client.get("/api/v1/pages", headers=worker).status_code == 403
+    assert client.get(f"/api/v1/pages/{a['id']}", headers=worker).status_code == 403

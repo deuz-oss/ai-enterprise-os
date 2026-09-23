@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -69,9 +70,10 @@ class GenerateSlipsRequest(BaseModel):
     """
 
     employee_ids: list[UUID] | None = None
-    allowance: float = 0
-    deductions: float = 0
-    overtime_rate: float = 0
+    # Decimal: JSON number diparse eksak (tanpa lewat float biner).
+    allowance: Decimal = Field(default=Decimal(0), ge=0)
+    deductions: Decimal = Field(default=Decimal(0), ge=0)
+    overtime_rate: Decimal = Field(default=Decimal(0), ge=0)
     prorata_absensi: bool = False
     bpjs_enabled: bool = False
 
@@ -151,11 +153,11 @@ class SaltabRowOut(BaseModel):
 
 
 class SaltabComponentUpdate(BaseModel):
-    amount: float
+    amount: Decimal
 
     @field_validator("amount")
     @classmethod
-    def _non_negative(cls, v: float) -> float:
+    def _non_negative(cls, v: Decimal) -> Decimal:
         if v < 0:
             raise ValueError("Nominal komponen tidak boleh negatif")
         return v
@@ -169,11 +171,11 @@ class SaltabComponentCreate(BaseModel):
     ctype: str
     code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
-    amount: float
+    amount: Decimal
 
     @field_validator("amount")
     @classmethod
-    def _non_negative(cls, v: float) -> float:
+    def _non_negative(cls, v: Decimal) -> Decimal:
         if v < 0:
             raise ValueError("Nominal komponen tidak boleh negatif")
         return v
@@ -190,7 +192,7 @@ class SaltabComponentCreate(BaseModel):
 
 
 class SalaryHoldCreate(BaseModel):
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     reason: str = Field(min_length=1, max_length=500)
 
 

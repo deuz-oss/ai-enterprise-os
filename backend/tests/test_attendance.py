@@ -234,3 +234,23 @@ def test_approved_leave_creates_attendance_records(client):
     ).json()
     target = next(s for s in summaries if s["employee_id"] == emp["id"])
     assert target["present_days"] == 0
+
+
+def test_csv_import_non_utf8_and_oversize(client):
+    """CSV Excel Windows (cp1252) dulu -> 500 UnicodeDecodeError; file raksasa
+    dulu dibaca utuh tanpa batas."""
+    admin = _auth_header(client)
+    cp1252 = "employee_no;date;clock_in;clock_out;overtime_hours;status\nX;2026-08-10;;;0;hadir ✓\n"
+    resp = client.post(
+        "/api/v1/attendance/import",
+        headers=admin,
+        files={"file": ("fp.csv", cp1252.replace("✓", "é").encode("cp1252"), "text/csv")},
+    )
+    assert resp.status_code == 200, resp.text
+
+    big = client.post(
+        "/api/v1/attendance/import",
+        headers=admin,
+        files={"file": ("fp.csv", b"a" * (5 * 1024 * 1024 + 10), "text/csv")},
+    )
+    assert big.status_code == 413

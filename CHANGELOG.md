@@ -6,6 +6,34 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Fase 57: Audit backend keamanan & logika + uang Decimal
+
+Audit modul-per-modul backend (bagian yang paling jarang diaudit dibanding UI).
+
+**Keamanan**
+- **[Kritis] Eskalasi ke platform_admin**: admin tenant bisa `POST /auth/register` atau `PATCH /auth/users/{id}` dengan `role=platform_admin` lalu lolos `require_platform_admin()` -> kuasai `/platform/*` lintas tenant (suspend/provisioning/billing tenant lain). Ditolak di `create_user` & `update_user`; guard platform kini juga mewajibkan akun tanpa tenant.
+- `/files/{path}`: cek traversal pakai `str.startswith` (lolos ke folder saudara `uploads-*`) -> `Path.is_relative_to`.
+- Billing: subscribe/top up/auto-reload bisa dipanggil role apa pun (termasuk karyawan) -> `BILLING_MANAGE_ROLES` (finance/management + admin), sama dengan menu.
+- `GET /overview` (revenue, piutang, pipeline, klien) terbaca akun karyawan outsourcing -> 403; mereka tetap pakai `/overview/personal`.
+- Pages (wiki internal): baca daftar/isi halaman terbuka untuk karyawan -> staf saja.
+- Chat: reaksi tanpa cek akses channel; `add_member` menerima id user tenant lain/fiktif; pesan terhapus masih bisa diedit.
+- ESS: HR yang juga karyawan bisa menyetujui cuti/lembur/koreksi absensinya sendiri -> ditolak (pemisahan tugas).
+
+**Payroll & keuangan (uang)**
+- Perhitungan PPh 21, BPJS, slip, invoice kini `Decimal` + pembulatan rupiah setengah-ke-atas (`app/core/money.py`). Dulu `float` + `round()` bawaan (banker's rounding): mis. 5.500.200 x 0,25% = 13.750,5 -> 13.750, seharusnya 13.751.
+- PKP Pasal 17 dibulatkan ke bawah ribuan penuh sebelum tarif.
+- Menambah bonus/THR/insentif di grid Saltab dulu tidak menghitung ulang PPh 21 (kurang potong). Kini `pph21` yang masih `auto` dihitung ulang dari bruto kena pajak; reimbursement, perdin, dan pencairan gaji ditahan dikecualikan (bukan objek / sudah dipajaki).
+- Komponen baru yang ditambahkan ke slip terhitung dobel di agregat `gross`/`net_pay` tersimpan (append setelah flush).
+- Kode komponen sistem (`pph21`, `gaji_pokok`, dst) bisa dipakai komponen manual -> menimpa pajak asli. Nominal tahan gaji bisa diubah dari grid (tidak lagi sama dgn `SalaryHold`). Tahan gaji melebihi gaji bersih. Allowance/potongan/tarif lembur negatif saat generate. Semua kini ditolak.
+- Kegagalan query tarif PPh 21/BPJS/biaya admin bank dulu ditelan diam-diam -> jatuh ke konstanta/0. Lookup biaya bank kini case-insensitive.
+- Jurnal otomatis `invoice_issued` timpang sebesar PPh 23 (Dr piutang sudah net) -> akun baru `1-1350 PPh 23 Dibayar di Muka`; `post_auto_event` kini menolak jurnal tidak seimbang dan melengkapi akun template yang belum ada di tenant lama.
+
+**Keandalan**
+- WebSocket chat menahan satu koneksi pool DB sepanjang sesi -> ~15 user online menghabiskan pool seluruh API.
+- `_get_admin_user_id` `MultipleResultsFound` di tenant dengan >1 admin/user -> channel JO/proyek/payroll tak pernah dibuat (error ditelan).
+- Cek tabrakan cuti -> 500 bila ada >=2 pengajuan bertabrakan.
+- Impor CSV (absensi, rekening koran, lead): file Excel cp1252 -> 500; tanpa batas ukuran -> kini fallback cp1252 + batas 5 MB.
+
 ### Fixed — Fase 56: DES-015 — 4 aksi destruktif lain tanpa konfirmasi
 
 Ditemukan saat sweep DES-008 (Sprint 1) tapi sengaja tidak difix saat itu (di luar scope yang disepakati) -- dikerjakan sekarang atas permintaan eksplisit.

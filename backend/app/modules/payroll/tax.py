@@ -17,7 +17,12 @@ perlu dicek ulang terhadap PMK 168/2023 saat pemakaian produksi.
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import ROUND_FLOOR, Decimal
 from typing import Any
+
+from app.core.money import ZERO, round_rupiah, to_decimal
+
+Brackets = list[tuple[Decimal, Decimal]]
 
 # ---------- Parameter regulasi (fallback jika DB kosong) ----------
 
@@ -127,33 +132,39 @@ TER_C: list[tuple[float, float]] = [
 ]
 
 
-def _deser_brackets(raw: Any) -> list[tuple[float, float]]:
+def _dec_brackets(raw: list[tuple[float, float]]) -> Brackets:
+    """Tabel konstanta (float literal) -> Decimal eksak lewat `to_decimal`."""
+    return [(to_decimal(upper), to_decimal(rate)) for upper, rate in raw]
+
+
+def _deser_brackets(raw: Any) -> Brackets:
     """Deserialisasi JSON brackets: [upper|null, rate] -> [(upper|inf, rate)]."""
-    result: list[tuple[float, float]] = []
+    result: Brackets = []
     for upper, rate in raw:
-        result.append((float("inf") if upper is None else float(upper), float(rate)))
+        result.append(
+            (Decimal("Infinity") if upper is None else to_decimal(upper), to_decimal(rate))
+        )
     return result
 
 
 def _get_pph21_config(db, effective_date: date | None):
+    # Sengaja tanpa try/except: dulu error DB ditelan -> diam-diam jatuh ke
+    # konstanta kode (tarif bisa usang) dan slip terbit dgn pajak salah.
     if db is None or effective_date is None:
         return None
-    try:
-        from sqlalchemy import select
+    from sqlalchemy import select
 
-        from app.modules.rates.models import Pph21Config
+    from app.modules.rates.models import Pph21Config
 
-        return (
-            db.execute(
-                select(Pph21Config)
-                .where(Pph21Config.effective_from <= effective_date)
-                .order_by(Pph21Config.effective_from.desc())  # noqa: E501
-            )
-            .scalars()
-            .first()
+    return (
+        db.execute(
+            select(Pph21Config)
+            .where(Pph21Config.effective_from <= effective_date)
+            .order_by(Pph21Config.effective_from.desc())
         )
-    except Exception:
-        return None
+        .scalars()
+        .first()
+    )
 
 
 @dataclass(frozen=True)
@@ -171,41 +182,40 @@ class TaxProfile:
         return f"{self.marital_status}_{deps}"
 
     @property
-    def ptkp_annual(self) -> float:
+    def ptkp_annual(self) -> Decimal:
         if self._config:
-            base = float(self._config.ptkp_diri)
+            base = to_decimal(self._config.ptkp_diri)
             if self.marital_status == "k":
-                base += float(self._config.ptkp_kawin)
+                base += to_decimal(self._config.ptkp_kawin)
             deps = min(max(self.dependents, 0), int(self._config.max_tanggungan))
-            return base + deps * float(self._config.ptkp_tanggungan)
-        base = PTKP_DIRI_SENDIRI
+            return base + deps * to_decimal(self._config.ptkp_tanggungan)
+        base = Decimal(PTKP_DIRI_SENDIRI)
         if self.marital_status == "k":
             base += PTKP_KAWIN
         deps = min(max(self.dependents, 0), MAX_TANGGUNGAN)
         return base + deps * PTKP_TANGGUNGAN
 
     @property
-    def ter_table(self) -> list[tuple[float, float]]:
+    def ter_table(self) -> Brackets:
+        key = self.ptkp_key
         if self._config:
-            key = self.ptkp_key
             # kategori masih hardcoded, tapi tabel dari DB
             if key in TER_CATEGORY_A:
                 return _deser_brackets(self._config.ter_a)
             if key in TER_CATEGORY_B:
                 return _deser_brackets(self._config.ter_b)
             return _deser_brackets(self._config.ter_c)
-        key = self.ptkp_key
         if key in TER_CATEGORY_A:
-            return TER_A
+            return _dec_brackets(TER_A)
         if key in TER_CATEGORY_B:
-            return TER_B
-        return TER_C
+            return _dec_brackets(TER_B)
+        return _dec_brackets(TER_C)
 
     @property
-    def pasal17_brackets(self) -> list[tuple[float, float]]:
+    def pasal17_brackets(self) -> Brackets:
         if self._config:
             return _deser_brackets(self._config.pasal17_brackets)
-        return PASAL_17_BRACKETS
+        return _dec_brackets(PASAL_17_BRACKETS)
 
     @classmethod
     def from_db(
@@ -224,20 +234,26 @@ def ter_category(profile: TaxProfile) -> str:
     return "C"
 
 
-def compute_ter(gross_monthly: float, profile: TaxProfile) -> float:
-    """PPh 21 bulanan metode TER atas penghasilan bruto."""
+def compute_ter(gross_monthly: Any, profile: TaxProfile) -> Decimal:
+    """PPh 21 bulanan metode TER atas penghasilan bruto (rupiah penuh)."""
+    gross = to_decimal(gross_monthly)
     for upper_bound, rate in profile.ter_table:
-        if gross_monthly <= upper_bound:
-            tax = gross_monthly * rate
-            return round(tax)
-    return 0.0
+        if gross <= upper_bound:
+            return round_rupiah(gross * rate)
+    return ZERO
 
 
-def compute_pasal17_annual(annual_gross: float, profile: TaxProfile) -> float:
-    """PPh 21 setahun metode pasal 17 progresif atas PKP."""
-    taxable = max(annual_gross - profile.ptkp_annual, 0)
-    tax = 0.0
-    previous_bound = 0.0
+def compute_pasal17_annual(annual_gross: Any, profile: TaxProfile) -> Decimal:
+    """PPh 21 setahun metode pasal 17 progresif atas PKP.
+
+    PKP dibulatkan ke bawah ke ribuan rupiah penuh sebelum tarif diterapkan
+    (ketentuan UU PPh; dulu tidak dibulatkan sehingga pajak bisa lebih besar
+    beberapa rupiah dari seharusnya).
+    """
+    taxable = max(to_decimal(annual_gross) - profile.ptkp_annual, ZERO)
+    taxable = (taxable / 1000).to_integral_value(rounding=ROUND_FLOOR) * 1000
+    tax = ZERO
+    previous_bound = ZERO
     for upper_bound, rate in profile.pasal17_brackets:
         layer = min(taxable, upper_bound) - previous_bound
         if layer > 0:
@@ -245,14 +261,14 @@ def compute_pasal17_annual(annual_gross: float, profile: TaxProfile) -> float:
         previous_bound = upper_bound
         if taxable <= upper_bound:
             break
-    return round(tax)
+    return round_rupiah(tax)
 
 
 def compute_pasal17_monthly_average(
-    monthly_gross: float, months: int, profile: TaxProfile
-) -> float:
+    monthly_gross: Any, months: int, profile: TaxProfile
+) -> Decimal:
     """Prorata rata-rata bulanan dari hitungan pasal 17 setahun."""
     if months <= 0:
-        return 0.0
-    annual_tax = compute_pasal17_annual(monthly_gross * months, profile)
-    return round(annual_tax / months)
+        return ZERO
+    annual_tax = compute_pasal17_annual(to_decimal(monthly_gross) * months, profile)
+    return round_rupiah(annual_tax / months)

@@ -379,14 +379,17 @@ function SaltabTable({ runId }: { runId: string | null }) {
                       </form>
                     ) : (
                       <span className="inline-flex gap-2">
-                        <button
-                          onClick={() => setEditing(c.id)}
-                          style={{ color: "var(--accent)" }}
-                          className="hover:opacity-80"
-                          title="Override manual"
-                        >
-                          edit
-                        </button>
+                        {/* Nominal tahan/cairkan wajib sama dgn data SalaryHold -- backend menolak (409). */}
+                        {c.code !== "tahan_gaji" && c.code !== "pencairan_gaji_ditahan" && (
+                          <button
+                            onClick={() => setEditing(c.id)}
+                            style={{ color: "var(--accent)" }}
+                            className="hover:opacity-80"
+                            title="Override manual"
+                          >
+                            edit
+                          </button>
+                        )}
                         {c.source === "manual" && !_CORE_COMPONENT_CODES.has(c.code) && (
                           <button
                             onClick={() =>

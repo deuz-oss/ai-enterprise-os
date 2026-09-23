@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,18 @@ router = APIRouter(
 )
 
 
-@router.get("")
+def _forbid_karyawan(user=Depends(get_current_user)):
+    """Agregat bisnis (revenue, piutang, pipeline, klien) bukan untuk akun
+    karyawan outsourcing -- dulu cukup login utk membacanya. Karyawan
+    memakai `/overview/personal` (UI sudah mengarahkan ke Portal Saya)."""
+    if getattr(user.role, "value", user.role) == "karyawan":
+        raise HTTPException(
+            status_code=403, detail="Dashboard perusahaan bukan untuk akun karyawan"
+        )
+    return user
+
+
+@router.get("", dependencies=[Depends(_forbid_karyawan)])
 def overview(db: Session = Depends(get_db)):
     """Dashboard Umum PRD v2.0 — 8 widget cross-bundle + AI insight stub.
 

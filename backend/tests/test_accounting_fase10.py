@@ -202,6 +202,10 @@ def test_auto_journal_invoice_and_payroll(client):
     assert lines["1-1200"][0] == total_due  # Dr Piutang
     assert lines["4-1000"][1] > 0  # Cr Pendapatan
     assert lines["2-1300"][1] > 0  # Cr PPN Keluaran
+    # Dr PPh 23 dibayar di muka menutup selisih piutang net -- dulu jurnal
+    # ini terposting timpang sebesar PPh 23.
+    assert lines["1-1350"][0] == float(inv.json()["pph23_amount"]) > 0
+    assert sum(d for d, _ in lines.values()) == sum(c for _, c in lines.values())
 
     # Idempoten: generate ulang invoice lain untuk periode sama → 409, jurnal tetap 1
     dup = client.post(

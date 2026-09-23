@@ -794,8 +794,9 @@ async def import_leads_csv(db: Session, file: UploadFile) -> LeadImportResultOut
     dicocokkan case-insensitive by nama -- kalau belum ada, dibuat baru
     dengan `source="csv_import"` supaya asal lead tetap terlacak (beda dari
     lead yang diketik manual satu-satu lewat form, `source="manual"`)."""
-    raw = await file.read()
-    text = raw.decode("utf-8-sig")
+    from app.core.csv_upload import read_csv_text
+
+    text = await read_csv_text(file)
     sample = text.splitlines()[0] if text.splitlines() else ""
     delimiter = ";" if sample.count(";") >= sample.count(",") else ","
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)

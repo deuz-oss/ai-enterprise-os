@@ -20,7 +20,9 @@ def download_local_file(object_key: str):
         raise HTTPException(status_code=404, detail="Mode storage S3/MinIO aktif")
     root = settings.uploads_root.resolve()
     target = (root / object_key).resolve()
-    if not str(target).startswith(str(root)):
+    # is_relative_to (bukan str.startswith): "uploads-lain/x" juga diawali
+    # string "uploads" sehingga lolos cek prefiks lama -> baca folder saudara.
+    if not target.is_relative_to(root):
         raise HTTPException(status_code=404, detail="File tidak ditemukan")
     if not target.is_file():
         raise HTTPException(status_code=404, detail="File tidak ditemukan")

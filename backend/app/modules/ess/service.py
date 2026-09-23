@@ -398,6 +398,13 @@ def list_own_attendance(
 # ---------- Pengajuan cuti/izin ----------
 
 
+def _forbid_self_decision(user, employee) -> None:
+    """Pemisahan tugas: HR yang juga karyawan tidak boleh memutus pengajuannya
+    sendiri (lembur & koreksi absensi langsung mengalir ke payroll)."""
+    if employee is not None and employee.user_id is not None and employee.user_id == user.id:
+        raise HTTPException(status_code=403, detail="Tidak bisa memutus pengajuan milik sendiri")
+
+
 def _get_own_leave(db: Session, user, leave_id: str) -> LeaveRequest:
     leave = db.get(LeaveRequest, parse_uuid(leave_id))
     if leave is None or leave.employee.user_id != user.id:
@@ -420,6 +427,7 @@ def create_leave_request(db: Session, user, payload: LeaveCreate) -> LeaveReques
         .where(LeaveRequest.status.in_([LeaveStatus.pending, LeaveStatus.approved]))
         .where(LeaveRequest.start_date <= leave.end_date)
         .where(LeaveRequest.end_date >= leave.start_date)
+        .limit(1)
     ).scalar_one_or_none()
     if overlapping is not None:
         raise HTTPException(
@@ -756,6 +764,7 @@ def decide_attendance_correction(
         raise HTTPException(status_code=404, detail="Pengajuan koreksi tidak ditemukan")
     if correction.status != LeaveStatus.pending:
         raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+    _forbid_self_decision(user, correction.employee)
 
     if approved:
         summary = db.execute(
@@ -844,6 +853,7 @@ def decide_leave_request(
         raise HTTPException(status_code=404, detail="Pengajuan tidak ditemukan")
     if leave.status != LeaveStatus.pending:
         raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+    _forbid_self_decision(user, leave.employee)
     if approved and leave.leave_type == LeaveType.annual:
         _consume_balance(db, leave)
     leave.status = LeaveStatus.approved if approved else LeaveStatus.rejected
@@ -912,6 +922,7 @@ def decide_overtime_request(
         raise HTTPException(status_code=404, detail="Pengajuan lembur tidak ditemukan")
     if overtime.status != LeaveStatus.pending:
         raise HTTPException(status_code=409, detail="Pengajuan sudah diputus sebelumnya")
+    _forbid_self_decision(user, overtime.employee)
     overtime.status = LeaveStatus.approved if approved else LeaveStatus.rejected
     overtime.decided_by = user.id
     overtime.decided_at = datetime.now(UTC)

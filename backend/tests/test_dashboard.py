@@ -278,3 +278,13 @@ def test_overview_payroll_summary_maps_real_status_values(client):
     data = client.get("/api/v1/overview", headers=headers).json()
     assert data["payroll"]["finalized"] == 1
     assert data["payroll"]["draft"] == 0
+
+
+def test_karyawan_cannot_read_company_overview(client):
+    """Revenue/piutang/pipeline dulu terbaca oleh akun karyawan outsourcing."""
+    from tests.test_ess import _create_karyawan
+
+    _auth_header(client)
+    karyawan = _create_karyawan(client)
+    assert client.get("/api/v1/overview", headers=karyawan).status_code == 403
+    assert client.get("/api/v1/overview/personal", headers=karyawan).status_code != 403

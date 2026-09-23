@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -127,7 +128,7 @@ class PayslipComponent(TenantMixin, Base):
     )
     code: Mapped[str] = mapped_column(String(50))
     name: Mapped[str] = mapped_column(String(255))
-    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     source: Mapped[str] = mapped_column(String(20), default="auto")
     notes: Mapped[str | None] = mapped_column(String(500))
 
@@ -157,7 +158,7 @@ class SalaryHold(TenantMixin, Base):
     released_payslip_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("payslips.id"), default=None
     )
-    amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     reason: Mapped[str] = mapped_column(String(500))
     status: Mapped[SalaryHoldStatus] = mapped_column(
         Enum(SalaryHoldStatus, native_enum=False, length=20),
@@ -200,16 +201,16 @@ class Payslip(TenantMixin, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     run_id: Mapped[UUID] = mapped_column(ForeignKey("payroll_runs.id"), index=True)
     employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), index=True)
-    base_salary: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
-    allowance: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    base_salary: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    allowance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     overtime_hours: Mapped[int] = mapped_column(Integer, default=0)
-    overtime_rate: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
-    overtime_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
-    deductions: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
-    gross: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    overtime_rate: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    overtime_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    deductions: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    gross: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     pph21_method: Mapped[str] = mapped_column(String(20), default="ter")
-    tax_pph21: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
-    net_pay: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    tax_pph21: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    net_pay: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     run = relationship("PayrollRun", back_populates="slips")

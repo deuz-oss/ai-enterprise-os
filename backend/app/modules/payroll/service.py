@@ -3,6 +3,7 @@ import hashlib
 import io
 import secrets
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
+from app.core.money import ZERO, round_rupiah, to_decimal
 from app.modules.hrd.models import Employee, EmployeeStatus
 from app.modules.payroll.models import (
     AttendanceSummary,
@@ -258,19 +260,24 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
             else:
                 overtime_hours = summary.overtime_hours
 
-        base_full = float(employee.base_salary or 0)
-        allowance_full = float(payload.allowance or 0)
-        overtime_amount = overtime_hours * float(payload.overtime_rate or 0)
+        # Decimal + pembulatan rupiah setengah-ke-atas (app/core/money.py).
+        base_full = to_decimal(employee.base_salary)
+        allowance_full = to_decimal(payload.allowance)
+        overtime_rate = to_decimal(payload.overtime_rate)
+        overtime_amount = round_rupiah(overtime_hours * overtime_rate)
 
         # Prorata opt-in (PRD §6.1): dari rekap absensi TERVALIDASI.
-        eff_ratio = 1.0
+        prorated = False
         effective_days: int | None = None
+        base = round_rupiah(base_full)
+        allowance_amt = round_rupiah(allowance_full)
         if payload.prorata_absensi and summary is not None:
             effective_days = max(summary.present_days, 0)
             if workdays > 0 and effective_days < workdays:
-                eff_ratio = effective_days / workdays
-        base = round(base_full * eff_ratio)
-        allowance_amt = round(allowance_full * eff_ratio)
+                prorated = True
+                # Kali dulu baru bagi: tanpa rasio antara yang terpotong.
+                base = round_rupiah(base_full * effective_days / workdays)
+                allowance_amt = round_rupiah(allowance_full * effective_days / workdays)
         gross = base + allowance_amt + overtime_amount
 
         # Gunakan config ber-versi jika ada, fallback ke konstanta kode
@@ -282,15 +289,12 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
         )
         tax = compute_ter(gross, profile)
         # Potongan admin bank otomatis (non-Mandiri) dari config
-        try:
-            from app.modules.rates.service import get_bank_fee
+        from app.modules.rates.service import get_bank_fee
 
-            bank_fee = get_bank_fee(db, employee.bank_name or "")
-        except Exception:
-            bank_fee = 0
+        bank_fee = to_decimal(get_bank_fee(db, employee.bank_name or ""))
 
         # BPJS dua sisi (opt-in): potongan karyawan + passthrough perusahaan
-        bpjs_emp_total = 0
+        bpjs_emp_total = ZERO
         breakdown = None
         if payload.bpjs_enabled:
             from app.modules.bpjs.engine import compute_contribution
@@ -301,16 +305,17 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
                 db=db,
                 effective_date=period_date,
             )
-            bpjs_emp_total = breakdown.kes_employee + breakdown.jht_employee + breakdown.jp_employee
+            bpjs_emp_total = to_decimal(breakdown.employee_total)
 
-        total_deductions = float(payload.deductions or 0) + bank_fee + bpjs_emp_total
+        other_deductions = round_rupiah(payload.deductions)
+        total_deductions = other_deductions + bank_fee + bpjs_emp_total
         slip = Payslip(
             run_id=run.id,
             employee_id=employee.id,
             base_salary=base,
             allowance=allowance_amt,
             overtime_hours=overtime_hours,
-            overtime_rate=float(payload.overtime_rate or 0),
+            overtime_rate=overtime_rate,
             overtime_amount=overtime_amount,
             deductions=total_deductions,
             gross=gross,
@@ -321,22 +326,16 @@ def generate_slips(db: Session, run_id: str, payload: GenerateSlipsRequest) -> l
 
         # Line-item Saltab (PRD §6) — dari angka yang sama agar komponen ↔
         # agregat slip selalu "nol selisih".
-        prorata_note = (
-            f"Prorata {effective_days}/{workdays} hari kerja"
-            if effective_days is not None and eff_ratio < 1.0
-            else None
-        )
-        comps_spec: list[tuple[str, str, str, float]] = [
+        prorata_note = f"Prorata {effective_days}/{workdays} hari kerja" if prorated else None
+        comps_spec: list[tuple[str, str, str, Any]] = [
             ("earnings", "gaji_pokok", "Gaji pokok", base),
             ("earnings", "tunjangan", "Tunjangan", allowance_amt),
         ]
         if overtime_amount:
             comps_spec.append(("earnings", "lembur", "Lembur", overtime_amount))
         comps_spec.append(("deduction", "pph21", "PPh 21", tax))
-        if payload.deductions:
-            comps_spec.append(
-                ("deduction", "potongan_lain", "Potongan lain", float(payload.deductions))
-            )
+        if other_deductions:
+            comps_spec.append(("deduction", "potongan_lain", "Potongan lain", other_deductions))
         if bank_fee:
             comps_spec.append(("deduction", "admin_bank", "Admin bank", bank_fee))
         if breakdown is not None:
@@ -472,28 +471,85 @@ def _check_slip_editable(db: Session, slip: Payslip) -> None:
         raise HTTPException(status_code=409, detail="Payroll karyawan ini terkunci")
 
 
-def _recompute_slip_aggregates(slip: Payslip) -> None:
+# Earnings yang BUKAN objek PPh 21 bulan berjalan: penggantian biaya dinas
+# (preset UI Payroll.tsx) dan pencairan gaji ditahan (sudah ikut bruto &
+# dipajaki di bulan saat ditahan -- memajakinya lagi = pajak ganda).
+_NON_TAXABLE_EARNING_CODES = {"reimbursement", "perdin", "pencairan_gaji_ditahan"}
+
+
+def _recompute_slip_aggregates(db: Session, slip: Payslip) -> None:
     """Hitung ulang gross/deductions/net_pay slip dari `slip.components` --
     satu-satunya sumber kebenaran (PRD §6), dipakai tiap kali komponen
-    ditambah/diubah/dihapus supaya agregat tidak pernah "nol selisih"."""
-    earnings_total = 0.0
-    deductions_excl_tax = 0.0
-    tax_amount = float(slip.tax_pph21)
+    ditambah/diubah/dihapus supaya agregat tidak pernah "nol selisih".
+
+    PPh 21 TER dihitung atas bruto bulanan (bonus/THR/insentif termasuk,
+    kecuali `_NON_TAXABLE_EARNING_CODES`), jadi bila bruto berubah, komponen
+    `pph21` yang masih `auto` ikut dihitung ulang. Dulu pajak lama
+    dipertahankan -> tambah bonus = pajak kurang potong.
+    Komponen `pph21` yang sudah di-override manual tidak disentuh.
+    """
+    earnings_total = ZERO
+    taxable_total = ZERO
+    deductions_excl_tax = ZERO
+    tax_comp: PayslipComponent | None = None
     for c in slip.components:
-        amt = float(c.amount)
+        amt = to_decimal(c.amount)
         if c.ctype == PayslipComponentType.earnings:
             earnings_total += amt
+            if c.code not in _NON_TAXABLE_EARNING_CODES:
+                taxable_total += amt
         elif c.code == "pph21":
-            tax_amount = amt
+            tax_comp = c
         elif c.ctype == PayslipComponentType.deduction:
             deductions_excl_tax += amt
 
-    slip.gross = round(earnings_total)
-    slip.deductions = round(deductions_excl_tax)
-    slip.net_pay = round(earnings_total) - round(tax_amount) - round(deductions_excl_tax)
+    gross = round_rupiah(earnings_total)
+    taxable_gross = round_rupiah(taxable_total)
+    if tax_comp is not None and tax_comp.source == "auto":
+        tax_comp.amount = _slip_tax(db, slip, taxable_gross)
+    elif tax_comp is None and any(
+        c.code == "gaji_pokok" and c.source == "auto" for c in slip.components
+    ):
+        # Slip hasil generate yg pajaknya 0 (komponen pph21 tidak dibuat):
+        # bruto baru bisa melewati batas TER -> komponen pajak perlu dibuat.
+        new_tax = _slip_tax(db, slip, taxable_gross)
+        if new_tax > 0:
+            tax_comp = PayslipComponent(
+                payslip_id=slip.id,
+                ctype=PayslipComponentType.deduction,
+                code="pph21",
+                name="PPh 21",
+                amount=new_tax,
+                source="auto",
+            )
+            db.add(tax_comp)
+            if tax_comp not in slip.components:
+                slip.components.append(tax_comp)
+    tax_amount = round_rupiah(tax_comp.amount if tax_comp is not None else slip.tax_pph21)
+
+    slip.gross = gross
+    slip.tax_pph21 = tax_amount
+    slip.deductions = round_rupiah(deductions_excl_tax)
+    slip.net_pay = gross - tax_amount - round_rupiah(deductions_excl_tax)
 
 
-def update_saltab_component(db: Session, user, component_id: str, amount: float):
+def _slip_tax(db: Session, slip: Payslip, gross: Decimal) -> Decimal:
+    """PPh 21 TER slip ini untuk bruto tertentu (profil PTKP karyawan + tarif
+    ber-versi periode run -- sama dengan saat generate)."""
+    run = _get_run(db, str(slip.run_id))
+    employee = db.get(Employee, slip.employee_id)
+    profile = TaxProfile.from_db(
+        db,
+        date(run.year, run.month, 1),
+        marital_status=(
+            employee.marital_status.value if employee and employee.marital_status else "tk"
+        ),
+        dependents=(employee.dependents or 0) if employee else 0,
+    )
+    return compute_ter(gross, profile)
+
+
+def update_saltab_component(db: Session, user, component_id: str, amount: Decimal):
     """Override manual komponen (grid Saltab); agregat slip dihitung ulang."""
     comp = db.get(PayslipComponent, parse_uuid(component_id))
     if comp is None:
@@ -502,13 +558,20 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
     if slip is None:
         raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
     _check_slip_editable(db, slip)
+    if comp.code in _UNDELETABLE_COMPONENT_CODES:
+        # Nominal wajib sama dgn SalaryHold.amount; ubah = pencairan selisih.
+        raise HTTPException(
+            status_code=409,
+            detail="Nominal tahan/cairkan gaji tidak bisa diubah langsung dari grid",
+        )
 
     old = float(comp.amount)
+    amount = round_rupiah(amount)
     comp.amount = amount
     comp.source = "manual"
     comp.notes = f"Override manual oleh {user.email}"
 
-    _recompute_slip_aggregates(slip)
+    _recompute_slip_aggregates(db, slip)
 
     db.commit()
     db.refresh(slip)
@@ -521,7 +584,7 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
         entity_id=comp.id,
         detail={
             "old": old,
-            "new": amount,
+            "new": float(amount),
             "employee_id": str(slip.employee_id),
             "by": user.email,
         },
@@ -530,7 +593,7 @@ def update_saltab_component(db: Session, user, component_id: str, amount: float)
 
 
 def add_saltab_component(
-    db: Session, user, payslip_id: str, *, ctype: str, code: str, name: str, amount: float
+    db: Session, user, payslip_id: str, *, ctype: str, code: str, name: str, amount: Decimal
 ) -> PayslipComponent:
     """Tambah komponen baru ke satu slip (Bonus/Insentif/THR/Kompensasi UUCK/
     Reimbursement/Perdin/Kasbon/dll) -- beda dari `update_saltab_component`
@@ -541,6 +604,9 @@ def add_saltab_component(
     _check_slip_editable(db, slip)
     if ctype not in (PayslipComponentType.earnings.value, PayslipComponentType.deduction.value):
         raise HTTPException(status_code=422, detail="Jenis komponen harus earnings atau deduction")
+    if code.strip().lower() in _RESERVED_COMPONENT_CODES:
+        raise HTTPException(status_code=422, detail=f"Kode komponen '{code}' dipakai sistem")
+    amount = round_rupiah(amount)
 
     comp = PayslipComponent(
         payslip_id=slip.id,
@@ -553,8 +619,11 @@ def add_saltab_component(
     )
     db.add(comp)
     db.flush()
-    slip.components.append(comp)
-    _recompute_slip_aggregates(slip)
+    # Setelah flush, relasi bisa sudah memuat comp (FK payslip_id) -> append
+    # buta menggandakannya & agregat slip terhitung dobel.
+    if comp not in slip.components:
+        slip.components.append(comp)
+    _recompute_slip_aggregates(db, slip)
     db.commit()
     db.refresh(comp)
     from app.modules import audit
@@ -564,12 +633,32 @@ def add_saltab_component(
         action="saltab.component_added",
         entity_type="payslip_component",
         entity_id=comp.id,
-        detail={"code": code, "name": name, "amount": amount, "employee_id": str(slip.employee_id)},
+        detail={
+            "code": code,
+            "name": name,
+            "amount": float(amount),
+            "employee_id": str(slip.employee_id),
+        },
     )
     return comp
 
 
 _UNDELETABLE_COMPONENT_CODES = {"tahan_gaji", "pencairan_gaji_ditahan"}
+# Kode yg dibuat mesin (generate/tahan gaji). Tidak boleh dipakai komponen
+# manual baru: mis. deduction ber-kode "pph21" akan dibaca
+# `_recompute_slip_aggregates` sebagai pajak & menimpa PPh 21 asli.
+_RESERVED_COMPONENT_CODES = _UNDELETABLE_COMPONENT_CODES | {
+    "gaji_pokok",
+    "tunjangan",
+    "lembur",
+    "pph21",
+    "potongan_lain",
+    "admin_bank",
+    "bpjs_kesehatan_py",
+    "jht_py",
+    "jp_py",
+    "bpjs_employer",
+}
 
 
 def delete_saltab_component(db: Session, user, component_id: str) -> None:
@@ -611,7 +700,7 @@ def delete_saltab_component(db: Session, user, component_id: str) -> None:
     )
     slip.components.remove(comp)
     db.delete(comp)
-    _recompute_slip_aggregates(slip)
+    _recompute_slip_aggregates(db, slip)
     db.commit()
 
 
@@ -619,12 +708,17 @@ def delete_saltab_component(db: Session, user, component_id: str) -> None:
 
 
 def create_salary_hold(
-    db: Session, user, payslip_id: str, *, amount: float, reason: str
+    db: Session, user, payslip_id: str, *, amount: Decimal, reason: str
 ) -> SalaryHold:
     slip = db.get(Payslip, parse_uuid(payslip_id))
     if slip is None:
         raise HTTPException(status_code=404, detail="Slip tidak ditemukan")
     _check_slip_editable(db, slip)
+    amount = round_rupiah(amount)
+    if amount > to_decimal(slip.net_pay):
+        raise HTTPException(
+            status_code=422, detail="Nominal tahan gaji melebihi gaji bersih slip ini"
+        )
 
     hold = SalaryHold(
         employee_id=slip.employee_id,
@@ -646,8 +740,11 @@ def create_salary_hold(
     )
     db.add(comp)
     db.flush()
-    slip.components.append(comp)
-    _recompute_slip_aggregates(slip)
+    # Setelah flush, relasi bisa sudah memuat comp (FK payslip_id) -> append
+    # buta menggandakannya & agregat slip terhitung dobel.
+    if comp not in slip.components:
+        slip.components.append(comp)
+    _recompute_slip_aggregates(db, slip)
     db.commit()
     db.refresh(hold)
 
@@ -658,7 +755,7 @@ def create_salary_hold(
         action="payroll.salary_held",
         entity_type="salary_hold",
         entity_id=hold.id,
-        detail={"employee_id": str(slip.employee_id), "amount": amount, "reason": reason},
+        detail={"employee_id": str(slip.employee_id), "amount": float(amount), "reason": reason},
     )
     return hold
 
@@ -720,14 +817,17 @@ def release_salary_hold(db: Session, user, hold_id: str, target_payslip_id: str)
         ctype=PayslipComponentType.earnings,
         code="pencairan_gaji_ditahan",
         name="Pencairan Gaji Ditahan",
-        amount=float(hold.amount),
+        amount=to_decimal(hold.amount),
         source="manual",
         notes=f"Pencairan dari tahan gaji {hold.held_at:%d/%m/%Y} — {hold.reason}",
     )
     db.add(comp)
     db.flush()
-    target_slip.components.append(comp)
-    _recompute_slip_aggregates(target_slip)
+    # Setelah flush, relasi bisa sudah memuat comp (FK payslip_id) -> append
+    # buta menggandakannya & agregat slip terhitung dobel.
+    if comp not in target_slip.components:
+        target_slip.components.append(comp)
+    _recompute_slip_aggregates(db, target_slip)
 
     hold.status = SalaryHoldStatus.released
     hold.released_at = datetime.now(UTC)
@@ -1532,4 +1632,4 @@ def preview_tax(payload: TaxPreviewIn, db: Session | None = None) -> dict:
         tax = compute_pasal17_monthly_average(payload.gross_monthly, payload.months, profile)
     else:
         tax = compute_ter(payload.gross_monthly, profile)
-    return {"tax_pph21": tax, "method": payload.method}
+    return {"tax_pph21": float(tax), "method": payload.method}

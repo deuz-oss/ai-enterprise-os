@@ -50,8 +50,9 @@ def _parse_amount(raw, key: str) -> float:
 
 async def import_statement(db: Session, file: UploadFile) -> dict:
     """Impor CSV rekening koran; baris gagal/duplikat dilaporkan, lainnya diproses."""
-    raw = await file.read()
-    text = raw.decode("utf-8-sig")
+    from app.core.csv_upload import read_csv_text
+
+    text = await read_csv_text(file)
     sample = text.splitlines()[0] if text.splitlines() else ""
     delimiter = ";" if sample.count(";") >= sample.count(",") else ","
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)

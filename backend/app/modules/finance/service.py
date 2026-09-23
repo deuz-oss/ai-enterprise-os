@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
+from app.core.money import round_rupiah, to_decimal
 from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.finance.models import (
@@ -127,9 +128,10 @@ def generate_invoice(
     ppn_rate = payload.ppn_rate if payload.ppn_rate is not None else default_ppn
     pph23_rate = payload.pph23_rate if payload.pph23_rate is not None else default_pph23
 
-    subtotal = payroll_total + payload.fee_amount
-    ppn_amount = round(subtotal * ppn_rate)
-    pph23_amount = round(payload.fee_amount * pph23_rate)
+    # Decimal + pembulatan rupiah setengah-ke-atas (lihat app/core/money.py).
+    subtotal = round_rupiah(to_decimal(payroll_total) + to_decimal(payload.fee_amount))
+    ppn_amount = round_rupiah(subtotal * to_decimal(ppn_rate))
+    pph23_amount = round_rupiah(to_decimal(payload.fee_amount) * to_decimal(pph23_rate))
     total_due = subtotal + ppn_amount - pph23_amount
 
     invoice = Invoice(
@@ -168,14 +170,16 @@ def generate_invoice(
     try:
         from app.modules.accounting.service import post_auto_event
 
-        ppn_out = round(ppn_amount)
-        revenue = round(subtotal)
+        # Dr Piutang (net PPh 23) + Dr PPh 23 dibayar di muka
+        #   = Cr Pendapatan + Cr PPN Keluaran.
         lines = [
             ("1-1200", float(total_due), 0.0),
-            ("4-1000", 0.0, revenue),
+            ("4-1000", 0.0, float(subtotal)),
         ]
-        if ppn_out:
-            lines.append(("2-1300", 0.0, ppn_out))
+        if pph23_amount:
+            lines.append(("1-1350", float(pph23_amount), 0.0))
+        if ppn_amount:
+            lines.append(("2-1300", 0.0, float(ppn_amount)))
         post = post_auto_event(  # noqa: F841
             db,
             tenant_id=invoice.tenant_id,
@@ -515,7 +519,7 @@ def create_payment_request(
         pr_number=_next_pr_number(db),
         pr_type=pr_type,
         payroll_run_id=run_ref.id if run_ref else None,
-        amount=round(amount),
+        amount=round_rupiah(amount),
         description=(description or "").strip()[:500]
         or (
             f"Pembayaran gaji {run_ref.month}/{run_ref.year} ({run_ref.run_type.value})"

@@ -243,3 +243,29 @@ def test_channel_list_shows_unread_for_karyawan(client):
     channels = client.get("/api/v1/chat/channels", headers=worker1).json()
     target = next(c for c in channels if c["id"] == ch["id"])
     assert target["unread_count"] == 2
+
+
+def test_admin_lookup_with_multiple_admins(client):
+    """Regresi: tenant dgn >1 admin dulu MultipleResultsFound di
+    `_get_admin_user_id` -> channel JO/proyek/payroll tak pernah dibuat."""
+    from app.modules.auth.models import User
+    from app.modules.chat.service import _get_admin_user_id
+
+    headers = _auth_header(client)
+    resp = client.post(
+        "/api/v1/auth/register",
+        headers=headers,
+        json={
+            "email": "admin2@outsourcing.co.id",
+            "full_name": "Admin Dua",
+            "password": "rahasia-123",
+            "role": "admin",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    db = client.testing_session()
+    try:
+        first = db.query(User).filter_by(email="brian@outsourcing.co.id").one()
+        assert _get_admin_user_id(db, first.tenant_id) == first.id
+    finally:
+        db.close()

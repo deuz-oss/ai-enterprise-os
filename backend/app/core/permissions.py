@@ -88,6 +88,9 @@ ACCOUNTING_TRANSACTIONS_ROLES = ("finance", "management")
 
 RATES_ROLES = ("admin", "finance", "management")
 AUDIT_ROLES = ("management",)
+# Aksi yang menggerakkan uang/langganan tenant (subscribe, top up, auto-reload).
+# Baca saldo tetap terbuka utk staf (indikator topbar Layout.tsx).
+BILLING_MANAGE_ROLES = ("finance", "management")
 # Kosong disengaja: HANYA admin yang lolos, murni lewat bypass admin
 # `require_roles` (lihat poin 1 di docstring atas) — bukan lupa isi.
 AUTH_ADMIN_ONLY_ROLES: tuple[str, ...] = ()

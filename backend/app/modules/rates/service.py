@@ -3,7 +3,7 @@
 from datetime import date
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.rates.models import BankFeeConfig, BillingTaxConfig, BpjsConfig, Pph21Config
@@ -133,7 +133,11 @@ def get_bank_fee(db: Session, bank_name: str) -> float:
     if not bank_name:
         return 0
     row = (
-        db.execute(select(BankFeeConfig).where(BankFeeConfig.bank_name == bank_name))
+        db.execute(
+            select(BankFeeConfig).where(
+                func.lower(func.trim(BankFeeConfig.bank_name)) == bank_name.strip().lower()
+            )
+        )
         .scalars()
         .first()
     )  # noqa: E501

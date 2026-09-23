@@ -121,7 +121,9 @@ def require_platform_admin():
     """Khusus pengelola SaaS; tanpa bypass apa pun."""
 
     def dependency(user=Depends(get_current_user)):
-        if user.role == "platform_admin":
+        # Wajib juga tanpa tenant: akun bertenanta dgn role platform_admin
+        # (data korup / eskalasi) tidak boleh menyentuh /platform/*.
+        if user.role == "platform_admin" and user.tenant_id is None:
             return user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -24,29 +24,33 @@ async def chat_ws(websocket: WebSocket, token: str = Query("")):
     if not user_id:
         await websocket.close(code=1008)
         return
+    # Session DB hanya untuk lookup user lalu segera ditutup: dulu session
+    # (koneksi pool) ditahan sepanjang umur websocket -> tiap user chat yang
+    # online memakan satu koneksi & pool habis untuk seluruh API.
+    from app.modules.auth.models import User
+
     db = SessionLocal()
     try:
-        from app.modules.auth.models import User
-
         user = db.get(User, _parse(user_id))  # type: ignore[attr-defined]
-        if user is None or not user.is_active:
-            await websocket.close(code=1008)
-            return
-        tenant_id = str(user.tenant_id or "platform")
-        user_id_str = str(user.id)
-
-        from app.modules.chat.ws_manager import manager
-
-        await manager.connect(tenant_id, user_id_str, websocket)
-        try:
-            while True:
-                await websocket.receive_text()  # heartbeat / typing — abaikan v1
-        except Exception:
-            pass
-        finally:
-            await manager.disconnect(tenant_id, user_id_str)
+        active = user is not None and user.is_active
+        tenant_id = str(user.tenant_id or "platform") if user is not None else ""
+        user_id_str = str(user.id) if user is not None else ""
     finally:
         db.close()
+    if not active:
+        await websocket.close(code=1008)
+        return
+
+    from app.modules.chat.ws_manager import manager
+
+    await manager.connect(tenant_id, user_id_str, websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # heartbeat / typing — abaikan v1
+    except Exception:
+        pass
+    finally:
+        await manager.disconnect(tenant_id, user_id_str)
 
 
 def _parse(value):

@@ -11,6 +11,9 @@ DEFAULT_COA: list[tuple[str, str, str, str, bool, bool]] = [
     ("1-1100", "Bank", "aset_lancar", "debit", True, False),
     ("1-1200", "Piutang Usaha", "aset_lancar", "debit", False, True),
     ("1-1300", "PPh 21 Dibayar di Muka", "aset_lancar", "debit", False, False),
+    # Dipotong klien atas fee jasa; dikreditkan di SPT. Tanpa akun ini jurnal
+    # invoice_issued tidak seimbang (Dr piutang sudah net PPh 23).
+    ("1-1350", "PPh 23 Dibayar di Muka", "aset_lancar", "debit", False, False),
     ("1-1400", "PPN Masukan", "aset_lancar", "debit", False, False),
     ("1-2000", "Aset Tetap — Peralatan Kantor", "aset_tetap", "debit", False, False),
     ("1-2100", "Akumulasi Penyusutan Peralatan", "aset_tetap", "kredit", False, False),

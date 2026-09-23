@@ -19,7 +19,9 @@ from fastapi import HTTPException
 
 
 def _user(role: UserRole):
-    return SimpleNamespace(role=role)
+    # Sama seperti data nyata: hanya platform_admin yang tanpa tenant.
+    tenant_id = None if role == UserRole.platform_admin else "tenant-x"
+    return SimpleNamespace(role=role, tenant_id=tenant_id)
 
 
 ALL_ROLES = list(UserRole)
@@ -48,6 +50,7 @@ REGISTRY_AREAS = {
     "ACCOUNTING_ROLES": permissions.ACCOUNTING_ROLES,
     "ACCOUNTING_TRANSACTIONS_ROLES": permissions.ACCOUNTING_TRANSACTIONS_ROLES,
     "AUDIT_ROLES": permissions.AUDIT_ROLES,
+    "BILLING_MANAGE_ROLES": permissions.BILLING_MANAGE_ROLES,
     "AUTH_ADMIN_ONLY_ROLES": permissions.AUTH_ADMIN_ONLY_ROLES,
     "APPS_TRIAL_ROLES": permissions.APPS_TRIAL_ROLES,
 }

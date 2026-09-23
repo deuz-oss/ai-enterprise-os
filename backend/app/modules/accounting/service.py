@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
+from app.core.money import to_decimal
 from app.modules.accounting.coa_template import DEFAULT_COA
 from app.modules.accounting.models import (
     Account,
@@ -295,9 +296,9 @@ def post_entry(db: Session, entry_id: str) -> JournalEntry:
     if entry.status == JournalEntryStatus.posted:
         raise HTTPException(status_code=409, detail="Jurnal sudah terposting")
 
-    total_debit = sum(float(l.debit) for l in entry.lines)  # noqa: E741
-    total_credit = sum(float(l.credit) for l in entry.lines)  # noqa: E741
-    if round(total_debit, 2) != round(total_credit, 2):
+    total_debit = sum(to_decimal(ln.debit) for ln in entry.lines)
+    total_credit = sum(to_decimal(ln.credit) for ln in entry.lines)
+    if total_debit != total_credit:
         raise HTTPException(
             status_code=422,
             detail=f"Tidak seimbang: debit {total_debit} != kredit {total_credit}",
@@ -518,6 +519,19 @@ def post_auto_event(
         logging.getLogger(__name__).warning("Auto-journal %s dilewati: %s", event_code, exc.detail)
         return None
 
+    # Jurnal otomatis langsung berstatus posted (tanpa lewat post_entry), jadi
+    # validasi keseimbangan wajib di sini juga -- dulu invoice ber-PPh 23
+    # terposting timpang tanpa ada yang menolak.
+    total_debit = sum(to_decimal(d) for _, d, _ in lines)
+    total_credit = sum(to_decimal(c) for _, _, c in lines)
+    if total_debit != total_credit:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Auto-journal %s ditolak: debit %s != kredit %s", event_code, total_debit, total_credit
+        )
+        return None
+
     entry = JournalEntry(
         entry_date=entry_date,
         description=description,
@@ -528,6 +542,10 @@ def post_auto_event(
         source_ref_type=source_ref_type,
         source_ref_id=parse_uuid(source_ref_id),
     )
+    if tenant_id is not None and any(get_account_by_code(db, c) is None for c, _, _ in lines):
+        # Akun template baru (mis. 1-1350) belum ada di tenant lama: ensure_coa
+        # hanya jalan saat provisioning, jadi lengkapi di sini secara malas.
+        ensure_coa(db, tenant_id)
     for code, debit, credit in lines:
         account = get_account_by_code(db, code)
         entry.lines.append(

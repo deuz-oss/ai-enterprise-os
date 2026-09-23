@@ -404,6 +404,13 @@ def add_member(db: Session, user, channel_id: str, new_user_id) -> dict:
     ch = get_channel_with_access_check(db, user, channel_id)
     if not is_staff(user) and user.role == "karyawan":
         raise HTTPException(status_code=403, detail="Karyawan tidak dapat menambah member")
+    from app.modules.auth.models import User
+
+    # User tidak ber-TenantMixin -> wajib cek manual: tanpa ini id user tenant
+    # lain (atau id fiktif) ikut tersimpan sebagai member.
+    target = db.get(User, parse_uuid(str(new_user_id)))
+    if target is None or target.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
     if _is_member(db, ch.id, new_user_id):
         raise HTTPException(status_code=409, detail="User sudah menjadi member")
     db.add(
@@ -879,6 +886,8 @@ def edit_message(db: Session, user, message_id: str, content: str) -> ChatMessag
     msg = db.get(ChatMessage, _parse(message_id))
     if msg is None:
         raise HTTPException(status_code=404, detail="Pesan tidak ditemukan")
+    if msg.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Pesan tidak ditemukan")
     if msg.sender_id != parse_uuid(str(user.id)):
         raise HTTPException(status_code=403, detail="Hanya pengirim yang bisa mengedit")
     msg.content = content.strip()[:5000]
@@ -909,6 +918,12 @@ def delete_message(db: Session, user, message_id: str) -> None:
 
 
 def toggle_reaction(db: Session, user, message_id: str, emoji: str) -> dict:
+    # Wajib bisa membaca channel pesan: tanpa cek ini karyawan bisa memberi
+    # reaksi (dan memicu notifikasi) di channel yang bukan miliknya.
+    msg = db.get(ChatMessage, _parse(message_id))
+    if msg is None or msg.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Pesan tidak ditemukan")
+    get_channel_with_access_check(db, user, msg.channel_id)
     existing = db.execute(
         select(ChatMessageReaction).where(
             ChatMessageReaction.message_id == _parse(message_id),
@@ -1198,15 +1213,21 @@ def ensure_job_order_channel(db: Session, job_order) -> Channel | None:
 def _get_admin_user_id(db: Session, tenant_id) -> UUID | None:
     from app.modules.auth.models import User
 
+    # .first() (bukan scalar_one_or_none): tenant nyata hampir selalu punya
+    # >1 admin/user -> dulu MultipleResultsFound, ditelan pemanggil, channel
+    # proyek/JO diam-diam tidak pernah terbentuk.
+    tid = parse_uuid(str(tenant_id))
     admin = db.execute(
-        select(User.id).where(User.tenant_id == parse_uuid(str(tenant_id)), User.role == "admin")
+        select(User.id)
+        .where(User.tenant_id == tid, User.role == "admin")
+        .order_by(User.created_at)
+        .limit(1)
     ).scalar_one_or_none()
     if admin:
         return admin
-    any_user = db.execute(
-        select(User.id).where(User.tenant_id == parse_uuid(str(tenant_id)))
-    ).scalar_one_or_none()  # noqa: E501
-    return any_user
+    return db.execute(
+        select(User.id).where(User.tenant_id == tid).order_by(User.created_at).limit(1)
+    ).scalar_one_or_none()
 
 
 def ensure_project_channel(db: Session, placement) -> Channel | None:

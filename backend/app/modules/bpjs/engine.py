@@ -17,6 +17,10 @@ Dasar peraturan (per 2025):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any
+
+from app.core.money import ZERO, rupiah_int, to_decimal
 
 # ---- BPJS Kesehatan ----
 KESEHATAN_EMPLOYER = 0.04
@@ -73,7 +77,11 @@ class BpjsBreakdown:
         return self.employer_total + self.employee_total
 
 
-def _jkk_rate(category: int | None, config=None) -> float:
+def _jkk_rate(category: int | None, config=None) -> Decimal:
+    return to_decimal(_jkk_rate_raw(category, config))
+
+
+def _jkk_rate_raw(category: int | None, config=None) -> float:
     if config is not None:
         # jkk_rates disimpan sebagai JSON dict str->float
         raw = config.jkk_rates if hasattr(config, "jkk_rates") else JKK_RATES
@@ -90,78 +98,78 @@ def _jkk_rate(category: int | None, config=None) -> float:
 
 
 def _get_bpjs_config(db, effective_date):
+    # Tanpa try/except -- lihat catatan di payroll/tax.py::_get_pph21_config.
     if db is None or effective_date is None:
         return None
-    try:
-        from datetime import date as _date
+    from datetime import date as _date
 
-        from sqlalchemy import select
+    from sqlalchemy import select
 
-        from app.modules.rates.models import BpjsConfig
+    from app.modules.rates.models import BpjsConfig
 
-        if isinstance(effective_date, str):
-            effective_date = _date.fromisoformat(effective_date)
-        return (
-            db.execute(
-                select(BpjsConfig)
-                .where(BpjsConfig.effective_from <= effective_date)
-                .order_by(BpjsConfig.effective_from.desc())  # noqa: E501
-            )
-            .scalars()
-            .first()
+    if isinstance(effective_date, str):
+        effective_date = _date.fromisoformat(effective_date)
+    return (
+        db.execute(
+            select(BpjsConfig)
+            .where(BpjsConfig.effective_from <= effective_date)
+            .order_by(BpjsConfig.effective_from.desc())
         )
-    except Exception:
-        return None
+        .scalars()
+        .first()
+    )
 
 
 def compute_contribution(
-    base_salary: float,
+    base_salary: Any,
     jkk_risk_category: int | None = None,
     _config=None,
     db=None,
-    effective_date=None,  # noqa: E501
+    effective_date=None,
 ) -> BpjsBreakdown:
-    """Hitung iuran bulanan dari gaji pokok (dengan batas atas per program)."""
-    # Resolve config dari DB jika db disediakan
+    """Hitung iuran bulanan dari gaji pokok (dengan batas atas per program).
+
+    Hitungan dalam Decimal, dibulatkan setengah-ke-atas ke rupiah penuh --
+    lihat `app/core/money.py` kenapa bukan float + `round()`.
+    """
     config = _config or _get_bpjs_config(db, effective_date)
     if config is not None:
-        kes_emp = float(config.kesehatan_employer)
-        kes_empl = float(config.kesehatan_employee)
-        kes_cap = float(config.kesehatan_cap)
-        jht_emp = float(config.jht_employer)
-        jht_empl = float(config.jht_employee)
-        jp_emp = float(config.jp_employer)
-        jp_empl = float(config.jp_employee)
-        jp_cap = float(config.jp_cap)
-        jkm = float(config.jkm_rate)
-        jkk_rate_val = _jkk_rate(jkk_risk_category, config)
+        kes_emp = to_decimal(config.kesehatan_employer)
+        kes_empl = to_decimal(config.kesehatan_employee)
+        kes_cap = to_decimal(config.kesehatan_cap)
+        jht_emp = to_decimal(config.jht_employer)
+        jht_empl = to_decimal(config.jht_employee)
+        jp_emp = to_decimal(config.jp_employer)
+        jp_empl = to_decimal(config.jp_employee)
+        jp_cap = to_decimal(config.jp_cap)
+        jkm = to_decimal(config.jkm_rate)
+        jkk_rate = _jkk_rate(jkk_risk_category, config)
     else:
-        kes_emp = KESEHATAN_EMPLOYER
-        kes_empl = KESEHATAN_EMPLOYEE
-        kes_cap = KESEHATAN_SALARY_CAP
-        jht_emp = JHT_EMPLOYER
-        jht_empl = JHT_EMPLOYEE
-        jp_emp = JP_EMPLOYER
-        jp_empl = JP_EMPLOYEE
-        jp_cap = JP_SALARY_CAP
-        jkm = JKM_RATE
-        jkk_rate_val = _jkk_rate(jkk_risk_category)
+        kes_emp = to_decimal(KESEHATAN_EMPLOYER)
+        kes_empl = to_decimal(KESEHATAN_EMPLOYEE)
+        kes_cap = to_decimal(KESEHATAN_SALARY_CAP)
+        jht_emp = to_decimal(JHT_EMPLOYER)
+        jht_empl = to_decimal(JHT_EMPLOYEE)
+        jp_emp = to_decimal(JP_EMPLOYER)
+        jp_empl = to_decimal(JP_EMPLOYEE)
+        jp_cap = to_decimal(JP_SALARY_CAP)
+        jkm = to_decimal(JKM_RATE)
+        jkk_rate = _jkk_rate(jkk_risk_category)
 
-    salary = max(0.0, float(base_salary))
-    salary_kes = round(min(salary, kes_cap))
-    salary_jp = round(min(salary, jp_cap))
-    salary_tk = round(salary)  # JHT/JKK/JKM tanpa batas atas upah
+    salary = max(ZERO, to_decimal(base_salary))
+    salary_kes = rupiah_int(min(salary, kes_cap))
+    salary_jp = rupiah_int(min(salary, jp_cap))
+    salary_tk = rupiah_int(salary)  # JHT/JKK/JKM tanpa batas atas upah
 
-    jkk_rate = jkk_rate_val
     return BpjsBreakdown(
         salary_kesehatan=salary_kes,
         salary_jp=salary_jp,
-        kes_employer=round(salary_kes * kes_emp),
-        kes_employee=round(salary_kes * kes_empl),
-        jkk=round(salary_tk * jkk_rate),
-        jkm=round(salary_tk * jkm),
-        jht_employer=round(salary_tk * jht_emp),
-        jht_employee=round(salary_tk * jht_empl),
-        jp_employer=round(salary_jp * jp_emp),
-        jp_employee=round(salary_jp * jp_empl),
+        kes_employer=rupiah_int(salary_kes * kes_emp),
+        kes_employee=rupiah_int(salary_kes * kes_empl),
+        jkk=rupiah_int(salary_tk * jkk_rate),
+        jkm=rupiah_int(salary_tk * jkm),
+        jht_employer=rupiah_int(salary_tk * jht_emp),
+        jht_employee=rupiah_int(salary_tk * jht_empl),
+        jp_employer=rupiah_int(salary_jp * jp_emp),
+        jp_employee=rupiah_int(salary_jp * jp_empl),
     )

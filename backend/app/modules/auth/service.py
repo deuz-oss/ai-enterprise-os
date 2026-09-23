@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_and_update_password, verify_password
-from app.modules.auth.models import PasswordResetToken, User
+from app.core.tenancy import get_tenant
+from app.modules.auth.models import PasswordResetToken, User, UserRole
 from app.modules.auth.schemas import UserCreate
 
 
@@ -36,6 +37,13 @@ def create_user(db: Session, payload: UserCreate, tenant_id=None) -> User:
     """
     if len(payload.password) < 8:
         raise HTTPException(status_code=422, detail="Password minimal 8 karakter")
+    # platform_admin hanya boleh akun tanpa tenant (bootstrap/seed platform).
+    # Tanpa cek ini admin tenant bisa POST /auth/register role=platform_admin
+    # lalu lolos `require_platform_admin()` -> kuasai /platform/* lintas tenant.
+    if payload.role == UserRole.platform_admin and (
+        tenant_id is not None or get_tenant() is not None
+    ):
+        raise HTTPException(status_code=422, detail="Role tidak valid untuk akun ini")
     if get_by_email(db, payload.email) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email sudah terdaftar")
     user = User(

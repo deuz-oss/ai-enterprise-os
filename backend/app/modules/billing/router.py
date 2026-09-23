@@ -18,7 +18,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_active_subscription, require_tenant_user
+from app.core.permissions import BILLING_MANAGE_ROLES
+from app.core.security import (
+    get_current_user,
+    require_active_subscription,
+    require_roles,
+    require_tenant_user,
+)
 from app.modules.billing import payment_service, service
 from app.modules.billing.models import TIER_MONTHLY_FEE_IDR, PaymentIntentType, SubscriptionTier
 
@@ -60,7 +66,7 @@ def balance_summary(db: Session = Depends(get_db), user=Depends(get_current_user
     return service.get_balance_summary(db, tenant_id)
 
 
-@subscribe_router.post("/subscribe")
+@subscribe_router.post("/subscribe", dependencies=[Depends(require_roles(*BILLING_MANAGE_ROLES))])
 def subscribe(payload: SubscribeIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
     amount = TIER_MONTHLY_FEE_IDR[payload.tier]
     intent, checkout_url = payment_service.create_checkout_intent(
@@ -75,7 +81,7 @@ def subscribe(payload: SubscribeIn, db: Session = Depends(get_db), user=Depends(
     return {"intent_id": str(intent.id), "checkout_url": checkout_url}
 
 
-@router.post("/topup")
+@router.post("/topup", dependencies=[Depends(require_roles(*BILLING_MANAGE_ROLES))])
 def topup(payload: TopupIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
     intent, checkout_url = payment_service.create_checkout_intent(
         db,
@@ -96,7 +102,7 @@ def auto_reload_settings(db: Session = Depends(get_db), user=Depends(get_current
     return service.get_auto_reload_settings(db, user.tenant_id)
 
 
-@router.put("/auto-reload-settings")
+@router.put("/auto-reload-settings", dependencies=[Depends(require_roles(*BILLING_MANAGE_ROLES))])
 def update_auto_reload_settings(
     payload: AutoReloadSettingsIn, db: Session = Depends(get_db), user=Depends(get_current_user)
 ):
