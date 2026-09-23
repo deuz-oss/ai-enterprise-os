@@ -32,12 +32,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "employee_emergency_contacts",
-        sa.Column("id", sa.CHAR(32), primary_key=True),
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False, index=True),
         sa.Column(
-            "tenant_id", sa.CHAR(32), sa.ForeignKey("tenants.id"), nullable=False, index=True
-        ),
-        sa.Column(
-            "employee_id", sa.CHAR(32), sa.ForeignKey("employees.id"), nullable=False, index=True
+            "employee_id", sa.Uuid(), sa.ForeignKey("employees.id"), nullable=False, index=True
         ),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("relation", sa.String(length=100), nullable=True),
@@ -49,14 +47,20 @@ def upgrade() -> None:
     )
 
     # Backfill: satu baris per employee yang sudah punya kontak lama terisi.
+    # Ekspresi id/boolean beda per dialek: versi awal migrasi ini cuma SQLite
+    # (randomblob/hex + CHAR(32)) sehingga gagal total di PostgreSQL.
+    if op.get_bind().dialect.name == "postgresql":
+        new_id, true_val = "gen_random_uuid()", "true"
+    else:
+        new_id, true_val = "lower(hex(randomblob(16)))", "1"
     op.execute(
-        """
+        f"""
         INSERT INTO employee_emergency_contacts
             (id, tenant_id, employee_id, name, relation, phone, is_primary, created_at)
         SELECT
-            lower(hex(randomblob(16))), tenant_id, id,
+            {new_id}, tenant_id, id,
             emergency_contact_name, emergency_contact_relation, emergency_contact_phone,
-            1, CURRENT_TIMESTAMP
+            {true_val}, CURRENT_TIMESTAMP
         FROM employees
         WHERE emergency_contact_name IS NOT NULL AND emergency_contact_name != ''
         """

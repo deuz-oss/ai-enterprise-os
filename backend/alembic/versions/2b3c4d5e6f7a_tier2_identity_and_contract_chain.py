@@ -40,7 +40,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("blood_type", sa.String(length=5), nullable=True))
 
     with op.batch_alter_table("employment_contracts") as batch_op:
-        batch_op.add_column(sa.Column("previous_contract_id", sa.CHAR(32), nullable=True))
+        batch_op.add_column(sa.Column("previous_contract_id", sa.Uuid(), nullable=True))
         batch_op.create_foreign_key(
             "fk_employment_contracts_previous_contract_id",
             "employment_contracts",
