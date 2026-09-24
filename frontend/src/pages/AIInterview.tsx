@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Archive, CheckCircle2, FileEdit, MessagesSquare } from "lucide-react";
+import { Archive, CheckCircle2, FileEdit, MessagesSquare, ShieldCheck } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -56,6 +56,11 @@ interface InterviewResponse {
   started_at: string | null;
   submitted_at: string | null;
   expires_at: string | null;
+  consent_given_at: string | null;
+  consent_version: string | null;
+  consent_withdrawn_at: string | null;
+  data_purged_at: string | null;
+  purge_reason: "retensi" | "penarikan_persetujuan" | "penghapusan_subjek" | null;
 }
 
 interface Candidate {
@@ -108,6 +113,20 @@ export default function AIInterview() {
   const aktifCount = allTemplates.filter((t) => t.status === "aktif").length;
   const draftCount = allTemplates.filter((t) => t.status === "draft").length;
   const arsipCount = allTemplates.filter((t) => t.status === "arsip").length;
+  // Fase 0 roadmap: masa retensi data interview (UU PDP), per tenant.
+  const { data: interviewSettings } = useQuery({
+    queryKey: ["ai-interview-settings"],
+    queryFn: () => api.get<{ retention_days: number }>("/ai-interview/settings"),
+  });
+  const [editingRetention, setEditingRetention] = useState(false);
+  const saveRetention = useMutation({
+    mutationFn: (retention_days: number) =>
+      api.put<{ retention_days: number }>("/ai-interview/settings", { retention_days }),
+    onSuccess: () => {
+      setEditingRetention(false);
+      qc.invalidateQueries({ queryKey: ["ai-interview-settings"] });
+    },
+  });
   const { data: responses } = useQuery({
     queryKey: ["ai-interview-responses", selectedId],
     queryFn: () => api.get<InterviewResponse[]>(`/ai-interview/responses?template_id=${selectedId}`),
@@ -203,6 +222,70 @@ export default function AIInterview() {
         <KpiCard label="Aktif" value={aktifCount} icon={CheckCircle2} iconTone="success" />
         <KpiCard label="Draft" value={draftCount} icon={FileEdit} iconTone="neutral" />
         <KpiCard label="Arsip" value={arsipCount} icon={Archive} iconTone="neutral" />
+      </div>
+
+      <div className="card flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--accent)" }} />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--text)]">Privasi & kepatuhan data</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Kandidat wajib menyetujui pemrosesan data sebelum interview dan bisa menariknya kapan
+              saja. Jawaban, transkrip, dan hasil AI dihapus otomatis{" "}
+              <b className="text-[var(--text)]">{interviewSettings?.retention_days ?? 180} hari</b>{" "}
+              setelah interview dikirim. AI hanya menilai isi jawaban, tidak menilai emosi, nada
+              suara, aksen, atau cara bicara.
+            </p>
+          </div>
+        </div>
+        {editingRetention ? (
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const days = Number(new FormData(e.currentTarget).get("retention_days"));
+              saveRetention.mutate(days);
+            }}
+          >
+            <label htmlFor="retention_days" className="text-xs text-[var(--text-muted)]">
+              Retensi (30–730 hari)
+            </label>
+            <input
+              id="retention_days"
+              name="retention_days"
+              type="number"
+              min={30}
+              max={730}
+              required
+              defaultValue={interviewSettings?.retention_days ?? 180}
+              className="input w-24 py-1 text-sm"
+            />
+            <button className="btn py-1 text-xs" disabled={saveRetention.isPending}>
+              Simpan
+            </button>
+            <button
+              type="button"
+              className="btn-secondary py-1 text-xs"
+              onClick={() => setEditingRetention(false)}
+            >
+              Batal
+            </button>
+            {saveRetention.error && (
+              <p className="w-full text-xs text-red-600 dark:text-red-400">
+                {(saveRetention.error as Error).message}
+              </p>
+            )}
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="btn-secondary py-1 text-xs"
+            onClick={() => setEditingRetention(true)}
+            title="Hanya role management yang dapat mengubah masa retensi"
+          >
+            Ubah retensi
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -349,6 +432,11 @@ export default function AIInterview() {
             </button>
           </div>
 
+          {createTemplate.error && (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {(createTemplate.error as Error).message}
+            </p>
+          )}
           <button type="submit" disabled={createTemplate.isPending} className="btn w-full">
             Simpan Template (draft)
           </button>
@@ -445,10 +533,19 @@ export default function AIInterview() {
                         {r.ai_score_overall !== null && (
                           <span className="pill p-blue">Skor {r.ai_score_overall}</span>
                         )}
+                        {r.consent_withdrawn_at ? (
+                          <span className="pill p-red">Persetujuan ditarik</span>
+                        ) : r.consent_given_at ? (
+                          <span className="pill p-green" title={`Versi ketentuan ${r.consent_version ?? "-"}`}>
+                            Menyetujui data
+                          </span>
+                        ) : (
+                          <span className="pill p-gray">Belum menyetujui</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      {(r.status === "terkirim" || r.status === "dinilai") && (
+                      {!r.data_purged_at && (r.status === "terkirim" || r.status === "dinilai") && (
                         <button
                           className="btn-secondary py-1 text-xs"
                           disabled={scoreResponse.isPending}
@@ -457,7 +554,7 @@ export default function AIInterview() {
                           {r.status === "dinilai" ? "Nilai Ulang" : "Nilai"}
                         </button>
                       )}
-                      {(r.status === "terkirim" || r.status === "dinilai") && (
+                      {!r.data_purged_at && (r.status === "terkirim" || r.status === "dinilai") && (
                         <button
                           className="btn-secondary py-1 text-xs"
                           onClick={() => setReviewingId(reviewingId === r.id ? null : r.id)}
@@ -468,6 +565,17 @@ export default function AIInterview() {
                     </div>
                   </div>
 
+                  {r.data_purged_at && (
+                    <p className="mt-2 text-xs text-[var(--text-muted)]">
+                      {r.purge_reason === "penarikan_persetujuan"
+                        ? "Kandidat menarik persetujuan"
+                        : r.purge_reason === "penghapusan_subjek"
+                          ? "Data kandidat dihapus atas permintaannya"
+                          : "Masa retensi berakhir"}{" "}
+                      — jawaban, transkrip, dan hasil AI dihapus pada{" "}
+                      {new Date(r.data_purged_at).toLocaleDateString("id-ID")}.
+                    </p>
+                  )}
                   {r.ai_narrative && (
                     <p className="mt-2 text-sm text-[var(--text-muted)]">{r.ai_narrative}</p>
                   )}

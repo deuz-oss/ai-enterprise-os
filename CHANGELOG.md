@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 59: AI Interview — fondasi kepatuhan (persetujuan, retensi, larangan analisis emosi)
+
+Fase 0 roadmap AI Interview, prasyarat sebelum fitur rekaman suara. Detail di `PRD.md` Fase 59.
+- Kandidat wajib menyetujui ketentuan pemrosesan data (UU PDP) sebelum interview; semua aksi sesi ditolak tanpa persetujuan. Versi ketentuan & waktu tersimpan per respons.
+- Kandidat bisa menarik persetujuan kapan saja: jawaban, transkrip, dan hasil AI dihapus, link terkunci.
+- Retensi per tenant (default 180 hari, 30–730, diubah role management) dengan pembersihan otomatis.
+- Kriteria template yang menilai emosi/nada suara/aksen/ekspresi ditolak; prompt penilaian melarang inferensi dari cara bicara.
+- Halaman admin: status persetujuan & penghapusan per respons, kartu privasi + pengaturan retensi, dan error simpan template kini tampil (sebelumnya gagal diam-diam).
+- Migrasi `6f7a8b9c0d1e` (kolom persetujuan/pembersihan + tabel `ai_interview_settings` dengan RLS).
+
 ### Changed — Fase 58: Redesign Chat (review UI/UX)
 
 **Bug yang ditemukan saat review**

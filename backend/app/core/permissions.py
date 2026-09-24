@@ -63,6 +63,9 @@ RECRUITMENT_ROLES = ("recruiter", "management")
 TALENTPOOL_ROLES = ("recruiter", "operations", "hr", "management")
 TALENTPOOL_BRANDING_ROLES = ("admin", "management")
 AI_RECRUITMENT_ROLES = ("recruiter", "management")
+# Masa retensi data AI Interview (UU PDP) -- keputusan kepatuhan, bukan
+# operasional recruiter harian; baca pengaturan tetap RECRUITMENT_ROLES.
+AI_INTERVIEW_SETTINGS_ROLES = ("management",)
 
 # ---------- Workforce ----------
 # Payroll ada di sini (bukan Finance & Accounting) mengikuti keputusan

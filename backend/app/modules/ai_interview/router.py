@@ -4,7 +4,7 @@
 tanpa autentikasi sama sekali — mirror `payroll/router.py::public_router`)."""
 
 from app.core.database import get_db
-from app.core.permissions import RECRUITMENT_ROLES
+from app.core.permissions import AI_INTERVIEW_SETTINGS_ROLES, RECRUITMENT_ROLES
 from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_roles
 from app.core.tenancy import get_request_meta
@@ -19,11 +19,14 @@ from app.modules.ai_interview.schemas import (
     AIInterviewInviteOut,
     AIInterviewResponseOut,
     AIInterviewReviewIn,
+    AIInterviewSettingsOut,
+    AIInterviewSettingsUpdate,
     AIInterviewTemplateCreate,
     AIInterviewTemplateOut,
     AIInterviewTemplateUpdate,
     AnswerIn,
     PublicInterviewSessionOut,
+    RetentionRunOut,
     VoiceCompleteIn,
     VoiceContextOut,
     VoiceSessionOut,
@@ -126,6 +129,38 @@ def resend_invite(response_id: str, db: Session = Depends(get_db)):
     return service.resend_invite(db, response_id)
 
 
+# ---------- Fase 0: retensi data (UU PDP) ----------
+
+
+@router.get("/settings", response_model=AIInterviewSettingsOut)
+def get_settings_view(db: Session = Depends(get_db)):
+    return service.get_interview_settings(db)
+
+
+@router.put(
+    "/settings",
+    response_model=AIInterviewSettingsOut,
+    dependencies=[Depends(require_roles(*AI_INTERVIEW_SETTINGS_ROLES))],
+)
+def update_settings(
+    payload: AIInterviewSettingsUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Masa retensi = keputusan kepatuhan, bukan operasional rekrutmen harian."""
+    return service.update_interview_settings(db, user, payload)
+
+
+@router.post(
+    "/retention/run",
+    response_model=RetentionRunOut,
+    dependencies=[Depends(require_roles(*AI_INTERVIEW_SETTINGS_ROLES))],
+)
+def run_retention(db: Session = Depends(get_db)):
+    """Jalankan pembersihan retensi sekarang (juga otomatis tiap daftar respons dibuka)."""
+    return RetentionRunOut(purged=service.purge_expired_responses(db))
+
+
 # ---------- Sisi kandidat — publik, tanpa autentikasi ----------
 
 public_router = APIRouter(prefix="/ai-interview/session", tags=["ai-interview-public"])
@@ -154,6 +189,20 @@ def _check_rate_limit(db: Session) -> None:
 def get_session(token: str, db: Session = Depends(get_db)):
     _check_rate_limit(db)
     return service.get_session(db, token)
+
+
+@public_router.post("/{token}/consent", status_code=status.HTTP_204_NO_CONTENT)
+def give_consent(token: str, db: Session = Depends(get_db)):
+    """Kandidat menyetujui ketentuan pemrosesan data (wajib sebelum mulai)."""
+    _check_rate_limit(db)
+    service.give_consent(db, token)
+
+
+@public_router.post("/{token}/withdraw-consent", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_consent(token: str, db: Session = Depends(get_db)):
+    """Kandidat menarik persetujuan -- jawaban, transkrip & hasil AI dihapus."""
+    _check_rate_limit(db)
+    service.withdraw_consent(db, token)
 
 
 @public_router.post("/{token}/start", status_code=status.HTTP_204_NO_CONTENT)

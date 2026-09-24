@@ -66,14 +66,23 @@ def _create_active_template(client, headers, **payload_overrides) -> dict:
     return activated.json()
 
 
-def _invite(client, headers, template_id, candidate_id) -> dict:
+def _consent(client, token: str) -> None:
+    """Fase 0: kandidat wajib menyetujui pemrosesan data sebelum mulai."""
+    resp = client.post(f"/api/v1/ai-interview/session/{token}/consent")
+    assert resp.status_code == 204, resp.text
+
+
+def _invite(client, headers, template_id, candidate_id, consent: bool = True) -> dict:
     invite = client.post(
         f"/api/v1/ai-interview/templates/{template_id}/invite",
         headers=headers,
         json={"candidate_ids": [candidate_id]},
     )
     assert invite.status_code == 200, invite.text
-    return invite.json()["invited"][0]
+    invited = invite.json()["invited"][0]
+    if consent:
+        _consent(client, invited["invite_token"])
+    return invited
 
 
 def test_template_crud_roundtrips_questions_and_criteria(client):
@@ -138,6 +147,13 @@ def test_candidate_session_flow_submit_leaves_submitted_when_ai_unconfigured(cli
     assert "criterion_keys" not in session_body["questions"][0]
     assert "weight" not in session_body["questions"][0]
 
+    # Fase 0: tanpa persetujuan, interview tidak bisa dimulai.
+    assert session_body["consent_given"] is False
+    assert "UU No. 27 Tahun 2022" in session_body["consent_text"]
+    blocked = client.post(f"/api/v1/ai-interview/session/{token}/start")
+    assert blocked.status_code == 403
+    _consent(client, token)
+
     start = client.post(f"/api/v1/ai-interview/session/{token}/start")
     assert start.status_code == 204
 
@@ -188,6 +204,7 @@ def test_review_gate_required_before_final_and_adjusted_override(client):
     )
     assert too_early.status_code == 422
 
+    _consent(client, token)
     client.post(f"/api/v1/ai-interview/session/{token}/start")
     client.post(
         f"/api/v1/ai-interview/session/{token}/answer",
@@ -435,3 +452,118 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
         json={"transcript": "percakapan lain"},
     )
     assert again.status_code == 422
+
+
+# ---------- Fase 0: persetujuan, penarikan, retensi, larangan analisis emosi ----------
+
+
+def _submit_text_interview(client, admin) -> tuple[str, str]:
+    template = _create_active_template(client, admin)
+    cand_id = _create_candidate(client, admin, name="Sari", email="sari@example.com")
+    invited = _invite(client, admin, template["id"], cand_id)
+    token = invited["invite_token"]
+    client.post(f"/api/v1/ai-interview/session/{token}/start")
+    client.post(
+        f"/api/v1/ai-interview/session/{token}/answer",
+        json={"question_id": "q1", "answer_text": "Jawaban pribadi kandidat"},
+    )
+    client.post(f"/api/v1/ai-interview/session/{token}/submit")
+    return token, invited["response_id"]
+
+
+def test_withdraw_consent_purges_data_and_locks_link(client):
+    admin = _auth_header(client)
+    token, response_id = _submit_text_interview(client, admin)
+
+    before = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert before["answers"] and before["consent_given_at"]
+
+    withdrawn = client.post(f"/api/v1/ai-interview/session/{token}/withdraw-consent")
+    assert withdrawn.status_code == 204
+    # Idempoten.
+    assert client.post(f"/api/v1/ai-interview/session/{token}/withdraw-consent").status_code == 204
+
+    after = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert after["answers"] == []
+    assert after["transcript_text"] is None and after["ai_score_overall"] is None
+    assert after["purge_reason"] == "penarikan_persetujuan"
+    assert after["consent_withdrawn_at"] is not None
+
+    # Halaman kandidat tetap bisa menampilkan status "sudah ditarik"...
+    session = client.get(f"/api/v1/ai-interview/session/{token}")
+    assert session.status_code == 200 and session.json()["data_withdrawn"] is True
+    # ...tapi aksi apa pun ditolak, dan staf tidak bisa menilai/mereview data yang sudah dihapus.
+    assert client.post(f"/api/v1/ai-interview/session/{token}/start").status_code == 410
+    review = client.post(
+        f"/api/v1/ai-interview/responses/{response_id}/review",
+        headers=admin,
+        json={"review_status": "disetujui"},
+    )
+    assert review.status_code == 409
+
+
+def test_retention_purges_old_responses(client):
+    from datetime import UTC, datetime, timedelta
+
+    from app.modules.ai_interview.models import AIInterviewResponse
+
+    admin = _auth_header(client)
+    _, response_id = _submit_text_interview(client, admin)
+
+    db = client.testing_session()
+    try:
+        row = db.get(AIInterviewResponse, __import__("uuid").UUID(response_id))
+        row.submitted_at = datetime.now(UTC) - timedelta(days=200)  # > default 180
+        db.commit()
+    finally:
+        db.close()
+
+    # Safety-net: membuka daftar respons langsung membersihkan yang kedaluwarsa.
+    rows = client.get("/api/v1/ai-interview/responses", headers=admin).json()
+    purged = next(r for r in rows if r["id"] == response_id)
+    assert purged["answers"] == [] and purged["purge_reason"] == "retensi"
+
+    settings = client.get("/api/v1/ai-interview/settings", headers=admin)
+    assert settings.status_code == 200 and settings.json()["retention_days"] == 180
+    too_short = client.put(
+        "/api/v1/ai-interview/settings", headers=admin, json={"retention_days": 7}
+    )
+    assert too_short.status_code == 422
+    updated = client.put(
+        "/api/v1/ai-interview/settings", headers=admin, json={"retention_days": 90}
+    )
+    assert updated.status_code == 200 and updated.json()["retention_days"] == 90
+    run = client.post("/api/v1/ai-interview/retention/run", headers=admin)
+    assert run.status_code == 200 and run.json()["purged"] == 0
+
+
+def test_template_rejects_emotion_or_voice_criteria(client):
+    admin = _auth_header(client)
+    payload = _template_payload()
+    payload["criteria"] = [{"key": "nada", "label": "Nada suara & intonasi"}]
+    resp = client.post("/api/v1/ai-interview/templates", headers=admin, json=payload)
+    assert resp.status_code == 422
+    assert "nada suara" in resp.text
+
+
+def test_scoring_prompt_forbids_emotion_inference():
+    from app.modules.ai_interview.service import _SCORE_SYSTEM_PROMPT
+
+    assert "DILARANG menilai" in _SCORE_SYSTEM_PROMPT
+    assert "emosi" in _SCORE_SYSTEM_PROMPT and "aksen" in _SCORE_SYSTEM_PROMPT
+
+
+def test_candidate_forget_also_purges_ai_interview_data(client):
+    """Hak hapus subjek (talentpool forget) dulu meninggalkan jawaban,
+    transkrip & skor AI Interview utuh."""
+    admin = _auth_header(client)
+    _, response_id = _submit_text_interview(client, admin)
+    cand_id = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()[
+        "candidate_id"
+    ]
+    forget = client.post(f"/api/v1/talentpool/candidates/{cand_id}/forget", headers=admin)
+    assert forget.status_code == 200, forget.text
+    assert forget.json()["ai_interviews"] == 1
+
+    after = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert after["answers"] == [] and after["purge_reason"] == "penghapusan_subjek"

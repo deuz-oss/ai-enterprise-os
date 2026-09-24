@@ -604,6 +604,36 @@ Kapabilitas penilaian kandidat berbasis AI di bawah Talent Cloud, pelengkap
 audio/video dan percakapan suara real-time — keduanya cuma nilai enum
 `mode` yang disiapkan, belum ada implementasi.
 
+### Fase 59 — AI Interview: Fondasi Kepatuhan (Fase 0 roadmap) — ✅ Selesai (2026-09-24)
+
+Prasyarat wajib sebelum fitur rekaman suara (roadmap AI Interview Fase 2–3).
+Dasar: UU No. 27/2022 (PDP) -- rekaman suara berpotensi **data biometrik**
+(data pribadi spesifik, butuh persetujuan khusus) -- dan EU AI Act yang
+melarang pengenalan emosi di konteks kerja/rekrutmen sejak Feb 2025.
+
+- **Persetujuan kandidat**: halaman sesi publik menampilkan ketentuan
+  (versi `CONSENT_VERSION` di `ai_interview/service.py`) sebelum interview.
+  Backend menolak start/jawab/submit/voice (403) sampai
+  `POST /ai-interview/session/{token}/consent` dipanggil; waktu & versi
+  disimpan per respons (`consent_given_at`, `consent_version`) + audit log.
+  **Teks ketentuan berubah = naikkan `CONSENT_VERSION`.**
+- **Penarikan persetujuan**: `POST .../withdraw-consent` menghapus jawaban,
+  transkrip, skor & narasi AI, catatan review; link terkunci (410); staf
+  tidak bisa menilai/mereview data yang sudah dihapus (409).
+- **Retensi**: `ai_interview_settings.retention_days` per tenant (default
+  180, rentang 30–730, ubah = role management). Pembersihan berjalan
+  otomatis setiap daftar respons dibuka + `POST /ai-interview/retention/run`.
+  Baris & status respons tetap ada sebagai jejak proses (`data_purged_at`,
+  `purge_reason`). **Fase rekaman nanti WAJIB ikut menghapus objek audio di
+  `_purge_content()`.**
+- **Batas keras: AI hanya menilai ISI jawaban.** Tidak ada skor dari emosi,
+  nada suara, intonasi, aksen/logat, kefasihan/kecepatan bicara, jeda,
+  ekspresi, atau bahasa tubuh. Ditegakkan di dua tempat: kriteria template
+  yang menyebut sinyal tersebut ditolak saat disimpan
+  (`FORBIDDEN_CRITERIA_TERMS` di `schemas.py`), dan prompt penilaian
+  melarangnya eksplisit. Alasan: dilarang EU AI Act, dan metrik cara bicara
+  mendiskriminasi penutur daerah & penyandang gangguan bicara.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

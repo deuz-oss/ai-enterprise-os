@@ -137,6 +137,19 @@ class AIInterviewResponse(TenantMixin, Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_notes: Mapped[str | None] = mapped_column(Text)
 
+    # Fase 0 roadmap (UU PDP No. 27/2022): persetujuan eksplisit kandidat
+    # sebelum jawaban/suaranya diproses AI. `consent_version` menunjuk teks
+    # persetujuan yang disetujui (lihat service.CONSENT_VERSION) -- kalau
+    # teksnya berubah, bukti persetujuan lama tetap bisa ditelusuri.
+    consent_given_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_version: Mapped[str | None] = mapped_column(String(20))
+    consent_withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Isi (jawaban, transkrip, hasil AI, catatan review) dikosongkan saat
+    # masa retensi habis atau persetujuan ditarik; baris & status tetap ada
+    # sebagai jejak proses rekrutmen tanpa data pribadinya.
+    data_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    purge_reason: Mapped[str | None] = mapped_column(String(30))
+
     invited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -158,3 +171,18 @@ class AIInterviewResponse(TenantMixin, Base):
         except (TypeError, ValueError):
             return []
         return data if isinstance(data, list) else []
+
+
+class AIInterviewSettings(TenantMixin, Base):
+    """Pengaturan AI Interview per tenant (satu baris, dibuat on-demand --
+    pola sama `HrDocumentSettings`). `retention_days`: berapa lama jawaban,
+    transkrip, dan hasil AI disimpan setelah interview dikirim sebelum
+    dihapus otomatis (UU PDP: data disimpan sepanjang diperlukan saja)."""
+
+    __tablename__ = "ai_interview_settings"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    retention_days: Mapped[int] = mapped_column(Integer, default=180)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

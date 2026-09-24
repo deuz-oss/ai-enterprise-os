@@ -25,6 +25,7 @@ from app.modules.ai_interview.models import (
     AIInterviewResponse,
     AIInterviewResponseStatus,
     AIInterviewReviewStatus,
+    AIInterviewSettings,
     AIInterviewTemplate,
     AIInterviewTemplateStatus,
 )
@@ -33,6 +34,7 @@ from app.modules.ai_interview.schemas import (
     AIInterviewInviteOut,
     AIInterviewInviteResultItem,
     AIInterviewReviewIn,
+    AIInterviewSettingsUpdate,
     AIInterviewTemplateCreate,
     AIInterviewTemplateUpdate,
     AnswerIn,
@@ -47,7 +49,7 @@ from app.modules.notifications.service import send_raw_email
 from app.modules.recruitment.models import Candidate
 from fastapi import HTTPException
 from livekit import api as lk_api
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -61,13 +63,155 @@ _SCORE_SYSTEM_PROMPT = (
     "kriteria yang diberikan. Untuk TIAP kriteria, beri skor 0-100 dan alasan "
     "singkat berbasis jawaban yang benar-benar ada (jangan mengarang). Beri "
     "juga skor keseluruhan 0-100 dan narasi ringkas 2-3 kalimat Bahasa "
-    "Indonesia. Balas HANYA JSON sesuai skema:\n"
+    "Indonesia. Nilai HANYA isi jawaban (apa yang dikatakan kandidat). "
+    "DILARANG menilai atau menyimpulkan emosi, nada suara, intonasi, aksen/"
+    "logat, kefasihan atau kecepatan bicara, jeda, ekspresi, maupun "
+    "kepribadian dari cara bicara -- kalau kriteria meminta itu, beri skor "
+    "hanya dari isi jawaban dan sebutkan batasan ini di alasan. "
+    "Balas HANYA JSON sesuai skema:\n"
     "{\n"
     '  "overall": number,\n'
     '  "narrative": string,\n'
     '  "breakdown": [{"criterion_key": string, "score": number, "reasoning": string}]\n'
     "}"
 )
+
+
+# ---------- Fase 0: persetujuan kandidat & retensi data (UU PDP) ----------
+
+# Naikkan versi setiap kali teks di bawah berubah -- bukti persetujuan per
+# respons menyimpan versi yang disetujui kandidat saat itu.
+CONSENT_VERSION = "2026-09-24"
+DEFAULT_RETENTION_DAYS = 180
+
+_CONSENT_TEXT = (
+    "Sebelum memulai, mohon baca dan setujui hal berikut:\n"
+    "1. Jawaban Anda (teks, atau suara dan transkripnya untuk interview suara) akan "
+    "diproses oleh sistem AI untuk membantu tim rekrutmen menilai kesesuaian Anda "
+    "dengan posisi ini.\n"
+    "2. AI hanya menilai ISI jawaban. AI tidak menilai emosi, nada suara, aksen, "
+    "ekspresi, atau cara bicara Anda.\n"
+    "3. Hasil penilaian AI bukan keputusan akhir. Setiap hasil ditinjau dan diputuskan "
+    "oleh petugas rekrutmen.\n"
+    "4. Data interview disimpan paling lama {retention_days} hari sejak interview "
+    "dikirim, lalu dihapus otomatis.\n"
+    "5. Anda dapat menarik persetujuan kapan saja lewat halaman ini. Seluruh jawaban, "
+    "transkrip, dan hasil penilaian AI Anda akan dihapus.\n"
+    "Dasar hukum: UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi."
+)
+
+PURGE_REASON_RETENTION = "retensi"
+PURGE_REASON_WITHDRAWN = "penarikan_persetujuan"
+PURGE_REASON_SUBJECT_ERASURE = "penghapusan_subjek"
+
+
+def get_interview_settings(db: Session) -> AIInterviewSettings:
+    """Satu baris per tenant, dibuat on-demand (pola HrDocumentSettings)."""
+    row = db.execute(select(AIInterviewSettings)).scalars().first()
+    if row is None:
+        row = AIInterviewSettings(retention_days=DEFAULT_RETENTION_DAYS)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+def update_interview_settings(
+    db: Session, user, payload: AIInterviewSettingsUpdate
+) -> AIInterviewSettings:
+    row = get_interview_settings(db)
+    old = row.retention_days
+    row.retention_days = payload.retention_days
+    db.commit()
+    db.refresh(row)
+    audit.log_event(
+        db,
+        action="ai_interview.retention_changed",
+        entity_type="ai_interview_settings",
+        entity_id=row.id,
+        detail={"old": old, "new": row.retention_days, "by": getattr(user, "email", "?")},
+    )
+    return row
+
+
+def consent_text(retention_days: int) -> str:
+    return _CONSENT_TEXT.format(retention_days=retention_days)
+
+
+def _purge_content(response: AIInterviewResponse, reason: str) -> None:
+    """Kosongkan data pribadi & turunannya; baris, status, dan keputusan
+    review (tanpa catatan) tetap ada sebagai jejak proses rekrutmen.
+    Fase 2 (rekaman suara) WAJIB ikut menghapus objek audio di sini."""
+    response.answers_json = None
+    response.transcript_text = None
+    response.ai_score_overall = None
+    response.ai_score_breakdown_json = None
+    response.ai_narrative = None
+    response.review_notes = None
+    response.data_purged_at = datetime.now(UTC)
+    response.purge_reason = reason
+
+
+def purge_response(response: AIInterviewResponse, reason: str) -> None:
+    """Titik masuk publik untuk modul lain (mis. talentpool forget_candidate)."""
+    _purge_content(response, reason)
+
+
+def purge_expired_responses(db: Session) -> int:
+    """Hapus isi respons yang melewati masa retensi tenant aktif. Dipanggil
+    sebagai safety-net saat daftar respons dibuka (pola sama
+    `close_cycle_for_tenant` di billing) dan lewat endpoint manual."""
+    days = get_interview_settings(db).retention_days
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    rows = list(
+        db.execute(
+            select(AIInterviewResponse).where(
+                AIInterviewResponse.data_purged_at.is_(None),
+                or_(
+                    and_(
+                        AIInterviewResponse.submitted_at.is_not(None),
+                        AIInterviewResponse.submitted_at < cutoff,
+                    ),
+                    and_(
+                        AIInterviewResponse.submitted_at.is_(None),
+                        AIInterviewResponse.invited_at < cutoff,
+                    ),
+                ),
+            )
+        ).scalars()
+    )
+    for r in rows:
+        _purge_content(r, PURGE_REASON_RETENTION)
+    if rows:
+        db.commit()
+        audit.log_event(
+            db,
+            action="ai_interview.retention_purged",
+            entity_type="ai_interview_settings",
+            entity_id=None,
+            detail={"count": len(rows), "retention_days": days},
+        )
+    return len(rows)
+
+
+def _require_consent(response: AIInterviewResponse) -> None:
+    if response.consent_given_at is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Setujui dulu ketentuan pemrosesan data sebelum memulai interview",
+        )
+
+
+def _ensure_data_present(response: AIInterviewResponse) -> None:
+    if response.data_purged_at is not None:
+        detail = {
+            PURGE_REASON_WITHDRAWN: "Kandidat menarik persetujuan -- data interview sudah dihapus",
+            PURGE_REASON_SUBJECT_ERASURE: "Data kandidat sudah dihapus atas permintaannya",
+        }.get(
+            response.purge_reason or "",
+            "Data interview sudah dihapus karena melewati masa retensi",
+        )
+        raise HTTPException(status_code=409, detail=detail)
 
 
 # ---------- Sisi staf: template ----------
@@ -223,6 +367,8 @@ def list_responses(
     status: AIInterviewResponseStatus | None = None,
     review_status: AIInterviewReviewStatus | None = None,
 ) -> list[AIInterviewResponse]:
+    # Safety-net retensi: tidak bergantung pada scheduler eksternal.
+    purge_expired_responses(db)
     stmt = select(AIInterviewResponse).order_by(AIInterviewResponse.invited_at.desc())
     if template_id is not None:
         stmt = stmt.where(AIInterviewResponse.template_id == parse_uuid(template_id))
@@ -245,6 +391,10 @@ def resend_invite(db: Session, response_id: str) -> AIInterviewResponse:
     response = _get_response_or_404(db, response_id)
     if response.status in (AIInterviewResponseStatus.submitted, AIInterviewResponseStatus.scored):
         raise HTTPException(status_code=422, detail="Interview ini sudah diselesaikan kandidat")
+    if response.consent_withdrawn_at is not None:
+        raise HTTPException(
+            status_code=409, detail="Kandidat sudah menarik persetujuan -- undangan tidak dikirim"
+        )
     template = db.get(AIInterviewTemplate, response.template_id)
     candidate = db.get(Candidate, response.candidate_id)
 
@@ -276,6 +426,7 @@ def score_response(db: Session, response_id: str) -> AIInterviewResponse:
         raise HTTPException(
             status_code=422, detail="Interview belum disubmit kandidat — belum ada yang dinilai"
         )
+    _ensure_data_present(response)
     template = db.get(AIInterviewTemplate, response.template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Template terkait tidak ditemukan")
@@ -297,6 +448,7 @@ def review_response(
         raise HTTPException(
             status_code=422, detail="Interview belum disubmit kandidat — belum bisa direview"
         )
+    _ensure_data_present(response)
 
     response.review_status = payload.review_status
     response.review_notes = (payload.review_notes or "").strip()[:2000] or None
@@ -397,7 +549,9 @@ def _run_scoring(db: Session, response: AIInterviewResponse, user_payload: dict)
 # ---------- Sisi kandidat: publik via invite_token ----------
 
 
-def _resolve_response_by_token(db: Session, token: str) -> AIInterviewResponse:
+def _resolve_response_by_token(
+    db: Session, token: str, *, allow_withdrawn: bool = False
+) -> AIInterviewResponse:
     response = db.execute(
         select(AIInterviewResponse).where(AIInterviewResponse.invite_token == token)
     ).scalar_one_or_none()
@@ -416,7 +570,13 @@ def _resolve_response_by_token(db: Session, token: str) -> AIInterviewResponse:
         response.status = AIInterviewResponseStatus.expired
         db.commit()
 
-    if response.status == AIInterviewResponseStatus.expired:
+    withdrawn = response.consent_withdrawn_at is not None
+    if withdrawn and not allow_withdrawn:
+        raise HTTPException(
+            status_code=410,
+            detail="Anda sudah menarik persetujuan. Data interview Anda telah dihapus.",
+        )
+    if response.status == AIInterviewResponseStatus.expired and not (allow_withdrawn and withdrawn):
         raise HTTPException(status_code=410, detail="Link interview ini sudah kedaluwarsa")
 
     set_tenant(response.tenant_id)
@@ -426,10 +586,11 @@ def _resolve_response_by_token(db: Session, token: str) -> AIInterviewResponse:
 def get_session(db: Session, token: str) -> PublicInterviewSessionOut:
     prev_tenant = get_tenant()
     try:
-        response = _resolve_response_by_token(db, token)
+        response = _resolve_response_by_token(db, token, allow_withdrawn=True)
         template = db.get(AIInterviewTemplate, response.template_id)
         if template is None:
             raise HTTPException(status_code=404, detail="Template interview tidak ditemukan")
+        retention_days = get_interview_settings(db).retention_days
         questions = [
             PublicInterviewQuestionOut(
                 id=q.get("id", ""),
@@ -447,6 +608,59 @@ def get_session(db: Session, token: str) -> PublicInterviewSessionOut:
             mode=template.mode,
             questions=questions,
             expires_at=response.expires_at,
+            consent_given=response.consent_given_at is not None,
+            consent_version=CONSENT_VERSION,
+            consent_text=consent_text(retention_days),
+            retention_days=retention_days,
+            data_withdrawn=response.consent_withdrawn_at is not None,
+        )
+    finally:
+        set_tenant(prev_tenant)
+
+
+def give_consent(db: Session, token: str) -> None:
+    """Kandidat menyetujui teks CONSENT_VERSION. Idempoten."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token)
+        if response.consent_given_at is not None and response.consent_version == CONSENT_VERSION:
+            return
+        response.consent_given_at = datetime.now(UTC)
+        response.consent_version = CONSENT_VERSION
+        db.commit()
+        audit.log_event(
+            db,
+            action="ai_interview.consent_given",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            detail={"version": CONSENT_VERSION, "candidate_id": str(response.candidate_id)},
+        )
+    finally:
+        set_tenant(prev_tenant)
+
+
+def withdraw_consent(db: Session, token: str) -> None:
+    """Kandidat menarik persetujuan: seluruh isi dihapus, link tidak bisa
+    dipakai lagi. Idempoten (penarikan kedua tidak error)."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token, allow_withdrawn=True)
+        if response.consent_withdrawn_at is not None:
+            return
+        response.consent_withdrawn_at = datetime.now(UTC)
+        _purge_content(response, PURGE_REASON_WITHDRAWN)
+        if response.status in (
+            AIInterviewResponseStatus.invited,
+            AIInterviewResponseStatus.in_progress,
+        ):
+            response.status = AIInterviewResponseStatus.expired
+        db.commit()
+        audit.log_event(
+            db,
+            action="ai_interview.consent_withdrawn",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            detail={"candidate_id": str(response.candidate_id)},
         )
     finally:
         set_tenant(prev_tenant)
@@ -456,6 +670,7 @@ def start_session(db: Session, token: str) -> None:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         if response.status == AIInterviewResponseStatus.invited:
             response.status = AIInterviewResponseStatus.in_progress
             response.started_at = datetime.now(UTC)
@@ -468,6 +683,7 @@ def submit_answer(db: Session, token: str, payload: AnswerIn) -> None:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         if response.status not in (
             AIInterviewResponseStatus.invited,
             AIInterviewResponseStatus.in_progress,
@@ -496,6 +712,7 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         if response.status not in (
             AIInterviewResponseStatus.invited,
             AIInterviewResponseStatus.in_progress,
@@ -537,6 +754,7 @@ async def start_voice_session(db: Session, token: str) -> VoiceSessionOut:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         if response.status not in (
             AIInterviewResponseStatus.invited,
             AIInterviewResponseStatus.in_progress,
@@ -602,6 +820,7 @@ def get_voice_context(db: Session, token: str) -> VoiceContextOut:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         template = db.get(AIInterviewTemplate, response.template_id)
         if template is None:
             raise HTTPException(status_code=404, detail="Template interview tidak ditemukan")
@@ -631,6 +850,7 @@ def complete_voice_session(db: Session, token: str, transcript: str) -> AIInterv
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
+        _require_consent(response)
         if response.status not in (
             AIInterviewResponseStatus.invited,
             AIInterviewResponseStatus.in_progress,

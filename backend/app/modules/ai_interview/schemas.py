@@ -7,7 +7,7 @@ from app.modules.ai_interview.models import (
     AIInterviewReviewStatus,
     AIInterviewTemplateStatus,
 )
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _QUESTION_TYPES = ("open_ended", "single_choice", "multiple_choice", "rating")
 
@@ -29,11 +29,52 @@ class InterviewQuestionIn(BaseModel):
         return v
 
 
+# Batas keras Fase 0 roadmap: AI Interview TIDAK menilai emosi, nada suara,
+# ekspresi, atau cara bicara kandidat -- hanya ISI jawaban. EU AI Act
+# melarang pengenalan emosi di konteks kerja/rekrutmen sejak Feb 2025, dan
+# metrik "kefasihan"/aksen mendiskriminasi penutur daerah & penyandang
+# gangguan bicara. Kriteria yang menyebut sinyal-sinyal ini ditolak saat
+# template disimpan (lihat juga _SCORE_SYSTEM_PROMPT di service.py).
+FORBIDDEN_CRITERIA_TERMS = (
+    "emosi",
+    "emotion",
+    "nada suara",
+    "intonasi",
+    "tone of voice",
+    "aksen",
+    "accent",
+    "logat",
+    "ekspresi wajah",
+    "facial",
+    "mimik",
+    "bahasa tubuh",
+    "body language",
+    "kefasihan bicara",
+    "kelancaran bicara",
+    "sentimen suara",
+    "voice sentiment",
+)
+
+
 class InterviewCriterionIn(BaseModel):
     key: str
     label: str
     weight: float = 1.0
     description: str | None = None
+
+    # model_validator (bukan field_validator "description"): validator field
+    # tidak berjalan saat field memakai default, jadi kriteria TANPA
+    # deskripsi akan lolos pengecekan key/label.
+    @model_validator(mode="after")
+    def _no_emotion_or_voice_signal(self) -> "InterviewCriterionIn":
+        text = " ".join([self.key, self.label, self.description or ""]).lower()
+        hit = next((t for t in FORBIDDEN_CRITERIA_TERMS if t in text), None)
+        if hit:
+            raise ValueError(
+                f'Kriteria tidak boleh menilai "{hit}". AI Interview hanya menilai isi '
+                "jawaban, bukan emosi, nada suara, ekspresi, atau cara bicara kandidat."
+            )
+        return self
 
 
 class AIInterviewTemplateCreate(BaseModel):
@@ -108,6 +149,11 @@ class AIInterviewResponseOut(BaseModel):
     started_at: datetime | None
     submitted_at: datetime | None
     expires_at: datetime | None
+    consent_given_at: datetime | None = None
+    consent_version: str | None = None
+    consent_withdrawn_at: datetime | None = None
+    data_purged_at: datetime | None = None
+    purge_reason: str | None = None
 
 
 class AIInterviewReviewIn(BaseModel):
@@ -142,6 +188,12 @@ class PublicInterviewSessionOut(BaseModel):
     mode: AIInterviewMode
     questions: list[PublicInterviewQuestionOut]
     expires_at: datetime | None
+    # Fase 0: persetujuan wajib sebelum interview dimulai.
+    consent_given: bool = False
+    consent_version: str = ""
+    consent_text: str = ""
+    retention_days: int = 180
+    data_withdrawn: bool = False
 
 
 class AnswerIn(BaseModel):
@@ -182,3 +234,22 @@ class VoiceContextOut(BaseModel):
 
 class VoiceCompleteIn(BaseModel):
     transcript: str
+
+
+# ---------- Fase 0: persetujuan & retensi ----------
+
+
+class AIInterviewSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    retention_days: int
+
+
+class AIInterviewSettingsUpdate(BaseModel):
+    # 30 hari minimum supaya proses review sempat selesai; 2 tahun maksimum
+    # supaya "disimpan sepanjang diperlukan" (UU PDP) tidak jadi selamanya.
+    retention_days: int = Field(ge=30, le=730)
+
+
+class RetentionRunOut(BaseModel):
+    purged: int

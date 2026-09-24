@@ -894,6 +894,27 @@ def forget_candidate(db: Session, *, user, candidate_id: str) -> dict:
     removed["versions"] = len(versions)
     for v in versions:
         db.delete(v)
+    # AI Interview: jawaban, transkrip & hasil AI juga data pribadi subjek
+    # (dulu tertinggal utuh setelah "forget"). Baris respons tetap ada tanpa
+    # isinya, sama seperti penarikan persetujuan (lihat ai_interview.service).
+    from app.modules.ai_interview.models import AIInterviewResponse
+    from app.modules.ai_interview.service import PURGE_REASON_SUBJECT_ERASURE, purge_response
+
+    responses = (
+        db.execute(
+            select(AIInterviewResponse).where(
+                AIInterviewResponse.candidate_id == candidate.id,
+                AIInterviewResponse.data_purged_at.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for r in responses:
+        purge_response(r, PURGE_REASON_SUBJECT_ERASURE)
+    removed["ai_interviews"] = len(responses)
+    removed["photo"] = 1 if candidate.photo_object_key else 0
+    candidate.photo_object_key = None
     candidate.full_name = "(dihapus atas permintaan)"
     candidate.phone = None
     candidate.email = None
