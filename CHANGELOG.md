@@ -6,6 +6,20 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 61: AI Interview — rekaman sesi, transkrip rapi, auth agent
+
+Fase 2 roadmap AI Interview. Detail di `PRD.md` Fase 61.
+- Rekaman sesi suara 2 kanal (kandidat / pewawancara AI) direkam agent, disimpan di object storage, diputar di halaman review (WaveSurfer.js); akses diaudit, link 15 menit, tanpa cache browser. Agent menolak merekam bila terhubung ke LiveKit Cloud.
+- Transkrip dirapikan LLM untuk dibaca; transkrip asli tetap dasar penilaian (bisa di-toggle).
+- Interview yang diputus kandidat tetap terkirim (transkrip parsial).
+- Penghapusan data (retensi/penarikan/forget) ikut menghapus file rekaman.
+
+### Security — Fase 61
+- Endpoint khusus agent suara (`voice/context`, `voice/complete`, `voice/recording`) wajib tanda tangan HMAC agent; dulu kandidat bisa mengirim transkrip karangan dan membaca kriteria/bobot penilaian dengan invite token-nya.
+
+### Fixed — Fase 61
+- Semua link unduhan file (CV, dokumen, kontrak, selfie, rekaman) di setup Docker menunjuk ke host internal `minio:9000` sehingga tidak bisa dibuka browser. Setting baru `STORAGE_PUBLIC_ENDPOINT`; produksi melayani MinIO lewat `files.<DOMAIN>` di Caddy (butuh DNS record).
+
 ### Added — Fase 60: AI Interview — turn detector, rubrik berbukti, tampilan review
 
 Fase 1 roadmap AI Interview. Detail di `PRD.md` Fase 60.

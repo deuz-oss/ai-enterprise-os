@@ -26,12 +26,13 @@ from app.modules.ai_interview.schemas import (
     AIInterviewTemplateUpdate,
     AnswerIn,
     PublicInterviewSessionOut,
+    RecordingUrlOut,
     RetentionRunOut,
     VoiceCompleteIn,
     VoiceContextOut,
     VoiceSessionOut,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 router = APIRouter(
@@ -122,6 +123,17 @@ def review_response(
 ):
     """Gate wajib — skor AI tidak dianggap final di UI manapun sebelum endpoint ini dipanggil."""
     return service.review_response(db, user, response_id, payload)
+
+
+@router.get("/responses/{response_id}/recording-url", response_model=RecordingUrlOut)
+def get_recording_url(
+    response_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Link putar rekaman sesi suara (kedaluwarsa 15 menit, akses diaudit)."""
+    return RecordingUrlOut(
+        url=service.recording_url(db, user, response_id),
+        expires_in_seconds=service.RECORDING_URL_TTL_SECONDS,
+    )
 
 
 @router.post("/responses/{response_id}/resend-invite", response_model=AIInterviewResponseOut)
@@ -231,15 +243,42 @@ async def start_voice_session(token: str, db: Session = Depends(get_db)):
 
 
 @public_router.get("/{token}/voice/context", response_model=VoiceContextOut)
-def get_voice_context(token: str, db: Session = Depends(get_db)):
-    """Dipanggil agent worker (bukan browser kandidat) — kredensial sama
-    (`invite_token`), tapi TIDAK di-rate-limit ketat seperti endpoint
-    kandidat karena dipanggil sekali per sesi oleh agent, bukan berulang
-    dari browser publik."""
+def get_voice_context(
+    token: str,
+    db: Session = Depends(get_db),
+    x_agent_signature: str | None = Header(default=None),
+):
+    """Khusus agent worker (bukan browser kandidat): memuat kriteria &
+    bobot penilaian, jadi wajib tanda tangan agent -- dulu cukup token
+    yang juga dipegang kandidat."""
+    service.verify_agent_signature(token, x_agent_signature)
     return service.get_voice_context(db, token)
 
 
 @public_router.post("/{token}/voice/complete", response_model=PublicInterviewSessionOut)
-def complete_voice_session(token: str, payload: VoiceCompleteIn, db: Session = Depends(get_db)):
+def complete_voice_session(
+    token: str,
+    payload: VoiceCompleteIn,
+    db: Session = Depends(get_db),
+    x_agent_signature: str | None = Header(default=None),
+):
+    """Khusus agent: dulu kandidat bisa mengirim transkrip karangan sendiri
+    lewat endpoint ini lalu dinilai."""
+    service.verify_agent_signature(token, x_agent_signature)
     service.complete_voice_session(db, token, payload.transcript)
     return service.get_session(db, token)
+
+
+@public_router.post("/{token}/voice/recording", status_code=status.HTTP_204_NO_CONTENT)
+async def upload_voice_recording(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_agent_signature: str | None = Header(default=None),
+):
+    """Khusus agent: unggah rekaman sesi (body = bytes audio mentah)."""
+    service.verify_agent_signature(token, x_agent_signature)
+    data = await request.body()
+    service.upload_voice_recording(
+        db, token, data=data, content_type=request.headers.get("content-type", "")
+    )

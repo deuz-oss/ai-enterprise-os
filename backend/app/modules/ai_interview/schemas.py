@@ -137,6 +137,9 @@ class AIInterviewResponseOut(BaseModel):
     status: AIInterviewResponseStatus
     answers: list[dict]
     transcript_text: str | None
+    transcript_clean: str | None = None
+    has_recording: bool = False
+    recording_size_bytes: int | None = None
     ai_score_overall: int | None
     ai_score_breakdown: list[dict]
     ai_narrative: str | None
@@ -253,3 +256,10 @@ class AIInterviewSettingsUpdate(BaseModel):
 
 class RetentionRunOut(BaseModel):
     purged: int
+
+
+class RecordingUrlOut(BaseModel):
+    url: str
+    expires_in_seconds: int
+    # Urutan kanal file ogg (lihat agent/main.py).
+    channels: list[str] = ["Kandidat", "Pewawancara AI"]

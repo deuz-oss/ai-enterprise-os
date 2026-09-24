@@ -26,4 +26,6 @@ def download_local_file(object_key: str):
         raise HTTPException(status_code=404, detail="File tidak ditemukan")
     if not target.is_file():
         raise HTTPException(status_code=404, detail="File tidak ditemukan")
-    return FileResponse(target, filename=target.name)
+    # Mode storage lokal (dev): tanpa cache juga, samakan perilaku dgn
+    # presigned URL S3 untuk data sensitif (lihat storage.presigned_get_url).
+    return FileResponse(target, filename=target.name, headers={"Cache-Control": "no-store"})

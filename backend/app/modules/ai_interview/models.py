@@ -122,6 +122,15 @@ class AIInterviewResponse(TenantMixin, Base):
 
     answers_json: Mapped[str | None] = mapped_column(Text)
     transcript_text: Mapped[str | None] = mapped_column(Text)
+    # Fase 2 roadmap: transkrip mentah (`transcript_text`) tetap SATU-SATUNYA
+    # dasar penilaian & kutipan bukti; versi dirapikan (tanpa "eh/anu",
+    # pengulangan) hanya untuk dibaca reviewer.
+    transcript_clean: Mapped[str | None] = mapped_column(Text)
+    # Rekaman sesi suara (ogg/opus 2 kanal: 0 = kandidat, 1 = pewawancara AI),
+    # direkam di agent lalu disimpan di object storage. Dihapus bersama isi
+    # lain saat retensi/penarikan persetujuan (`_purge_content`).
+    recording_object_key: Mapped[str | None] = mapped_column(String(500))
+    recording_size_bytes: Mapped[int | None] = mapped_column(Integer)
 
     ai_score_overall: Mapped[int | None] = mapped_column(Integer)
     ai_score_breakdown_json: Mapped[str | None] = mapped_column(Text)
@@ -163,6 +172,10 @@ class AIInterviewResponse(TenantMixin, Base):
         except (TypeError, ValueError):
             return []
         return data if isinstance(data, list) else []
+
+    @property
+    def has_recording(self) -> bool:
+        return self.recording_object_key is not None
 
     @property
     def ai_score_breakdown(self) -> list[dict]:

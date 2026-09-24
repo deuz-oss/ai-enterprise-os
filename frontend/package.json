@@ -24,7 +24,8 @@
     "react-router-dom": "^6.26.2",
     "react-virtuoso": "^4.18.13",
     "recharts": "^3.10.1",
-    "sonner": "^2.0.8"
+    "sonner": "^2.0.8",
+    "wavesurfer.js": "^7.12.12"
   },
   "devDependencies": {
     "@types/react": "^18.3.9",

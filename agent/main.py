@@ -30,8 +30,13 @@ kalibrasi `endpointing` belum diuji dengan kandidat sungguhan.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import hmac
 import logging
 import os
+from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from livekit.agents import (
@@ -56,6 +61,11 @@ logger = logging.getLogger("ai-interview-agent")
 AGENT_NAME = "ai-interview-agent"
 
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://backend:8000/api/v1").rstrip("/")
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "")
+# Kunci tanda tangan request agent -> backend (endpoint khusus agent:
+# voice/context, voice/complete, voice/recording). Sama dengan yang dipakai
+# backend (`ai_interview.service.agent_signature`); kandidat tidak punya.
+LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "")
 STT_BASE_URL = os.environ["STT_BASE_URL"]
 # Bahasa dipaksa (bukan deteksi otomatis): Whisper lebih akurat untuk bahasa
 # Indonesia kalau bahasanya diberi tahu, dan turn detector memakai bahasa
@@ -73,6 +83,22 @@ TTS_VOICE = os.environ.get("AI_TTS_VOICE", "ash")
 TTS_INSTRUCTIONS = (
     "Speak natural, professional Bahasa Indonesia with a warm interviewer tone."
 )
+
+
+def _agent_headers(token: str) -> dict[str, str]:
+    sig = hmac.new(LIVEKIT_API_SECRET.encode(), token.encode(), hashlib.sha256).hexdigest()
+    return {"X-Agent-Signature": sig}
+
+
+def _recording_allowed() -> bool:
+    """Rekaman HANYA kalau servernya self-hosted. Perekam bawaan LiveKit
+    Agents mengunggah audio ke LiveKit Cloud bila LIVEKIT_URL mengarah ke
+    *.livekit.cloud atau LIVEKIT_OBSERVABILITY_URL diisi -- rekaman suara
+    kandidat (data biometrik, UU PDP) tidak boleh keluar ke pihak ketiga."""
+    if os.environ.get("LIVEKIT_OBSERVABILITY_URL"):
+        return False
+    host = (urlparse(LIVEKIT_URL).hostname or "").lower()
+    return not host.endswith("livekit.cloud")
 
 
 class InterviewAgent(Agent):
@@ -98,6 +124,7 @@ class InterviewAgent(Agent):
         super().__init__(instructions=instructions)
         self._token = token
         self._room = room
+        self.submitted = False
 
     @function_tool
     async def end_interview(self) -> str:
@@ -107,6 +134,7 @@ class InterviewAgent(Agent):
         transcript = _format_transcript(self.session)
         try:
             await _submit_transcript(self._token, transcript)
+            self.submitted = True
         except Exception:  # noqa: BLE001 - jangan sampai kegagalan submit bikin agent macet
             logger.exception("Gagal mengirim transkrip ke backend untuk token %s", self._token)
         await self._room.disconnect()
@@ -115,7 +143,10 @@ class InterviewAgent(Agent):
 
 async def _fetch_context(token: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as http:
-        resp = await http.get(f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/context")
+        resp = await http.get(
+            f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/context",
+            headers=_agent_headers(token),
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -125,8 +156,38 @@ async def _submit_transcript(token: str, transcript: str) -> None:
         resp = await http.post(
             f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/complete",
             json={"transcript": transcript},
+            headers=_agent_headers(token),
         )
         resp.raise_for_status()
+
+
+async def _upload_recording(token: str, path: Path) -> None:
+    """Unggah rekaman sesi ke backend (disimpan di object storage), lalu
+    HAPUS salinan lokal di agent -- rekaman biometrik tidak boleh
+    menumpuk di disk worker. Dicoba 3x; gagal total tetap dihapus lokal
+    (dicatat di log) daripada tersimpan tanpa kendali retensi."""
+    try:
+        data = path.read_bytes()
+        if not data:
+            return
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=120) as http:
+                    resp = await http.post(
+                        f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/recording",
+                        content=data,
+                        headers={**_agent_headers(token), "Content-Type": "audio/ogg"},
+                    )
+                    if resp.status_code == 409:
+                        return  # sudah tersimpan sebelumnya
+                    resp.raise_for_status()
+                    return
+            except Exception:  # noqa: BLE001
+                logger.warning("Upload rekaman percobaan %d gagal", attempt + 1, exc_info=True)
+                await asyncio.sleep(2 * (attempt + 1))
+        logger.error("Rekaman sesi tidak terunggah setelah 3 percobaan -- salinan lokal dihapus")
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def _format_transcript(session: AgentSession) -> str:
@@ -187,7 +248,40 @@ async def entrypoint(ctx: JobContext) -> None:
         topics=context["questions"],
     )
 
-    await session.start(room=ctx.room, agent=agent, room_options=room_io.RoomOptions())
+    record = _recording_allowed()
+    if not record:
+        logger.warning("LIVEKIT_URL mengarah ke LiveKit Cloud -- sesi TIDAK direkam")
+
+    async def _finalize() -> None:
+        """Jalan saat job selesai (kandidat menutup panggilan ATAU agent
+        memanggil end_interview): tutup sesi supaya file rekaman selesai
+        ditulis, kirim transkrip kalau belum terkirim (dulu interview yang
+        diputus kandidat tidak pernah sampai ke backend), lalu unggah rekaman."""
+        await session.aclose()
+        if not agent.submitted:
+            transcript = _format_transcript(session)
+            if "Kandidat:" in transcript:
+                try:
+                    await _submit_transcript(token, transcript)
+                    agent.submitted = True
+                except Exception:  # noqa: BLE001
+                    logger.exception("Gagal mengirim transkrip parsial saat sesi berakhir")
+        audio = Path(ctx.session_directory) / "audio.ogg"
+        if record and audio.exists() and agent.submitted:
+            await _upload_recording(token, audio)
+        else:
+            audio.unlink(missing_ok=True)
+
+    ctx.add_shutdown_callback(_finalize)
+
+    await session.start(
+        room=ctx.room,
+        agent=agent,
+        room_options=room_io.RoomOptions(),
+        # Hanya audio (2 kanal: 0 = kandidat, 1 = pewawancara AI) ke file
+        # lokal session_directory/audio.ogg; traces/log/transkrip ke cloud mati.
+        record={"audio": record, "traces": False, "logs": False, "transcript": False},
+    )
     await session.generate_reply(
         instructions=(
             "Sapa kandidat, perkenalkan diri singkat sebagai pewawancara AI, "

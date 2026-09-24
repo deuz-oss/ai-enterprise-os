@@ -14,7 +14,7 @@ backend ──> postgres (volume pgdata) ; minio (volume minio)
 
 1. VPS Ubuntu 22.04+/Debian 12 dengan Docker Engine + compose plugin:
    `curl -fsSL https://get.docker.com | sh`
-2. DNS: A record `aeos.example.com` → IP publik VPS.
+2. DNS: A record `aeos.example.com` → IP publik VPS, **dan** `files.aeos.example.com` → IP yang sama (link unduhan CV/dokumen/kontrak/selfie/rekaman interview dilayani MinIO lewat Caddy; tanpa record ini semua tombol unduh gagal).
 3. Port 80 & 443 terbuka; port database/storage TIDAK diekspos.
 4. Repo di-clone ke server, mis. `/opt/ai-enterprise-os`.
 

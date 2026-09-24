@@ -54,6 +54,8 @@ services:
       DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-aeos_app}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       STORAGE_ENDPOINT: http://minio:9000
+      # URL unduhan untuk browser -- minio:9000 hanya dikenal di jaringan Docker.
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
     depends_on:
       postgres:
         condition: service_healthy

@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # Saat Docker Compose, env dioverride ke PostgreSQL + MinIO.
     database_url: str | None = None
     storage_endpoint: str | None = None
+    # Host object storage yang bisa dijangkau BROWSER, khusus untuk
+    # menandatangani presigned URL (tanda tangan S3 mengikat hostname).
+    # Tanpa ini URL unduhan menunjuk ke host internal Docker (mis.
+    # http://minio:9000) yang tidak bisa dibuka pengguna. Kosong = pakai
+    # storage_endpoint (cocok bila endpoint-nya memang publik).
+    storage_public_endpoint: str | None = None
     storage_access_key: str | None = None
     storage_secret_key: str | None = None
     storage_bucket: str = "documents"

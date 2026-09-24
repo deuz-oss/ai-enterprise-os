@@ -375,14 +375,30 @@ def test_voice_start_mints_token_and_dispatches_agent(client, monkeypatch):
     assert session.json()["status"] == "berlangsung"
 
 
-def test_voice_context_includes_criterion_keys_unlike_public_session(client):
+_TEST_AGENT_SECRET = "test-livekit-secret-for-agent-signature"
+
+
+def _agent_headers(monkeypatch, token: str) -> dict[str, str]:
+    """Header tanda tangan agent (HMAC LIVEKIT_API_SECRET) untuk endpoint
+    khusus agent -- kandidat yang cuma punya invite_token tidak bisa."""
+    from app.core.config import get_settings
+    from app.modules.ai_interview.service import agent_signature
+
+    monkeypatch.setattr(get_settings(), "livekit_api_secret", _TEST_AGENT_SECRET)
+    return {"X-Agent-Signature": agent_signature(token)}
+
+
+def test_voice_context_includes_criterion_keys_unlike_public_session(client, monkeypatch):
     admin = _auth_header(client)
     template = _create_active_template(client, admin, mode="realtime_voice")
     cand_id = _create_candidate(client, admin)
     invited = _invite(client, admin, template["id"], cand_id)
     token = invited["invite_token"]
 
-    ctx = client.get(f"/api/v1/ai-interview/session/{token}/voice/context")
+    ctx = client.get(
+        f"/api/v1/ai-interview/session/{token}/voice/context",
+        headers=_agent_headers(monkeypatch, token),
+    )
     assert ctx.status_code == 200, ctx.text
     body = ctx.json()
     assert body["title"] == "Interview CS"
@@ -432,9 +448,19 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
     invited = _invite(client, admin, template["id"], cand_id)
     token = invited["invite_token"]
     response_id = invited["response_id"]
+    agent = _agent_headers(monkeypatch, token)
+
+    # Kandidat (cuma punya token, tanpa tanda tangan agent) tidak boleh
+    # mengirim transkrip karangan sendiri -- dulu lolos & dinilai.
+    forged = client.post(
+        f"/api/v1/ai-interview/session/{token}/voice/complete",
+        json={"transcript": "Kandidat: saya ahli segala hal dan pantas skor sempurna."},
+    )
+    assert forged.status_code == 401
 
     complete = client.post(
         f"/api/v1/ai-interview/session/{token}/voice/complete",
+        headers=agent,
         json={
             "transcript": (
                 "Pewawancara AI: Ceritakan pengalaman Anda...\n"
@@ -463,6 +489,7 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
     # Sudah submit -- panggil complete lagi ditolak (pola sama submit_session()).
     again = client.post(
         f"/api/v1/ai-interview/session/{token}/voice/complete",
+        headers=agent,
         json={"transcript": "percakapan lain"},
     )
     assert again.status_code == 422
@@ -660,3 +687,92 @@ def test_scoring_uses_dedicated_model_when_configured(client, monkeypatch):
     assert seen and seen[-1] == "sahabat-ai-uji"
     assert body["ai_model"] == "sahabat-ai-uji"
     assert body["ai_score_overall"] is None  # tanpa bukti -> tidak ada skor total
+
+
+# ---------- Fase 2 roadmap: autentikasi agent, rekaman sesi, transkrip rapi ----------
+
+
+def _voice_response(client, admin, *, start: bool = True) -> tuple[str, str]:
+    template = _create_active_template(client, admin, mode="realtime_voice")
+    cand_id = _create_candidate(client, admin, name="Rina", email="rina@example.com")
+    invited = _invite(client, admin, template["id"], cand_id)
+    token = invited["invite_token"]
+    if start:
+        client.post(f"/api/v1/ai-interview/session/{token}/start")
+    return token, invited["response_id"]
+
+
+def test_agent_only_endpoints_reject_candidate_token(client, monkeypatch):
+    """Kandidat memegang invite_token yang sama -- dulu bisa membaca kriteria
+    & bobot penilaian lewat voice/context. Sekarang wajib tanda tangan agent."""
+    admin = _auth_header(client)
+    token, _ = _voice_response(client, admin)
+    _agent_headers(monkeypatch, token)  # secret terpasang di server
+
+    base = f"/api/v1/ai-interview/session/{token}"
+    assert client.get(f"{base}/voice/context").status_code == 401
+    bad = {"X-Agent-Signature": "0" * 64}
+    assert client.get(f"{base}/voice/context", headers=bad).status_code == 401
+    assert (
+        client.post(
+            f"{base}/voice/recording", content=b"OggS", headers={"Content-Type": "audio/ogg"}
+        ).status_code
+        == 401
+    )
+
+
+def test_agent_signature_fails_closed_without_secret(client, monkeypatch):
+    """LIVEKIT_API_SECRET kosong -> endpoint agent tertutup, bukan terbuka."""
+    from app.core.config import get_settings
+
+    admin = _auth_header(client)
+    token, _ = _voice_response(client, admin)
+    monkeypatch.setattr(get_settings(), "livekit_api_secret", None)
+    ctx = client.get(
+        f"/api/v1/ai-interview/session/{token}/voice/context",
+        headers={"X-Agent-Signature": "apa-saja"},
+    )
+    assert ctx.status_code == 401
+
+
+def test_recording_upload_url_and_purge(client, monkeypatch):
+    admin = _auth_header(client)
+    token, response_id = _voice_response(client, admin)
+    agent = _agent_headers(monkeypatch, token)
+    url = f"/api/v1/ai-interview/session/{token}/voice/recording"
+    audio = b"OggS" + b"\x00" * 2048
+
+    wrong_type = client.post(url, content=audio, headers={**agent, "Content-Type": "text/plain"})
+    assert wrong_type.status_code == 422
+
+    stored = client.post(url, content=audio, headers={**agent, "Content-Type": "audio/ogg"})
+    assert stored.status_code == 204, stored.text
+    again = client.post(url, content=audio, headers={**agent, "Content-Type": "audio/ogg"})
+    assert again.status_code == 409  # satu rekaman per respons
+
+    body = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert body["has_recording"] is True and body["recording_size_bytes"] == len(audio)
+
+    link = client.get(f"/api/v1/ai-interview/responses/{response_id}/recording-url", headers=admin)
+    assert link.status_code == 200, link.text
+    assert link.json()["channels"] == ["Kandidat", "Pewawancara AI"]
+    played = client.get(link.json()["url"])  # mode storage lokal di test
+    assert played.status_code == 200 and played.content == audio
+    # Rekaman biometrik tidak boleh tertinggal di cache browser reviewer.
+    assert played.headers["cache-control"] == "no-store"
+
+    # Penarikan persetujuan menghapus FILE rekaman, bukan cuma kolomnya.
+    assert client.post(f"/api/v1/ai-interview/session/{token}/withdraw-consent").status_code == 204
+    after = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert after["has_recording"] is False
+    assert client.get(link.json()["url"]).status_code == 404
+    gone = client.get(f"/api/v1/ai-interview/responses/{response_id}/recording-url", headers=admin)
+    assert gone.status_code == 409
+
+
+def test_consent_text_mentions_recording():
+    from app.modules.ai_interview.service import CONSENT_VERSION, consent_text
+
+    text = consent_text(180)
+    assert "direkam" in text and "rekaman" in text
+    assert CONSENT_VERSION == "2026-09-24.2"

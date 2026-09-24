@@ -14,3 +14,13 @@
 		reverse_proxy frontend:80
 	}
 }
+
+# Object storage (MinIO) untuk link unduhan bertanda tangan: CV, dokumen,
+# kontrak, selfie absensi, rekaman AI Interview. Header Host diteruskan apa
+# adanya (default reverse_proxy) sehingga tanda tangan S3 yang dibuat
+# backend untuk files.{$DOMAIN} tetap valid. Butuh DNS record
+# files.<DOMAIN> -> server ini. Isi bucket TETAP privat: tanpa URL
+# bertanda tangan yang masih berlaku, objek tidak bisa dibaca.
+files.{$DOMAIN} {
+	reverse_proxy minio:9000
+}

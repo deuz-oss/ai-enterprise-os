@@ -661,6 +661,42 @@ melarang pengenalan emosi di konteks kerja/rekrutmen sejak Feb 2025.
   verifikasi; kriteria yang tidak pernah ditanyakan (skor 0 dari AI) tidak
   lagi menurunkan skor total kandidat.
 
+### Fase 61 — AI Interview: Rekaman Sesi, Transkrip Rapi, Auth Agent (Fase 2 roadmap) — ✅ Selesai (2026-09-24)
+
+- **Rekaman sesi suara** direkam agent memakai perekam bawaan LiveKit Agents
+  (`record={"audio": True, ...}` -> `session_directory/audio.ogg`, ogg/opus
+  2 kanal: 0 = kandidat, 1 = pewawancara AI), diunggah ke backend
+  (`POST .../voice/recording`), disimpan di object storage, salinan lokal
+  agent dihapus (juga saat upload gagal 3x). **Bukan LiveKit Egress**: tanpa
+  service/Redis tambahan. Agent MENOLAK merekam bila `LIVEKIT_URL` =
+  `*.livekit.cloud` atau `LIVEKIT_OBSERVABILITY_URL` diisi (perekam bawaan
+  akan mengunggah audio ke LiveKit Cloud).
+- **Interview yang diputus kandidat** kini tetap terkirim: shutdown callback
+  agent mengirim transkrip parsial (dulu hilang total bila `end_interview`
+  tidak sempat dipanggil).
+- **Auth agent (celah keamanan)**: `voice/context` & `voice/complete` dulu
+  cukup invite_token -- yang juga dipegang kandidat -> kandidat bisa
+  mengirim transkrip karangan & membaca kriteria/bobot. Sekarang wajib
+  `X-Agent-Signature` = HMAC-SHA256(`LIVEKIT_API_SECRET`, token); secret
+  kosong = tertutup (fail-closed).
+- **Pemutar rekaman** (WaveSurfer.js) di halaman review: 2 lajur gelombang
+  berlabel; dimuat saat diklik (link 15 menit, akses dicatat audit log,
+  `Cache-Control: no-store` supaya tidak tertinggal di cache browser).
+- **Transkrip ganda**: `transcript_text` (mentah) tetap satu-satunya dasar
+  penilaian & kutipan bukti; `transcript_clean` (dirapikan LLM, tanpa kata
+  pengisi) hanya untuk dibaca, bisa di-toggle ke versi asli.
+- **Penghapusan**: retensi/penarikan persetujuan/forget kandidat menghapus
+  objek audio di storage (terverifikasi: objek hilang dari MinIO).
+- **Bug infrastruktur (berdampak ke SEMUA unduhan file)**: presigned URL
+  ditandatangani untuk host internal `http://minio:9000` -> tidak bisa
+  dibuka browser (CV, dokumen, kontrak, selfie, rekaman; 20 titik). Setting
+  baru `STORAGE_PUBLIC_ENDPOINT` (dev: `http://localhost:9000`, prod:
+  `https://files.<DOMAIN>` via Caddy -> MinIO, butuh DNS record).
+- Consent dinaikkan ke `2026-09-24.2` (menyebut rekaman). Migrasi
+  `7a8b9c0d1e2f`. Percakapan suara end-to-end dgn LiveKit sungguhan belum
+  diuji (butuh infra voice); jalur agent diuji lewat harness di image agent
+  dan simulasi agent dari container backend.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

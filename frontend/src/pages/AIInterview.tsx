@@ -5,6 +5,7 @@ import { PageHeader } from "../components/workspace";
 import { KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { RecordingPlayer } from "../components/RecordingPlayer";
 
 interface Question {
   id: string;
@@ -44,6 +45,9 @@ interface InterviewResponse {
   status: "diundang" | "berlangsung" | "terkirim" | "dinilai" | "kedaluwarsa";
   answers: { question_id: string; answer_text: string; submitted_at: string }[];
   transcript_text: string | null;
+  transcript_clean: string | null;
+  has_recording: boolean;
+  recording_size_bytes: number | null;
   ai_score_overall: number | null;
   ai_score_breakdown: ScoreItem[];
   ai_narrative: string | null;
@@ -82,6 +86,39 @@ interface ScoreItem {
   dropped_quotes?: number;
   supported?: boolean;
   rubric_version?: string;
+}
+
+/** Transkrip sesi suara: versi dirapikan (tanpa "eh/anu") untuk dibaca,
+ * versi asli tetap bisa dibuka karena HANYA versi asli yang dipakai
+ * penilaian & kutipan bukti. */
+function TranscriptView({ raw, clean }: { raw: string; clean: string | null }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const text = showRaw || !clean ? raw : clean;
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer text-xs text-[var(--accent)]">
+        Lihat transkrip percakapan
+      </summary>
+      {clean && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]">
+          <span>
+            {showRaw
+              ? "Versi asli speech-to-text — dasar penilaian & kutipan bukti."
+              : "Versi dirapikan AI untuk dibaca (kata pengisi dibuang). Tidak dipakai untuk penilaian."}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowRaw((v) => !v)}
+            className="font-medium underline hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+          >
+            {showRaw ? "Tampilkan versi rapi" : "Tampilkan versi asli"}
+          </button>
+        </div>
+      )}
+      <p className="mt-1 whitespace-pre-line text-xs text-[var(--text-muted)]">{text}</p>
+    </details>
+  );
 }
 
 function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | null }) {
@@ -688,15 +725,9 @@ export default function AIInterview() {
                   {r.ai_narrative && (
                     <p className="mt-2 text-sm text-[var(--text-muted)]">{r.ai_narrative}</p>
                   )}
+                  {r.has_recording && !r.data_purged_at && <RecordingPlayer responseId={r.id} />}
                   {r.transcript_text && (
-                    <details className="mt-1">
-                      <summary className="cursor-pointer text-xs text-[var(--accent)]">
-                        Lihat transkrip percakapan
-                      </summary>
-                      <p className="mt-1 whitespace-pre-line text-xs text-[var(--text-muted)]">
-                        {r.transcript_text}
-                      </p>
-                    </details>
+                    <TranscriptView raw={r.transcript_text} clean={r.transcript_clean} />
                   )}
                   {r.answers.length > 0 && (
                     <details className="mt-1">

@@ -10,11 +10,14 @@ baru `set_tenant()` sebelum load data terkait lain, dibungkus try/finally.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from app.core import storage
 from app.core.config import get_settings
 from app.core.database import parse_uuid
 from app.core.llm import chat_completion
@@ -90,22 +93,24 @@ _SCORE_SYSTEM_PROMPT = (
 
 # Naikkan versi setiap kali teks di bawah berubah -- bukti persetujuan per
 # respons menyimpan versi yang disetujui kandidat saat itu.
-CONSENT_VERSION = "2026-09-24"
+CONSENT_VERSION = "2026-09-24.2"
 DEFAULT_RETENTION_DAYS = 180
 
 _CONSENT_TEXT = (
     "Sebelum memulai, mohon baca dan setujui hal berikut:\n"
     "1. Jawaban Anda (teks, atau suara dan transkripnya untuk interview suara) akan "
     "diproses oleh sistem AI untuk membantu tim rekrutmen menilai kesesuaian Anda "
-    "dengan posisi ini.\n"
+    "dengan posisi ini. Untuk interview suara, percakapan direkam dan rekamannya "
+    "dapat diputar ulang oleh petugas rekrutmen saat meninjau hasil.\n"
     "2. AI hanya menilai ISI jawaban. AI tidak menilai emosi, nada suara, aksen, "
     "ekspresi, atau cara bicara Anda.\n"
     "3. Hasil penilaian AI bukan keputusan akhir. Setiap hasil ditinjau dan diputuskan "
     "oleh petugas rekrutmen.\n"
-    "4. Data interview disimpan paling lama {retention_days} hari sejak interview "
+    "4. Data interview (termasuk rekaman) disimpan paling lama {retention_days} hari "
+    "sejak interview "
     "dikirim, lalu dihapus otomatis.\n"
     "5. Anda dapat menarik persetujuan kapan saja lewat halaman ini. Seluruh jawaban, "
-    "transkrip, dan hasil penilaian AI Anda akan dihapus.\n"
+    "rekaman, transkrip, dan hasil penilaian AI Anda akan dihapus.\n"
     "Dasar hukum: UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi."
 )
 
@@ -150,9 +155,15 @@ def consent_text(retention_days: int) -> str:
 def _purge_content(response: AIInterviewResponse, reason: str) -> None:
     """Kosongkan data pribadi & turunannya; baris, status, dan keputusan
     review (tanpa catatan) tetap ada sebagai jejak proses rekrutmen.
-    Fase 2 (rekaman suara) WAJIB ikut menghapus objek audio di sini."""
+    Objek rekaman audio ikut dihapus dari storage (gagal hapus = error,
+    jangan diam-diam meninggalkan rekaman biometrik)."""
+    if response.recording_object_key:
+        storage.delete_object(response.recording_object_key)
+    response.recording_object_key = None
+    response.recording_size_bytes = None
     response.answers_json = None
     response.transcript_text = None
+    response.transcript_clean = None
     response.ai_score_overall = None
     response.ai_score_breakdown_json = None
     response.ai_narrative = None
@@ -201,6 +212,27 @@ def purge_expired_responses(db: Session) -> int:
             detail={"count": len(rows), "retention_days": days},
         )
     return len(rows)
+
+
+# ---------- Autentikasi agent suara (Fase 2) ----------
+#
+# Endpoint yang HANYA untuk agent (`voice/context`, `voice/complete`,
+# `voice/recording`) dulu cuma dijaga invite_token -- yang juga dipegang
+# kandidat. Akibatnya kandidat bisa mengirim transkrip karangan sendiri lalu
+# dinilai, dan membaca kriteria/bobot penilaian lewat `voice/context`.
+# Sekarang wajib header tanda tangan HMAC-SHA256(LIVEKIT_API_SECRET, token):
+# secret itu hanya dimiliki backend & agent (lihat agent/main.py).
+
+
+def agent_signature(token: str) -> str:
+    secret = get_settings().livekit_api_secret or ""
+    return hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_agent_signature(token: str, signature: str | None) -> None:
+    secret = get_settings().livekit_api_secret
+    if not secret or not signature or not hmac.compare_digest(signature, agent_signature(token)):
+        raise HTTPException(status_code=401, detail="Endpoint ini hanya untuk agent interview")
 
 
 def _require_consent(response: AIInterviewResponse) -> None:
@@ -983,6 +1015,103 @@ def complete_voice_session(db: Session, token: str, transcript: str) -> AIInterv
         template = db.get(AIInterviewTemplate, response.template_id)
         if template is not None and response.transcript_text:
             _score_transcript(db, response, template, response.transcript_text)
+        _clean_transcript(db, response)
         return response
     finally:
         set_tenant(prev_tenant)
+
+
+# ---------- Fase 2: rekaman sesi suara & transkrip dirapikan ----------
+
+MAX_RECORDING_BYTES = 60 * 1024 * 1024  # ~60 menit ogg/opus 2 kanal
+_RECORDING_MIME = {"audio/ogg", "audio/opus", "audio/webm"}
+
+_CLEAN_SYSTEM_PROMPT = (
+    "Rapikan transkrip interview hasil speech-to-text agar mudah dibaca: buang kata "
+    "pengisi (eh, em, anu, apa ya), pengulangan kata yang tidak disengaja, dan perbaiki "
+    "tanda baca. JANGAN mengubah makna, JANGAN menambah atau meringkas isi, JANGAN "
+    'menghapus kalimat. Pertahankan label pembicara di awal baris ("Kandidat:", '
+    '"Pewawancara AI:"). Balas HANYA JSON: {"transcript": string}'
+)
+
+
+def _clean_transcript(db: Session, response: AIInterviewResponse) -> None:
+    """Versi baca untuk reviewer. Best-effort: gagal = tetap tampil versi
+    mentah. TIDAK pernah dipakai untuk penilaian."""
+    if not response.transcript_text:
+        return
+    try:
+        result = chat_completion(
+            _CLEAN_SYSTEM_PROMPT,
+            response.transcript_text,
+            feature="ai_interview.transcript_clean",
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Merapikan transkrip gagal untuk response %s", response.id, exc_info=True)
+        return
+    cleaned = str(result.get("transcript") or "").strip() if isinstance(result, dict) else ""
+    if cleaned:
+        response.transcript_clean = cleaned[:20000]
+        db.commit()
+
+
+def upload_voice_recording(
+    db: Session, token: str, *, data: bytes, content_type: str
+) -> AIInterviewResponse:
+    """Dipanggil agent setelah sesi suara berakhir (header tanda tangan
+    diverifikasi di router). Satu rekaman per respons."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token)
+        _require_consent(response)
+        if response.status == AIInterviewResponseStatus.invited:
+            raise HTTPException(status_code=422, detail="Interview belum dimulai")
+        if response.recording_object_key:
+            raise HTTPException(status_code=409, detail="Rekaman untuk interview ini sudah ada")
+        mime = (content_type or "").split(";")[0].strip().lower()
+        if mime not in _RECORDING_MIME:
+            raise HTTPException(status_code=422, detail="Rekaman harus audio ogg/opus/webm")
+        if not data:
+            raise HTTPException(status_code=422, detail="File rekaman kosong")
+        if len(data) > MAX_RECORDING_BYTES:
+            raise HTTPException(status_code=413, detail="Rekaman melebihi batas ukuran")
+        key = storage.new_object_key(f"ai-interview/recordings/{response.id}", "sesi.ogg")
+        storage.put_object(key, data, mime)
+        response.recording_object_key = key
+        response.recording_size_bytes = len(data)
+        db.commit()
+        db.refresh(response)
+        audit.log_event(
+            db,
+            action="ai_interview.recording_stored",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            object_key=key,
+            detail={"size": len(data)},
+        )
+        return response
+    finally:
+        set_tenant(prev_tenant)
+
+
+RECORDING_URL_TTL_SECONDS = 15 * 60
+
+
+def recording_url(db: Session, user, response_id: str) -> str:
+    """Link putar rekaman untuk staf; setiap akses tercatat di audit log
+    (rekaman suara = data pribadi spesifik/biometrik)."""
+    response = _get_response_or_404(db, response_id)
+    _ensure_data_present(response)
+    if not response.recording_object_key:
+        raise HTTPException(status_code=404, detail="Interview ini tidak punya rekaman")
+    audit.log_event(
+        db,
+        action="ai_interview.recording_accessed",
+        entity_type="ai_interview_response",
+        entity_id=response.id,
+        object_key=response.recording_object_key,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return storage.presigned_get_url(
+        response.recording_object_key, expires_seconds=RECORDING_URL_TTL_SECONDS, no_store=True
+    )

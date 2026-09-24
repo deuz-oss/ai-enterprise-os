@@ -25,13 +25,20 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def _client():
+def _client(*, public: bool = False):
+    """`public=True` = klien untuk MENANDATANGANI URL yang dibuka browser
+    (tidak melakukan request jaringan) -- lihat Settings.storage_public_endpoint."""
     settings = get_settings()
     if not settings.storage_configured:
         return None
+    endpoint = (
+        settings.storage_public_endpoint or settings.storage_endpoint
+        if public
+        else settings.storage_endpoint
+    )
     return boto3.client(
         "s3",
-        endpoint_url=settings.storage_endpoint,
+        endpoint_url=endpoint,
         aws_access_key_id=settings.storage_access_key,
         aws_secret_access_key=settings.storage_secret_key,
         config=BotoConfig(signature_version="s3v4"),
@@ -104,14 +111,42 @@ def get_object(object_key: str) -> bytes:
         raise HTTPException(status_code=502, detail="Gagal membaca file dari storage") from exc
 
 
-def presigned_get_url(object_key: str, expires_seconds: int = 3600) -> str:
+def delete_object(object_key: str) -> None:
+    """Hapus objek (mis. rekaman interview saat retensi/penarikan
+    persetujuan). Objek yang sudah tidak ada dianggap sukses (idempoten)."""
     client = _client()
+    if client is None:
+        path = get_settings().uploads_root / object_key
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.error("delete_object lokal gagal: %s", exc)
+            raise HTTPException(status_code=502, detail="Gagal menghapus file") from exc
+        return
+    try:
+        client.delete_object(Bucket=_bucket(), Key=object_key)
+    except (ClientError, BotoCoreError) as exc:
+        logger.error("delete_object failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Gagal menghapus file di storage") from exc
+
+
+def presigned_get_url(
+    object_key: str, expires_seconds: int = 3600, *, no_store: bool = False
+) -> str:
+    """`no_store=True` untuk data sensitif (mis. rekaman suara): respons
+    membawa `Cache-Control: no-store`, jadi salinan tidak tertinggal di cache
+    browser reviewer setelah data dihapus (retensi/penarikan persetujuan)."""
+    client = _client(public=True)
     if client is None:
         return f"/api/v1/files/{quote(object_key, safe='/')}"
     try:
         return client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": _bucket(), "Key": object_key},
+            Params={
+                "Bucket": _bucket(),
+                "Key": object_key,
+                **({"ResponseCacheControl": "no-store, private"} if no_store else {}),
+            },
             ExpiresIn=expires_seconds,
         )
     except (ClientError, BotoCoreError) as exc:
