@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 60: AI Interview — turn detector, rubrik berbukti, tampilan review
+
+Fase 1 roadmap AI Interview. Detail di `PRD.md` Fase 60.
+- Agen suara: turn detector lokal `v1-mini` (mendukung Bahasa Indonesia, tanpa LiveKit Cloud) + endpointing lebih sabar untuk jeda berpikir kandidat; STT dipaksa bahasa Indonesia; dependensi LiveKit dipin 1.7.x; bobot model diunduh saat build.
+- Penilaian berbasis rubrik: tiap kriteria wajib punya kutipan persis jawaban kandidat, diverifikasi server; kutipan karangan/kalimat pewawancara dibuang; kriteria tanpa bukti tidak dihitung; skor total dihitung server (rata-rata berbobot).
+- `AI_SCORING_MODEL` opsional untuk uji A/B model penilai (mis. Sahabat-AI/SEA-LION).
+- Halaman review: kartu per kriteria dengan bar skor, alasan, kutipan bukti; jawaban kandidat mode teks kini bisa dilihat.
+- Fix test flaky `test_match_job_order_ranking_dan_reuse` (bergantung detik pembuatan kandidat di SQLite).
+
 ### Added — Fase 59: AI Interview — fondasi kepatuhan (persetujuan, retensi, larangan analisis emosi)
 
 Fase 0 roadmap AI Interview, prasyarat sebelum fitur rekaman suara. Detail di `PRD.md` Fase 59.

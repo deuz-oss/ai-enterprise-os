@@ -173,7 +173,11 @@ def test_match_job_order_ranking_dan_reuse(client):
         patch("app.modules.ai.service.chat_completion") as llm,
         patch("app.modules.ai.service.get_object") as get_obj,
     ):
-        # Panggilan pertama untuk Andi (skor rendah), kedua untuk Citra (tinggi).
+        # Skor dibagikan per URUTAN panggilan, dan urutan evaluasi kandidat
+        # (created_at desc) seri kalau keduanya dibuat di detik yang sama di
+        # SQLite -- dulu test ini mengasumsikan Andi dinilai duluan dan gagal
+        # acak begitu pembuatan kandidat melewati batas detik. Yang diuji di
+        # sini adalah PENGURUTAN hasil menurut skor, bukan urutan evaluasi.
         llm.side_effect = [_llm_result(55, "dipertimbangkan"), _llm_result(91, "direkomendasikan")]
         get_obj.return_value = _CV_TEXT
         first = client.post(f"/api/v1/ai/job-orders/{jo_id}/match", headers=headers)
@@ -182,8 +186,9 @@ def test_match_job_order_ranking_dan_reuse(client):
         assert body["evaluated"] == 2
         assert body["reused"] == 0
         # Terurut menurun berdasarkan skor
-        assert body["results"][0]["candidate"]["full_name"] == "Citra"
-        assert body["results"][0]["screening"]["score"] == 91
+        assert [r["screening"]["score"] for r in body["results"]] == [91, 55]
+        top_name = body["results"][0]["candidate"]["full_name"]
+        assert {r["candidate"]["full_name"] for r in body["results"]} == {"Andi", "Citra"}
         assert llm.call_count == 2
 
         # Menjalankan ulang memakai hasil lama → tidak ada panggilan LLM baru
@@ -191,7 +196,7 @@ def test_match_job_order_ranking_dan_reuse(client):
         assert second.status_code == 200
         body2 = second.json()
         assert body2["reused"] == 2
-        assert body2["results"][0]["candidate"]["full_name"] == "Citra"
+        assert body2["results"][0]["candidate"]["full_name"] == top_name
         assert llm.call_count == 2  # tetap 2
 
 

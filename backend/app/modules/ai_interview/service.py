@@ -58,21 +58,30 @@ logger = logging.getLogger(__name__)
 # (lihat `agent/main.py`) -- LiveKit mencocokkan dispatch eksplisit by name.
 _VOICE_AGENT_NAME = "ai-interview-agent"
 
+# Versi rubrik penilaian -- naikkan kalau prompt/aturan validasi di bawah
+# berubah. Disimpan di tiap item breakdown bersama snapshot kriteria, jadi
+# skor lama tetap bisa dibaca apa adanya walau template diubah kemudian.
+RUBRIC_VERSION = "2026-09-24"
+
 _SCORE_SYSTEM_PROMPT = (
-    "Anda asisten rekrutmen AI. Nilai jawaban kandidat interview berdasarkan "
-    "kriteria yang diberikan. Untuk TIAP kriteria, beri skor 0-100 dan alasan "
-    "singkat berbasis jawaban yang benar-benar ada (jangan mengarang). Beri "
-    "juga skor keseluruhan 0-100 dan narasi ringkas 2-3 kalimat Bahasa "
-    "Indonesia. Nilai HANYA isi jawaban (apa yang dikatakan kandidat). "
+    "Anda asisten rekrutmen AI yang menilai jawaban kandidat terhadap rubrik. "
+    "Untuk TIAP kriteria: beri skor 0-100, alasan singkat (1-2 kalimat Bahasa "
+    "Indonesia), dan 1-3 KUTIPAN PERSIS dari ucapan/jawaban KANDIDAT sebagai "
+    "bukti (salin kata demi kata, minimal 3 kata, jangan parafrase, jangan "
+    "mengutip pewawancara). Kalau tidak ada bukti untuk suatu kriteria, isi "
+    '"evidence" dengan [] dan jelaskan di alasan -- JANGAN mengarang kutipan; '
+    "kutipan yang tidak ditemukan di jawaban akan dibuang sistem dan skornya "
+    "tidak dihitung. Nilai HANYA isi jawaban (apa yang dikatakan kandidat). "
     "DILARANG menilai atau menyimpulkan emosi, nada suara, intonasi, aksen/"
     "logat, kefasihan atau kecepatan bicara, jeda, ekspresi, maupun "
     "kepribadian dari cara bicara -- kalau kriteria meminta itu, beri skor "
     "hanya dari isi jawaban dan sebutkan batasan ini di alasan. "
+    "Beri juga narasi ringkas 2-3 kalimat Bahasa Indonesia. "
     "Balas HANYA JSON sesuai skema:\n"
     "{\n"
-    '  "overall": number,\n'
     '  "narrative": string,\n'
-    '  "breakdown": [{"criterion_key": string, "score": number, "reasoning": string}]\n'
+    '  "breakdown": [{"criterion_key": string, "score": number, '
+    '"reasoning": string, "evidence": [string]}]\n'
     "}"
 )
 
@@ -491,7 +500,8 @@ def _score(db: Session, response: AIInterviewResponse, template: AIInterviewTemp
         for q in template.questions
     ]
     user_payload = {"criteria": template.criteria, "qa": qa_pairs}
-    return _run_scoring(db, response, user_payload)
+    candidate_text = "\n".join(str(a.get("answer_text", "")) for a in response.answers)
+    return _run_scoring(db, response, template, user_payload, candidate_text)
 
 
 def _score_transcript(
@@ -505,15 +515,115 @@ def _score_transcript(
         for q in template.questions
     ]
     user_payload = {"criteria": template.criteria, "topics": topics, "transcript": transcript}
-    return _run_scoring(db, response, user_payload)
+    return _run_scoring(db, response, template, user_payload, _candidate_lines(transcript))
 
 
-def _run_scoring(db: Session, response: AIInterviewResponse, user_payload: dict) -> bool:
+# Label pembicara dari agent/main.py::_format_transcript.
+_CANDIDATE_PREFIX = "Kandidat:"
+
+
+def _candidate_lines(transcript: str) -> str:
+    """Hanya ucapan kandidat -- bukti tidak boleh diambil dari kalimat
+    pewawancara AI (mis. AI mengulang pertanyaan yang memuat kata kunci)."""
+    return "\n".join(
+        line[len(_CANDIDATE_PREFIX) :].strip()
+        for line in transcript.splitlines()
+        if line.strip().startswith(_CANDIDATE_PREFIX)
+    )
+
+
+def _norm(text: str) -> str:
+    """Huruf kecil, tanda baca jadi spasi, spasi dirapikan -- supaya kutipan
+    yang beda kapitalisasi/tanda baca tetap cocok, tapi parafrase tidak."""
+    cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
+    return " ".join(cleaned.split())
+
+
+_MIN_QUOTE_WORDS = 3
+
+
+def _verify_quote(quote: str, haystack_norm: str) -> bool:
+    """Kutipan sah bila tiap potongannya (dipisah "..."/"…") ada persis di
+    teks kandidat dan totalnya minimal 3 kata."""
+    parts = [_norm(part) for part in quote.replace("…", "...").split("...") if _norm(part)]
+    if sum(len(p.split()) for p in parts) < _MIN_QUOTE_WORDS:
+        return False
+    return all(f" {p} " in f" {haystack_norm} " for p in parts)
+
+
+def build_rubric_breakdown(
+    result: dict, criteria: list[dict], candidate_text: str
+) -> tuple[list[dict], int | None]:
+    """Validasi keluaran AI terhadap rubrik template; kembalikan (breakdown,
+    skor total). Aturan:
+    - hanya kriteria yang ada di template; kriteria yang tidak dinilai AI
+      tetap muncul (tanpa skor) supaya reviewer melihat celahnya;
+    - kutipan yang tidak ada di jawaban kandidat dibuang;
+    - kriteria tanpa kutipan sah = tidak didukung bukti -> tidak dihitung;
+    - skor total = rata-rata berbobot kriteria yang didukung bukti (dihitung
+      di sini, angka "overall" dari AI tidak dipakai).
+    """
+    haystack = _norm(candidate_text)
+    raw_breakdown = result.get("breakdown")
+    raw_items: list = raw_breakdown if isinstance(raw_breakdown, list) else []
+    by_key: dict[str, dict] = {}
+    for item in raw_items:
+        if isinstance(item, dict) and item.get("criterion_key") not in by_key:
+            by_key[str(item.get("criterion_key"))] = item
+
+    breakdown: list[dict] = []
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for crit in criteria:
+        key = str(crit.get("key", ""))
+        try:
+            weight = max(0.0, float(crit.get("weight", 1.0)))
+        except (TypeError, ValueError):
+            weight = 1.0
+        item = by_key.get(key, {})
+        raw_evidence = item.get("evidence")
+        quotes_raw: list = raw_evidence if isinstance(raw_evidence, list) else []
+        quotes = [str(q).strip()[:500] for q in quotes_raw if str(q).strip()][:5]
+        valid = [q for q in quotes if _verify_quote(q, haystack)]
+        try:
+            score: int | None = max(0, min(100, int(item["score"]))) if item else None
+        except (KeyError, TypeError, ValueError):
+            score = None
+        supported = score is not None and bool(valid)
+        if supported and score is not None:
+            weighted_sum += score * weight
+            weight_total += weight
+        breakdown.append(
+            {
+                "criterion_key": key,
+                "label": crit.get("label", key),
+                "weight": weight,
+                "score": score,
+                "reasoning": str(item.get("reasoning") or "").strip()[:1000],
+                "evidence": valid,
+                "dropped_quotes": len(quotes) - len(valid),
+                "supported": supported,
+                "rubric_version": RUBRIC_VERSION,
+            }
+        )
+    overall = round(weighted_sum / weight_total) if weight_total > 0 else None
+    return breakdown, overall
+
+
+def _run_scoring(
+    db: Session,
+    response: AIInterviewResponse,
+    template: AIInterviewTemplate,
+    user_payload: dict,
+    candidate_text: str,
+) -> bool:
+    model = get_settings().ai_scoring_model or get_settings().ai_model
     try:
         result = chat_completion(
             _SCORE_SYSTEM_PROMPT,
             json.dumps(user_payload, ensure_ascii=False),
             feature="ai_interview.score",
+            model=model,
         )
     except Exception:  # noqa: BLE001 - AI gagal → biarkan status apa adanya, jangan crash
         logger.warning("Scoring AI Interview gagal untuk response %s", response.id, exc_info=True)
@@ -521,18 +631,13 @@ def _run_scoring(db: Session, response: AIInterviewResponse, user_payload: dict)
     if not isinstance(result, dict):
         return False
 
-    try:
-        overall = max(0, min(100, int(result.get("overall", 0))))
-    except (TypeError, ValueError):
-        overall = 0
-    breakdown_raw = result.get("breakdown")
-    breakdown = breakdown_raw if isinstance(breakdown_raw, list) else []
+    breakdown, overall = build_rubric_breakdown(result, template.criteria, candidate_text)
     narrative = str(result.get("narrative") or "").strip()[:2000] or None
 
     response.ai_score_overall = overall
     response.ai_score_breakdown_json = json.dumps(breakdown, ensure_ascii=False)
     response.ai_narrative = narrative
-    response.ai_model = get_settings().ai_model
+    response.ai_model = model
     response.status = AIInterviewResponseStatus.scored
     db.commit()
     db.refresh(response)
@@ -541,7 +646,12 @@ def _run_scoring(db: Session, response: AIInterviewResponse, user_payload: dict)
         action="ai_interview.scored",
         entity_type="ai_interview_response",
         entity_id=response.id,
-        detail={"overall": overall},
+        detail={
+            "overall": overall,
+            "model": model,
+            "rubric_version": RUBRIC_VERSION,
+            "unsupported": [b["criterion_key"] for b in breakdown if not b["supported"]],
+        },
     )
     return True
 

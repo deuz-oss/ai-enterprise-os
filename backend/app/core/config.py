@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     ai_base_url: str | None = None
     ai_api_key: str | None = None
     ai_model: str = "gpt-4o-mini"
+    # Model khusus penilaian AI Interview (roadmap Fase 1 #7: uji A/B mis.
+    # Sahabat-AI/SEA-LION via endpoint OpenAI-compatible yang sama). Kosong =
+    # pakai AI_MODEL. Model yang benar-benar dipakai tercatat per respons
+    # (`ai_interview_responses.ai_model`) supaya hasil A/B bisa dibandingkan.
+    ai_scoring_model: str | None = None
     ai_embedding_model: str = "text-embedding-3-small"
 
     # AI Interview Fase 2 — percakapan suara real-time (PRD "Berikutnya" §5).

@@ -34,7 +34,12 @@ def ai_configured() -> bool:
 
 
 def chat_completion(
-    system: str, user: str, *, json_mode: bool = True, feature: str | None = None
+    system: str,
+    user: str,
+    *,
+    json_mode: bool = True,
+    feature: str | None = None,
+    model: str | None = None,
 ) -> dict | str:
     """Panggil endpoint /chat/completions dan kembalikan isinya.
 
@@ -44,6 +49,8 @@ def chat_completion(
 
     `feature` melabeli panggilan ini untuk `ai_usage_events` (mis.
     "recruitment.match_explain") — dipakai breakdown biaya per fitur.
+    `model` menimpa AI_MODEL untuk panggilan ini saja (mis. model penilai
+    AI Interview, lihat Settings.ai_scoring_model).
     """
     settings = get_settings()
     if not settings.ai_configured:
@@ -52,7 +59,7 @@ def chat_completion(
             detail="Fitur AI belum aktif. Set AI_BASE_URL (dan AI_API_KEY) di .env.",
         )
     payload: dict = {
-        "model": settings.ai_model,
+        "model": model or settings.ai_model,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},

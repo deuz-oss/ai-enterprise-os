@@ -24,6 +24,8 @@ join, sesi WebRTC, sintesis TTS) sudah diverifikasi jalan lewat
 `docker compose --profile voice up` sungguhan. Latensi percakapan nyata
 dan turn-taking masih BELUM PERNAH diuji nyata (butuh GPU yang tidak
 tersedia saat pass ini ditulis) -- STT tetap self-hosted CPU-mode di dev.
+Turn detector (2026-09-24) sama: model terpasang & termuat, tapi
+kalibrasi `endpointing` belum diuji dengan kandidat sungguhan.
 """
 
 from __future__ import annotations
@@ -32,7 +34,16 @@ import logging
 import os
 
 import httpx
-from livekit.agents import Agent, AgentServer, AgentSession, JobContext, cli, function_tool, room_io
+from livekit.agents import (
+    Agent,
+    AgentServer,
+    AgentSession,
+    JobContext,
+    cli,
+    function_tool,
+    inference,
+    room_io,
+)
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
 
@@ -46,6 +57,10 @@ AGENT_NAME = "ai-interview-agent"
 
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://backend:8000/api/v1").rstrip("/")
 STT_BASE_URL = os.environ["STT_BASE_URL"]
+# Bahasa dipaksa (bukan deteksi otomatis): Whisper lebih akurat untuk bahasa
+# Indonesia kalau bahasanya diberi tahu, dan turn detector memakai bahasa
+# ini untuk memilih cara menilai "kalimat sudah selesai atau belum".
+STT_LANGUAGE = os.environ.get("STT_LANGUAGE") or "id"
 # SENGAJA sama dengan backend's AI_BASE_URL/AI_API_KEY/AI_MODEL -- LLM
 # TIDAK self-hosted terpisah, lihat catatan strategi AI di PRD §14. TTS
 # JUGA lewat endpoint ini sekarang (lihat docstring di atas) -- bukan
@@ -138,7 +153,7 @@ async def entrypoint(ctx: JobContext) -> None:
     context = await _fetch_context(token)
 
     session = AgentSession(
-        stt=lk_openai.STT(base_url=STT_BASE_URL, api_key="not-needed"),
+        stt=lk_openai.STT(base_url=STT_BASE_URL, api_key="not-needed", language=STT_LANGUAGE),
         llm=lk_openai.LLM(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, model=LLM_MODEL),
         tts=lk_openai.TTS(
             base_url=LLM_BASE_URL,
@@ -148,6 +163,20 @@ async def entrypoint(ctx: JobContext) -> None:
             instructions=TTS_INSTRUCTIONS,
         ),
         vad=silero.VAD.load(),
+        # Roadmap Fase 1 #4. Dulu hanya VAD: begitu kandidat diam sesaat
+        # (wajar saat berpikir di tengah jawaban interview), AI langsung
+        # memotong. Turn detector menilai dari ISI kalimat apakah kandidat
+        # memang sudah selesai bicara. `version="v1-mini"` DIPAKSA: model
+        # lokal (~108 MB, mendukung "id"); tanpa ini library memilih "v1"
+        # yang lewat gateway LiveKit Cloud di mode dev -- Aeos self-hosted.
+        # (Plugin lama `livekit.plugins.turn_detector` deprecated di 1.7.)
+        turn_handling={
+            "turn_detection": inference.TurnDetector(version="v1-mini"),
+            # Lebih sabar dari default (0.5/3.0 dtk): interview = jawaban
+            # panjang dengan jeda berpikir, beda dari percakapan CS singkat.
+            # max_delay = batas tunggu saat model menilai kalimat belum usai.
+            "endpointing": {"min_delay": 0.8, "max_delay": 6.0},
+        },
     )
 
     agent = InterviewAgent(

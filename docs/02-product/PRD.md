@@ -634,6 +634,33 @@ melarang pengenalan emosi di konteks kerja/rekrutmen sejak Feb 2025.
   melarangnya eksplisit. Alasan: dilarang EU AI Act, dan metrik cara bicara
   mendiskriminasi penutur daerah & penyandang gangguan bicara.
 
+### Fase 60 — AI Interview: Turn Detector, Rubrik Berbukti, Review (Fase 1 roadmap) — ✅ Selesai (2026-09-24)
+
+- **Turn detector lokal** di agen suara (`agent/main.py`):
+  `inference.TurnDetector(version="v1-mini")` -- model audio in-process
+  (mendukung "id", ±28 ms/prediksi di CPU, terbukti jalan `--network none`).
+  `version` WAJIB dipaksa: default library memilih "v1" yang lewat gateway
+  LiveKit Cloud di mode dev. Endpointing dilonggarkan untuk interview
+  (`min_delay` 0.8 / `max_delay` 6.0 dtk) supaya jeda berpikir kandidat tidak
+  dipotong. STT dipaksa `language="id"`. Dependensi dipin `~=1.7.1`.
+  Kalibrasi endpointing **belum diuji dengan kandidat sungguhan**.
+- **Rubrik + kutipan bukti** (`RUBRIC_VERSION` di `ai_interview/service.py`):
+  AI wajib menyertakan kutipan persis jawaban kandidat per kriteria; server
+  memverifikasi tiap kutipan (≥3 kata, ada di jawaban -- di mode suara hanya
+  baris "Kandidat:") dan membuang yang karangan. Kriteria tanpa bukti sah =
+  tidak dihitung. **Skor total dihitung server** (rata-rata berbobot
+  kriteria yang didukung bukti), angka "overall" dari AI diabaikan.
+  Snapshot label/bobot/versi rubrik disimpan per item.
+- **Model penilai terpisah** `AI_SCORING_MODEL` (opsional) untuk uji A/B
+  Sahabat-AI/SEA-LION; model yang dipakai tercatat per respons.
+- **Tampilan review**: kartu per kriteria (bar skor, alasan, kutipan,
+  "tanpa bukti — tidak dihitung", jumlah kutipan dibuang), jawaban kandidat
+  mode teks kini terlihat (dulu tidak ada sama sekali), label "Bukti tidak
+  cukup" saat tak satu pun kriteria berbukti.
+- Diverifikasi dengan LLM sungguhan (gpt-4o-mini): 6/6 kutipan lolos
+  verifikasi; kriteria yang tidak pernah ditanyakan (skor 0 dari AI) tidak
+  lagi menurunkan skor total kandidat.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

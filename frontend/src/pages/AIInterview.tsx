@@ -45,7 +45,7 @@ interface InterviewResponse {
   answers: { question_id: string; answer_text: string; submitted_at: string }[];
   transcript_text: string | null;
   ai_score_overall: number | null;
-  ai_score_breakdown: { criterion_key: string; score: number; reasoning: string }[];
+  ai_score_breakdown: ScoreItem[];
   ai_narrative: string | null;
   ai_model: string | null;
   review_status: "menunggu_review" | "disetujui" | "disesuaikan" | "ditolak";
@@ -67,6 +67,105 @@ interface Candidate {
   id: string;
   full_name: string;
   email: string | null;
+}
+
+/** Item breakdown hasil penilaian. Field rubrik (label, evidence,
+ * supported, ...) ada sejak Fase 1 roadmap (RUBRIC_VERSION 2026-09-24);
+ * hasil lama hanya punya criterion_key/score/reasoning. */
+interface ScoreItem {
+  criterion_key: string;
+  score: number | null;
+  reasoning: string;
+  label?: string;
+  weight?: number;
+  evidence?: string[];
+  dropped_quotes?: number;
+  supported?: boolean;
+  rubric_version?: string;
+}
+
+function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | null }) {
+  const isRubric = items.some((b) => b.supported !== undefined);
+  const version = items.find((b) => b.rubric_version)?.rubric_version;
+  return (
+    <div className="mt-3 space-y-2">
+      {items.map((b) => {
+        const unsupported = isRubric && !b.supported;
+        return (
+          <div
+            key={b.criterion_key}
+            className="rounded-lg p-3"
+            style={{
+              border: "1px solid var(--border)",
+              backgroundColor: unsupported ? "var(--bg)" : "var(--bg-elevated)",
+            }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-[var(--text)]">
+                {b.label ?? b.criterion_key}
+                {b.weight !== undefined && (
+                  <span className="ml-1.5 text-xs font-normal text-[var(--text-muted)]">
+                    bobot {b.weight}
+                  </span>
+                )}
+              </p>
+              {unsupported ? (
+                <span className="pill p-yellow" title="Tidak ada kutipan jawaban kandidat yang mendukung skor ini">
+                  Tanpa bukti — tidak dihitung
+                </span>
+              ) : (
+                <span className="text-sm font-semibold tabular-nums text-[var(--text)]">
+                  {b.score ?? "–"}
+                </span>
+              )}
+            </div>
+            {!unsupported && b.score !== null && (
+              <div
+                className="mt-1.5 h-1.5 overflow-hidden rounded-full"
+                style={{ backgroundColor: "var(--hover)" }}
+                role="meter"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={b.score}
+                aria-label={`Skor ${b.label ?? b.criterion_key}`}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${b.score}%`, backgroundColor: "var(--accent)" }}
+                />
+              </div>
+            )}
+            {b.reasoning && <p className="mt-2 text-xs text-[var(--text-muted)]">{b.reasoning}</p>}
+            {(b.evidence ?? []).length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {b.evidence!.map((q) => (
+                  <li
+                    key={q}
+                    className="rounded-r-md py-1 pl-2.5 pr-2 text-xs text-[var(--text)]"
+                    style={{ borderLeft: "3px solid var(--accent)", backgroundColor: "var(--accent-tint)" }}
+                  >
+                    “{q}”
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(b.dropped_quotes ?? 0) > 0 && (
+              <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+                {b.dropped_quotes} kutipan dari AI dibuang karena tidak ditemukan di jawaban kandidat.
+              </p>
+            )}
+          </div>
+        );
+      })}
+      <p className="text-[11px] text-[var(--text-muted)]">
+        {isRubric
+          ? "Skor total = rata-rata berbobot kriteria yang didukung kutipan jawaban kandidat. "
+          : "Hasil penilaian format lama (tanpa kutipan bukti). "}
+        {model && <>Dinilai oleh {model}</>}
+        {version && <> · rubrik {version}</>}
+      </p>
+    </div>
+  );
 }
 
 const STATUS_PILL: Record<string, string> = {
@@ -530,8 +629,18 @@ export default function AIInterview() {
                       <div className="mt-1 flex gap-2">
                         <span className={`pill ${STATUS_PILL[r.status]}`}>{r.status}</span>
                         <span className={`pill ${REVIEW_PILL[r.review_status]}`}>{r.review_status}</span>
-                        {r.ai_score_overall !== null && (
+                        {r.ai_score_overall !== null ? (
                           <span className="pill p-blue">Skor {r.ai_score_overall}</span>
+                        ) : (
+                          r.status === "dinilai" &&
+                          !r.data_purged_at && (
+                            <span
+                              className="pill p-yellow"
+                              title="Tidak ada kriteria yang didukung kutipan jawaban kandidat"
+                            >
+                              Bukti tidak cukup
+                            </span>
+                          )
                         )}
                         {r.consent_withdrawn_at ? (
                           <span className="pill p-red">Persetujuan ditarik</span>
@@ -589,14 +698,28 @@ export default function AIInterview() {
                       </p>
                     </details>
                   )}
+                  {r.answers.length > 0 && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs text-[var(--accent)]">
+                        Lihat jawaban kandidat
+                      </summary>
+                      <dl className="mt-2 space-y-2">
+                        {r.answers.map((a) => (
+                          <div key={a.question_id}>
+                            <dt className="text-xs font-medium text-[var(--text)]">
+                              {selected?.questions.find((q) => q.id === a.question_id)?.prompt ??
+                                a.question_id}
+                            </dt>
+                            <dd className="mt-0.5 whitespace-pre-line text-xs text-[var(--text-muted)]">
+                              {a.answer_text}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </details>
+                  )}
                   {r.ai_score_breakdown.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-muted)]">
-                      {r.ai_score_breakdown.map((b) => (
-                        <li key={b.criterion_key}>
-                          {b.criterion_key}: {b.score} — {b.reasoning}
-                        </li>
-                      ))}
-                    </ul>
+                    <ScoreBreakdown items={r.ai_score_breakdown} model={r.ai_model} />
                   )}
 
                   {reviewingId === r.id && (

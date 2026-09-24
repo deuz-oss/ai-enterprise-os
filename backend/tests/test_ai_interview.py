@@ -411,9 +411,10 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
                     {
                         "message": {
                             "content": (
-                                '{"overall": 77, "narrative": "Cukup baik.", '
+                                '{"narrative": "Cukup baik.", '
                                 '"breakdown": [{"criterion_key": "komunikasi", '
-                                '"score": 77, "reasoning": "Jelas."}]}'
+                                '"score": 77, "reasoning": "Jelas.", '
+                                '"evidence": ["menangani komplain pelanggan setiap hari"]}]}'
                             )
                         }
                     }
@@ -434,7 +435,12 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
 
     complete = client.post(
         f"/api/v1/ai-interview/session/{token}/voice/complete",
-        json={"transcript": "Pewawancara: Ceritakan pengalaman Anda...\nKandidat: Saya pernah..."},
+        json={
+            "transcript": (
+                "Pewawancara AI: Ceritakan pengalaman Anda...\n"
+                "Kandidat: Saya pernah menangani komplain pelanggan setiap hari."
+            )
+        },
     )
     assert complete.status_code == 200, complete.text
     assert complete.json()["status"] == "dinilai"
@@ -442,7 +448,15 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
     detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin)
     body = detail.json()
     assert body["status"] == "dinilai"
+    # Skor total dihitung server dari kriteria yg didukung bukti (bukan angka AI).
     assert body["ai_score_overall"] == 77
+    komunikasi = next(b for b in body["ai_score_breakdown"] if b["criterion_key"] == "komunikasi")
+    assert komunikasi["supported"] is True
+    assert komunikasi["evidence"] == ["menangani komplain pelanggan setiap hari"]
+    # Kriteria template yg tidak dinilai AI tetap muncul, tanpa skor.
+    ketahanan = next(b for b in body["ai_score_breakdown"] if b["criterion_key"] == "ketahanan")
+    assert ketahanan["supported"] is False and ketahanan["score"] is None
+    assert body["ai_model"] == "test-chat-model"
     assert body["review_status"] == "menunggu_review"
     assert body["transcript_text"] is not None
 
@@ -567,3 +581,82 @@ def test_candidate_forget_also_purges_ai_interview_data(client):
 
     after = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
     assert after["answers"] == [] and after["purge_reason"] == "penghapusan_subjek"
+
+
+# ---------- Fase 1 roadmap #5: rubrik + kutipan bukti ----------
+
+
+def test_rubric_drops_fabricated_and_interviewer_quotes():
+    from app.modules.ai_interview.service import _candidate_lines, build_rubric_breakdown
+
+    criteria = [
+        {"key": "komunikasi", "label": "Komunikasi", "weight": 2},
+        {"key": "teknis", "label": "Teknis", "weight": 1},
+        {"key": "kerjasama", "label": "Kerja sama", "weight": 1},
+    ]
+    transcript = (
+        "Pewawancara AI: Ceritakan cara menangani komplain pelanggan.\n"
+        "Kandidat: Saya selalu mendengarkan keluhan pelanggan dulu, lalu menawarkan solusi."
+    )
+    ai_result = {
+        "overall": 99,  # diabaikan -- total dihitung server
+        "breakdown": [
+            {
+                "criterion_key": "komunikasi",
+                "score": 80,
+                "evidence": ["Mendengarkan keluhan pelanggan dulu", "Saya pakai CRM Salesforce"],
+            },
+            # Kutipan hanya ada di kalimat PEWAWANCARA -> tidak sah.
+            {"criterion_key": "teknis", "score": 90, "evidence": ["menangani komplain pelanggan"]},
+            # Kriteria di luar template -> diabaikan.
+            {"criterion_key": "bocor", "score": 100, "evidence": ["menawarkan solusi"]},
+        ],
+    }
+    breakdown, overall = build_rubric_breakdown(ai_result, criteria, _candidate_lines(transcript))
+    by_key = {b["criterion_key"]: b for b in breakdown}
+    assert set(by_key) == {"komunikasi", "teknis", "kerjasama"}
+    assert by_key["komunikasi"]["evidence"] == ["Mendengarkan keluhan pelanggan dulu"]
+    assert by_key["komunikasi"]["dropped_quotes"] == 1
+    assert by_key["teknis"]["supported"] is False
+    assert by_key["kerjasama"]["score"] is None
+    assert overall == 80  # hanya kriteria yg didukung bukti
+
+
+def test_rubric_quote_rules():
+    from app.modules.ai_interview.service import _norm, _verify_quote
+
+    hay = _norm("Saya bekerja 3 tahun di gudang, mengatur stok dan pengiriman barang.")
+    assert _verify_quote("mengatur stok dan pengiriman", hay)
+    assert _verify_quote("Saya bekerja 3 tahun ... pengiriman barang", hay)  # elipsis
+    assert not _verify_quote("stok", hay)  # < 3 kata
+    assert not _verify_quote("mengelola stok dan pengiriman", hay)  # parafrase
+
+
+def test_scoring_uses_dedicated_model_when_configured(client, monkeypatch):
+    import app.core.llm as llm_module
+    import httpx
+
+    settings = llm_module.get_settings()
+    monkeypatch.setattr(settings, "ai_base_url", "http://fake-ai.test/v1")
+    monkeypatch.setattr(settings, "ai_model", "model-umum")
+    monkeypatch.setattr(settings, "ai_scoring_model", "sahabat-ai-uji")
+    seen: list[str] = []
+
+    def _fake_post(url, json=None, **kw):
+        seen.append(json["model"])
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"narrative": "-", "breakdown": []}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(llm_module.httpx, "post", _fake_post)
+    admin = _auth_header(client)
+    _, response_id = _submit_text_interview(client, admin)
+    body = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert seen and seen[-1] == "sahabat-ai-uji"
+    assert body["ai_model"] == "sahabat-ai-uji"
+    assert body["ai_score_overall"] is None  # tanpa bukti -> tidak ada skor total
