@@ -6,6 +6,29 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 58: Redesign Chat (review UI/UX)
+
+**Bug yang ditemukan saat review**
+- Pengirim pesan tampil sebagai potongan UUID (`dc3c770c…`) -- API cuma mengirim `sender_id`. Kini `sender_name`, `sender_role`, `is_bot` (akun @AEOS), `reply_count`, `my_reactions` ikut di payload pesan.
+- Membuka channel menampilkan area pesan **kosong** sampai polling 4 dtk berikutnya: Virtuoso merender nol item saat mount (props data terisi, rentang internal kosong -- terukur lewat fiber props di browser). Diperbaiki dengan `initialItemCount` + scroll eksplisit ke pesan terbaru.
+- Tombol "Balas" hanya muncul di pesan milik sendiri -- tidak bisa membalas orang lain di thread.
+- Kartu PR mengulang judulnya sebagai teks pesan tepat di atas kartu.
+
+**Struktur & layout**
+- Tinggi penuh (`100vh - 7rem`) menggantikan `64vh` + header halaman bersubjudul marketing ("Gratis di semua paket").
+- Sidebar dikelompokkan (Channel / Pesan langsung / Proyek klien / Payroll / Job order, bisa dilipat, prefiks "JO:"/"Proyek:" dibuang), pencarian channel, pratinjau pesan terakhir, unread tebal + badge aksen. Form "channel baru" jadi tombol `+`.
+- Header percakapan: nama + jumlah anggota, aksi jadi ikon (cari, disematkan, digest, menu notifikasi dgn penjelasan tiap level). Tombol "Tandai dibaca" dihapus (sudah otomatis saat channel dibuka).
+- Mobile: daftar channel dan percakapan bergantian penuh-lebar dengan tombol kembali.
+
+**Pesan**
+- Avatar inisial + nama + jam (HH.mm, tanggal lengkap di tooltip), pemisah hari ("Hari ini", "Kemarin", "Kamis, 3 September"), pesan beruntun pengirim sama digabung (< 5 menit).
+- 6 emoji + pin + edit + hapus yang dulu menempel permanen di bawah SETIAP pesan jadi toolbar hover/fokus; chip reaksi hanya bila ada, reaksi milik sendiri disorot.
+- Bot @AEOS: avatar Sparkles + badge "AI"; @mention disorot; kartu aksi dengan aksen kiri dan area tombol terpisah; tautan "N balasan" ke thread; pesan induk ditampilkan di atas thread.
+- Composer: textarea auto-tinggi (Enter kirim, Shift+Enter baris baru), tombol kirim ikon, petunjuk pintasan, error unggah lampiran ditampilkan.
+- Empty/loading state yang benar (dulu "Belum ada pesan. Mulai percakapan!" tampil walau belum memilih channel).
+
+Validasi: `tsc` + build bersih; diverifikasi live (light/dark, iframe 400px utk mobile karena jendela browser tak bisa di-resize -- DES-014); kontras WCAG dihitung per pasangan warna baru (semua >= 4.5:1; inisial avatar sempat 2.31:1 di light mode, sudah diperbaiki).
+
 ### Fixed — Fase 57: Audit backend keamanan & logika + uang Decimal
 
 Audit modul-per-modul backend (bagian yang paling jarang diaudit dibanding UI).

@@ -269,3 +269,25 @@ def test_admin_lookup_with_multiple_admins(client):
         assert _get_admin_user_id(db, first.tenant_id) == first.id
     finally:
         db.close()
+
+
+def test_message_payload_has_sender_and_thread_meta(client):
+    """UI dulu cuma punya sender_id (tampil potongan UUID) dan tidak tahu
+    jumlah balasan thread / reaksi milik sendiri."""
+    headers = _auth_header(client)
+    ch = client.post("/api/v1/chat/channels", headers=headers, json={"name": "desain"}).json()
+    root = client.post(
+        f"/api/v1/chat/channels/{ch['id']}/messages", headers=headers, json={"content": "halo"}
+    ).json()
+    assert root["sender_name"] == "Brian"
+    assert root["is_bot"] is False
+    client.post(
+        f"/api/v1/chat/channels/{ch['id']}/messages",
+        headers=headers,
+        json={"content": "balasan", "parent_id": root["id"]},
+    )
+    client.post(f"/api/v1/chat/messages/{root['id']}/react", headers=headers, json={"emoji": "👍"})
+    rows = client.get(f"/api/v1/chat/channels/{ch['id']}/messages", headers=headers).json()
+    got = next(r for r in rows if r["id"] == root["id"])
+    assert got["reply_count"] == 1
+    assert got["my_reactions"] == ["👍"]

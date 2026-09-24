@@ -139,7 +139,10 @@ def list_messages(
         limit=limit,
     )
     response.headers["X-Has-More"] = "true" if has_more else "false"
-    return [service._serialize_message(m, user.id) for m in messages]
+    counts = service.reply_counts(db, [m.id for m in messages]) if not parent_id else {}
+    return [
+        service._serialize_message(m, user.id, reply_count=counts.get(str(m.id))) for m in messages
+    ]
 
 
 @router.post("/channels/{channel_id}/messages", status_code=201)

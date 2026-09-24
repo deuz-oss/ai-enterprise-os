@@ -100,6 +100,9 @@ class ChatMessage(TenantMixin, Base):
     pinned_by_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), default=None)
 
     channel = relationship("Channel", back_populates="messages")
+    # Nama pengirim untuk UI (dulu cuma sender_id -> UI menampilkan potongan
+    # UUID). Read-only; "selectin" = 1 query tambahan per halaman pesan.
+    sender = relationship("User", foreign_keys=[sender_id], lazy="selectin", viewonly=True)
     reactions = relationship(
         "ChatMessageReaction", back_populates="message", cascade="all, delete-orphan"
     )

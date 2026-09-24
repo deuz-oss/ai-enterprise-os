@@ -1024,13 +1024,40 @@ def _parse(value):
         return None
 
 
-def _serialize_message(msg: ChatMessage, current_user_id) -> dict:
+def reply_counts(db: Session, message_ids: list) -> dict[str, int]:
+    """Jumlah balasan thread (belum dihapus) per pesan induk, satu query."""
+    if not message_ids:
+        return {}
+    rows = db.execute(
+        select(ChatMessage.parent_id, func.count(ChatMessage.id))
+        .where(
+            ChatMessage.parent_id.in_([parse_uuid(str(i)) for i in message_ids]),
+            ChatMessage.deleted_at.is_(None),
+        )
+        .group_by(ChatMessage.parent_id)
+    ).all()
+    return {str(pid): int(n) for pid, n in rows}
+
+
+def _serialize_message(msg: ChatMessage, current_user_id, reply_count: int | None = None) -> dict:
     reactions: dict[str, list[str]] = {}
     for r in msg.reactions:
         reactions.setdefault(r.emoji, []).append(str(r.user_id))
+    sender = msg.sender
+    me = str(current_user_id)
     base: dict = {
         "id": str(msg.id),
         "sender_id": str(msg.sender_id),
+        "sender_name": sender.full_name if sender is not None else "Pengguna",
+        "sender_role": sender.role.value if sender is not None else None,
+        # Akun bot @AEOS (lihat ai/collab.py::_get_or_create_aeos_user).
+        "is_bot": bool(
+            sender is not None
+            and sender.email.startswith("aeos.")
+            and sender.email.endswith("@aeos.internal")
+        ),
+        "reply_count": reply_count or 0,
+        "my_reactions": [e for e, users in reactions.items() if me in users],
         "content": msg.content if msg.deleted_at is None else "(pesan dihapus)",
         "parent_id": str(msg.parent_id) if msg.parent_id else None,
         "edited_at": msg.edited_at.isoformat() if msg.edited_at else None,
