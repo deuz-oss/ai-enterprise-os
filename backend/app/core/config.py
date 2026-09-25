@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # pakai AI_MODEL. Model yang benar-benar dipakai tercatat per respons
     # (`ai_interview_responses.ai_model`) supaya hasil A/B bisa dibandingkan.
     ai_scoring_model: str | None = None
+    # Roadmap Fase 5: jumlah penilaian independen per interview. Skor akhir =
+    # rata-rata; kriteria yang hasilnya berbeda jauh antar-run ditandai tidak
+    # stabil untuk reviewer. 1 = matikan (hemat biaya LLM, tanpa cek).
+    ai_interview_scoring_runs: int = 2
     ai_embedding_model: str = "text-embedding-3-small"
 
     # AI Interview Fase 2 — percakapan suara real-time (PRD "Berikutnya" §5).

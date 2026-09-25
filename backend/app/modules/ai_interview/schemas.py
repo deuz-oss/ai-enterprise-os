@@ -7,6 +7,7 @@ from app.modules.ai_interview.models import (
     AIInterviewReviewStatus,
     AIInterviewTemplateStatus,
 )
+from app.modules.recruitment.models import PlacementStatus
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _QUESTION_TYPES = ("open_ended", "single_choice", "multiple_choice", "rating")
@@ -237,6 +238,7 @@ class AIInterviewResponseOut(BaseModel):
     has_recording: bool = False
     recording_size_bytes: int | None = None
     ai_score_overall: int | None
+    ai_score_original: int | None = None
     ai_score_breakdown: list[dict]
     ai_narrative: str | None
     ai_model: str | None
@@ -253,6 +255,20 @@ class AIInterviewResponseOut(BaseModel):
     consent_withdrawn_at: datetime | None = None
     data_purged_at: datetime | None = None
     purge_reason: str | None = None
+    # Fase 5: tahap pipeline kandidat di job order template ini (Placement),
+    # diisi service -- None bila template tanpa job order / belum di pipeline.
+    placement_id: UUID | None = None
+    placement_status: PlacementStatus | None = None
+
+
+# Fase 5: tahap pipeline yang boleh dipilih reviewer dari halaman review AI
+# Interview. Sengaja terbatas: lanjut ke klien atau gagal. Tahap sesudahnya
+# (offering, OJT, onboarding) punya alur & dokumen sendiri di Recruitment.
+REVIEW_PLACEMENT_STATUSES = (
+    PlacementStatus.submitted,
+    PlacementStatus.interview_client,
+    PlacementStatus.rejected,
+)
 
 
 class AIInterviewReviewIn(BaseModel):
@@ -260,6 +276,19 @@ class AIInterviewReviewIn(BaseModel):
     review_notes: str | None = None
     ai_score_overall: int | None = None
     ai_score_breakdown: list[dict] | None = None
+    # Keputusan pipeline SELALU eksplisit dari reviewer, terpisah dari
+    # review_status (yang menilai hasil AI, bukan kandidat). Kosong = tidak
+    # mengubah pipeline. AI tidak pernah memindahkan kandidat sendiri.
+    placement_status: PlacementStatus | None = None
+    placement_note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("placement_status")
+    @classmethod
+    def _allowed_placement(cls, v: PlacementStatus | None) -> PlacementStatus | None:
+        if v is not None and v not in REVIEW_PLACEMENT_STATUSES:
+            allowed = ", ".join(s.value for s in REVIEW_PLACEMENT_STATUSES)
+            raise ValueError(f"Tahap pipeline dari review AI Interview hanya: {allowed}")
+        return v
 
     @field_validator("review_status")
     @classmethod
@@ -367,6 +396,21 @@ class AIInterviewSettingsUpdate(BaseModel):
     # 30 hari minimum supaya proses review sempat selesai; 2 tahun maksimum
     # supaya "disimpan sepanjang diperlukan" (UU PDP) tidak jadi selamanya.
     retention_days: int = Field(ge=30, le=730)
+
+
+class CalibrationOut(BaseModel):
+    """Fase 5: seberapa sering reviewer menyetujui/mengoreksi skor AI untuk
+    satu template -- sinyal apakah rubrik/model perlu diperbaiki."""
+
+    scored: int
+    reviewed: int
+    approved: int
+    adjusted: int
+    rejected: int
+    # rata-rata |skor AI asli - skor reviewer| pada respons yang disesuaikan
+    mean_adjustment: float | None
+    # respons dengan >=1 kriteria yang hasil antar-run penilaiannya tidak stabil
+    unstable: int
 
 
 class RetentionRunOut(BaseModel):

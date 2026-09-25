@@ -37,11 +37,13 @@ from app.modules.ai_interview.schemas import (
     AIInterviewInviteIn,
     AIInterviewInviteOut,
     AIInterviewInviteResultItem,
+    AIInterviewResponseOut,
     AIInterviewReviewIn,
     AIInterviewSettingsUpdate,
     AIInterviewTemplateCreate,
     AIInterviewTemplateUpdate,
     AnswerIn,
+    CalibrationOut,
     InterviewCriterionBase,
     InterviewGuidelineOut,
     PublicInterviewQuestionOut,
@@ -52,7 +54,7 @@ from app.modules.ai_interview.schemas import (
     VoiceSessionOut,
 )
 from app.modules.notifications.service import send_raw_email
-from app.modules.recruitment.models import Candidate
+from app.modules.recruitment.models import Candidate, Placement, PlacementStatus
 from fastapi import HTTPException
 from livekit import api as lk_api
 from sqlalchemy import and_, or_, select
@@ -273,6 +275,7 @@ def _purge_content(response: AIInterviewResponse, reason: str) -> None:
     response.transcript_text = None
     response.transcript_clean = None
     response.ai_score_overall = None
+    response.ai_score_original = None
     response.ai_score_breakdown_json = None
     response.ai_narrative = None
     response.review_notes = None
@@ -604,6 +607,14 @@ def review_response(
             status_code=422, detail="Interview belum disubmit kandidat — belum bisa direview"
         )
     _ensure_data_present(response)
+    placement = None
+    if payload.placement_status is not None:
+        placement = _placement_for(db, response)
+        if placement is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Kandidat belum ada di pipeline job order interview ini",
+            )
 
     response.review_status = payload.review_status
     response.review_notes = (payload.review_notes or "").strip()[:2000] or None
@@ -611,6 +622,9 @@ def review_response(
     response.reviewed_at = datetime.now(UTC)
     if payload.review_status == AIInterviewReviewStatus.adjusted:
         if payload.ai_score_overall is not None:
+            # Simpan skor AI asli sekali (review ulang tidak menimpanya).
+            if response.ai_score_original is None:
+                response.ai_score_original = response.ai_score_overall
             response.ai_score_overall = max(0, min(100, payload.ai_score_overall))
         if payload.ai_score_breakdown is not None:
             response.ai_score_breakdown_json = json.dumps(
@@ -625,7 +639,101 @@ def review_response(
         entity_id=response.id,
         detail={"review_status": payload.review_status.value, "by": getattr(user, "email", "?")},
     )
+    if placement is not None and payload.placement_status is not None:
+        from app.modules.recruitment.service import update_placement_status
+
+        previous = placement.status
+        note = (payload.placement_note or "").strip() or None
+        if payload.placement_status == PlacementStatus.rejected and note is None:
+            note = "Tidak lolos tahap AI Interview"
+        update_placement_status(db, str(placement.id), payload.placement_status, note=note)
+        audit.log_event(
+            db,
+            action="ai_interview.pipeline_updated",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            detail={
+                "placement_id": str(placement.id),
+                "from": previous.value,
+                "to": payload.placement_status.value,
+                "by": getattr(user, "email", "?"),
+            },
+        )
+        db.refresh(response)
     return response
+
+
+def _placement_for(db: Session, response: AIInterviewResponse) -> Placement | None:
+    if response.job_order_id is None:
+        return None
+    return db.execute(
+        select(Placement).where(
+            Placement.candidate_id == response.candidate_id,
+            Placement.job_order_id == response.job_order_id,
+        )
+    ).scalar_one_or_none()
+
+
+def responses_out(
+    db: Session, responses: list[AIInterviewResponse]
+) -> list[AIInterviewResponseOut]:
+    """Serialisasi + tahap pipeline (Placement) kandidat, satu query."""
+    pairs = {(r.candidate_id, r.job_order_id) for r in responses if r.job_order_id}
+    placements: dict = {}
+    if pairs:
+        rows = db.execute(
+            select(Placement).where(
+                Placement.candidate_id.in_({c for c, _ in pairs}),
+                Placement.job_order_id.in_({j for _, j in pairs}),
+            )
+        ).scalars()
+        placements = {(p.candidate_id, p.job_order_id): p for p in rows}
+    out = []
+    for r in responses:
+        item = AIInterviewResponseOut.model_validate(r)
+        placement = placements.get((r.candidate_id, r.job_order_id))
+        if placement is not None:
+            item.placement_id = placement.id
+            item.placement_status = placement.status
+        out.append(item)
+    return out
+
+
+def template_calibration(db: Session, template_id: str) -> CalibrationOut:
+    """Fase 5: kesesuaian skor AI dengan keputusan reviewer untuk satu template."""
+    _get_template_or_404(db, template_id)
+    rows = list(
+        db.execute(
+            select(AIInterviewResponse).where(
+                AIInterviewResponse.template_id == parse_uuid(template_id),
+                AIInterviewResponse.data_purged_at.is_(None),
+            )
+        ).scalars()
+    )
+    scored = [r for r in rows if r.ai_score_overall is not None or r.ai_score_original is not None]
+    reviewed = [r for r in scored if r.review_status != AIInterviewReviewStatus.pending]
+
+    def count(status: AIInterviewReviewStatus) -> int:
+        return sum(1 for r in reviewed if r.review_status == status)
+
+    diffs = [
+        abs(r.ai_score_original - r.ai_score_overall)
+        for r in reviewed
+        if r.review_status == AIInterviewReviewStatus.adjusted
+        and r.ai_score_original is not None
+        and r.ai_score_overall is not None
+    ]
+    return CalibrationOut(
+        scored=len(scored),
+        reviewed=len(reviewed),
+        approved=count(AIInterviewReviewStatus.approved),
+        adjusted=count(AIInterviewReviewStatus.adjusted),
+        rejected=count(AIInterviewReviewStatus.rejected),
+        mean_adjustment=round(sum(diffs) / len(diffs), 1) if diffs else None,
+        unstable=sum(
+            1 for r in scored if any(b.get("stable") is False for b in r.ai_score_breakdown)
+        ),
+    )
 
 
 # ---------- Skoring AI (dipakai submit otomatis & trigger manual) ----------
@@ -647,7 +755,7 @@ def _score(db: Session, response: AIInterviewResponse, template: AIInterviewTemp
     ]
     user_payload = {"criteria": template.criteria, "qa": qa_pairs}
     candidate_text = "\n".join(str(a.get("answer_text", "")) for a in response.answers)
-    return _run_scoring(db, response, template, user_payload, candidate_text)
+    return _run_scoring(db, response, template, user_payload, candidate_text, response.answers)
 
 
 def _score_transcript(
@@ -756,31 +864,138 @@ def build_rubric_breakdown(
     return breakdown, overall
 
 
+def locate_evidence(
+    quote: str, answers: list[dict], prefer_question_ids: set[str] | None = None
+) -> dict:
+    """Roadmap Fase 5: cari jawaban asal sebuah kutipan bukti dan, bila
+    jawabannya rekaman dengan timestamp kata, detik mulainya -- reviewer bisa
+    langsung mendengar bagian itu. Kutipan sudah terverifikasi ada di teks
+    kandidat; di sini hanya memetakan lokasinya (bisa gagal -> None).
+    `prefer_question_ids`: pertanyaan yang terkait kriteria kutipan dicari
+    lebih dulu (kalimat sama bisa muncul di beberapa jawaban)."""
+    first = next((_norm(p) for p in quote.replace("…", "...").split("...") if _norm(p)), "")
+    ref: dict = {"quote": quote, "question_id": None, "start": None}
+    if not first:
+        return ref
+    target = first.split()
+    preferred = prefer_question_ids or set()
+    ordered = sorted(answers, key=lambda a: a.get("question_id") not in preferred)
+    for answer in ordered:
+        if f" {first} " not in f" {_norm(str(answer.get('answer_text', '')))} ":
+            continue
+        ref["question_id"] = answer.get("question_id")
+        # Kata STT bisa memuat tanda baca / berupa 2 token setelah normalisasi
+        # ("call-center" -> "call center"); ratakan ke token, simpan indeks kata.
+        tokens: list[tuple[str, float]] = []
+        for w in answer.get("words") or []:
+            try:
+                start = float(w[0])
+            except (TypeError, ValueError, IndexError):
+                continue
+            tokens.extend((t, start) for t in _norm(str(w[2])).split())
+        texts = [t for t, _ in tokens]
+        for i in range(len(texts) - len(target) + 1):
+            if texts[i : i + len(target)] == target:
+                ref["start"] = tokens[i][1]
+                break
+        return ref
+    return ref
+
+
+# Selisih skor antar-run penilaian (poin, skala 0-100) yang dianggap tidak
+# stabil. Dengan temperature 0.2, run yang stabil biasanya berselisih <= 5.
+_UNSTABLE_SPREAD = 15
+
+
+def merge_scoring_runs(
+    runs: list[list[dict]], criteria: list[dict]
+) -> tuple[list[dict], int | None]:
+    """Gabungkan breakdown beberapa run penilaian independen (Fase 5).
+    Per kriteria: skor = rata-rata run yang didukung bukti; bukti = gabungan
+    kutipan sah; `stable` = False bila selisih skor > _UNSTABLE_SPREAD atau
+    run berbeda pendapat soal ada/tidaknya bukti. Skor total dihitung ulang."""
+    merged: list[dict] = []
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for idx, _crit in enumerate(criteria):
+        items = [run[idx] for run in runs]
+        base = next((it for it in items if it["supported"]), items[0])
+        scores = [it["score"] if it["supported"] else None for it in items]
+        present = [sc for sc in scores if sc is not None]
+        evidence: list[str] = []
+        for it in items:
+            for q in it["evidence"]:
+                if q not in evidence:
+                    evidence.append(q)
+        supported = bool(present)
+        score = round(sum(present) / len(present)) if present else base["score"]
+        spread = (max(present) - min(present)) if len(present) > 1 else 0
+        stable = len(runs) < 2 or (spread <= _UNSTABLE_SPREAD and len(present) in (0, len(runs)))
+        item = {
+            **base,
+            "score": score,
+            "evidence": evidence[:5],
+            "dropped_quotes": sum(it["dropped_quotes"] for it in items),
+            "supported": supported,
+            "score_runs": scores,
+            "stable": stable,
+        }
+        if supported and score is not None:
+            weighted_sum += score * item["weight"]
+            weight_total += item["weight"]
+        merged.append(item)
+    overall = round(weighted_sum / weight_total) if weight_total > 0 else None
+    return merged, overall
+
+
 def _run_scoring(
     db: Session,
     response: AIInterviewResponse,
     template: AIInterviewTemplate,
     user_payload: dict,
     candidate_text: str,
+    answers: list[dict] | None = None,
 ) -> bool:
-    model = get_settings().ai_scoring_model or get_settings().ai_model
-    try:
-        result = chat_completion(
-            _SCORE_SYSTEM_PROMPT,
-            json.dumps(user_payload, ensure_ascii=False),
-            feature="ai_interview.score",
-            model=model,
-        )
-    except Exception:  # noqa: BLE001 - AI gagal → biarkan status apa adanya, jangan crash
-        logger.warning("Scoring AI Interview gagal untuk response %s", response.id, exc_info=True)
-        return False
-    if not isinstance(result, dict):
+    """`answers` (mode teks/rekaman) dipakai untuk memetakan tiap kutipan
+    bukti ke jawaban & detik rekamannya; mode suara real-time tidak punya."""
+    settings = get_settings()
+    model = settings.ai_scoring_model or settings.ai_model
+    runs: list[list[dict]] = []
+    narrative: str | None = None
+    for _ in range(max(1, settings.ai_interview_scoring_runs)):
+        try:
+            result = chat_completion(
+                _SCORE_SYSTEM_PROMPT,
+                json.dumps(user_payload, ensure_ascii=False),
+                feature="ai_interview.score",
+                model=model,
+            )
+        except Exception:  # noqa: BLE001 - AI gagal → biarkan status apa adanya, jangan crash
+            logger.warning(
+                "Scoring AI Interview gagal untuk response %s", response.id, exc_info=True
+            )
+            continue
+        if not isinstance(result, dict):
+            continue
+        run_breakdown, _ = build_rubric_breakdown(result, template.criteria, candidate_text)
+        runs.append(run_breakdown)
+        if narrative is None:
+            narrative = str(result.get("narrative") or "").strip()[:2000] or None
+    if not runs:
         return False
 
-    breakdown, overall = build_rubric_breakdown(result, template.criteria, candidate_text)
-    narrative = str(result.get("narrative") or "").strip()[:2000] or None
+    breakdown, overall = merge_scoring_runs(runs, template.criteria)
+    if answers:
+        for item in breakdown:
+            related = {
+                str(q.get("id"))
+                for q in template.questions
+                if item["criterion_key"] in (q.get("criterion_keys") or [])
+            }
+            item["evidence_refs"] = [locate_evidence(q, answers, related) for q in item["evidence"]]
 
     response.ai_score_overall = overall
+    response.ai_score_original = None  # skor baru -> koreksi lama tidak berlaku
     response.ai_score_breakdown_json = json.dumps(breakdown, ensure_ascii=False)
     response.ai_narrative = narrative
     response.ai_model = model
@@ -797,6 +1012,8 @@ def _run_scoring(
             "model": model,
             "rubric_version": RUBRIC_VERSION,
             "unsupported": [b["criterion_key"] for b in breakdown if not b["supported"]],
+            "runs": len(runs),
+            "unstable": [b["criterion_key"] for b in breakdown if not b["stable"]],
         },
     )
     return True
@@ -1351,8 +1568,16 @@ def upload_answer_audio(
         set_tenant(prev_tenant)
 
 
-def _stt_transcribe(data: bytes, mime: str) -> str:
-    """faster-whisper-server (API kompatibel OpenAI /audio/transcriptions)."""
+MAX_ANSWER_WORDS = 3000
+
+
+def _stt_transcribe(data: bytes, mime: str) -> tuple[str, list[list]]:
+    """faster-whisper-server (API kompatibel OpenAI /audio/transcriptions).
+    Roadmap Fase 5: minta timestamp per kata (`verbose_json`) -- dipakai untuk
+    memutar rekaman tepat di kutipan bukti. faster-whisper menyediakannya
+    native, jadi WhisperX tidak perlu; diarization juga tidak perlu karena
+    tiap file jawaban hanya berisi suara kandidat.
+    Kembalikan (teks, [[mulai_detik, selesai_detik, kata], ...])."""
     settings = get_settings()
     base = (settings.stt_base_url or "").rstrip("/")
     ext = _EXT.get(mime, "audio")
@@ -1362,12 +1587,22 @@ def _stt_transcribe(data: bytes, mime: str) -> str:
         data={
             "model": settings.stt_model or "Systran/faster-whisper-small",
             "language": "id",
-            "response_format": "json",
+            "response_format": "verbose_json",
+            "timestamp_granularities[]": "word",
         },
         timeout=300,
     )
     resp.raise_for_status()
-    return str(resp.json().get("text") or "").strip()
+    body = resp.json()
+    words: list[list] = []
+    for w in body.get("words") or []:
+        try:
+            words.append(
+                [round(float(w["start"]), 2), round(float(w["end"]), 2), str(w["word"]).strip()]
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return str(body.get("text") or "").strip(), words[:MAX_ANSWER_WORDS]
 
 
 def transcribe_answer_audio(
@@ -1390,8 +1625,11 @@ def transcribe_answer_audio(
         entry = next((a for a in response.answers if a.get("question_id") == question_id), None)
         if entry is None or entry.get("audio_object_key") != object_key:
             return
+        words: list[list] = []
         try:
-            text = _stt_transcribe(storage.get_object(object_key), entry.get("audio_mime", ""))
+            text, words = _stt_transcribe(
+                storage.get_object(object_key), entry.get("audio_mime", "")
+            )
         except Exception:  # noqa: BLE001 - STT gagal -> kandidat diminta rekam ulang
             logger.warning(
                 "Transkripsi jawaban gagal (%s/%s)", response_id, question_id, exc_info=True
@@ -1402,6 +1640,7 @@ def transcribe_answer_audio(
         for a in answers:
             if a.get("question_id") == question_id and a.get("audio_object_key") == object_key:
                 a["answer_text"] = text[:8000]
+                a["words"] = words
                 # Transkrip kosong = suara tidak tertangkap (hening/terlalu pelan).
                 a["transcription"] = "ready" if text else "failed"
         response.answers_json = json.dumps(answers, ensure_ascii=False)

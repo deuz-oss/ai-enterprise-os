@@ -810,6 +810,47 @@ pertanyaan diajukan -- kandidat berbeda mendapat interview berbeda.
   LiveKit sungguhan (apakah LLM benar-benar memanggil tool dengan tertib)
   masih butuh infra voice.
 
+### Fase 64 — AI Interview: Bukti Bertimestamp, Konsistensi Skor, Integrasi Pipeline (Fase 5 roadmap) — ✅ Selesai (2026-09-25)
+
+- **"Dengar bukti"** (mode rekaman jawaban): STT kini meminta timestamp per
+  kata (`verbose_json` + `timestamp_granularities[]=word`), disimpan per
+  jawaban (`answers[].words`). Setelah penilaian, tiap kutipan bukti
+  dipetakan ke pertanyaan asal & detik mulainya (`evidence_refs`, pertanyaan
+  yang terkait kriteria didahulukan). Di halaman review, klik "▶ 0:02" pada
+  kutipan untuk memutar rekaman jawaban tepat di bagian itu.
+- **WhisperX & diarization TIDAK dipakai** (menyimpang dari roadmap, sengaja):
+  faster-whisper-server sudah memberi timestamp kata native, dan pemisahan
+  pembicara tidak diperlukan -- file jawaban hanya berisi kandidat, rekaman
+  sesi real-time sudah 2 kanal terpisah. WhisperX menambah pyannote, token
+  HuggingFace, dan model berat tanpa manfaat tambahan.
+- **Konsistensi skor**: penilaian dijalankan `AI_INTERVIEW_SCORING_RUNS` kali
+  (default 2, 1 = matikan) secara independen. Skor per kriteria = rata-rata
+  run yang didukung bukti; bukti = gabungan kutipan sah; kriteria ditandai
+  **tidak stabil** bila selisih antar-run > 15 poin atau run berbeda soal
+  ada/tidaknya bukti (`score_runs`, `stable`). Biaya LLM penilaian menjadi 2x.
+- **Kalibrasi per template** (`GET /templates/{id}/calibration`): berapa hasil
+  AI yang disetujui/disesuaikan/ditolak reviewer, rata-rata koreksi (poin),
+  dan jumlah hasil tidak stabil. UI memberi saran memperjelas kriteria bila
+  >40% dari >=5 review dikoreksi. Skor AI asli kini disimpan saat reviewer
+  menyesuaikannya (kolom `ai_score_original`, migrasi `9c0d1e2f3a4b`; dulu
+  tertimpa sehingga tidak bisa diukur). Nilai ulang mengosongkannya.
+- **Integrasi pipeline**: saat review, staf bisa sekaligus memindahkan
+  kandidat di pipeline job order template (Placement): submit ke klien,
+  interview klien, atau tidak lolos (alasan default "Tidak lolos tahap AI
+  Interview"). Selalu keputusan eksplisit reviewer -- AI tidak pernah
+  memindahkan kandidat -- dan terpisah dari status review (yang menilai hasil
+  AI, bukan kandidat). Tahap offering/OJT/onboarding tetap lewat
+  Recruitment. Kandidat yang belum ada di pipeline -> 422, review tidak
+  tersimpan. Tahap pipeline tampil di kartu respons. Diaudit
+  (`ai_interview.pipeline_updated`).
+- **Uji live** (STT whisper + gpt-4o-mini + PostgreSQL): kutipan dipetakan ke
+  detik yang tepat (kata pertama kutipan), dua run 85/80 -> 82 stabil, review
+  memindahkan placement ke "disubmit", kalibrasi mencatat koreksi 10 poin.
+  Uji ini juga menemukan kutipan yang muncul di dua jawaban selalu dipetakan
+  ke jawaban pertama -- diperbaiki (pertanyaan terkait kriteria didahulukan).
+- Mode suara real-time belum punya "dengar bukti" (transkrip agen belum
+  membawa offset waktu per baris).
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

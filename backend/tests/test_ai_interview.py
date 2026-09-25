@@ -788,7 +788,14 @@ def _recording_setup(client, monkeypatch, transcripts: list[str]):
 
     monkeypatch.setattr(get_settings(), "stt_base_url", "http://stt.test/v1")
     queue = list(transcripts)
-    monkeypatch.setattr(svc, "_stt_transcribe", lambda data, mime: queue.pop(0))
+
+    def fake_stt(data, mime):
+        text = queue.pop(0)
+        # Timestamp kata sintetis: 0,5 detik per kata.
+        words = [[i * 0.5, i * 0.5 + 0.4, w] for i, w in enumerate(text.split())]
+        return text, words
+
+    monkeypatch.setattr(svc, "_stt_transcribe", fake_stt)
     admin = _auth_header(client)
     template = _create_active_template(client, admin, mode="async_recording")
     cand_id = _create_candidate(client, admin, name="Dewi", email="dewi@example.com")
@@ -1021,3 +1028,236 @@ def test_marker_lines_never_count_as_candidate_evidence():
     lines = _candidate_lines(transcript)
     assert "menangani komplain" not in lines
     assert "dengarkan keluhan" in lines
+
+
+# ---------- Fase 5 roadmap: bukti bertimestamp, konsistensi skor, pipeline ----------
+
+
+def _fake_scoring(monkeypatch, runs: list[dict[str, tuple[int, list[str]]]]):
+    """Mock LLM penilai: tiap panggilan mengambil run berikutnya
+    {criterion_key: (skor, [kutipan])}; run terakhir dipakai berulang."""
+    from app.modules.ai_interview import service as svc
+
+    queue = list(runs)
+
+    def fake(system, user, **kwargs):
+        run = queue.pop(0) if len(queue) > 1 else queue[0]
+        return {
+            "narrative": "Ringkasan.",
+            "breakdown": [
+                {"criterion_key": k, "score": sc, "reasoning": "alasan", "evidence": ev}
+                for k, (sc, ev) in run.items()
+            ],
+        }
+
+    monkeypatch.setattr(svc, "chat_completion", fake)
+
+
+def test_locate_evidence_maps_quote_to_answer_and_second():
+    from app.modules.ai_interview.service import locate_evidence
+
+    answers = [
+        {"question_id": "q1", "answer_text": "Halo semua."},
+        {
+            "question_id": "q2",
+            "answer_text": "Saya kerja di call-center, lalu refund pelanggan.",
+            "words": [
+                [0.0, 0.3, "Saya"],
+                [0.3, 0.6, "kerja"],
+                [0.6, 0.8, "di"],
+                [0.8, 1.5, "call-center,"],
+                [1.6, 2.0, "lalu"],
+                [2.0, 2.5, "refund"],
+            ],
+        },
+    ]
+    # "call-center," dinormalisasi jadi 2 token; kutipan mulai di tengahnya.
+    ref = locate_evidence("center, lalu refund", answers)
+    assert ref == {"quote": "center, lalu refund", "question_id": "q2", "start": 0.8}
+    # Jawaban teks (tanpa words): hanya pertanyaannya yang diketahui.
+    assert locate_evidence("Halo semua", answers)["start"] is None
+    # Kalimat sama di 2 jawaban: pertanyaan terkait kriteria didahulukan
+    # (ditemukan saat uji live -- dulu selalu jatuh ke jawaban pertama).
+    dup = [
+        {"question_id": "q1", "answer_text": "a b c"},
+        {"question_id": "q2", "answer_text": "a b c"},
+    ]
+    assert locate_evidence("a b c", dup)["question_id"] == "q1"
+    assert locate_evidence("a b c", dup, {"q2"})["question_id"] == "q2"
+    assert locate_evidence("tidak ada di jawaban", answers)["question_id"] is None
+
+
+def test_merge_runs_averages_and_flags_unstable():
+    from app.modules.ai_interview.service import merge_scoring_runs
+
+    criteria = [{"key": "a", "weight": 1}, {"key": "b", "weight": 1}, {"key": "c", "weight": 1}]
+
+    def item(key, score, supported, evidence=()):
+        return {
+            "criterion_key": key,
+            "weight": 1.0,
+            "score": score,
+            "reasoning": "",
+            "evidence": list(evidence),
+            "dropped_quotes": 0,
+            "supported": supported,
+        }
+
+    run1 = [item("a", 90, True, ["x y z"]), item("b", 70, True, ["p q r"]), item("c", 50, True)]
+    run2 = [item("a", 60, True, ["x y z", "u v w"]), item("b", 74, True), item("c", 40, False)]
+    merged, overall = merge_scoring_runs([run1, run2], criteria)
+    a, b, c = merged
+    assert (a["score"], a["stable"], a["score_runs"]) == (75, False, [90, 60])
+    assert a["evidence"] == ["x y z", "u v w"]
+    assert (b["score"], b["stable"]) == (72, True)
+    # Satu run menemukan bukti, run lain tidak -> tidak stabil.
+    assert (c["score"], c["supported"], c["stable"]) == (50, True, False)
+    assert overall == round((75 + 72 + 50) / 3)
+
+
+def test_recording_scored_with_evidence_timestamps(client, monkeypatch):
+    admin, token, response_id = _recording_setup(
+        client,
+        monkeypatch,
+        [
+            "Saya selalu mendengarkan keluhan pelanggan dulu",
+            "Saya urutkan antrean berdasarkan urgensi",
+        ],
+    )
+    _fake_scoring(
+        monkeypatch,
+        [
+            {
+                "komunikasi": (80, ["mendengarkan keluhan pelanggan"]),
+                "ketahanan": (70, ["antrean berdasarkan urgensi"]),
+            }
+        ],
+    )
+    assert _upload(client, token, "q1").status_code == 202
+    assert _upload(client, token, "q2").status_code == 202
+    assert client.post(f"/api/v1/ai-interview/session/{token}/submit").status_code == 200
+
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert detail["status"] == "dinilai"
+    by_key = {b["criterion_key"]: b for b in detail["ai_score_breakdown"]}
+    assert by_key["komunikasi"]["evidence_refs"] == [
+        {"quote": "mendengarkan keluhan pelanggan", "question_id": "q1", "start": 1.0}
+    ]
+    assert by_key["ketahanan"]["evidence_refs"][0]["question_id"] == "q2"
+    # Dua run identik -> stabil.
+    assert by_key["komunikasi"]["score_runs"] == [80, 80] and by_key["komunikasi"]["stable"]
+
+
+def test_unstable_scoring_visible_in_calibration(client, monkeypatch):
+    admin = _auth_header(client)
+    _fake_scoring(
+        monkeypatch,
+        [
+            {"komunikasi": (90, ["Jawaban pribadi kandidat"])},
+            {"komunikasi": (50, ["Jawaban pribadi kandidat"])},
+        ],
+    )
+    _, response_id = _submit_text_interview(client, admin)
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    kom = next(b for b in detail["ai_score_breakdown"] if b["criterion_key"] == "komunikasi")
+    assert (kom["score"], kom["stable"]) == (70, False)
+
+    # Reviewer menyesuaikan skor -> skor AI asli tersimpan untuk kalibrasi.
+    reviewed = client.post(
+        f"/api/v1/ai-interview/responses/{response_id}/review",
+        headers=admin,
+        json={"review_status": "disesuaikan", "ai_score_overall": 55},
+    ).json()
+    assert (reviewed["ai_score_original"], reviewed["ai_score_overall"]) == (70, 55)
+    calib = client.get(
+        f"/api/v1/ai-interview/templates/{detail['template_id']}/calibration", headers=admin
+    ).json()
+    assert calib == {
+        "scored": 1,
+        "reviewed": 1,
+        "approved": 0,
+        "adjusted": 1,
+        "rejected": 0,
+        "mean_adjustment": 15.0,
+        "unstable": 1,
+    }
+
+
+def test_single_scoring_run_when_consistency_disabled(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.modules.ai_interview import service as svc
+
+    monkeypatch.setattr(get_settings(), "ai_interview_scoring_runs", 1)
+    calls = []
+
+    def fake(system, user, **kwargs):
+        calls.append(1)
+        return {"breakdown": [{"criterion_key": "komunikasi", "score": 60, "evidence": []}]}
+
+    monkeypatch.setattr(svc, "chat_completion", fake)
+    admin = _auth_header(client)
+    _submit_text_interview(client, admin)
+    assert len(calls) == 1
+
+
+def test_review_can_move_candidate_in_pipeline(client, monkeypatch):
+    admin = _auth_header(client)
+    _fake_scoring(monkeypatch, [{"komunikasi": (80, ["Jawaban pribadi kandidat"])}])
+    client_id = _client_id(client, admin)
+    jo = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=admin,
+        json={"client_id": client_id, "title": "CS", "headcount": 1},
+    )
+    assert jo.status_code == 201, jo.text
+    jo_id = jo.json()["id"]
+    template = _create_active_template(client, admin, job_order_id=jo_id)
+    cand_id = _create_candidate(client, admin, name="Tono", email="tono@example.com")
+    invited = _invite(client, admin, template["id"], cand_id)
+    token, response_id = invited["invite_token"], invited["response_id"]
+    client.post(f"/api/v1/ai-interview/session/{token}/start")
+    client.post(
+        f"/api/v1/ai-interview/session/{token}/answer",
+        json={"question_id": "q1", "answer_text": "Jawaban pribadi kandidat"},
+    )
+    client.post(f"/api/v1/ai-interview/session/{token}/submit")
+
+    # Belum ada di pipeline JO -> aksi pipeline ditolak, review tidak tersimpan.
+    no_pipeline = client.post(
+        f"/api/v1/ai-interview/responses/{response_id}/review",
+        headers=admin,
+        json={"review_status": "disetujui", "placement_status": "disubmit"},
+    )
+    assert no_pipeline.status_code == 422
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert detail["review_status"] == "menunggu_review" and detail["placement_id"] is None
+
+    placement = client.post(
+        "/api/v1/recruitment/placements",
+        headers=admin,
+        json={"candidate_id": cand_id, "job_order_id": jo_id},
+    ).json()
+    listed = client.get(
+        f"/api/v1/ai-interview/responses?template_id={template['id']}", headers=admin
+    ).json()
+    assert listed[0]["placement_status"] == "disourcing"
+
+    # Tahap di luar daftar yang diizinkan ditolak (offering punya alur sendiri).
+    bad = client.post(
+        f"/api/v1/ai-interview/responses/{response_id}/review",
+        headers=admin,
+        json={"review_status": "disetujui", "placement_status": "offering"},
+    )
+    assert bad.status_code == 422
+
+    ok = client.post(
+        f"/api/v1/ai-interview/responses/{response_id}/review",
+        headers=admin,
+        json={"review_status": "disetujui", "placement_status": "gagal"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["placement_status"] == "gagal"
+    moved = client.get("/api/v1/recruitment/placements", headers=admin).json()
+    row = next(p for p in moved if p["id"] == placement["id"])
+    assert row["status"] == "gagal"
+    assert row["rejection_note"] == "Tidak lolos tahap AI Interview"

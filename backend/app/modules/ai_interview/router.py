@@ -25,6 +25,7 @@ from app.modules.ai_interview.schemas import (
     AIInterviewTemplateOut,
     AIInterviewTemplateUpdate,
     AnswerIn,
+    CalibrationOut,
     InterviewGuidelineOut,
     PublicInterviewSessionOut,
     RecordingUrlOut,
@@ -79,6 +80,12 @@ def builtin_guidelines():
     return service.builtin_guidelines()
 
 
+@router.get("/templates/{template_id}/calibration", response_model=CalibrationOut)
+def template_calibration(template_id: str, db: Session = Depends(get_db)):
+    """Fase 5: kesesuaian skor AI dengan keputusan reviewer per template."""
+    return service.template_calibration(db, template_id)
+
+
 @router.get("/templates/{template_id}", response_model=AIInterviewTemplateOut)
 def get_template(template_id: str, db: Session = Depends(get_db)):
     return service.get_template(db, template_id)
@@ -110,7 +117,7 @@ def list_responses(
     review_status: AIInterviewReviewStatus | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    return service.list_responses(
+    responses = service.list_responses(
         db,
         template_id=template_id,
         candidate_id=candidate_id,
@@ -118,11 +125,12 @@ def list_responses(
         status=status_filter,
         review_status=review_status,
     )
+    return service.responses_out(db, responses)
 
 
 @router.get("/responses/{response_id}", response_model=AIInterviewResponseOut)
 def get_response(response_id: str, db: Session = Depends(get_db)):
-    return service.get_response(db, response_id)
+    return service.responses_out(db, [service.get_response(db, response_id)])[0]
 
 
 @router.post("/responses/{response_id}/score", response_model=AIInterviewResponseOut)
@@ -138,8 +146,10 @@ def review_response(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """Gate wajib — skor AI tidak dianggap final di UI manapun sebelum endpoint ini dipanggil."""
-    return service.review_response(db, user, response_id, payload)
+    """Gate wajib — skor AI tidak dianggap final di UI manapun sebelum endpoint ini dipanggil.
+    Fase 5: boleh sekaligus memindahkan kandidat di pipeline (`placement_status`)."""
+    response = service.review_response(db, user, response_id, payload)
+    return service.responses_out(db, [response])[0]
 
 
 @router.get("/responses/{response_id}/recording-url", response_model=RecordingUrlOut)

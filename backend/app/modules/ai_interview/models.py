@@ -144,6 +144,9 @@ class AIInterviewResponse(TenantMixin, Base):
     recording_size_bytes: Mapped[int | None] = mapped_column(Integer)
 
     ai_score_overall: Mapped[int | None] = mapped_column(Integer)
+    # Fase 5 roadmap: skor AI sebelum disesuaikan reviewer (NULL = tidak
+    # pernah disesuaikan) -- bahan kalibrasi AI vs penilaian manusia.
+    ai_score_original: Mapped[int | None] = mapped_column(Integer)
     ai_score_breakdown_json: Mapped[str | None] = mapped_column(Text)
     ai_narrative: Mapped[str | None] = mapped_column(Text)
     ai_model: Mapped[str | None] = mapped_column(String(120))

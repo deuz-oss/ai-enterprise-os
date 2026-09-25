@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 64: AI Interview — bukti bertimestamp, konsistensi skor, integrasi pipeline
+
+Fase 5 roadmap AI Interview. Detail di `PRD.md` Fase 64.
+- Kutipan bukti di halaman review bisa diklik untuk memutar rekaman jawaban tepat di detik kutipan (timestamp per kata dari faster-whisper; WhisperX tidak diperlukan).
+- Penilaian AI dijalankan 2x secara independen (`AI_INTERVIEW_SCORING_RUNS`); skor dirata-rata dan kriteria yang hasilnya berbeda jauh ditandai "tidak stabil".
+- Ringkasan kalibrasi per template: berapa hasil AI yang disetujui/dikoreksi reviewer dan rata-rata koreksinya. Skor AI asli kini tersimpan saat disesuaikan (migrasi `9c0d1e2f3a4b`).
+- Saat review, staf bisa sekaligus memindahkan kandidat di pipeline job order (submit ke klien, interview klien, atau tidak lolos). Selalu keputusan manusia.
+
 ### Added — Fase 63: AI Interview — alur terstruktur & pedoman percakapan
 
 Fase 4 roadmap AI Interview. Detail di `PRD.md` Fase 63.

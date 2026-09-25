@@ -5,7 +5,7 @@ import { PageHeader } from "../components/workspace";
 import { KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { RecordingPlayer } from "../components/RecordingPlayer";
+import { RecordingPlayer, type SeekRequest } from "../components/RecordingPlayer";
 
 interface Question {
   id: string;
@@ -70,6 +70,8 @@ interface InterviewResponse {
   has_recording: boolean;
   recording_size_bytes: number | null;
   ai_score_overall: number | null;
+  /** Skor AI sebelum disesuaikan reviewer (Fase 5); null = tidak disesuaikan. */
+  ai_score_original: number | null;
   ai_score_breakdown: ScoreItem[];
   ai_narrative: string | null;
   ai_model: string | null;
@@ -86,7 +88,34 @@ interface InterviewResponse {
   consent_withdrawn_at: string | null;
   data_purged_at: string | null;
   purge_reason: "retensi" | "penarikan_persetujuan" | "penghapusan_subjek" | null;
+  /** Tahap pipeline kandidat di job order template ini (Fase 5). */
+  placement_id: string | null;
+  placement_status: string | null;
 }
+
+interface Calibration {
+  scored: number;
+  reviewed: number;
+  approved: number;
+  adjusted: number;
+  rejected: number;
+  mean_adjustment: number | null;
+  unstable: number;
+}
+
+const PLACEMENT_LABEL: Record<string, string> = {
+  disourcing: "Sourcing",
+  screening: "Screening",
+  interview_rekruter: "Interview rekruter",
+  disubmit: "Disubmit ke klien",
+  interview_klien: "Interview klien",
+  ojt: "OJT",
+  offering: "Offering",
+  hired: "Hired",
+  onboarded: "Onboarded",
+  gagal: "Gagal",
+  dibatalkan: "Dibatalkan",
+};
 
 interface Candidate {
   id: string;
@@ -107,6 +136,16 @@ interface ScoreItem {
   dropped_quotes?: number;
   supported?: boolean;
   rubric_version?: string;
+  /** Fase 5: skor tiap run penilaian independen & apakah hasilnya konsisten. */
+  score_runs?: (number | null)[];
+  stable?: boolean;
+  /** Fase 5: asal kutipan (pertanyaan) & detik mulainya di rekaman jawaban. */
+  evidence_refs?: { quote: string; question_id: string | null; start: number | null }[];
+}
+
+function fmtSec(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 /** Transkrip sesi suara: versi dirapikan (tanpa "eh/anu") untuk dibaca,
@@ -155,8 +194,23 @@ function TranscriptView({ raw, clean }: { raw: string; clean: string | null }) {
   );
 }
 
-function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | null }) {
+function ScoreBreakdown({
+  items,
+  model,
+  questions,
+  onPlayEvidence,
+}: {
+  items: ScoreItem[];
+  model: string | null;
+  questions: Question[];
+  onPlayEvidence: (questionId: string, start: number) => void;
+}) {
   const isRubric = items.some((b) => b.supported !== undefined);
+  const runs = items.find((b) => b.score_runs)?.score_runs?.length ?? 1;
+  const questionNo = (qid: string | null) => {
+    const idx = questions.findIndex((q) => q.id === qid);
+    return idx >= 0 ? `P${idx + 1}` : null;
+  };
   const version = items.find((b) => b.rubric_version)?.rubric_version;
   return (
     <div className="mt-3 space-y-2">
@@ -180,15 +234,27 @@ function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | 
                   </span>
                 )}
               </p>
-              {unsupported ? (
-                <span className="pill p-yellow" title="Tidak ada kutipan jawaban kandidat yang mendukung skor ini">
-                  Tanpa bukti — tidak dihitung
-                </span>
-              ) : (
-                <span className="text-sm font-semibold tabular-nums text-[var(--text)]">
-                  {b.score ?? "–"}
-                </span>
-              )}
+              <span className="flex items-center gap-2">
+                {b.stable === false && (
+                  <span
+                    className="pill p-yellow"
+                    title={`Penilaian AI independen memberi hasil berbeda (${(b.score_runs ?? [])
+                      .map((x) => x ?? "tanpa bukti")
+                      .join(" vs ")}). Periksa jawaban kandidat secara manual.`}
+                  >
+                    Tidak stabil
+                  </span>
+                )}
+                {unsupported ? (
+                  <span className="pill p-yellow" title="Tidak ada kutipan jawaban kandidat yang mendukung skor ini">
+                    Tanpa bukti — tidak dihitung
+                  </span>
+                ) : (
+                  <span className="text-sm font-semibold tabular-nums text-[var(--text)]">
+                    {b.score ?? "–"}
+                  </span>
+                )}
+              </span>
             </div>
             {!unsupported && b.score !== null && (
               <div
@@ -209,15 +275,33 @@ function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | 
             {b.reasoning && <p className="mt-2 text-xs text-[var(--text-muted)]">{b.reasoning}</p>}
             {(b.evidence ?? []).length > 0 && (
               <ul className="mt-2 space-y-1">
-                {b.evidence!.map((q) => (
-                  <li
-                    key={q}
-                    className="rounded-r-md py-1 pl-2.5 pr-2 text-xs text-[var(--text)]"
-                    style={{ borderLeft: "3px solid var(--accent)", backgroundColor: "var(--accent-tint)" }}
-                  >
-                    “{q}”
-                  </li>
-                ))}
+                {b.evidence!.map((q) => {
+                  const ref = b.evidence_refs?.find((r) => r.quote === q);
+                  const qno = ref ? questionNo(ref.question_id) : null;
+                  return (
+                    <li
+                      key={q}
+                      className="flex items-start justify-between gap-2 rounded-r-md py-1 pl-2.5 pr-2 text-xs text-[var(--text)]"
+                      style={{ borderLeft: "3px solid var(--accent)", backgroundColor: "var(--accent-tint)" }}
+                    >
+                      <span>
+                        “{q}”
+                        {qno && <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">{qno}</span>}
+                      </span>
+                      {ref?.question_id && ref.start !== null && (
+                        <button
+                          type="button"
+                          onClick={() => onPlayEvidence(ref.question_id!, ref.start!)}
+                          className="shrink-0 font-medium tabular-nums underline hover:opacity-80"
+                          style={{ color: "var(--accent)" }}
+                          aria-label={`Dengarkan kutipan di ${qno ?? "jawaban"} detik ${fmtSec(ref.start)}`}
+                        >
+                          ▶ {fmtSec(ref.start)}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {(b.dropped_quotes ?? 0) > 0 && (
@@ -232,6 +316,7 @@ function ScoreBreakdown({ items, model }: { items: ScoreItem[]; model: string | 
         {isRubric
           ? "Skor total = rata-rata berbobot kriteria yang didukung kutipan jawaban kandidat. "
           : "Hasil penilaian format lama (tanpa kutipan bukti). "}
+        {runs > 1 && <>Skor = rata-rata {runs} penilaian independen. </>}
         {model && <>Dinilai oleh {model}</>}
         {version && <> · rubrik {version}</>}
       </p>
@@ -363,6 +448,10 @@ export default function AIInterview() {
     return preselected ? [preselected] : [];
   });
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  // Klik kutipan bukti -> putar rekaman jawaban terkait di detik kutipan.
+  const [evidenceSeek, setEvidenceSeek] = useState<
+    ({ responseId: string; questionId: string } & SeekRequest) | null
+  >(null);
 
   const { data: templates } = useQuery({
     queryKey: ["ai-interview-templates"],
@@ -396,11 +485,18 @@ export default function AIInterview() {
     queryFn: () => api.get<InterviewResponse[]>(`/ai-interview/responses?template_id=${selectedId}`),
     enabled: Boolean(selectedId),
   });
+  const { data: calibration } = useQuery({
+    queryKey: ["ai-interview-calibration", selectedId],
+    queryFn: () => api.get<Calibration>(`/ai-interview/templates/${selectedId}/calibration`),
+    enabled: Boolean(selectedId),
+  });
   const candidateName = (id: string) => candidates?.find((c) => c.id === id)?.full_name ?? id;
 
   const invalidateTemplates = () => qc.invalidateQueries({ queryKey: ["ai-interview-templates"] });
-  const invalidateResponses = () =>
+  const invalidateResponses = () => {
     qc.invalidateQueries({ queryKey: ["ai-interview-responses", selectedId] });
+    qc.invalidateQueries({ queryKey: ["ai-interview-calibration", selectedId] });
+  };
 
   const createTemplate = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/ai-interview/templates", body),
@@ -472,6 +568,12 @@ export default function AIInterview() {
     if (reviewStatus === "disesuaikan") {
       const overall = form.get("ai_score_overall");
       if (overall) body.ai_score_overall = Number(overall);
+    }
+    // Fase 5: keputusan pipeline terpisah & eksplisit (kosong = tidak diubah).
+    const placementStatus = String(form.get("placement_status") ?? "");
+    if (placementStatus) {
+      body.placement_status = placementStatus;
+      body.placement_note = form.get("placement_note") || null;
     }
     reviewResponse.mutate({ id: responseId, body });
   }
@@ -840,6 +942,33 @@ export default function AIInterview() {
                   </button>
                 </div>
               )}
+
+              {calibration && calibration.scored > 0 && (
+                <div
+                  className="rounded-lg border p-3 text-xs text-[var(--text-muted)]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <p className="mb-1 font-medium text-[var(--text)]">Kalibrasi skor AI</p>
+                  <p>
+                    {calibration.reviewed} dari {calibration.scored} hasil sudah direview:{" "}
+                    {calibration.approved} disetujui, {calibration.adjusted} disesuaikan
+                    {calibration.mean_adjustment !== null && (
+                      <> (rata-rata dikoreksi {calibration.mean_adjustment} poin)</>
+                    )}
+                    , {calibration.rejected} ditolak.
+                    {calibration.unstable > 0 && (
+                      <> {calibration.unstable} hasil punya kriteria dengan penilaian AI tidak stabil.</>
+                    )}
+                  </p>
+                  {calibration.reviewed >= 5 &&
+                    (calibration.adjusted + calibration.rejected) / calibration.reviewed > 0.4 && (
+                      <p className="mt-1 text-amber-700 dark:text-amber-400">
+                        Reviewer sering mengoreksi skor AI untuk template ini — pertimbangkan
+                        memperjelas deskripsi kriteria.
+                      </p>
+                    )}
+                </div>
+              )}
             </div>
 
             <div className="card space-y-3 p-0">
@@ -855,7 +984,17 @@ export default function AIInterview() {
                         <span className={`pill ${STATUS_PILL[r.status]}`}>{r.status}</span>
                         <span className={`pill ${REVIEW_PILL[r.review_status]}`}>{r.review_status}</span>
                         {r.ai_score_overall !== null ? (
-                          <span className="pill p-blue">Skor {r.ai_score_overall}</span>
+                          <span
+                            className="pill p-blue"
+                            title={
+                              r.ai_score_original !== null
+                                ? `Skor AI ${r.ai_score_original}, disesuaikan reviewer`
+                                : undefined
+                            }
+                          >
+                            Skor {r.ai_score_overall}
+                            {r.ai_score_original !== null && ` (AI ${r.ai_score_original})`}
+                          </span>
                         ) : (
                           r.status === "dinilai" &&
                           !r.data_purged_at && (
@@ -875,6 +1014,11 @@ export default function AIInterview() {
                           </span>
                         ) : (
                           <span className="pill p-gray">Belum menyetujui</span>
+                        )}
+                        {r.placement_status && (
+                          <span className="pill p-gray" title="Tahap kandidat di pipeline job order">
+                            Pipeline: {PLACEMENT_LABEL[r.placement_status] ?? r.placement_status}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -918,7 +1062,10 @@ export default function AIInterview() {
                     <TranscriptView raw={r.transcript_text} clean={r.transcript_clean} />
                   )}
                   {r.answers.length > 0 && (
-                    <details className="mt-1">
+                    <details
+                      className="mt-1"
+                      open={evidenceSeek?.responseId === r.id ? true : undefined}
+                    >
                       <summary className="cursor-pointer text-xs text-[var(--accent)]">
                         Lihat jawaban kandidat
                       </summary>
@@ -938,6 +1085,12 @@ export default function AIInterview() {
                                   responseId={r.id}
                                   urlPath={`/ai-interview/responses/${r.id}/answers/${a.question_id}/audio-url`}
                                   title="Rekaman jawaban (transkrip di atas = dasar penilaian)"
+                                  seek={
+                                    evidenceSeek?.responseId === r.id &&
+                                    evidenceSeek.questionId === a.question_id
+                                      ? evidenceSeek
+                                      : null
+                                  }
                                 />
                               </dd>
                             )}
@@ -947,7 +1100,14 @@ export default function AIInterview() {
                     </details>
                   )}
                   {r.ai_score_breakdown.length > 0 && (
-                    <ScoreBreakdown items={r.ai_score_breakdown} model={r.ai_model} />
+                    <ScoreBreakdown
+                      items={r.ai_score_breakdown}
+                      model={r.ai_model}
+                      questions={selected.questions}
+                      onPlayEvidence={(questionId, start) =>
+                        setEvidenceSeek({ responseId: r.id, questionId, at: start, nonce: Date.now() })
+                      }
+                    />
                   )}
 
                   {reviewingId === r.id && (
@@ -975,6 +1135,39 @@ export default function AIInterview() {
                         className="input w-full py-1 text-xs"
                         rows={2}
                       />
+                      {r.placement_id ? (
+                        <fieldset className="space-y-1">
+                          <label
+                            htmlFor={`placement-${r.id}`}
+                            className="text-[11px] text-[var(--text-muted)]"
+                          >
+                            Keputusan pipeline (tahap sekarang:{" "}
+                            {PLACEMENT_LABEL[r.placement_status ?? ""] ?? r.placement_status})
+                          </label>
+                          <select
+                            id={`placement-${r.id}`}
+                            name="placement_status"
+                            defaultValue=""
+                            className="input w-full py-1 text-xs"
+                          >
+                            <option value="">Tidak mengubah pipeline</option>
+                            <option value="disubmit">Lanjut — submit ke klien</option>
+                            <option value="interview_klien">Lanjut — interview klien</option>
+                            <option value="gagal">Tidak lolos</option>
+                          </select>
+                          <input
+                            name="placement_note"
+                            maxLength={1000}
+                            placeholder="Alasan (dicatat di pipeline bila tidak lolos)"
+                            className="input w-full py-1 text-xs"
+                          />
+                        </fieldset>
+                      ) : (
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Kandidat belum ada di pipeline job order template ini — keputusan
+                          lanjut/gagal dilakukan di Recruitment.
+                        </p>
+                      )}
                       <button type="submit" disabled={reviewResponse.isPending} className="btn py-1 text-xs">
                         Simpan Review
                       </button>

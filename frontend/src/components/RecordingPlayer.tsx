@@ -29,15 +29,24 @@ function fmt(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** Permintaan lompat ke detik tertentu (mis. klik kutipan bukti). `nonce`
+ * membedakan klik berulang pada detik yang sama. */
+export interface SeekRequest {
+  at: number;
+  nonce: number;
+}
+
 export function RecordingPlayer({
   responseId,
   urlPath,
   title = "Rekaman sesi",
+  seek = null,
 }: {
   responseId: string;
   /** Endpoint link rekaman; default = rekaman sesi suara real-time. */
   urlPath?: string;
   title?: string;
+  seek?: SeekRequest | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
@@ -47,7 +56,24 @@ export function RecordingPlayer({
   const [time, setTime] = useState({ cur: 0, dur: 0 });
   const [channels, setChannels] = useState<string[]>(["Kandidat", "Pewawancara AI"]);
 
+  // Detik tujuan yang menunggu rekaman selesai dimuat.
+  const pendingSeekRef = useRef<number | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => () => wsRef.current?.destroy(), []);
+
+  useEffect(() => {
+    if (!seek) return;
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (state === "ready" && wsRef.current) {
+      wsRef.current.setTime(seek.at);
+      void wsRef.current.play();
+    } else {
+      pendingSeekRef.current = seek.at;
+      if (state === "idle" || state === "error") void load();
+    }
+    // `load`/`state` sengaja tidak jadi dependensi: efek hanya untuk klik baru.
+  }, [seek?.nonce]);
 
   async function load() {
     if (!containerRef.current) return;
@@ -77,6 +103,11 @@ export function RecordingPlayer({
       ws.on("ready", (dur) => {
         setTime({ cur: 0, dur });
         setState("ready");
+        if (pendingSeekRef.current !== null) {
+          ws.setTime(pendingSeekRef.current);
+          pendingSeekRef.current = null;
+          void ws.play();
+        }
       });
       ws.on("timeupdate", (cur) => setTime((t) => ({ ...t, cur })));
       ws.on("play", () => setPlaying(true));
@@ -95,6 +126,7 @@ export function RecordingPlayer({
 
   return (
     <div
+      ref={rootRef}
       className="mt-2 rounded-lg p-3"
       style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
     >
