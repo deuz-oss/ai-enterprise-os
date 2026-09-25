@@ -15,6 +15,20 @@ interface Question {
   options: string[] | null;
   criterion_keys: string[];
   required: boolean;
+  /** Fase 4 (suara real-time): kuota pertanyaan susulan & apa yang digali. */
+  follow_up_max?: number;
+  follow_up_focus?: string | null;
+}
+
+/** Pedoman percakapan agen suara: JIKA kondisi -> jawaban baku. */
+interface Guideline {
+  condition: string;
+  response: string;
+}
+
+interface BuiltinGuideline extends Guideline {
+  key: string | null;
+  locked: boolean;
 }
 
 interface Criterion {
@@ -33,6 +47,7 @@ interface Template {
   status: "draft" | "aktif" | "arsip";
   questions: Question[];
   criteria: Criterion[];
+  guidelines: Guideline[];
   created_at: string;
   updated_at: string;
 }
@@ -122,7 +137,20 @@ function TranscriptView({ raw, clean }: { raw: string; clean: string | null }) {
           </button>
         </div>
       )}
-      <p className="mt-1 whitespace-pre-line text-xs text-[var(--text-muted)]">{text}</p>
+      <div className="mt-1 space-y-0.5 text-xs text-[var(--text-muted)]">
+        {text.split("\n").map((line, i) =>
+          // Penanda pertanyaan dari agen terstruktur (Fase 4): "## Pertanyaan N: ..."
+          line.startsWith("## ") ? (
+            <p key={i} className="pt-2 font-semibold text-[var(--text)]">
+              {line.slice(3)}
+            </p>
+          ) : (
+            <p key={i} className="whitespace-pre-line">
+              {line}
+            </p>
+          )
+        )}
+      </div>
     </details>
   );
 }
@@ -226,6 +254,97 @@ const REVIEW_PILL: Record<string, string> = {
   ditolak: "p-red",
 };
 
+/** Fase 4: pedoman percakapan agen suara. Aturan bawaan ditampilkan
+ * read-only (sumber: backend) supaya staf tahu apa yang sudah dijaga sistem
+ * dan tidak menulis ulang aturan yang sama. */
+function GuidelinesEditor({
+  value,
+  onChange,
+}: {
+  value: Guideline[];
+  onChange: (next: Guideline[]) => void;
+}) {
+  const { data: builtin } = useQuery({
+    queryKey: ["ai-interview-builtin-guidelines"],
+    queryFn: () => api.get<BuiltinGuideline[]>("/ai-interview/guidelines/builtin"),
+    staleTime: Infinity,
+  });
+  const update = (idx: number, patch: Partial<Guideline>) =>
+    onChange(value.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-xs font-medium text-[var(--text-muted)]">Pedoman percakapan</p>
+        <p className="text-[11px] text-[var(--text-muted)]">
+          Jawaban baku saat kandidat menanyakan hal tertentu. Diucapkan AI hampir persis, jadi
+          tulis kalimat yang sudah disetujui tim.
+        </p>
+      </div>
+      {value.map((g, idx) => (
+        <div key={idx} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+          <input
+            value={g.condition}
+            onChange={(e) => update(idx, { condition: e.target.value })}
+            placeholder="Jika kandidat… (mis. bertanya soal shift kerja)"
+            aria-label={`Kondisi pedoman ${idx + 1}`}
+            maxLength={300}
+            className="input w-full py-1 text-xs sm:w-2/5"
+          />
+          <input
+            value={g.response}
+            onChange={(e) => update(idx, { response: e.target.value })}
+            placeholder="Jawab: (mis. Shift kerja 3x8 jam, jadwal diatur supervisor.)"
+            aria-label={`Jawaban pedoman ${idx + 1}`}
+            maxLength={600}
+            className="input min-w-0 flex-1 py-1 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, i) => i !== idx))}
+            className="text-xs text-red-600 dark:text-red-400"
+          >
+            Hapus
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, { condition: "", response: "" }])}
+        className="btn-secondary py-1 text-xs"
+        disabled={value.length >= 20}
+      >
+        + Tambah Pedoman
+      </button>
+      {builtin && builtin.length > 0 && (
+        <details className="rounded-md border p-2" style={{ borderColor: "var(--border)" }}>
+          <summary className="cursor-pointer text-xs text-[var(--accent)]">
+            Aturan bawaan sistem ({builtin.length}) — selalu berlaku
+          </summary>
+          <ul className="mt-2 space-y-1.5">
+            {builtin.map((g) => (
+              <li key={g.key ?? g.condition} className="text-[11px] text-[var(--text-muted)]">
+                <span
+                  className={`pill mr-1.5 ${g.locked ? "p-red" : "p-gray"}`}
+                  title={
+                    g.locked
+                      ? "Tidak bisa dikalahkan pedoman template"
+                      : "Pedoman template untuk topik yang sama menggantikan jawaban ini"
+                  }
+                >
+                  {g.locked ? "terkunci" : "default"}
+                </span>
+                <b className="text-[var(--text)]">Jika</b> {g.condition.toLowerCase()} →{" "}
+                {g.response}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export default function AIInterview() {
   const qc = useQueryClient();
   // Fase 21 item 3 — deep-link dari tombol "Jadwalkan Interview" terunifikasi
@@ -236,6 +355,9 @@ export default function AIInterview() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [mode, setMode] = useState("async_text");
+  const [guidelines, setGuidelines] = useState<Guideline[]>([]);
+  const isVoice = mode === "realtime_voice";
   const [candidateIds, setCandidateIds] = useState<string[]>(() => {
     const preselected = searchParams.get("candidate_id");
     return preselected ? [preselected] : [];
@@ -286,6 +408,8 @@ export default function AIInterview() {
       setShowForm(false);
       setQuestions([]);
       setCriteria([]);
+      setGuidelines([]);
+      setMode("async_text");
       invalidateTemplates();
     },
   });
@@ -327,9 +451,13 @@ export default function AIInterview() {
     createTemplate.mutate({
       title: form.get("title"),
       objective: form.get("objective") || null,
-      mode: form.get("mode") || "async_text",
+      mode,
       questions: questions.filter((q) => q.prompt.trim()),
       criteria: criteria.filter((c) => c.key.trim() && c.label.trim()),
+      // Pedoman hanya dipakai agen suara real-time.
+      guidelines: isVoice
+        ? guidelines.filter((g) => g.condition.trim() && g.response.trim())
+        : [],
     });
   }
 
@@ -443,7 +571,13 @@ export default function AIInterview() {
             <label htmlFor="mode" className="text-xs font-medium text-[var(--text-muted)]">
               Mode Interview
             </label>
-            <select id="mode" name="mode" defaultValue="async_text" className="input mt-1 w-full">
+            <select
+              id="mode"
+              name="mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              className="input mt-1 w-full"
+            >
               <option value="async_text">Teks — kandidat ketik jawaban</option>
               <option value="async_recording">
                 Rekaman jawaban — kandidat merekam jawaban suara per pertanyaan (butuh
@@ -459,44 +593,84 @@ export default function AIInterview() {
           <div className="space-y-1">
             <p className="text-xs font-medium text-[var(--text-muted)]">Pertanyaan</p>
             {questions.map((q, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  value={q.prompt}
-                  onChange={(e) =>
-                    setQuestions((qs) =>
-                      qs.map((item, i) => (i === idx ? { ...item, prompt: e.target.value } : item))
-                    )
-                  }
-                  placeholder={`Pertanyaan ${idx + 1}`}
-                  className="input flex-1 py-1 text-xs"
-                />
-                <input
-                  value={q.criterion_keys.join(",")}
-                  onChange={(e) =>
-                    setQuestions((qs) =>
-                      qs.map((item, i) =>
-                        i === idx
-                          ? {
-                              ...item,
-                              criterion_keys: e.target.value
-                                .split(",")
-                                .map((s) => s.trim())
-                                .filter(Boolean),
-                            }
-                          : item
+              <div key={idx} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={q.prompt}
+                    onChange={(e) =>
+                      setQuestions((qs) =>
+                        qs.map((item, i) => (i === idx ? { ...item, prompt: e.target.value } : item))
                       )
-                    )
-                  }
-                  placeholder="kriteria (pisah koma)"
-                  className="input w-40 py-1 text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
-                  className="text-xs text-red-600 dark:text-red-400"
-                >
-                  Hapus
-                </button>
+                    }
+                    placeholder={`Pertanyaan ${idx + 1}`}
+                    className="input flex-1 py-1 text-xs"
+                  />
+                  <input
+                    value={q.criterion_keys.join(",")}
+                    onChange={(e) =>
+                      setQuestions((qs) =>
+                        qs.map((item, i) =>
+                          i === idx
+                            ? {
+                                ...item,
+                                criterion_keys: e.target.value
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="kriteria (pisah koma)"
+                    className="input w-40 py-1 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
+                    className="text-xs text-red-600 dark:text-red-400"
+                  >
+                    Hapus
+                  </button>
+                </div>
+                {isVoice && (
+                  <div className="flex flex-wrap items-center gap-2 pl-3 text-[11px] text-[var(--text-muted)]">
+                    <label htmlFor={`fu-max-${idx}`}>Pertanyaan susulan maks.</label>
+                    <select
+                      id={`fu-max-${idx}`}
+                      value={q.follow_up_max ?? 1}
+                      onChange={(e) =>
+                        setQuestions((qs) =>
+                          qs.map((item, i) =>
+                            i === idx ? { ...item, follow_up_max: Number(e.target.value) } : item
+                          )
+                        )
+                      }
+                      className="input w-16 py-0.5 text-xs"
+                    >
+                      {[0, 1, 2, 3].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={q.follow_up_focus ?? ""}
+                      onChange={(e) =>
+                        setQuestions((qs) =>
+                          qs.map((item, i) =>
+                            i === idx ? { ...item, follow_up_focus: e.target.value || null } : item
+                          )
+                        )
+                      }
+                      placeholder="yang digali (mis. hasil terukur, peran pribadi)"
+                      aria-label={`Fokus pertanyaan susulan ${idx + 1}`}
+                      maxLength={300}
+                      disabled={(q.follow_up_max ?? 1) === 0}
+                      className="input min-w-0 flex-1 py-0.5 text-xs"
+                    />
+                  </div>
+                )}
               </div>
             ))}
             <button
@@ -512,6 +686,8 @@ export default function AIInterview() {
                     options: null,
                     criterion_keys: [],
                     required: true,
+                    follow_up_max: 1,
+                    follow_up_focus: null,
                   },
                 ])
               }
@@ -577,6 +753,8 @@ export default function AIInterview() {
               + Tambah Kriteria
             </button>
           </div>
+
+          {isVoice && <GuidelinesEditor value={guidelines} onChange={setGuidelines} />}
 
           {createTemplate.error && (
             <p className="text-sm text-red-600 dark:text-red-400">

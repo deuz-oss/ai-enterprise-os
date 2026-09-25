@@ -898,3 +898,126 @@ def test_session_polling_does_not_exhaust_rate_limit(client, monkeypatch):
     for _ in range(40):
         assert client.get(f"/api/v1/ai-interview/session/{token}").status_code == 200
     assert _upload(client, token, "q1").status_code == 202  # batas tulis terpisah
+
+
+# ---------- Fase 4 roadmap: alur terstruktur & pedoman percakapan ----------
+
+
+def test_template_stores_follow_up_settings_and_guidelines(client):
+    admin = _auth_header(client)
+    payload = _template_payload(mode="realtime_voice")
+    payload["questions"][0]["follow_up_max"] = 2
+    payload["questions"][0]["follow_up_focus"] = "hasil yang terukur"
+    payload["guidelines"] = [
+        {"condition": "Kandidat bertanya soal shift", "response": "Shift kerja 3x8 jam."}
+    ]
+    created = client.post("/api/v1/ai-interview/templates", headers=admin, json=payload)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["questions"][0]["follow_up_max"] == 2
+    assert body["questions"][1]["follow_up_max"] == 1  # default
+    assert body["guidelines"][0]["response"] == "Shift kerja 3x8 jam."
+
+    patched = client.patch(
+        f"/api/v1/ai-interview/templates/{body['id']}", headers=admin, json={"guidelines": []}
+    )
+    assert patched.json()["guidelines"] == []
+
+
+def test_protected_attribute_questions_rejected(client):
+    admin = _auth_header(client)
+    payload = _template_payload()
+    payload["questions"][1]["prompt"] = "Apakah Anda  SUDAH MENIKAH?"
+    resp = client.post("/api/v1/ai-interview/templates", headers=admin, json=payload)
+    assert resp.status_code == 422
+    assert "sudah menikah" in resp.text
+
+    payload = _template_payload()
+    payload["guidelines"] = [
+        {"condition": "Kandidat diam lama", "response": "Boleh tahu apa agama Anda?"}
+    ]
+    assert (
+        client.post("/api/v1/ai-interview/templates", headers=admin, json=payload).status_code
+        == 422
+    )
+
+    payload = _template_payload()
+    payload["questions"][0]["follow_up_max"] = 5
+    assert (
+        client.post("/api/v1/ai-interview/templates", headers=admin, json=payload).status_code
+        == 422
+    )
+
+
+def test_legacy_template_violating_new_rules_still_readable(client):
+    """Validasi kebijakan hanya saat menyimpan: template lama yang tersimpan
+    sebelum aturan baru tidak boleh membuat daftar template error 500."""
+    from uuid import UUID
+
+    from app.modules.ai_interview.models import AIInterviewTemplate
+
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin)
+    db = client.testing_session()
+    row = db.get(AIInterviewTemplate, UUID(template["id"]))
+    row.questions_json = '[{"id": "q1", "prompt": "Apa agama Anda?"}]'
+    row.criteria_json = '[{"key": "nada", "label": "Nada suara"}]'
+    db.commit()
+    db.close()
+    listed = client.get("/api/v1/ai-interview/templates", headers=admin)
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["questions"][0]["prompt"] == "Apa agama Anda?"
+
+
+def test_voice_context_sends_builtin_then_template_guidelines(client, monkeypatch):
+    admin = _auth_header(client)
+    payload_guidelines = [
+        {"condition": "Kandidat bertanya soal gaji", "response": "Kisaran gaji 5-6 juta."}
+    ]
+    template = _create_active_template(
+        client, admin, mode="realtime_voice", guidelines=payload_guidelines
+    )
+    cand_id = _create_candidate(client, admin)
+    token = _invite(client, admin, template["id"], cand_id)["invite_token"]
+    ctx = client.get(
+        f"/api/v1/ai-interview/session/{token}/voice/context",
+        headers=_agent_headers(monkeypatch, token),
+    ).json()
+    guidelines = ctx["guidelines"]
+    keys = [g["key"] for g in guidelines if g["source"] == "sistem"]
+    assert keys[:3] == ["atribut_dilindungi", "hasil_penilaian", "manipulasi"]
+    assert all(g["locked"] for g in guidelines[:3])
+    assert guidelines[-1] == {
+        "key": None,
+        "condition": "Kandidat bertanya soal gaji",
+        "response": "Kisaran gaji 5-6 juta.",
+        "locked": False,
+        "source": "template",
+    }
+    assert ctx["questions"][0]["follow_up_max"] == 1
+
+    # Pedoman template tidak pernah bocor ke kandidat.
+    session = client.get(f"/api/v1/ai-interview/session/{token}").json()
+    assert "guidelines" not in session and "Kisaran gaji" not in str(session)
+
+
+def test_builtin_guidelines_listed_for_staff(client):
+    admin = _auth_header(client)
+    resp = client.get("/api/v1/ai-interview/guidelines/builtin", headers=admin)
+    assert resp.status_code == 200
+    locked = [g["key"] for g in resp.json() if g["locked"]]
+    assert "atribut_dilindungi" in locked
+    assert client.get("/api/v1/ai-interview/guidelines/builtin").status_code == 401
+
+
+def test_marker_lines_never_count_as_candidate_evidence():
+    from app.modules.ai_interview.service import _candidate_lines
+
+    transcript = (
+        "## Pertanyaan 1: Ceritakan pengalaman menangani komplain pelanggan\n"
+        "Pewawancara AI: Ceritakan pengalaman menangani komplain pelanggan.\n"
+        "Kandidat: Saya dengarkan keluhan pelanggan dulu."
+    )
+    lines = _candidate_lines(transcript)
+    assert "menangani komplain" not in lines
+    assert "dengarkan keluhan" in lines

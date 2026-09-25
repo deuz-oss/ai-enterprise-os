@@ -39,13 +39,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+from interview_flow import InterviewFlow, build_instructions, format_transcript
 from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
     JobContext,
+    RunContext,
     cli,
     function_tool,
+    get_job_context,
     inference,
     room_io,
 )
@@ -77,12 +80,13 @@ STT_LANGUAGE = os.environ.get("STT_LANGUAGE") or "id"
 # base_url terpisah lagi.
 LLM_BASE_URL = os.environ["AI_BASE_URL"]
 LLM_API_KEY = os.environ.get("AI_API_KEY") or "not-needed"
-LLM_MODEL = os.environ.get("AI_MODEL", "gpt-4o-mini")
+# AI_AGENT_MODEL opsional: model khusus agen suara. Simulasi alur Fase 4
+# (2026-09-25, 6 run/model): gpt-4o-mini kadang mengarang pertanyaan atau
+# bertanya susulan tanpa izin tool (4/6 bersih); gpt-4.1-mini 6/6 bersih.
+LLM_MODEL = os.environ.get("AI_AGENT_MODEL") or os.environ.get("AI_MODEL") or "gpt-4o-mini"
 TTS_MODEL = os.environ.get("AI_TTS_MODEL", "gpt-4o-mini-tts")
 TTS_VOICE = os.environ.get("AI_TTS_VOICE", "ash")
-TTS_INSTRUCTIONS = (
-    "Speak natural, professional Bahasa Indonesia with a warm interviewer tone."
-)
+TTS_INSTRUCTIONS = "Speak natural, professional Bahasa Indonesia with a warm interviewer tone."
 
 
 def _agent_headers(token: str) -> dict[str, str]:
@@ -102,43 +106,64 @@ def _recording_allowed() -> bool:
 
 
 class InterviewAgent(Agent):
-    """Satu instance per sesi interview. `end_interview` adalah tool yang
-    LLM panggil sendiri setelah menilai semua topik sudah tergali dan sudah
-    menyampaikan penutup ke kandidat -- bukan dipicu kode Python."""
+    """Satu instance per sesi interview. Fase 4 roadmap: alur terstruktur --
+    LLM hanya melihat satu pertanyaan aktif lewat tool `next_question`,
+    kuota pertanyaan susulan & syarat penutupan dijaga `InterviewFlow`
+    (lihat interview_flow.py untuk alasannya)."""
 
-    def __init__(
-        self, *, token: str, room, title: str, objective: str | None, topics: list[dict]
-    ) -> None:
-        topic_lines = "\n".join(f"- {t['prompt']}" for t in topics) or "(tidak ada topik spesifik)"
-        instructions = (
-            f'Anda pewawancara AI untuk posisi terkait "{title}". {objective or ""}\n\n'
-            "Ajukan topik-topik berikut secara natural dalam percakapan (boleh tidak "
-            "berurutan kaku, boleh tanya susulan yang relevan), dalam Bahasa Indonesia, "
-            "nada profesional tapi hangat:\n"
-            f"{topic_lines}\n\n"
-            "Setelah semua topik cukup tergali, ucapkan penutup yang sopan ke kandidat, "
-            "LALU panggil tool `end_interview`. Jangan menilai kandidat secara lisan "
-            "(itu dilakukan sistem terpisah setelah percakapan selesai). Jangan mengarang "
-            "informasi tentang posisi/perusahaan di luar yang diberikan."
-        )
-        super().__init__(instructions=instructions)
+    def __init__(self, *, token: str, context: dict) -> None:
+        super().__init__(instructions=build_instructions(context))
         self._token = token
-        self._room = room
+        self.flow = InterviewFlow(questions=list(context.get("questions") or []))
         self.submitted = False
 
+    def _user_turns(self) -> int:
+        """Jumlah giliran bicara kandidat (penjagaan "sudah dijawab")."""
+        return sum(
+            1
+            for item in self.session.history.items
+            if getattr(item, "role", None) == "user" and getattr(item, "text_content", None)
+        )
+
     @function_tool
-    async def end_interview(self) -> str:
-        """Panggil SETELAH semua topik sudah digali DAN Anda sudah
-        mengucapkan salam penutup ke kandidat -- menandai percakapan selesai,
-        memicu penilaian, dan mengakhiri panggilan."""
-        transcript = _format_transcript(self.session)
+    async def next_question(self) -> str:
+        """Ambil pertanyaan interview berikutnya. Panggil setelah menyapa
+        kandidat, dan setiap kali jawaban untuk pertanyaan aktif sudah cukup."""
+        return self.flow.next_question(len(self.session.history.items), self._user_turns())
+
+    @function_tool
+    async def request_follow_up(self) -> str:
+        """Minta izin mengajukan SATU pertanyaan susulan untuk pertanyaan
+        aktif, bila jawaban kandidat kabur atau kurang contoh konkret."""
+        return self.flow.request_follow_up(self._user_turns())
+
+    @function_tool
+    async def end_interview(
+        self, context: RunContext, candidate_requested_stop: bool = False
+    ) -> str:
+        """Panggil SETELAH semua pertanyaan diajukan (next_question menyatakan
+        selesai) -- menandai percakapan selesai, memicu penilaian, lalu
+        mengucapkan penutup yang diberikan tool ini. `candidate_requested_stop=true`
+        hanya bila kandidat sendiri minta berhenti di tengah jalan."""
+        refusal = self.flow.end_refusal(candidate_requested_stop, self._user_turns())
+        if refusal:
+            return refusal
+        transcript = _format_transcript(self.session, self.flow)
         try:
             await _submit_transcript(self._token, transcript)
             self.submitted = True
         except Exception:  # noqa: BLE001 - jangan sampai kegagalan submit bikin agent macet
             logger.exception("Gagal mengirim transkrip ke backend untuk token %s", self._token)
-        await self._room.disconnect()
-        return "Interview ditutup, terima kasih atas waktunya."
+
+        # Pola `EndCallTool` bawaan LiveKit: balasan tool (kalimat penutup)
+        # diputar di speech handle yang SAMA, jadi job baru dimatikan setelah
+        # handle itu selesai. Dulu `room.disconnect()` langsung di sini --
+        # apa pun yang diucapkan setelah tool terpotong.
+        def _shutdown(_handle) -> None:
+            get_job_context().shutdown(reason="interview_selesai")
+
+        context.speech_handle.add_done_callback(_shutdown)
+        return self.flow.closing_instruction(candidate_requested_stop)
 
 
 async def _fetch_context(token: str) -> dict:
@@ -190,15 +215,12 @@ async def _upload_recording(token: str, path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
-def _format_transcript(session: AgentSession) -> str:
-    lines: list[str] = []
-    for item in session.history.items:
-        role = getattr(item, "role", None)
-        text = getattr(item, "text_content", None)
-        if role and text:
-            speaker = "Kandidat" if role == "user" else "Pewawancara AI"
-            lines.append(f"{speaker}: {text}")
-    return "\n".join(lines)
+def _format_transcript(session: AgentSession, flow: InterviewFlow) -> str:
+    items = [
+        (getattr(item, "role", None) or "", getattr(item, "text_content", None) or "")
+        for item in session.history.items
+    ]
+    return format_transcript(items, flow.markers)
 
 
 server = AgentServer()
@@ -240,13 +262,7 @@ async def entrypoint(ctx: JobContext) -> None:
         },
     )
 
-    agent = InterviewAgent(
-        token=token,
-        room=ctx.room,
-        title=context["title"],
-        objective=context.get("objective"),
-        topics=context["questions"],
-    )
+    agent = InterviewAgent(token=token, context=context)
 
     record = _recording_allowed()
     if not record:
@@ -259,7 +275,7 @@ async def entrypoint(ctx: JobContext) -> None:
         diputus kandidat tidak pernah sampai ke backend), lalu unggah rekaman."""
         await session.aclose()
         if not agent.submitted:
-            transcript = _format_transcript(session)
+            transcript = _format_transcript(session, agent.flow)
             if "Kandidat:" in transcript:
                 try:
                     await _submit_transcript(token, transcript)
@@ -282,11 +298,9 @@ async def entrypoint(ctx: JobContext) -> None:
         # lokal session_directory/audio.ogg; traces/log/transkrip ke cloud mati.
         record={"audio": record, "traces": False, "logs": False, "transcript": False},
     )
+    # Pertanyaan pertama disisipkan kode (lihat InterviewFlow.opening_instruction).
     await session.generate_reply(
-        instructions=(
-            "Sapa kandidat, perkenalkan diri singkat sebagai pewawancara AI, "
-            "lalu mulai interview."
-        )
+        instructions=agent.flow.opening_instruction(len(session.history.items))
     )
 
 

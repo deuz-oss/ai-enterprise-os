@@ -25,6 +25,7 @@ from app.modules.ai_interview.schemas import (
     AIInterviewTemplateOut,
     AIInterviewTemplateUpdate,
     AnswerIn,
+    InterviewGuidelineOut,
     PublicInterviewSessionOut,
     RecordingUrlOut,
     RetentionRunOut,
@@ -69,6 +70,13 @@ def list_templates(
     db: Session = Depends(get_db),
 ):
     return service.list_templates(db, job_order_id=job_order_id, status=status_filter)
+
+
+@router.get("/guidelines/builtin", response_model=list[InterviewGuidelineOut])
+def builtin_guidelines():
+    """Aturan percakapan bawaan agen suara (Fase 4) -- ditampilkan di editor
+    template supaya staf tahu apa yang sudah dijaga sistem."""
+    return service.builtin_guidelines()
 
 
 @router.get("/templates/{template_id}", response_model=AIInterviewTemplateOut)

@@ -11,8 +11,44 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 _QUESTION_TYPES = ("open_ended", "single_choice", "multiple_choice", "rating")
 
+# Fase 4 roadmap: pertanyaan yang menggali atribut yang dilindungi (UU
+# Ketenagakerjaan Pasal 5-6: tanpa diskriminasi; UU PDP: data pribadi
+# spesifik) ditolak saat template disimpan. Frasa sengaja spesifik ("agama
+# anda", bukan "agama") supaya tidak salah tolak pertanyaan sah. Agen suara
+# juga dilarang menanyakannya lewat aturan bawaan terkunci (service.py).
+PROTECTED_QUESTION_TERMS = (
+    "agama anda",
+    "agamamu",
+    "apa agama",
+    "suku anda",
+    "sukumu",
+    "apa suku",
+    "status pernikahan",
+    "sudah menikah",
+    "sudah berkeluarga",
+    "sedang hamil",
+    "rencana hamil",
+    "rencana punya anak",
+    "rencana memiliki anak",
+    "orientasi seksual",
+    "pilihan politik",
+    "partai politik",
+    "partai apa",
+    "berapa usia anda",
+    "berapa umur anda",
+)
 
-class InterviewQuestionIn(BaseModel):
+
+def _protected_hit(text: str) -> str | None:
+    lowered = " ".join(text.lower().split())
+    return next((t for t in PROTECTED_QUESTION_TERMS if t in lowered), None)
+
+
+class InterviewQuestionBase(BaseModel):
+    """Bentuk data pertanyaan tanpa validasi kebijakan -- dipakai untuk
+    OUTPUT, supaya template lama yang tersimpan sebelum aturan baru tetap
+    bisa dibaca (validasi hanya saat menyimpan, lewat InterviewQuestionIn)."""
+
     id: str
     order: int = 1
     type: str = "open_ended"
@@ -20,6 +56,11 @@ class InterviewQuestionIn(BaseModel):
     options: list[str] | None = None
     criterion_keys: list[str] = []
     required: bool = True
+    # Fase 4 roadmap (mode suara real-time): berapa kali agen boleh bertanya
+    # susulan untuk pertanyaan ini, dan apa yang digali. Batas dijaga kode
+    # agen (bukan cuma prompt) supaya interview tidak melebar tanpa akhir.
+    follow_up_max: int = Field(default=1, ge=0, le=3)
+    follow_up_focus: str | None = Field(default=None, max_length=300)
 
     @field_validator("type")
     @classmethod
@@ -27,6 +68,54 @@ class InterviewQuestionIn(BaseModel):
         if v not in _QUESTION_TYPES:
             raise ValueError(f"type harus salah satu dari: {', '.join(_QUESTION_TYPES)}")
         return v
+
+
+class InterviewQuestionIn(InterviewQuestionBase):
+    @model_validator(mode="after")
+    def _no_protected_attribute(self) -> "InterviewQuestionIn":
+        hit = _protected_hit(f"{self.prompt} {self.follow_up_focus or ''}")
+        if hit:
+            raise ValueError(
+                f'Pertanyaan tidak boleh menanyakan "{hit}". Agama, suku, status '
+                "pernikahan, kehamilan, usia, orientasi seksual, dan pandangan politik "
+                "tidak boleh jadi bahan interview (UU Ketenagakerjaan Pasal 5-6)."
+            )
+        return self
+
+
+class InterviewGuidelineBase(BaseModel):
+    condition: str
+    response: str
+
+
+class InterviewGuidelineIn(InterviewGuidelineBase):
+    """Pedoman percakapan agen suara, gaya Parlant: JIKA kondisi -> jawab.
+    `response` diucapkan agen (hampir) persis -- jawaban baku yang sudah
+    disetujui tim, bukan karangan LLM."""
+
+    condition: str = Field(min_length=5, max_length=300)
+    response: str = Field(min_length=5, max_length=600)
+
+    @model_validator(mode="after")
+    def _no_protected_probe(self) -> "InterviewGuidelineIn":
+        hit = _protected_hit(self.response)
+        if hit:
+            raise ValueError(f'Jawaban pedoman tidak boleh menanyakan "{hit}".')
+        return self
+
+
+_MAX_GUIDELINES = 20
+
+
+class InterviewGuidelineOut(BaseModel):
+    """Pedoman yang dikirim ke agen. `locked` = aturan bawaan yang tidak bisa
+    dikalahkan pedoman template; `source` = "sistem" | "template"."""
+
+    key: str | None = None
+    condition: str
+    response: str
+    locked: bool = False
+    source: str = "template"
 
 
 # Batas keras Fase 0 roadmap: AI Interview TIDAK menilai emosi, nada suara,
@@ -56,12 +145,16 @@ FORBIDDEN_CRITERIA_TERMS = (
 )
 
 
-class InterviewCriterionIn(BaseModel):
+class InterviewCriterionBase(BaseModel):
+    """Lihat InterviewQuestionBase -- untuk output, tanpa validasi kebijakan."""
+
     key: str
     label: str
     weight: float = 1.0
     description: str | None = None
 
+
+class InterviewCriterionIn(InterviewCriterionBase):
     # model_validator (bukan field_validator "description"): validator field
     # tidak berjalan saat field memakai default, jadi kriteria TANPA
     # deskripsi akan lolos pengecekan key/label.
@@ -84,6 +177,7 @@ class AIInterviewTemplateCreate(BaseModel):
     mode: AIInterviewMode = AIInterviewMode.async_text
     questions: list[InterviewQuestionIn] = []
     criteria: list[InterviewCriterionIn] = []
+    guidelines: list[InterviewGuidelineIn] = Field(default=[], max_length=_MAX_GUIDELINES)
 
 
 class AIInterviewTemplateUpdate(BaseModel):
@@ -93,6 +187,7 @@ class AIInterviewTemplateUpdate(BaseModel):
     status: AIInterviewTemplateStatus | None = None
     questions: list[InterviewQuestionIn] | None = None
     criteria: list[InterviewCriterionIn] | None = None
+    guidelines: list[InterviewGuidelineIn] | None = Field(default=None, max_length=_MAX_GUIDELINES)
 
 
 class AIInterviewTemplateOut(BaseModel):
@@ -104,8 +199,9 @@ class AIInterviewTemplateOut(BaseModel):
     objective: str | None
     mode: AIInterviewMode
     status: AIInterviewTemplateStatus
-    questions: list[InterviewQuestionIn]
-    criteria: list[InterviewCriterionIn]
+    questions: list[InterviewQuestionBase]
+    criteria: list[InterviewCriterionBase]
+    guidelines: list[InterviewGuidelineBase] = []
     created_at: datetime
     updated_at: datetime
 
@@ -237,6 +333,8 @@ class VoiceContextQuestionOut(BaseModel):
     order: int
     prompt: str
     criterion_keys: list[str]
+    follow_up_max: int = 1
+    follow_up_focus: str | None = None
 
 
 class VoiceContextOut(BaseModel):
@@ -247,7 +345,9 @@ class VoiceContextOut(BaseModel):
     title: str
     objective: str | None
     questions: list[VoiceContextQuestionOut]
-    criteria: list[InterviewCriterionIn]
+    criteria: list[InterviewCriterionBase]
+    # Fase 4: aturan bawaan (terkunci & default) lalu pedoman template.
+    guidelines: list[InterviewGuidelineOut] = []
 
 
 class VoiceCompleteIn(BaseModel):

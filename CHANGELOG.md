@@ -6,6 +6,21 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 63: AI Interview — alur terstruktur & pedoman percakapan
+
+Fase 4 roadmap AI Interview. Detail di `PRD.md` Fase 63.
+- Agen suara kini mengajukan pertanyaan satu per satu sesuai urutan template; kuota pertanyaan susulan per pertanyaan (0-3, dengan fokus yang digali) dan syarat penutupan dijaga kode, bukan hanya prompt. Agen tidak bisa pindah pertanyaan atau menutup interview sebelum kandidat menjawab (ditemukan lewat simulasi dengan LLM sungguhan).
+- Penutup interview berupa kalimat baku yang selalu terucap sebelum panggilan diakhiri.
+- Setting opsional `AI_AGENT_MODEL` untuk model agen suara (disarankan `gpt-4.1-mini`, paling patuh di simulasi).
+- Pedoman percakapan (jika kandidat ... -> jawaban baku): aturan bawaan terkunci (atribut dilindungi, skor, manipulasi), pedoman per template, dan jawaban default (gaji, info tidak tersedia, minta berhenti, minta ulang). Aturan bawaan tampil di editor template.
+- Pertanyaan/pedoman yang menanyakan agama, suku, status pernikahan, kehamilan, usia, orientasi seksual, atau pandangan politik ditolak saat template disimpan.
+- Transkrip suara diberi penanda per pertanyaan, tampil sebagai judul bagian di halaman review.
+- Penilaian mengabaikan pertanyaan kandidat soal gaji dan info pribadi yang dilindungi (`RUBRIC_VERSION` 2026-09-25). Migrasi `8b9c0d1e2f3a`.
+
+### Fixed — Fase 63
+- Agen suara memutus panggilan (`room.disconnect()`) langsung di dalam tool `end_interview`, sehingga apa pun yang diucapkan sesudahnya terpotong.
+- Template lama yang melanggar aturan validasi yang ditambahkan belakangan membuat daftar template error 500; validasi kini hanya saat menyimpan.
+
 ### Added — Fase 62: AI Interview — mode rekaman jawaban
 
 Fase 3 roadmap AI Interview. Detail di `PRD.md` Fase 62.

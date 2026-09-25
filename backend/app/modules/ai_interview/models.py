@@ -61,6 +61,9 @@ class AIInterviewTemplate(TenantMixin, Base):
     )
     questions_json: Mapped[str] = mapped_column(Text, default="[]")
     criteria_json: Mapped[str] = mapped_column(Text, default="[]")
+    # Fase 4 roadmap: pedoman percakapan agen suara (lihat
+    # service.BUILTIN_GUIDELINES untuk aturan bawaan yang selalu berlaku).
+    guidelines_json: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -79,6 +82,14 @@ class AIInterviewTemplate(TenantMixin, Base):
     def criteria(self) -> list[dict]:
         try:
             data = json.loads(self.criteria_json) if self.criteria_json else []
+        except (TypeError, ValueError):
+            return []
+        return data if isinstance(data, list) else []
+
+    @property
+    def guidelines(self) -> list[dict]:
+        try:
+            data = json.loads(self.guidelines_json) if self.guidelines_json else []
         except (TypeError, ValueError):
             return []
         return data if isinstance(data, list) else []

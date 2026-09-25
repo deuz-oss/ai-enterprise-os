@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv
 
 COPY pyproject.toml ./
-COPY main.py ./
+COPY main.py interview_flow.py ./
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
 
 # Unduh bobot model plugin (Silero VAD) saat BUILD, bukan saat job pertama

@@ -12,6 +12,11 @@ dependencies = [
   "httpx>=0.27.0",
 ]
 
+# Eksplisit: flat layout dengan >1 modul membuat auto-discovery setuptools
+# gagal ("Multiple top-level modules discovered").
+[tool.setuptools]
+py-modules = ["main", "interview_flow"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

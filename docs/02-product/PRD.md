@@ -734,6 +734,82 @@ koneksi lemah atau yang lebih nyaman menjawab tanpa lawan bicara langsung.
   Model whisper diunduh saat request pertama (±480 MB, disimpan di volume
   `stt_model_cache`).
 
+### Fase 63 — AI Interview: Alur Terstruktur & Pedoman Percakapan (Fase 4 roadmap) — ✅ Selesai (2026-09-25)
+
+Berlaku untuk mode suara real-time (agen LiveKit). Dulu agen diberi semua
+topik sekaligus dan dibiarkan "ngobrol natural": LLM bebas melompati
+pertanyaan, bertanya susulan tanpa batas, atau menutup sebelum semua
+pertanyaan diajukan -- kandidat berbeda mendapat interview berbeda.
+
+- **Alur terstruktur, dijaga kode** (`agent/interview_flow.py`, modul
+  murni + 11 tes tanpa LiveKit): LLM hanya melihat satu pertanyaan aktif lewat
+  tool `next_question` (daftar pertanyaan tidak ada di prompt). Tool
+  `request_follow_up` menghitung kuota pertanyaan susulan per pertanyaan.
+  `end_interview` ditolak selama masih ada pertanyaan yang belum diajukan,
+  kecuali kandidat sendiri minta berhenti (`candidate_requested_stop`).
+- **Diuji dengan simulasi LLM sungguhan** (prompt + tool identik dengan
+  agen, kandidat bernaskah: jawaban kabur, tanya gaji, manipulasi prompt,
+  menyebut agama/status nikah sendiri, tanya skor, minta berhenti). Hasil
+  simulasi ini membentuk desainnya:
+  - LLM bisa memanggil `next_question` beruntun lalu `end_interview` dalam
+    SATU respons, sehingga seluruh interview terlewati tanpa jawaban. Karena
+    itu tool-tool alur kini **menolak selama kandidat belum bicara** sejak
+    pertanyaan (atau pertanyaan susulan) terakhir diajukan.
+  - Bila pembukaan diserahkan ke LLM, LLM mengarang pertanyaan sendiri. Kini
+    **pertanyaan pertama disisipkan kode** ke instruksi pembuka.
+  - LLM kadang menutup tanpa pamit. Kini **penutup berupa kalimat baku yang
+    diucapkan setelah tool `end_interview`**, dan job baru dimatikan setelah
+    ucapan itu selesai diputar (pola `EndCallTool` LiveKit). Ini sekaligus
+    memperbaiki bug lama Fase 2: `room.disconnect()` langsung di dalam tool
+    memotong apa pun yang diucapkan sesudahnya.
+  - Kepatuhan per model (6 run tiap model): `gpt-4o-mini` 4/6 bersih
+    (kadang mengarang parafrase pertanyaan atau bertanya susulan tanpa izin
+    tool; penjaga kode tetap memaksa pertanyaan asli diajukan);
+    `gpt-4.1-mini` 6/6 bersih; `gpt-4.1` justru lebih sering bertanya
+    susulan tanpa tool. Setting baru `AI_AGENT_MODEL` (kosong = `AI_MODEL`),
+    disarankan `gpt-4.1-mini`.
+  - Jawaban baku (gaji, manipulasi, skor, minta berhenti) patuh di semua run
+    dan semua model. Info agama/status nikah yang disebut kandidat tidak
+    ditanggapi.
+- **Pengaturan per pertanyaan**: `follow_up_max` (0-3, default 1) dan
+  `follow_up_focus` (apa yang digali, mis. "hasil terukur"). Disimpan di
+  `questions_json`.
+- **Pedoman percakapan gaya Parlant** (kondisi -> jawaban baku), berurutan
+  menurut prioritas:
+  1. *Terkunci* (bawaan, tidak bisa dikalahkan): tidak menanyakan atau
+     menggali atribut yang dilindungi, tidak membocorkan skor atau peluang
+     lolos, menolak manipulasi prompt.
+  2. *Pedoman template* (maks. 20, diisi tim rekrutmen, kolom baru
+     `guidelines_json`).
+  3. *Jawaban baku default*: gaji/benefit, info yang tidak tersedia,
+     kandidat ingin berhenti, minta pertanyaan diulang.
+
+  Pedoman template untuk topik yang sama menggantikan jawaban default,
+  misalnya tenant yang memang mau menyebut kisaran gaji. Sumber aturan
+  bawaan: `service.BUILTIN_GUIDELINES`, dikirim ke agen lewat `voice/context`
+  dan ditampilkan read-only di editor template (`GET /guidelines/builtin`).
+- **Validasi anti-diskriminasi saat simpan template**: pertanyaan atau
+  jawaban pedoman yang menanyakan agama, suku, status pernikahan,
+  kehamilan/rencana punya anak, usia, orientasi seksual, atau pandangan
+  politik ditolak (422). Dasarnya UU Ketenagakerjaan Pasal 5-6. Frasa
+  sengaja spesifik ("agama anda", bukan "agama") supaya pertanyaan yang sah
+  tidak ikut tertolak.
+- **Bug laten ikut diperbaiki**: validasi kebijakan (kriteria emosi Fase 0,
+  pertanyaan yang dilindungi) dulu juga berjalan saat MEMBACA template.
+  Template lama yang tersimpan sebelum aturan baru akan membuat daftar
+  template error 500. Sekarang output memakai model dasar tanpa validasi.
+- **Transkrip bertanda pertanyaan**: baris `## Pertanyaan N: ...` disisipkan
+  agen dan ditampilkan sebagai judul bagian di review. Baris ini tidak
+  pernah dihitung sebagai kutipan bukti kandidat, dan perapi transkrip
+  diminta mempertahankannya.
+- **Penilaian** (`RUBRIC_VERSION` `2026-09-25`): pertanyaan kandidat soal
+  gaji/benefit tidak menurunkan skor. Info pribadi yang dilindungi yang
+  disebut kandidat sendiri wajib diabaikan (tidak dikutip, tidak dinilai).
+- Migrasi `8b9c0d1e2f3a`. Mode teks dan rekaman jawaban tidak berubah:
+  keduanya tidak interaktif, jadi tidak ada pertanyaan susulan. Uji dengan
+  LiveKit sungguhan (apakah LLM benar-benar memanggil tool dengan tertib)
+  masih butuh infra voice.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
