@@ -17,6 +17,7 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+import httpx
 from app.core import storage
 from app.core.config import get_settings
 from app.core.database import parse_uuid
@@ -44,6 +45,7 @@ from app.modules.ai_interview.schemas import (
     InterviewCriterionIn,
     PublicInterviewQuestionOut,
     PublicInterviewSessionOut,
+    RecordedAnswerOut,
     VoiceContextOut,
     VoiceContextQuestionOut,
     VoiceSessionOut,
@@ -93,15 +95,16 @@ _SCORE_SYSTEM_PROMPT = (
 
 # Naikkan versi setiap kali teks di bawah berubah -- bukti persetujuan per
 # respons menyimpan versi yang disetujui kandidat saat itu.
-CONSENT_VERSION = "2026-09-24.2"
+CONSENT_VERSION = "2026-09-24.3"
 DEFAULT_RETENTION_DAYS = 180
 
 _CONSENT_TEXT = (
     "Sebelum memulai, mohon baca dan setujui hal berikut:\n"
     "1. Jawaban Anda (teks, atau suara dan transkripnya untuk interview suara) akan "
     "diproses oleh sistem AI untuk membantu tim rekrutmen menilai kesesuaian Anda "
-    "dengan posisi ini. Untuk interview suara, percakapan direkam dan rekamannya "
-    "dapat diputar ulang oleh petugas rekrutmen saat meninjau hasil.\n"
+    "dengan posisi ini. Untuk interview suara (percakapan langsung atau rekaman "
+    "jawaban), suara Anda direkam, diubah menjadi teks, dan rekamannya dapat diputar "
+    "ulang oleh petugas rekrutmen saat meninjau hasil.\n"
     "2. AI hanya menilai ISI jawaban. AI tidak menilai emosi, nada suara, aksen, "
     "ekspresi, atau cara bicara Anda.\n"
     "3. Hasil penilaian AI bukan keputusan akhir. Setiap hasil ditinjau dan diputuskan "
@@ -159,6 +162,9 @@ def _purge_content(response: AIInterviewResponse, reason: str) -> None:
     jangan diam-diam meninggalkan rekaman biometrik)."""
     if response.recording_object_key:
         storage.delete_object(response.recording_object_key)
+    for answer in response.answers:  # rekaman jawaban mode async_recording
+        if answer.get("audio_object_key"):
+            storage.delete_object(answer["audio_object_key"])
     response.recording_object_key = None
     response.recording_size_bytes = None
     response.answers_json = None
@@ -755,6 +761,18 @@ def get_session(db: Session, token: str) -> PublicInterviewSessionOut:
             consent_text=consent_text(retention_days),
             retention_days=retention_days,
             data_withdrawn=response.consent_withdrawn_at is not None,
+            recorded_answers=[
+                RecordedAnswerOut(
+                    question_id=str(a.get("question_id")),
+                    status=str(a.get("transcription") or "ready"),
+                    attempts_used=int(a.get("attempts") or 0),
+                    transcript=a.get("answer_text") or None,
+                )
+                for a in response.answers
+                if a.get("audio_object_key")
+            ],
+            max_attempts=MAX_ANSWER_ATTEMPTS,
+            max_answer_seconds=MAX_ANSWER_SECONDS,
         )
     finally:
         set_tenant(prev_tenant)
@@ -862,6 +880,17 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
             raise HTTPException(status_code=422, detail="Interview ini sudah disubmit sebelumnya")
         if not response.answers:
             raise HTTPException(status_code=422, detail="Belum ada jawaban yang diisi")
+        pending = [a for a in response.answers if a.get("transcription") == "processing"]
+        if pending:
+            raise HTTPException(
+                status_code=409, detail="Rekaman jawaban masih diproses. Coba lagi sebentar."
+            )
+        failed = [a for a in response.answers if a.get("transcription") == "failed"]
+        if failed:
+            raise HTTPException(
+                status_code=422,
+                detail="Ada jawaban yang suaranya tidak tertangkap. Rekam ulang jawaban tersebut.",
+            )
 
         response.status = AIInterviewResponseStatus.submitted
         response.submitted_at = datetime.now(UTC)
@@ -1114,4 +1143,175 @@ def recording_url(db: Session, user, response_id: str) -> str:
     )
     return storage.presigned_get_url(
         response.recording_object_key, expires_seconds=RECORDING_URL_TTL_SECONDS, no_store=True
+    )
+
+
+# ---------- Fase 3: mode rekaman jawaban (async_recording) ----------
+
+MAX_ANSWER_ATTEMPTS = 3
+MAX_ANSWER_SECONDS = 180
+MAX_ANSWER_AUDIO_BYTES = 15 * 1024 * 1024
+# webm/opus (Chrome, Firefox, Edge), mp4/aac (Safari iOS/macOS).
+_ANSWER_AUDIO_MIME = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav"}
+_EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3"}
+
+
+def upload_answer_audio(
+    db: Session,
+    token: str,
+    question_id: str,
+    *,
+    data: bytes,
+    content_type: str,
+    duration_sec: float | None,
+) -> tuple[AIInterviewResponse, str]:
+    """Simpan rekaman jawaban kandidat untuk satu pertanyaan; transkripsi
+    dijadwalkan di latar belakang (lihat `transcribe_answer_audio`).
+    Rekam ulang maksimal MAX_ANSWER_ATTEMPTS kali; audio lama dihapus."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token)
+        _require_consent(response)
+        if response.status not in (
+            AIInterviewResponseStatus.invited,
+            AIInterviewResponseStatus.in_progress,
+        ):
+            raise HTTPException(status_code=422, detail="Interview ini sudah dikirim")
+        template = db.get(AIInterviewTemplate, response.template_id)
+        if template is None or template.mode != AIInterviewMode.async_recording:
+            raise HTTPException(status_code=422, detail="Template ini bukan mode rekaman jawaban")
+        if question_id not in {str(q.get("id")) for q in template.questions}:
+            raise HTTPException(status_code=404, detail="Pertanyaan tidak ditemukan")
+        if not get_settings().stt_base_url:
+            raise HTTPException(
+                status_code=503,
+                detail="Mode rekaman belum aktif (STT_BASE_URL belum dikonfigurasi).",
+            )
+        mime = (content_type or "").split(";")[0].strip().lower()
+        if mime not in _ANSWER_AUDIO_MIME:
+            raise HTTPException(status_code=422, detail="Format rekaman tidak didukung")
+        if not data:
+            raise HTTPException(status_code=422, detail="Rekaman kosong")
+        if len(data) > MAX_ANSWER_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail="Rekaman terlalu besar")
+        if duration_sec is not None and duration_sec > MAX_ANSWER_SECONDS + 5:
+            raise HTTPException(
+                status_code=422, detail=f"Jawaban maksimal {MAX_ANSWER_SECONDS // 60} menit"
+            )
+
+        answers = response.answers
+        previous = next((a for a in answers if a.get("question_id") == question_id), None)
+        attempts = int(previous.get("attempts") or 0) if previous else 0
+        if attempts >= MAX_ANSWER_ATTEMPTS:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Batas rekam ulang ({MAX_ANSWER_ATTEMPTS}x) untuk pertanyaan ini habis",
+            )
+
+        key = storage.new_object_key(
+            f"ai-interview/answers/{response.id}", f"{question_id}.{_EXT.get(mime, 'audio')}"
+        )
+        storage.put_object(key, data, mime)
+        if previous and previous.get("audio_object_key"):
+            storage.delete_object(previous["audio_object_key"])
+
+        answers = [a for a in answers if a.get("question_id") != question_id]
+        answers.append(
+            {
+                "question_id": question_id,
+                "answer_text": "",
+                "submitted_at": datetime.now(UTC).isoformat(),
+                "audio_object_key": key,
+                "audio_mime": mime,
+                "audio_duration_sec": round(duration_sec, 1) if duration_sec else None,
+                "attempts": attempts + 1,
+                "transcription": "processing",
+            }
+        )
+        response.answers_json = json.dumps(answers, ensure_ascii=False)
+        if response.status == AIInterviewResponseStatus.invited:
+            response.status = AIInterviewResponseStatus.in_progress
+            response.started_at = response.started_at or datetime.now(UTC)
+        db.commit()
+        db.refresh(response)
+        return response, key
+    finally:
+        set_tenant(prev_tenant)
+
+
+def _stt_transcribe(data: bytes, mime: str) -> str:
+    """faster-whisper-server (API kompatibel OpenAI /audio/transcriptions)."""
+    settings = get_settings()
+    base = (settings.stt_base_url or "").rstrip("/")
+    ext = _EXT.get(mime, "audio")
+    resp = httpx.post(
+        f"{base}/audio/transcriptions",
+        files={"file": (f"jawaban.{ext}", data, mime)},
+        data={
+            "model": settings.stt_model or "Systran/faster-whisper-small",
+            "language": "id",
+            "response_format": "json",
+        },
+        timeout=300,
+    )
+    resp.raise_for_status()
+    return str(resp.json().get("text") or "").strip()
+
+
+def transcribe_answer_audio(
+    db: Session, response_id: str, question_id: str, object_key: str
+) -> None:
+    """Background task (sesi DB milik task, dibuat router). Hasil hanya
+    ditulis kalau audio yang ditranskripsi masih audio terbaru untuk
+    pertanyaan itu (kandidat bisa rekam ulang saat transkripsi sebelumnya
+    masih berjalan)."""
+    prev_tenant = get_tenant()
+    try:
+        response = db.execute(
+            select(AIInterviewResponse)
+            .where(AIInterviewResponse.id == parse_uuid(response_id))
+            .execution_options(include_with_loader_criteria=False)
+        ).scalar_one_or_none()
+        if response is None:
+            return
+        set_tenant(response.tenant_id)
+        entry = next((a for a in response.answers if a.get("question_id") == question_id), None)
+        if entry is None or entry.get("audio_object_key") != object_key:
+            return
+        try:
+            text = _stt_transcribe(storage.get_object(object_key), entry.get("audio_mime", ""))
+        except Exception:  # noqa: BLE001 - STT gagal -> kandidat diminta rekam ulang
+            logger.warning(
+                "Transkripsi jawaban gagal (%s/%s)", response_id, question_id, exc_info=True
+            )
+            text = ""
+        db.refresh(response)
+        answers = response.answers
+        for a in answers:
+            if a.get("question_id") == question_id and a.get("audio_object_key") == object_key:
+                a["answer_text"] = text[:8000]
+                # Transkrip kosong = suara tidak tertangkap (hening/terlalu pelan).
+                a["transcription"] = "ready" if text else "failed"
+        response.answers_json = json.dumps(answers, ensure_ascii=False)
+        db.commit()
+    finally:
+        set_tenant(prev_tenant)
+
+
+def answer_audio_url(db: Session, user, response_id: str, question_id: str) -> str:
+    response = _get_response_or_404(db, response_id)
+    _ensure_data_present(response)
+    entry = next((a for a in response.answers if a.get("question_id") == question_id), None)
+    if entry is None or not entry.get("audio_object_key"):
+        raise HTTPException(status_code=404, detail="Jawaban ini tidak punya rekaman")
+    audit.log_event(
+        db,
+        action="ai_interview.answer_audio_accessed",
+        entity_type="ai_interview_response",
+        entity_id=response.id,
+        object_key=entry["audio_object_key"],
+        detail={"question_id": question_id, "by": getattr(user, "email", "?")},
+    )
+    return storage.presigned_get_url(
+        entry["audio_object_key"], expires_seconds=RECORDING_URL_TTL_SECONDS, no_store=True
     )

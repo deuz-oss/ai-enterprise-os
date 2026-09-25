@@ -43,7 +43,13 @@ interface InterviewResponse {
   candidate_id: string;
   job_order_id: string | null;
   status: "diundang" | "berlangsung" | "terkirim" | "dinilai" | "kedaluwarsa";
-  answers: { question_id: string; answer_text: string; submitted_at: string }[];
+  answers: {
+    question_id: string;
+    answer_text: string;
+    submitted_at: string;
+    audio_object_key?: string;
+    transcription?: string;
+  }[];
   transcript_text: string | null;
   transcript_clean: string | null;
   has_recording: boolean;
@@ -439,6 +445,10 @@ export default function AIInterview() {
             </label>
             <select id="mode" name="mode" defaultValue="async_text" className="input mt-1 w-full">
               <option value="async_text">Teks — kandidat ketik jawaban</option>
+              <option value="async_recording">
+                Rekaman jawaban — kandidat merekam jawaban suara per pertanyaan (butuh
+                STT_BASE_URL)
+              </option>
               <option value="realtime_voice">
                 Suara real-time — kandidat ngobrol langsung dengan AI (butuh infra LIVEKIT_*
                 dikonfigurasi, lihat .env.example)
@@ -744,6 +754,15 @@ export default function AIInterview() {
                             <dd className="mt-0.5 whitespace-pre-line text-xs text-[var(--text-muted)]">
                               {a.answer_text}
                             </dd>
+                            {a.audio_object_key && !r.data_purged_at && (
+                              <dd>
+                                <RecordingPlayer
+                                  responseId={r.id}
+                                  urlPath={`/ai-interview/responses/${r.id}/answers/${a.question_id}/audio-url`}
+                                  title="Rekaman jawaban (transkrip di atas = dasar penilaian)"
+                                />
+                              </dd>
+                            )}
                           </div>
                         ))}
                       </dl>

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
+export const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
 
 const TOKEN_KEY = "aeos_token";
 

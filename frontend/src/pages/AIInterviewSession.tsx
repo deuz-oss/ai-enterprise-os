@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { api, ApiError } from "../api/client";
+import { AIInterviewRecording } from "./AIInterviewRecording";
 import { AIInterviewVoiceCall } from "./AIInterviewVoiceCall";
 
 /** Sesi kandidat AI Interview (PRD v3.1 Patch 4) — publik, TANPA Layout/login,
@@ -34,6 +35,14 @@ interface PublicSession {
   consent_text: string;
   retention_days: number;
   data_withdrawn: boolean;
+  recorded_answers: {
+    question_id: string;
+    status: "processing" | "ready" | "failed";
+    attempts_used: number;
+    transcript: string | null;
+  }[];
+  max_attempts: number;
+  max_answer_seconds: number;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -192,6 +201,9 @@ export default function AIInterviewSession() {
     queryFn: () => api.get<PublicSession>(`/ai-interview/session/${token}`),
     enabled: Boolean(token),
     retry: false,
+    // Mode rekaman: pantau transkripsi latar belakang sampai selesai.
+    refetchInterval: (q) =>
+      q.state.data?.recorded_answers?.some((r) => r.status === "processing") ? 2500 : false,
   });
 
   const submit = useMutation({
@@ -282,6 +294,18 @@ export default function AIInterviewSession() {
             menghubungi Anda untuk langkah berikutnya.
           </p>
         </div>
+      ) : data.mode === "async_recording" ? (
+        <AIInterviewRecording
+          token={token!}
+          questions={data.questions}
+          recorded={data.recorded_answers}
+          maxAttempts={data.max_attempts}
+          maxSeconds={data.max_answer_seconds}
+          onSubmitted={() => {
+            setSubmitted(true);
+            qc.invalidateQueries({ queryKey: ["ai-interview-session", token] });
+          }}
+        />
       ) : data.mode === "realtime_voice" ? (
         <AIInterviewVoiceCall
           token={token!}

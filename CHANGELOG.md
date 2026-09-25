@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 62: AI Interview — mode rekaman jawaban
+
+Fase 3 roadmap AI Interview. Detail di `PRD.md` Fase 62.
+- Mode template `async_recording`: kandidat merekam jawaban suara per pertanyaan di browser (meter level, pratinjau, batas 3 menit), ditranskripsi di background lewat STT (`STT_BASE_URL`, setting baru `STT_MODEL`), lalu dinilai dengan rubrik berbukti.
+- Rekam ulang maksimal 3x per pertanyaan (rekaman lama dihapus); kirim ditolak selama ada jawaban yang masih diproses atau suaranya tidak tertangkap.
+- Staf bisa memutar rekaman tiap jawaban di halaman review (akses diaudit, tanpa cache).
+- Penghapusan data ikut menghapus audio jawaban; versi persetujuan `2026-09-24.3`.
+
+### Fixed — Fase 62
+- Halaman sesi kandidat bisa kena 429 karena rate limit 30/jam per IP berlaku juga untuk GET/polling. Sekarang baca 1200/jam dan tulis 60/jam, per IP+token.
+
 ### Added — Fase 61: AI Interview — rekaman sesi, transkrip rapi, auth agent
 
 Fase 2 roadmap AI Interview. Detail di `PRD.md` Fase 61.

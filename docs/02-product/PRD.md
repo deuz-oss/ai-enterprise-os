@@ -697,6 +697,43 @@ melarang pengenalan emosi di konteks kerja/rekrutmen sejak Feb 2025.
   diuji (butuh infra voice); jalur agent diuji lewat harness di image agent
   dan simulasi agent dari container backend.
 
+### Fase 62 — AI Interview: Mode Rekaman Jawaban (Fase 3 roadmap) — ✅ Selesai (2026-09-25)
+
+Mode template baru `async_recording`: kandidat merekam jawaban suara per
+pertanyaan di browser, **tanpa** LiveKit/agent. Cocok untuk kandidat dengan
+koneksi lemah atau yang lebih nyaman menjawab tanpa lawan bicara langsung.
+
+- **Perekaman di browser**: `MediaRecorder` (webm/opus, fallback mp4/ogg,
+  32 kbps), satu pertanyaan per layar, meter level suara (`AnalyserNode`),
+  berhenti otomatis di batas durasi (default 3 menit), bisa didengar ulang
+  sebelum dikirim. Rekaman dengan suara terdeteksi < 1,5 detik ditolak di
+  browser (cek RMS sederhana; `@ricky0123/vad-web` dari roadmap tidak dipakai
+  karena butuh model ONNX + WASM hanya untuk cek "ada suara").
+- **Unggah & transkripsi**: `POST /ai-interview/session/{token}/answers/{qid}/audio`
+  (body mentah, 202) -> disimpan di object storage -> ditranskripsi di
+  background lewat STT OpenAI-compatible (`STT_BASE_URL`, model `STT_MODEL`,
+  default `Systran/faster-whisper-small`, bahasa `id`). Status per jawaban:
+  `processing` / `ready` / `failed` (transkrip kosong = suara tidak
+  tertangkap). Halaman kandidat polling tiap 2,5 detik selama ada yang
+  diproses dan menampilkan "yang tertangkap sistem".
+- **Rekam ulang maksimal 3x per pertanyaan**; rekaman lama langsung dihapus
+  dari storage. Kirim interview ditolak bila masih ada jawaban `processing`
+  (409) atau `failed` (422).
+- **Penilaian** memakai rubrik berbukti Fase 60 atas transkrip -- aturan
+  keras tetap: tidak menilai nada/aksen/kelancaran/emosi dari audio.
+- **Review staf**: pemutar rekaman per jawaban di "Lihat jawaban kandidat"
+  (link diaudit, 15 menit, `no-store`).
+- **Penghapusan**: retensi/penarikan persetujuan/forget ikut menghapus audio
+  jawaban. Teks persetujuan dinaikkan ke `2026-09-24.3` (menyebut rekaman
+  jawaban).
+- **Bug ditemukan saat uji live**: rate limit sesi publik dulu 30/jam per IP
+  untuk SEMUA request termasuk GET -> polling halaman kandidat kena 429.
+  Sekarang dipisah: baca 1200/jam, tulis 60/jam, per IP+token.
+- Tanpa migrasi (data jawaban tetap di kolom JSON `answers`). Butuh
+  `STT_BASE_URL` (profil voice: `stt-server`); tanpa itu unggah ditolak 503.
+  Model whisper diunduh saat request pertama (±480 MB, disimpan di volume
+  `stt_model_cache`).
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

@@ -29,7 +29,16 @@ function fmt(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function RecordingPlayer({ responseId }: { responseId: string }) {
+export function RecordingPlayer({
+  responseId,
+  urlPath,
+  title = "Rekaman sesi",
+}: {
+  responseId: string;
+  /** Endpoint link rekaman; default = rekaman sesi suara real-time. */
+  urlPath?: string;
+  title?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -45,7 +54,9 @@ export function RecordingPlayer({ responseId }: { responseId: string }) {
     setState("loading");
     setError("");
     try {
-      const rec = await api.get<RecordingUrl>(`/ai-interview/responses/${responseId}/recording-url`);
+      const rec = await api.get<RecordingUrl>(
+        urlPath ?? `/ai-interview/responses/${responseId}/recording-url`
+      );
       setChannels(rec.channels);
       const accent = cssVar("--accent", "#0F6E56");
       const muted = cssVar("--text-muted", "#64748B");
@@ -104,7 +115,7 @@ export function RecordingPlayer({ responseId }: { responseId: string }) {
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-[var(--text)]">Rekaman sesi</p>
+          <p className="text-xs font-medium text-[var(--text)]">{title}</p>
           <p className="text-[11px] tabular-nums text-[var(--text-muted)]">
             {state === "idle"
               ? "Klik putar untuk memuat (akses rekaman tercatat di audit log)"

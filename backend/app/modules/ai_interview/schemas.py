@@ -184,6 +184,17 @@ class PublicInterviewQuestionOut(BaseModel):
     options: list[str] | None
 
 
+class RecordedAnswerOut(BaseModel):
+    """Status jawaban rekaman per pertanyaan (mode async_recording).
+    Transkrip ditampilkan ke kandidat sendiri -- itu kata-katanya sendiri,
+    dan membantu ia tahu apakah suaranya tertangkap dengan benar."""
+
+    question_id: str
+    status: str  # processing | ready | failed
+    attempts_used: int
+    transcript: str | None = None
+
+
 class PublicInterviewSessionOut(BaseModel):
     title: str
     objective: str | None
@@ -197,6 +208,10 @@ class PublicInterviewSessionOut(BaseModel):
     consent_text: str = ""
     retention_days: int = 180
     data_withdrawn: bool = False
+    # Fase 3: mode rekaman jawaban.
+    recorded_answers: list[RecordedAnswerOut] = []
+    max_attempts: int = 3
+    max_answer_seconds: int = 180
 
 
 class AnswerIn(BaseModel):

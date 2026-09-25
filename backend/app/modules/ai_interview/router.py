@@ -32,7 +32,16 @@ from app.modules.ai_interview.schemas import (
     VoiceContextOut,
     VoiceSessionOut,
 )
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from sqlalchemy.orm import Session
 
 router = APIRouter(
@@ -136,6 +145,23 @@ def get_recording_url(
     )
 
 
+@router.get(
+    "/responses/{response_id}/answers/{question_id}/audio-url", response_model=RecordingUrlOut
+)
+def get_answer_audio_url(
+    response_id: str,
+    question_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Link putar rekaman satu jawaban (mode rekaman). Akses diaudit."""
+    return RecordingUrlOut(
+        url=service.answer_audio_url(db, user, response_id, question_id),
+        expires_in_seconds=service.RECORDING_URL_TTL_SECONDS,
+        channels=["Kandidat"],
+    )
+
+
 @router.post("/responses/{response_id}/resend-invite", response_model=AIInterviewResponseOut)
 def resend_invite(response_id: str, db: Session = Depends(get_db)):
     return service.resend_invite(db, response_id)
@@ -177,16 +203,24 @@ def run_retention(db: Session = Depends(get_db)):
 
 public_router = APIRouter(prefix="/ai-interview/session", tags=["ai-interview-public"])
 
-_SESSION_RATE_MAX = 30
+# Dua kelas batas (dulu satu bucket 30/jam per IP untuk semuanya):
+# - "read" (GET sesi): halaman mode rekaman mem-polling status transkripsi
+#   tiap ±2,5 dtk -> 30/jam habis dalam ~1 menit dan kandidat terkena 429
+#   di tengah interview (ditemukan saat uji Fase 3 dgn faster-whisper asli).
+# - "write" (persetujuan, unggah jawaban, mulai sesi suara): tetap ketat.
+# Kunci = token + IP, bukan IP saja: beberapa kandidat dari satu jaringan
+# kantor (IP publik sama) dulu saling menghabiskan jatah. Token 256-bit tidak
+# bisa ditebak, jadi batas ini soal kewajaran beban, bukan anti-brute-force.
+_RATE_LIMITS = {"read": 1200, "write": 60}
 _SESSION_RATE_WINDOW_SEC = 3600
 
 
-def _check_rate_limit(db: Session) -> None:
+def _check_rate_limit(db: Session, token: str, kind: str = "write") -> None:
     ip, _ = get_request_meta()
-    limiter = get_limiter("ai_interview_session")
-    key = ip or "unknown"
+    limiter = get_limiter(f"ai_interview_session_{kind}")
+    key = f"{ip or 'unknown'}|{token[:16]}"
     allowed, retry_after = limiter.check(
-        db, key, max_attempts=_SESSION_RATE_MAX, window_seconds=_SESSION_RATE_WINDOW_SEC
+        db, key, max_attempts=_RATE_LIMITS[kind], window_seconds=_SESSION_RATE_WINDOW_SEC
     )
     if not allowed:
         raise HTTPException(
@@ -199,21 +233,21 @@ def _check_rate_limit(db: Session) -> None:
 
 @public_router.get("/{token}", response_model=PublicInterviewSessionOut)
 def get_session(token: str, db: Session = Depends(get_db)):
-    _check_rate_limit(db)
+    _check_rate_limit(db, token, "read")
     return service.get_session(db, token)
 
 
 @public_router.post("/{token}/consent", status_code=status.HTTP_204_NO_CONTENT)
 def give_consent(token: str, db: Session = Depends(get_db)):
     """Kandidat menyetujui ketentuan pemrosesan data (wajib sebelum mulai)."""
-    _check_rate_limit(db)
+    _check_rate_limit(db, token)
     service.give_consent(db, token)
 
 
 @public_router.post("/{token}/withdraw-consent", status_code=status.HTTP_204_NO_CONTENT)
 def withdraw_consent(token: str, db: Session = Depends(get_db)):
     """Kandidat menarik persetujuan -- jawaban, transkrip & hasil AI dihapus."""
-    _check_rate_limit(db)
+    _check_rate_limit(db, token)
     service.withdraw_consent(db, token)
 
 
@@ -238,7 +272,7 @@ def submit_session(token: str, db: Session = Depends(get_db)):
 
 @public_router.post("/{token}/voice/start", response_model=VoiceSessionOut)
 async def start_voice_session(token: str, db: Session = Depends(get_db)):
-    _check_rate_limit(db)
+    _check_rate_limit(db, token)
     return await service.start_voice_session(db, token)
 
 
@@ -282,3 +316,42 @@ async def upload_voice_recording(
     service.upload_voice_recording(
         db, token, data=data, content_type=request.headers.get("content-type", "")
     )
+
+
+@public_router.post("/{token}/answers/{question_id}/audio", status_code=status.HTTP_202_ACCEPTED)
+async def upload_answer_audio(
+    token: str,
+    question_id: str,
+    request: Request,
+    background: BackgroundTasks,
+    duration_sec: float | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Mode rekaman: unggah jawaban suara satu pertanyaan (body = bytes
+    audio). Transkripsi berjalan di latar belakang; kandidat memantau
+    statusnya lewat GET sesi (`recorded_answers`)."""
+    _check_rate_limit(db, token)
+    data = await request.body()
+    response, key = service.upload_answer_audio(
+        db,
+        token,
+        question_id,
+        data=data,
+        content_type=request.headers.get("content-type", ""),
+        duration_sec=duration_sec,
+    )
+    # Sesi DB task dibuat dari dependency get_db yang AKTIF (termasuk
+    # override di test), bukan SessionLocal langsung -- sesi request sudah
+    # ditutup saat background task berjalan.
+    db_dep = request.app.dependency_overrides.get(get_db, get_db)
+    background.add_task(_run_transcription, db_dep, str(response.id), question_id, key)
+    return {"status": "processing"}
+
+
+def _run_transcription(db_dep, response_id: str, question_id: str, key: str) -> None:
+    gen = db_dep()
+    db = next(gen)
+    try:
+        service.transcribe_answer_audio(db, response_id, question_id, key)
+    finally:
+        gen.close()

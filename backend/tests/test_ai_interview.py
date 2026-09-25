@@ -775,4 +775,126 @@ def test_consent_text_mentions_recording():
 
     text = consent_text(180)
     assert "direkam" in text and "rekaman" in text
-    assert CONSENT_VERSION == "2026-09-24.2"
+    assert CONSENT_VERSION == "2026-09-24.3"
+
+
+# ---------- Fase 3 roadmap: mode rekaman jawaban (async_recording) ----------
+
+
+def _recording_setup(client, monkeypatch, transcripts: list[str]):
+    """Template mode rekaman + kandidat bersetuju; STT di-mock berurutan."""
+    from app.core.config import get_settings
+    from app.modules.ai_interview import service as svc
+
+    monkeypatch.setattr(get_settings(), "stt_base_url", "http://stt.test/v1")
+    queue = list(transcripts)
+    monkeypatch.setattr(svc, "_stt_transcribe", lambda data, mime: queue.pop(0))
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin, mode="async_recording")
+    cand_id = _create_candidate(client, admin, name="Dewi", email="dewi@example.com")
+    invited = _invite(client, admin, template["id"], cand_id)
+    return admin, invited["invite_token"], invited["response_id"]
+
+
+def _upload(client, token, qid, audio=b"\x1aE\xdf\xa3webm-audio", ctype="audio/webm"):
+    return client.post(
+        f"/api/v1/ai-interview/session/{token}/answers/{qid}/audio?duration_sec=12.5",
+        content=audio,
+        headers={"Content-Type": ctype},
+    )
+
+
+def test_recording_answer_transcribed_and_submitted(client, monkeypatch):
+    admin, token, response_id = _recording_setup(
+        client,
+        monkeypatch,
+        ["Saya dengarkan keluhan pelanggan dulu.", "Saya tetap tenang dan bikin prioritas."],
+    )
+    up = _upload(client, token, "q1")
+    assert up.status_code == 202, up.text
+    session = client.get(f"/api/v1/ai-interview/session/{token}").json()
+    rec = {r["question_id"]: r for r in session["recorded_answers"]}
+    # TestClient menjalankan background task sebelum post() kembali.
+    assert rec["q1"]["status"] == "ready"
+    assert rec["q1"]["transcript"] == "Saya dengarkan keluhan pelanggan dulu."
+    assert session["max_attempts"] == 3
+
+    assert _upload(client, token, "q2").status_code == 202
+    submit = client.post(f"/api/v1/ai-interview/session/{token}/submit")
+    assert submit.status_code == 200, submit.text
+
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    by_q = {a["question_id"]: a for a in detail["answers"]}
+    assert by_q["q2"]["answer_text"] == "Saya tetap tenang dan bikin prioritas."
+    assert by_q["q1"]["audio_duration_sec"] == 12.5
+    link = client.get(
+        f"/api/v1/ai-interview/responses/{response_id}/answers/q1/audio-url", headers=admin
+    )
+    assert link.status_code == 200 and link.json()["channels"] == ["Kandidat"]
+
+
+def test_recording_silent_answer_blocks_submit_until_rerecorded(client, monkeypatch):
+    _, token, _ = _recording_setup(client, monkeypatch, ["", "Jawaban kedua terdengar jelas."])
+    _upload(client, token, "q1")
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"]
+    assert rec[0]["status"] == "failed"  # transkrip kosong = suara tidak tertangkap
+    blocked = client.post(f"/api/v1/ai-interview/session/{token}/submit")
+    assert blocked.status_code == 422
+
+    _upload(client, token, "q1")  # rekam ulang
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"]
+    assert rec[0]["status"] == "ready" and rec[0]["attempts_used"] == 2
+
+
+def test_recording_retake_limit_and_old_audio_deleted(client, monkeypatch):
+    from app.core.config import get_settings
+
+    admin, token, response_id = _recording_setup(client, monkeypatch, ["a b c"] * 4)
+    root = get_settings().uploads_root
+    keys = []
+    for _ in range(3):
+        assert _upload(client, token, "q1").status_code == 202
+        detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin)
+        keys.append(detail.json()["answers"][0]["audio_object_key"])
+    assert len(set(keys)) == 3
+    # Rekaman lama terhapus dari storage; hanya yang terakhir tersisa.
+    assert not (root / keys[0]).exists() and (root / keys[2]).exists()
+    fourth = _upload(client, token, "q1")
+    assert fourth.status_code == 409
+
+    # Penarikan persetujuan menghapus file rekaman jawaban juga.
+    client.post(f"/api/v1/ai-interview/session/{token}/withdraw-consent")
+    assert not (root / keys[2]).exists()
+
+
+def test_recording_upload_guards(client, monkeypatch):
+    from app.core.config import get_settings
+
+    admin, token, _ = _recording_setup(client, monkeypatch, [])
+    assert _upload(client, token, "q-tidak-ada").status_code == 404
+    assert _upload(client, token, "q1", ctype="text/plain").status_code == 422
+    too_long = client.post(
+        f"/api/v1/ai-interview/session/{token}/answers/q1/audio?duration_sec=600",
+        content=b"x",
+        headers={"Content-Type": "audio/webm"},
+    )
+    assert too_long.status_code == 422
+    monkeypatch.setattr(get_settings(), "stt_base_url", None)
+    assert _upload(client, token, "q1").status_code == 503
+
+    # Template mode teks menolak unggah rekaman.
+    text_tpl = _create_active_template(client, admin)
+    cand = _create_candidate(client, admin, name="Eko", email="eko@example.com")
+    text_token = _invite(client, admin, text_tpl["id"], cand)["invite_token"]
+    monkeypatch.setattr(get_settings(), "stt_base_url", "http://stt.test/v1")
+    assert _upload(client, text_token, "q1").status_code == 422
+
+
+def test_session_polling_does_not_exhaust_rate_limit(client, monkeypatch):
+    """Mode rekaman mem-polling status transkripsi; dulu GET sesi berbagi
+    batas 30/jam per IP dgn aksi tulis -> kandidat terkena 429 di tengah
+    interview setelah ~1 menit menunggu."""
+    _, token, _ = _recording_setup(client, monkeypatch, ["a b c"])
+    for _ in range(40):
+        assert client.get(f"/api/v1/ai-interview/session/{token}").status_code == 200
+    assert _upload(client, token, "q1").status_code == 202  # batas tulis terpisah

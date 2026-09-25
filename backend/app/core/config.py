@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None
     stt_base_url: str | None = None
+    # Model yang diminta ke faster-whisper-server untuk transkripsi jawaban
+    # mode rekaman (samakan dgn STT_MODEL di docker-compose).
+    stt_model: str = "Systran/faster-whisper-small"
 
     # Integrasi tanda tangan elektronik. Nilai ESIGN_PROVIDER:
     # "" (nonaktif) | "sandbox" (simulasi lokal) | "privy" (PrivyID produksi)
