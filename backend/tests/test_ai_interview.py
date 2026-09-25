@@ -1496,3 +1496,76 @@ def test_template_structure_validated(client):
         json={"criteria": only_one},
     )
     assert resp.status_code == 422 and "ketahanan" in resp.json()["detail"]
+
+
+# ---------- Cek gap Fase 65 ----------
+
+
+def test_template_job_order_linkable_validated_and_locked(client):
+    """Dulu tidak ada jalur UI/PATCH untuk mengaitkan template ke job order
+    (integrasi pipeline Fase 5 tidak terjangkau), dan job order tidak dicek."""
+    import uuid
+
+    admin = _auth_header(client)
+    ghost = client.post(
+        "/api/v1/ai-interview/templates",
+        headers=admin,
+        json=_template_payload(job_order_id=str(uuid.uuid4())),
+    )
+    assert ghost.status_code == 422 and "Job order" in ghost.json()["detail"]
+
+    jo_id = client.post(
+        "/api/v1/recruitment/job-orders",
+        headers=admin,
+        json={"client_id": _client_id(client, admin), "title": "CS", "headcount": 1},
+    ).json()["id"]
+    template = _create_active_template(client, admin)
+    url = f"/api/v1/ai-interview/templates/{template['id']}"
+    linked = client.patch(url, headers=admin, json={"job_order_id": jo_id})
+    assert linked.status_code == 200 and linked.json()["job_order_id"] == jo_id
+
+    _invite(client, admin, template["id"], _create_candidate(client, admin))
+    assert client.patch(url, headers=admin, json={"job_order_id": None}).status_code == 409
+    # Payload form lengkap dengan job order yang sama tetap boleh.
+    same = client.patch(url, headers=admin, json={"job_order_id": jo_id, "title": "CS v2"})
+    assert same.status_code == 200, same.text
+
+
+def test_legacy_invalid_template_still_manageable(client):
+    """Validasi struktur (Fase 65) tidak boleh mengunci template lama yang
+    tersimpan sebelum validasi ada (mis. ID ganda dari bug form lama)."""
+    import json
+    from uuid import UUID
+
+    from app.modules.ai_interview.models import AIInterviewTemplate
+
+    admin = _auth_header(client)
+    created = client.post(
+        "/api/v1/ai-interview/templates", headers=admin, json=_template_payload()
+    ).json()
+    db = client.testing_session()
+    row = db.get(AIInterviewTemplate, UUID(created["id"]))
+    questions = row.questions
+    questions[1]["id"] = "q1"  # ID ganda warisan bug lama
+    row.questions_json = json.dumps(questions)
+    db.commit()
+    db.close()
+
+    url = f"/api/v1/ai-interview/templates/{created['id']}"
+    assert client.patch(url, headers=admin, json={"status": "aktif"}).status_code == 200
+    legacy = client.get(url, headers=admin).json()
+    # Form mengirim ulang pertanyaan apa adanya + judul baru -> tetap boleh.
+    renamed = client.patch(
+        url,
+        headers=admin,
+        json={
+            "title": "Judul baru",
+            "questions": legacy["questions"],
+            "criteria": legacy["criteria"],
+        },
+    )
+    assert renamed.status_code == 200, renamed.text
+    # Tapi mengubah pertanyaan tetap wajib memperbaiki ID ganda.
+    legacy["questions"][0]["prompt"] = "Diubah?"
+    changed = client.patch(url, headers=admin, json={"questions": legacy["questions"]})
+    assert changed.status_code == 422

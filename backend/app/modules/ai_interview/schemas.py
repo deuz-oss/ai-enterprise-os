@@ -182,6 +182,7 @@ class AIInterviewTemplateCreate(BaseModel):
 
 
 class AIInterviewTemplateUpdate(BaseModel):
+    job_order_id: UUID | None = None
     title: str | None = None
     objective: str | None = None
     mode: AIInterviewMode | None = None

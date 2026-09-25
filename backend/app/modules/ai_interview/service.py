@@ -59,6 +59,7 @@ from app.modules.notifications.service import send_raw_email
 from app.modules.recruitment.models import (
     FORGOTTEN_CANDIDATE_NAME,
     Candidate,
+    JobOrder,
     Placement,
     PlacementStatus,
 )
@@ -406,7 +407,16 @@ def _validate_structure(questions: list[dict], criteria: list[dict]) -> None:
         )
 
 
+def _require_job_order(db: Session, job_order_id) -> None:
+    """Job order harus ada DI TENANT INI (db.get ikut filter tenant). Dulu
+    tidak dicek: UUID sembarang -> FK error 500 di PostgreSQL, dan ID job
+    order tenant lain diterima (template terkait lintas tenant)."""
+    if job_order_id is not None and db.get(JobOrder, job_order_id) is None:
+        raise HTTPException(status_code=422, detail="Job order tidak ditemukan")
+
+
 def create_template(db: Session, payload: AIInterviewTemplateCreate, user) -> AIInterviewTemplate:
+    _require_job_order(db, payload.job_order_id)
     _validate_structure(
         [q.model_dump() for q in payload.questions], [c.model_dump() for c in payload.criteria]
     )
@@ -471,8 +481,10 @@ def templates_out(
 _EDITABLE_WHEN_USED = {"follow_up_max", "follow_up_focus"}
 
 
-def _question_core(questions: list[dict]) -> list[dict]:
-    return [InterviewQuestionBase(**q).model_dump(exclude=_EDITABLE_WHEN_USED) for q in questions]
+def _question_core(questions: list[dict], keep_follow_up: bool = False) -> list[dict]:
+    """Bentuk ternormalisasi (default diisi) untuk membandingkan isi pertanyaan."""
+    exclude = set() if keep_follow_up else _EDITABLE_WHEN_USED
+    return [InterviewQuestionBase(**q).model_dump(exclude=exclude) for q in questions]
 
 
 def _criteria_core(criteria: list[dict]) -> list[dict]:
@@ -489,6 +501,10 @@ def update_template(
         locked: list[str] = []
         if "mode" in data and data["mode"] != template.mode:
             locked.append("mode")
+        if "job_order_id" in data and data["job_order_id"] != template.job_order_id:
+            # Respons menyimpan job order saat diundang; mengganti job order
+            # template yang sudah dipakai membuat pipeline-nya tidak konsisten.
+            locked.append("job order")
         if "questions" in data and _question_core(data["questions"] or []) != _question_core(
             template.questions
         ):
@@ -506,10 +522,17 @@ def update_template(
                     "untuk membuat versi baru."
                 ),
             )
-    _validate_structure(
-        data["questions"] if "questions" in data else template.questions,
-        data["criteria"] if "criteria" in data else template.criteria,
-    )
+    if "job_order_id" in data:
+        _require_job_order(db, data["job_order_id"])
+    # Validasi struktur HANYA bila pertanyaan/kriteria benar-benar berubah:
+    # template lama yang tersimpan sebelum validasi ini (mis. ID ganda dari bug
+    # form lama) tetap harus bisa diaktifkan, diarsipkan, atau diganti judul.
+    new_questions = data["questions"] if "questions" in data else template.questions
+    new_criteria = data["criteria"] if "criteria" in data else template.criteria
+    if _question_core(new_questions, keep_follow_up=True) != _question_core(
+        template.questions, keep_follow_up=True
+    ) or _criteria_core(new_criteria) != _criteria_core(template.criteria):
+        _validate_structure(new_questions, new_criteria)
     if "questions" in data:
         questions = data.pop("questions")
         template.questions_json = json.dumps(questions or [], ensure_ascii=False)

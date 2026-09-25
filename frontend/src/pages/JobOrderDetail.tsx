@@ -898,7 +898,9 @@ export default function JobOrderDetail() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    onClick={() => navigate(`/ai-interview?candidate_id=${p.candidate_id}`)}
+                    onClick={() =>
+                      navigate(`/ai-interview?candidate_id=${p.candidate_id}&job_order_id=${p.job_order_id}`)
+                    }
                   >
                     <Bot className="h-3.5 w-3.5" /> Mode AI — buka AI Interview
                   </Button>

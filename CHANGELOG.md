@@ -6,6 +6,11 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — cek gap Fase 65
+- Template AI Interview tidak bisa dikaitkan ke job order dari UI (form tanpa kolom job order, PATCH tidak menerima `job_order_id`, tombol "Mode AI" di Job Order hanya membawa kandidat) -- akibatnya keputusan pipeline di review (Fase 64) tidak pernah tersedia. Kini form punya pilihan job order (terkunci bila template sudah dipakai), tombol "Mode AI" membawa job order, template aktif job order itu terpilih otomatis, dan ada ajakan membuat template bila belum ada.
+- `job_order_id` template tidak divalidasi: UUID sembarang -> error 500 di PostgreSQL, ID job order tenant lain diterima.
+- Validasi struktur template (Fase 65) mengunci template lama yang tersimpan dengan ID pertanyaan ganda: tidak bisa diaktifkan, diarsipkan, atau diganti judul. Kini validasi hanya berjalan bila pertanyaan/kriteria benar-benar diubah.
+
 ### Added — Fase 65: AI Interview — edit, duplikat & arsip template
 
 Detail di `PRD.md` Fase 65.

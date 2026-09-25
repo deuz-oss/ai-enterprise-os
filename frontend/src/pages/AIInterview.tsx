@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Archive, CheckCircle2, FileEdit, MessagesSquare, ShieldCheck } from "lucide-react";
 import { PageHeader } from "../components/workspace";
@@ -93,6 +93,12 @@ interface InterviewResponse {
   /** Tahap pipeline kandidat di job order template ini (Fase 5). */
   placement_id: string | null;
   placement_status: string | null;
+}
+
+interface JobOrderLite {
+  id: string;
+  title: string;
+  status: string;
 }
 
 interface Calibration {
@@ -450,6 +456,8 @@ function nextQuestionId(qs: Question[]): string {
 function TemplateForm({
   initial,
   usedCount,
+  jobOrders,
+  defaultJobOrderId,
   pending,
   error,
   onSubmit,
@@ -458,6 +466,9 @@ function TemplateForm({
 }: {
   initial: Template | null;
   usedCount: number;
+  jobOrders: JobOrderLite[];
+  /** Dari tautan "Mode AI" di halaman Job Order -- template baru langsung terkait. */
+  defaultJobOrderId: string | null;
   pending: boolean;
   error: Error | null;
   onSubmit: (body: Record<string, unknown>) => void;
@@ -467,6 +478,10 @@ function TemplateForm({
   const locked = usedCount > 0;
   const [title, setTitle] = useState(initial?.title ?? "");
   const [objective, setObjective] = useState(initial?.objective ?? "");
+  // Job order terkait = syarat integrasi pipeline di review (Fase 5).
+  const [jobOrderId, setJobOrderId] = useState(
+    initial ? (initial.job_order_id ?? "") : (defaultJobOrderId ?? "")
+  );
   const [mode, setMode] = useState(initial?.mode ?? "async_text");
   const [questions, setQuestions] = useState<Question[]>(initial?.questions ?? []);
   const [criteria, setCriteria] = useState<Criterion[]>(initial?.criteria ?? []);
@@ -478,6 +493,7 @@ function TemplateForm({
     onSubmit({
       title,
       objective: objective || null,
+      job_order_id: jobOrderId || null,
       mode,
       // Template terkunci: kirim pertanyaan apa adanya (urutan & isi tidak
       // boleh berubah); selain itu rapikan urutan sesuai tampilan.
@@ -512,7 +528,7 @@ function TemplateForm({
         >
           <p>
             Template ini sudah dipakai <b className="text-[var(--text)]">{usedCount} kandidat</b>.
-            Pertanyaan, kriteria, dan mode dikunci supaya hasil yang sudah ada tetap bisa
+            Pertanyaan, kriteria, mode, dan job order dikunci supaya hasil yang sudah ada tetap bisa
             dibandingkan. Judul, tujuan, pedoman percakapan, dan pengaturan pertanyaan susulan
             masih bisa diubah.
           </p>
@@ -544,6 +560,29 @@ function TemplateForm({
         className="input w-full"
         rows={2}
       />
+      <div>
+        <label htmlFor="job_order" className="text-xs font-medium text-[var(--text-muted)]">
+          Job order (opsional)
+        </label>
+        <select
+          id="job_order"
+          value={jobOrderId}
+          onChange={(e) => setJobOrderId(e.target.value)}
+          disabled={locked}
+          className="input mt-1 w-full"
+        >
+          <option value="">Tanpa job order</option>
+          {jobOrders.map((jo) => (
+            <option key={jo.id} value={jo.id}>
+              {jo.title}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+          Dengan job order, reviewer bisa langsung meloloskan atau menggagalkan kandidat di
+          pipeline job order itu dari halaman review.
+        </p>
+      </div>
       <div>
         <label htmlFor="mode" className="text-xs font-medium text-[var(--text-muted)]">
           Mode Interview
@@ -748,6 +787,24 @@ export default function AIInterview() {
     queryKey: ["candidates-lite"],
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates"),
   });
+  const { data: jobOrders } = useQuery({
+    queryKey: ["job-orders-lite"],
+    queryFn: () => api.get<JobOrderLite[]>("/recruitment/job-orders"),
+  });
+  const jobOrderTitle = (id: string | null) =>
+    id ? (jobOrders?.find((jo) => jo.id === id)?.title ?? null) : null;
+  // Dari tombol "Mode AI" di halaman Job Order: pilih otomatis template aktif
+  // untuk job order itu (sekali), dan jadikan default template baru.
+  const linkedJobOrderId = searchParams.get("job_order_id");
+  const [autoSelected, setAutoSelected] = useState(false);
+  useEffect(() => {
+    if (autoSelected || !linkedJobOrderId || !templates) return;
+    const match = templates.find(
+      (t) => t.job_order_id === linkedJobOrderId && t.status === "aktif"
+    );
+    if (match) setSelectedId(match.id);
+    setAutoSelected(true);
+  }, [autoSelected, linkedJobOrderId, templates]);
   const selected = templates?.find((t) => t.id === selectedId) ?? null;
   const allTemplates = templates ?? [];
   const aktifCount = allTemplates.filter((t) => t.status === "aktif").length;
@@ -809,6 +866,7 @@ export default function AIInterview() {
   const duplicateTemplate = useMutation({
     mutationFn: (id: string) => api.post<Template>(`/ai-interview/templates/${id}/duplicate`),
     onSuccess: (copy) => {
+      updateTemplate.reset();
       setSelectedId(copy.id);
       setFormState({ template: copy });
       invalidateTemplates();
@@ -878,7 +936,10 @@ export default function AIInterview() {
         <PageHeader icon={MessagesSquare} title="AI Interview" />
         <button
           className="btn"
-          onClick={() => setFormState(formState ? null : { template: null })}
+          onClick={() => {
+            createTemplate.reset();
+            setFormState(formState ? null : { template: null });
+          }}
         >
           {formState ? "Tutup" : "+ Template Baru"}
         </button>
@@ -957,11 +1018,37 @@ export default function AIInterview() {
         )}
       </div>
 
+      {linkedJobOrderId &&
+        !formState &&
+        templates &&
+        !templates.some((t) => t.job_order_id === linkedJobOrderId && t.status === "aktif") && (
+          <div className="card flex flex-wrap items-center justify-between gap-2 text-sm">
+            <p className="text-[var(--text-muted)]">
+              Belum ada template aktif untuk job order{" "}
+              <b className="text-[var(--text)]">
+                {jobOrderTitle(linkedJobOrderId) ?? "ini"}
+              </b>
+              . Buat dulu supaya hasil interview terhubung ke pipeline job order.
+            </p>
+            <button
+              className="btn py-1 text-xs"
+              onClick={() => {
+                createTemplate.reset();
+                setFormState({ template: null });
+              }}
+            >
+              Buat template untuk job order ini
+            </button>
+          </div>
+        )}
+
       {formState && (
         <TemplateForm
           key={formState.template?.id ?? "baru"}
           initial={formState.template}
           usedCount={formState.template?.response_count ?? 0}
+          jobOrders={jobOrders ?? []}
+          defaultJobOrderId={linkedJobOrderId}
           pending={createTemplate.isPending || updateTemplate.isPending}
           error={(formState.template ? updateTemplate.error : createTemplate.error) as Error | null}
           onCancel={() => setFormState(null)}
@@ -992,7 +1079,10 @@ export default function AIInterview() {
             >
               <div>
                 <p className="text-sm font-medium text-[var(--text)]">{t.title}</p>
-                <p className="text-xs text-[var(--text-muted)]">{t.questions.length} pertanyaan</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {t.questions.length} pertanyaan
+                  {jobOrderTitle(t.job_order_id) && <> · {jobOrderTitle(t.job_order_id)}</>}
+                </p>
               </div>
               <span className={`pill ${t.status === "aktif" ? "p-green" : "p-gray"}`}>{t.status}</span>
             </button>

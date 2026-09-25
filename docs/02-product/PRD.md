@@ -890,6 +890,21 @@ percakapan (Fase 63), atau batas pertanyaan susulan tidak bisa diperbaiki.
   `q{jumlah+1}` bentrok setelah pertanyaan dihapus -> jawaban tertimpa.
   Form kini memakai ID terbesar + 1.
 
+### Cek gap Fase 65 — ✅ Selesai (2026-09-25)
+
+- **Integrasi pipeline Fase 64 tidak terjangkau dari UI**: tidak ada jalur
+  mengaitkan template ke job order (form tanpa kolom, PATCH tanpa
+  `job_order_id`, tombol "Mode AI" di Job Order hanya membawa kandidat),
+  jadi `placement_id` selalu kosong. Tes lolos karena membuat template lewat
+  API. Kini: pilihan job order di form (terkunci bila sudah dipakai, 409),
+  tombol "Mode AI" membawa `job_order_id`, template aktif job order itu
+  terpilih otomatis, dan banner ajakan membuat template bila belum ada.
+- **`job_order_id` tanpa validasi** -> kini wajib job order di tenant yang sama
+  (dulu: UUID sembarang = 500 di PostgreSQL; job order tenant lain diterima).
+- **Template lama terkunci oleh validasi baru** (ID ganda warisan bug form)
+  -> validasi struktur hanya saat pertanyaan/kriteria benar-benar berubah
+  (dibandingkan dalam bentuk ternormalisasi).
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
