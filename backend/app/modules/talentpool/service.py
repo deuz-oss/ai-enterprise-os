@@ -20,7 +20,7 @@ from app.core import storage
 from app.core.database import parse_uuid
 from app.core.llm import chat_completion, vision_completion
 from app.modules import audit
-from app.modules.recruitment.models import Candidate
+from app.modules.recruitment.models import FORGOTTEN_CANDIDATE_NAME, Candidate
 from app.modules.talentpool.field_catalog import (
     CANDIDATE_FIELD_CATALOG,
     CANDIDATE_FIELD_KEYS,
@@ -915,7 +915,7 @@ def forget_candidate(db: Session, *, user, candidate_id: str) -> dict:
     removed["ai_interviews"] = len(responses)
     removed["photo"] = 1 if candidate.photo_object_key else 0
     candidate.photo_object_key = None
-    candidate.full_name = "(dihapus atas permintaan)"
+    candidate.full_name = FORGOTTEN_CANDIDATE_NAME
     candidate.phone = None
     candidate.email = None
     candidate.city = None

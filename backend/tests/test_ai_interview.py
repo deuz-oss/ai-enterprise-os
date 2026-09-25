@@ -1261,3 +1261,142 @@ def test_review_can_move_candidate_in_pipeline(client, monkeypatch):
     row = next(p for p in moved if p["id"] == placement["id"])
     assert row["status"] == "gagal"
     assert row["rejection_note"] == "Tidak lolos tahap AI Interview"
+
+
+# ---------- Cek gap 2026-09-25 (setelah Fase 3-5) ----------
+
+
+def test_rescoring_resets_previous_review(client, monkeypatch):
+    """Dulu "disetujui" tetap menempel pada skor baru hasil nilai ulang."""
+    admin = _auth_header(client)
+    _fake_scoring(monkeypatch, [{"komunikasi": (80, ["Jawaban pribadi kandidat"])}])
+    _, response_id = _submit_text_interview(client, admin)
+    base = f"/api/v1/ai-interview/responses/{response_id}"
+    client.post(f"{base}/review", headers=admin, json={"review_status": "disetujui"})
+    rescored = client.post(f"{base}/score", headers=admin)
+    assert rescored.status_code == 200, rescored.text
+    body = rescored.json()
+    assert body["review_status"] == "menunggu_review" and body["reviewed_at"] is None
+
+
+def test_text_answer_rejected_outside_text_mode(client, monkeypatch):
+    """Dulu jawaban teks bisa menimpa rekaman (file audio yatim di storage)
+    dan mode suara bisa dilewati dengan mengetik lalu submit."""
+    admin, token, _ = _recording_setup(client, monkeypatch, ["Jawaban rekaman satu dua"])
+    assert _upload(client, token, "q1").status_code == 202
+    typed = client.post(
+        f"/api/v1/ai-interview/session/{token}/answer",
+        json={"question_id": "q1", "answer_text": "ketikan"},
+    )
+    assert typed.status_code == 422
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"]
+    assert rec[0]["transcript"] == "Jawaban rekaman satu dua"  # rekaman utuh
+
+    voice_token, _ = _voice_response(client, admin)
+    assert (
+        client.post(
+            f"/api/v1/ai-interview/session/{voice_token}/answer",
+            json={"question_id": "q1", "answer_text": "ketikan"},
+        ).status_code
+        == 422
+    )
+    assert client.post(f"/api/v1/ai-interview/session/{voice_token}/submit").status_code == 422
+
+    text_template = _create_active_template(client, admin)
+    cand = _create_candidate(client, admin, name="Nia", email="nia@example.com")
+    text_token = _invite(client, admin, text_template["id"], cand)["invite_token"]
+    unknown = client.post(
+        f"/api/v1/ai-interview/session/{text_token}/answer",
+        json={"question_id": "q-karangan", "answer_text": "x"},
+    )
+    assert unknown.status_code == 404
+
+
+def test_oversized_upload_rejected_before_reading_body(client, monkeypatch):
+    from app.modules.ai_interview import service as svc
+
+    _, token, _ = _recording_setup(client, monkeypatch, [])
+    monkeypatch.setattr(svc, "MAX_ANSWER_AUDIO_BYTES", 10)
+    resp = _upload(client, token, "q1", audio=b"x" * 11)
+    assert resp.status_code == 413
+
+
+def test_stale_processing_settles_as_system_failure_and_refunds_attempt(client, monkeypatch):
+    """Dulu task transkripsi yang hilang (container restart) membuat status
+    "processing" abadi: tombol rekam & kirim terkunci permanen."""
+    import json
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    from app.modules.ai_interview.models import AIInterviewResponse
+
+    _, token, response_id = _recording_setup(client, monkeypatch, ["Jawaban satu dua tiga"])
+    assert _upload(client, token, "q1").status_code == 202
+    db = client.testing_session()
+    row = db.get(AIInterviewResponse, UUID(response_id))
+    answers = row.answers
+    answers[0]["transcription"] = "processing"
+    answers[0]["submitted_at"] = (datetime.now(UTC) - timedelta(minutes=11)).isoformat()
+    row.answers_json = json.dumps(answers)
+    db.commit()
+    db.close()
+
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"][0]
+    assert (rec["status"], rec["failure"], rec["attempts_used"]) == ("failed", "system", 0)
+
+
+def test_stt_error_refunds_attempt_but_silence_does_not(client, monkeypatch):
+    from app.modules.ai_interview import service as svc
+
+    _, token, _ = _recording_setup(client, monkeypatch, [])
+
+    def broken(data, mime):
+        raise RuntimeError("stt mati")
+
+    monkeypatch.setattr(svc, "_stt_transcribe", broken)
+    _upload(client, token, "q1")
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"][0]
+    assert (rec["status"], rec["failure"], rec["attempts_used"]) == ("failed", "system", 0)
+
+    monkeypatch.setattr(svc, "_stt_transcribe", lambda data, mime: ("", []))
+    _upload(client, token, "q1")
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"][0]
+    assert (rec["failure"], rec["attempts_used"]) == ("silent", 1)
+
+
+def test_exhausted_silent_answer_can_still_be_submitted(client, monkeypatch):
+    """Dulu 3x suara tidak tertangkap = interview tidak pernah bisa dikirim."""
+    _, token, _ = _recording_setup(
+        client, monkeypatch, ["", "", "", "Jawaban kedua terdengar jelas"]
+    )
+    for _ in range(3):
+        _upload(client, token, "q1")
+    blocked_retry = _upload(client, token, "q1")
+    assert blocked_retry.status_code == 409  # jatah habis
+    _upload(client, token, "q2")
+    submit = client.post(f"/api/v1/ai-interview/session/{token}/submit")
+    assert submit.status_code == 200, submit.text
+
+
+def test_staff_response_list_omits_word_timestamps(client, monkeypatch):
+    admin, token, response_id = _recording_setup(client, monkeypatch, ["Satu dua tiga empat"])
+    _upload(client, token, "q1")
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    assert "words" not in detail["answers"][0]
+    assert detail["answers"][0]["answer_text"] == "Satu dua tiga empat"
+
+
+def test_forgotten_candidate_cannot_be_invited_again(client):
+    """Temuan lama: kandidat yang datanya dihapus (UU PDP) masih bisa diundang."""
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin)
+    cand_id = _create_candidate(client, admin, name="Rudi", email="rudi@example.com")
+    forget = client.post(f"/api/v1/talentpool/candidates/{cand_id}/forget", headers=admin)
+    assert forget.status_code == 200, forget.text
+    invite = client.post(
+        f"/api/v1/ai-interview/templates/{template['id']}/invite",
+        headers=admin,
+        json={"candidate_ids": [cand_id]},
+    ).json()
+    assert invite["invited"] == []
+    assert invite["skipped"][0]["reason"] == "Data kandidat sudah dihapus atas permintaannya"

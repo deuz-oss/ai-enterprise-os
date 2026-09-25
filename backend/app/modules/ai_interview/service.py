@@ -54,7 +54,12 @@ from app.modules.ai_interview.schemas import (
     VoiceSessionOut,
 )
 from app.modules.notifications.service import send_raw_email
-from app.modules.recruitment.models import Candidate, Placement, PlacementStatus
+from app.modules.recruitment.models import (
+    FORGOTTEN_CANDIDATE_NAME,
+    Candidate,
+    Placement,
+    PlacementStatus,
+)
 from fastapi import HTTPException
 from livekit import api as lk_api
 from sqlalchemy import and_, or_, select
@@ -456,6 +461,16 @@ def invite_candidates(
                 {"candidate_id": str(candidate_id), "reason": "Kandidat tidak ditemukan"}
             )
             continue
+        if candidate.full_name == FORGOTTEN_CANDIDATE_NAME:
+            # Cek gap: dulu kandidat yang datanya sudah dihapus (UU PDP) masih
+            # bisa diundang lagi -- memproses ulang subjek yang minta dilupakan.
+            skipped.append(
+                {
+                    "candidate_id": str(candidate_id),
+                    "reason": "Data kandidat sudah dihapus atas permintaannya",
+                }
+            )
+            continue
         token = secrets.token_urlsafe(32)
         response = AIInterviewResponse(
             template_id=template.id,
@@ -588,9 +603,25 @@ def score_response(db: Session, response_id: str) -> AIInterviewResponse:
     template = db.get(AIInterviewTemplate, response.template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Template terkait tidak ditemukan")
+    previous_review = response.review_status
     if not _score(db, response, template):
         raise HTTPException(
             status_code=503, detail="Fitur AI belum aktif atau gagal menilai. Coba lagi nanti."
+        )
+    # Cek gap 2026-09-25: dulu status review (mis. "disetujui") tetap menempel
+    # pada skor BARU yang belum pernah dilihat reviewer.
+    if previous_review != AIInterviewReviewStatus.pending:
+        response.review_status = AIInterviewReviewStatus.pending
+        response.reviewed_by = None
+        response.reviewed_at = None
+        db.commit()
+        db.refresh(response)
+        audit.log_event(
+            db,
+            action="ai_interview.review_reset",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            detail={"previous": previous_review.value, "reason": "dinilai_ulang"},
         )
     return response
 
@@ -691,6 +722,9 @@ def responses_out(
     out = []
     for r in responses:
         item = AIInterviewResponseOut.model_validate(r)
+        # Timestamp kata (bisa ribuan per respons) hanya bahan pemetaan bukti;
+        # tidak perlu ikut ke daftar respons.
+        item.answers = [{k: v for k, v in a.items() if k != "words"} for a in item.answers]
         placement = placements.get((r.candidate_id, r.job_order_id))
         if placement is not None:
             item.placement_id = placement.id
@@ -1063,6 +1097,8 @@ def get_session(db: Session, token: str) -> PublicInterviewSessionOut:
         template = db.get(AIInterviewTemplate, response.template_id)
         if template is None:
             raise HTTPException(status_code=404, detail="Template interview tidak ditemukan")
+        if _settle_stale_transcriptions(response):
+            db.commit()
         retention_days = get_interview_settings(db).retention_days
         questions = [
             PublicInterviewQuestionOut(
@@ -1092,6 +1128,7 @@ def get_session(db: Session, token: str) -> PublicInterviewSessionOut:
                     status=str(a.get("transcription") or "ready"),
                     attempts_used=int(a.get("attempts") or 0),
                     transcript=a.get("answer_text") or None,
+                    failure=a.get("failure"),
                 )
                 for a in response.answers
                 if a.get("audio_object_key")
@@ -1174,6 +1211,15 @@ def submit_answer(db: Session, token: str, payload: AnswerIn) -> None:
             AIInterviewResponseStatus.in_progress,
         ):
             raise HTTPException(status_code=422, detail="Interview ini sudah disubmit")
+        # Cek gap 2026-09-25: dulu tanpa cek mode -- di mode rekaman, jawaban
+        # teks menimpa entri rekaman sehingga file audionya yatim di storage
+        # (tak terhapus retensi/penarikan); di mode suara, kandidat bisa
+        # melewati percakapan dengan mengetik.
+        template = db.get(AIInterviewTemplate, response.template_id)
+        if template is None or template.mode != AIInterviewMode.async_text:
+            raise HTTPException(status_code=422, detail="Template ini bukan mode jawaban teks")
+        if payload.question_id not in {str(q.get("id")) for q in template.questions}:
+            raise HTTPException(status_code=404, detail="Pertanyaan tidak ditemukan")
         if response.status == AIInterviewResponseStatus.invited:
             response.status = AIInterviewResponseStatus.in_progress
             response.started_at = response.started_at or datetime.now(UTC)
@@ -1203,6 +1249,14 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
             AIInterviewResponseStatus.in_progress,
         ):
             raise HTTPException(status_code=422, detail="Interview ini sudah disubmit sebelumnya")
+        template = db.get(AIInterviewTemplate, response.template_id)
+        if template is not None and template.mode == AIInterviewMode.realtime_voice:
+            # Mode suara diselesaikan agent (voice/complete), bukan kandidat.
+            raise HTTPException(
+                status_code=422, detail="Interview suara diselesaikan lewat percakapan"
+            )
+        if _settle_stale_transcriptions(response):
+            db.commit()
         if not response.answers:
             raise HTTPException(status_code=422, detail="Belum ada jawaban yang diisi")
         pending = [a for a in response.answers if a.get("transcription") == "processing"]
@@ -1210,8 +1264,16 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
             raise HTTPException(
                 status_code=409, detail="Rekaman jawaban masih diproses. Coba lagi sebentar."
             )
-        failed = [a for a in response.answers if a.get("transcription") == "failed"]
-        if failed:
+        # Gagal yang masih bisa direkam ulang wajib diulang. Kesempatan habis
+        # (suara memang tidak tertangkap 3x) -> boleh dikirim sebagai jawaban
+        # kosong; dulu kandidat terkunci permanen, tidak bisa kirim sama sekali.
+        retryable = [
+            a
+            for a in response.answers
+            if a.get("transcription") == "failed"
+            and int(a.get("attempts") or 0) < MAX_ANSWER_ATTEMPTS
+        ]
+        if retryable:
             raise HTTPException(
                 status_code=422,
                 detail="Ada jawaban yang suaranya tidak tertangkap. Rekam ulang jawaban tersebut.",
@@ -1229,7 +1291,6 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
             detail={"candidate_id": str(response.candidate_id)},
         )
 
-        template = db.get(AIInterviewTemplate, response.template_id)
         if template is not None:
             _score(db, response, template)  # best-effort — status tetap "submitted" kalau gagal
         return response
@@ -1485,6 +1546,43 @@ _ANSWER_AUDIO_MIME = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "aud
 _EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3"}
 
 
+# STT timeout 300 dtk; lewat 10 menit masih "processing" = task transkripsi
+# hilang (mis. container restart saat memproses).
+_STALE_TRANSCRIPTION = timedelta(minutes=10)
+
+
+def _mark_system_failure(answer: dict) -> None:
+    """Gagal karena sistem (STT error / task hilang), bukan kandidat:
+    kesempatan rekam dikembalikan supaya kandidat tidak kehabisan jatah
+    karena gangguan server (cek gap 2026-09-25)."""
+    answer["transcription"] = "failed"
+    answer["failure"] = "system"
+    answer["attempts"] = max(0, int(answer.get("attempts") or 1) - 1)
+
+
+def _settle_stale_transcriptions(response: AIInterviewResponse) -> bool:
+    """Jawaban yang macet "processing" terlalu lama dianggap gagal sistem.
+    Dulu macet selamanya: tombol rekam & kirim terkunci permanen."""
+    now = datetime.now(UTC)
+    answers = response.answers
+    changed = False
+    for a in answers:
+        if a.get("transcription") != "processing":
+            continue
+        try:
+            sent = datetime.fromisoformat(str(a.get("submitted_at")))
+        except ValueError:
+            continue
+        if sent.tzinfo is None:
+            sent = sent.replace(tzinfo=UTC)
+        if now - sent > _STALE_TRANSCRIPTION:
+            _mark_system_failure(a)
+            changed = True
+    if changed:
+        response.answers_json = json.dumps(answers, ensure_ascii=False)
+    return changed
+
+
 def upload_answer_audio(
     db: Session,
     token: str,
@@ -1528,6 +1626,7 @@ def upload_answer_audio(
                 status_code=422, detail=f"Jawaban maksimal {MAX_ANSWER_SECONDS // 60} menit"
             )
 
+        _settle_stale_transcriptions(response)
         answers = response.answers
         previous = next((a for a in answers if a.get("question_id") == question_id), None)
         attempts = int(previous.get("attempts") or 0) if previous else 0
@@ -1626,15 +1725,17 @@ def transcribe_answer_audio(
         if entry is None or entry.get("audio_object_key") != object_key:
             return
         words: list[list] = []
+        system_error = False
         try:
             text, words = _stt_transcribe(
                 storage.get_object(object_key), entry.get("audio_mime", "")
             )
-        except Exception:  # noqa: BLE001 - STT gagal -> kandidat diminta rekam ulang
+        except Exception:  # noqa: BLE001 - STT gagal -> kandidat diminta coba lagi
             logger.warning(
                 "Transkripsi jawaban gagal (%s/%s)", response_id, question_id, exc_info=True
             )
             text = ""
+            system_error = True
         db.refresh(response)
         answers = response.answers
         for a in answers:
@@ -1643,6 +1744,10 @@ def transcribe_answer_audio(
                 a["words"] = words
                 # Transkrip kosong = suara tidak tertangkap (hening/terlalu pelan).
                 a["transcription"] = "ready" if text else "failed"
+                if system_error:
+                    _mark_system_failure(a)
+                elif not text:
+                    a["failure"] = "silent"
         response.answers_json = json.dumps(answers, ensure_ascii=False)
         db.commit()
     finally:

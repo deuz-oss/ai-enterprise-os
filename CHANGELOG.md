@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — cek gap AI Interview (setelah Fase 62-64)
+- Kandidat mode rekaman bisa terkunci permanen (tidak bisa rekam ulang maupun mengirim interview): saat 3x suara tidak tertangkap, saat STT server gangguan (kegagalan sistem ikut memakan jatah rekam), atau saat proses transkripsi hilang (status "diproses" abadi). Kini gangguan sistem mengembalikan jatah, transkripsi macet >10 menit dianggap gagal sistem, dan jawaban yang jatahnya habis boleh dikirim kosong.
+- Endpoint jawaban teks tidak memeriksa mode template: di mode rekaman, jawaban teks menimpa rekaman sehingga file suaranya tertinggal di storage tanpa ikut terhapus retensi/penarikan persetujuan; di mode suara real-time, kandidat bisa melewati percakapan dengan mengetik jawaban lalu submit. Pertanyaan yang tidak ada di template juga kini ditolak.
+- Unggahan rekaman jawaban (endpoint publik) dibaca utuh ke memori sebelum ukurannya dicek; kini dibatasi selama streaming (413).
+- "Nilai ulang" setelah review membuat status "disetujui" menempel pada skor baru yang belum dilihat reviewer; kini review kembali ke "menunggu review" (diaudit).
+- Kandidat yang datanya sudah dihapus (UU PDP) masih bisa diundang AI Interview lagi; kini dilewati dan disembunyikan dari daftar undangan.
+- Daftar respons AI Interview tidak lagi membawa timestamp per kata (bisa ribuan per respons).
+
 ### Added — Fase 64: AI Interview — bukti bertimestamp, konsistensi skor, integrasi pipeline
 
 Fase 5 roadmap AI Interview. Detail di `PRD.md` Fase 64.

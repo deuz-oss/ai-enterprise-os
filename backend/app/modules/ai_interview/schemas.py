@@ -318,6 +318,9 @@ class RecordedAnswerOut(BaseModel):
     status: str  # processing | ready | failed
     attempts_used: int
     transcript: str | None = None
+    # Alasan gagal: "silent" (suara tidak tertangkap, memakai jatah) atau
+    # "system" (gangguan server, jatah dikembalikan).
+    failure: str | None = None
 
 
 class PublicInterviewSessionOut(BaseModel):

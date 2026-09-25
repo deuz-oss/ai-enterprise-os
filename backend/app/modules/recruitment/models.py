@@ -42,6 +42,13 @@ class JobOrderBusinessStatus(str, enum.Enum):
     filled = "terisi"
 
 
+# Nama pengganti setelah hak hapus subjek data (talentpool.forget_candidate).
+# Baris kandidat dipertahankan untuk jejak proses, jadi nama ini satu-satunya
+# penanda "sudah dilupakan" -- modul lain wajib memperlakukannya sebagai
+# kandidat yang tidak boleh diproses lagi (mis. diundang interview).
+FORGOTTEN_CANDIDATE_NAME = "(dihapus atas permintaan)"
+
+
 class CandidateStatus(str, enum.Enum):
     new = "baru"
     screening = "screening"

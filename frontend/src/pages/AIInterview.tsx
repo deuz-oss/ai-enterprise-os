@@ -918,20 +918,23 @@ export default function AIInterview() {
                 <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                   <p className="text-xs font-medium text-[var(--text-muted)]">Undang Kandidat</p>
                   <div className="max-h-40 space-y-1 overflow-y-auto">
-                    {(candidates ?? []).map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 text-sm text-[var(--text)]">
-                        <input
-                          type="checkbox"
-                          checked={candidateIds.includes(c.id)}
-                          onChange={(e) =>
-                            setCandidateIds((ids) =>
-                              e.target.checked ? [...ids, c.id] : ids.filter((id) => id !== c.id)
-                            )
-                          }
-                        />
-                        {c.full_name} {c.email ? `(${c.email})` : "(tanpa email)"}
-                      </label>
-                    ))}
+                    {/* Kandidat yang datanya dihapus (UU PDP) tidak boleh diundang lagi. */}
+                    {(candidates ?? [])
+                      .filter((c) => c.full_name !== "(dihapus atas permintaan)")
+                      .map((c) => (
+                        <label key={c.id} className="flex items-center gap-2 text-sm text-[var(--text)]">
+                          <input
+                            type="checkbox"
+                            checked={candidateIds.includes(c.id)}
+                            onChange={(e) =>
+                              setCandidateIds((ids) =>
+                                e.target.checked ? [...ids, c.id] : ids.filter((id) => id !== c.id)
+                              )
+                            }
+                          />
+                          {c.full_name} {c.email ? `(${c.email})` : "(tanpa email)"}
+                        </label>
+                      ))}
                   </div>
                   <button
                     className="btn"

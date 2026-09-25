@@ -20,6 +20,9 @@ interface RecordedAnswer {
   status: "processing" | "ready" | "failed";
   attempts_used: number;
   transcript: string | null;
+  /** "silent" = suara tidak tertangkap (memakai jatah); "system" = gangguan
+   * server (jatah dikembalikan). */
+  failure?: "silent" | "system" | null;
 }
 
 interface Props {
@@ -72,7 +75,14 @@ export function AIInterviewRecording({ token, questions, recorded, maxAttempts, 
   const byQ = new Map(recorded.map((r) => [r.question_id, r]));
   const current = question ? byQ.get(question.id) : undefined;
   const attemptsLeft = maxAttempts - (current?.attempts_used ?? 0);
-  const allReady = questions.every((q) => byQ.get(q.id)?.status === "ready");
+  // Jawaban gagal dengan jatah rekam habis boleh dikirim kosong (dulu
+  // kandidat terkunci permanen: tidak bisa rekam, tidak bisa kirim).
+  const exhausted = (a?: RecordedAnswer) =>
+    a?.status === "failed" && a.failure !== "system" && a.attempts_used >= maxAttempts;
+  const allReady = questions.every((q) => {
+    const a = byQ.get(q.id);
+    return a?.status === "ready" || exhausted(a);
+  });
   const anyProcessing = recorded.some((r) => r.status === "processing");
 
   function stopTracks() {
@@ -255,7 +265,11 @@ export function AIInterviewRecording({ token, questions, recorded, maxAttempts, 
         )}
         {current?.status === "failed" && rec === "idle" && (
           <p className="text-sm text-red-600 dark:text-red-400">
-            Suara tidak tertangkap dari rekaman terakhir. Silakan rekam ulang lebih dekat ke mikrofon.
+            {current.failure === "system"
+              ? "Terjadi gangguan sistem saat memproses rekaman Anda. Kesempatan Anda tidak berkurang — silakan rekam ulang."
+              : exhausted(current)
+                ? "Suara tidak tertangkap dan kesempatan rekam sudah habis. Jawaban ini akan dikirim kosong."
+                : "Suara tidak tertangkap dari rekaman terakhir. Silakan rekam ulang lebih dekat ke mikrofon."}
           </p>
         )}
       </div>

@@ -851,6 +851,24 @@ pertanyaan diajukan -- kandidat berbeda mendapat interview berbeda.
 - Mode suara real-time belum punya "dengar bukti" (transkrip agen belum
   membawa offset waktu per baris).
 
+### Cek gap AI Interview (setelah Fase 62-64) — ✅ Selesai (2026-09-25)
+
+Audit ulang kode Fase 3-5 menemukan 6 gap (semua diperbaiki + tes regresi):
+- **Kandidat terkunci permanen di mode rekaman** (3 jalan: 3x suara tidak
+  tertangkap; STT server gangguan tapi tetap memakan jatah; task transkripsi
+  hilang -> "processing" abadi). Kini: kegagalan dibedakan `silent` vs
+  `system`; `system` mengembalikan jatah; "processing" > 10 menit dianggap
+  gagal sistem; jawaban dengan jatah habis boleh dikirim kosong.
+- **Jawaban teks tanpa cek mode**: menimpa rekaman (file audio yatim, lolos
+  dari retensi/penarikan) dan membuka jalan pintas melewati percakapan suara.
+  Kini hanya mode teks & pertanyaan yang ada; `submit` ditolak di mode suara.
+- **Body unggahan dibaca utuh sebelum dicek ukurannya** (endpoint publik;
+  Caddy produksi tanpa batas body) -> dibatasi selama streaming.
+- **Nilai ulang tidak mereset review** -> kini kembali "menunggu review".
+- **Kandidat yang dilupakan masih bisa diundang** (temuan lama) -> dilewati;
+  penanda bersama `FORGOTTEN_CANDIDATE_NAME`.
+- Timestamp kata tidak lagi ikut di daftar respons (payload).
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

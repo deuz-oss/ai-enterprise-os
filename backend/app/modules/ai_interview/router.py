@@ -330,7 +330,7 @@ async def upload_voice_recording(
 ):
     """Khusus agent: unggah rekaman sesi (body = bytes audio mentah)."""
     service.verify_agent_signature(token, x_agent_signature)
-    data = await request.body()
+    data = await _read_body_capped(request, service.MAX_RECORDING_BYTES)
     service.upload_voice_recording(
         db, token, data=data, content_type=request.headers.get("content-type", "")
     )
@@ -349,7 +349,7 @@ async def upload_answer_audio(
     audio). Transkripsi berjalan di latar belakang; kandidat memantau
     statusnya lewat GET sesi (`recorded_answers`)."""
     _check_rate_limit(db, token)
-    data = await request.body()
+    data = await _read_body_capped(request, service.MAX_ANSWER_AUDIO_BYTES)
     response, key = service.upload_answer_audio(
         db,
         token,
@@ -364,6 +364,22 @@ async def upload_answer_audio(
     db_dep = request.app.dependency_overrides.get(get_db, get_db)
     background.add_task(_run_transcription, db_dep, str(response.id), question_id, key)
     return {"status": "processing"}
+
+
+async def _read_body_capped(request: Request, limit: int) -> bytes:
+    """Baca body dengan batas ukuran SELAMA streaming. Cek gap 2026-09-25:
+    dulu `await request.body()` memuat seluruh body ke memori sebelum
+    ukurannya dicek -- endpoint publik (cukup invite_token) bisa dikirimi
+    body raksasa; produksi (Caddy) tidak punya batas body di depan."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail="Rekaman terlalu besar")
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf.extend(chunk)
+        if len(buf) > limit:
+            raise HTTPException(status_code=413, detail="Rekaman terlalu besar")
+    return bytes(buf)
 
 
 def _run_transcription(db_dep, response_id: str, question_id: str, key: str) -> None:
