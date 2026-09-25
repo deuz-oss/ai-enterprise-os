@@ -869,6 +869,27 @@ Audit ulang kode Fase 3-5 menemukan 6 gap (semua diperbaiki + tes regresi):
   penanda bersama `FORGOTTEN_CANDIDATE_NAME`.
 - Timestamp kata tidak lagi ikut di daftar respons (payload).
 
+### Fase 65 — AI Interview: Edit, Duplikat & Arsip Template — ✅ Selesai (2026-09-25)
+
+Sebelumnya template hanya bisa dibuat -- salah ketik pertanyaan, pedoman
+percakapan (Fase 63), atau batas pertanyaan susulan tidak bisa diperbaiki.
+
+- **Edit** (`PATCH /templates/{id}`, form yang sama dengan buat baru). Output
+  template membawa `response_count`. Template yang **sudah dipakai**
+  (>= 1 kandidat diundang) mengunci pertanyaan, kriteria, dan mode (409):
+  mengubahnya setelah kandidat menjawab membuat hasil lama tidak sebanding
+  dan kutipan bukti kehilangan konteks. Yang tetap boleh: judul, tujuan,
+  pedoman percakapan, `follow_up_max`/`follow_up_focus` (hanya memengaruhi
+  sesi suara berikutnya). Pembanding dinormalisasi lewat model dasar,
+  jadi form boleh mengirim payload lengkap tanpa memicu kunci.
+- **Duplikat** (`POST /templates/{id}/duplicate`): salinan draft "(salinan)",
+  langsung terbuka di form edit -- jalan resmi untuk mengubah pertanyaan
+  template yang sudah dipakai. **Arsipkan** dari halaman detail.
+- **Validasi struktur** (buat & edit): ID pertanyaan & kunci kriteria unik,
+  pertanyaan hanya merujuk kriteria yang ada. Bug form lama: ID
+  `q{jumlah+1}` bentrok setelah pertanyaan dihapus -> jawaban tertimpa.
+  Form kini memakai ID terbesar + 1.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

@@ -61,7 +61,7 @@ def create_template(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return service.create_template(db, payload, user)
+    return service.templates_out(db, [service.create_template(db, payload, user)])[0]
 
 
 @router.get("/templates", response_model=list[AIInterviewTemplateOut])
@@ -70,7 +70,8 @@ def list_templates(
     status_filter: AIInterviewTemplateStatus | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
 ):
-    return service.list_templates(db, job_order_id=job_order_id, status=status_filter)
+    templates = service.list_templates(db, job_order_id=job_order_id, status=status_filter)
+    return service.templates_out(db, templates)
 
 
 @router.get("/guidelines/builtin", response_model=list[InterviewGuidelineOut])
@@ -88,14 +89,26 @@ def template_calibration(template_id: str, db: Session = Depends(get_db)):
 
 @router.get("/templates/{template_id}", response_model=AIInterviewTemplateOut)
 def get_template(template_id: str, db: Session = Depends(get_db)):
-    return service.get_template(db, template_id)
+    return service.templates_out(db, [service.get_template(db, template_id)])[0]
 
 
 @router.patch("/templates/{template_id}", response_model=AIInterviewTemplateOut)
 def update_template(
     template_id: str, payload: AIInterviewTemplateUpdate, db: Session = Depends(get_db)
 ):
-    return service.update_template(db, template_id, payload)
+    return service.templates_out(db, [service.update_template(db, template_id, payload)])[0]
+
+
+@router.post(
+    "/templates/{template_id}/duplicate",
+    response_model=AIInterviewTemplateOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_template(
+    template_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Salinan draft -- cara mengubah pertanyaan/kriteria template yang sudah dipakai."""
+    return service.templates_out(db, [service.duplicate_template(db, template_id, user)])[0]
 
 
 @router.post("/templates/{template_id}/invite", response_model=AIInterviewInviteOut)

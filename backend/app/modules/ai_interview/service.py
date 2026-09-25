@@ -41,11 +41,13 @@ from app.modules.ai_interview.schemas import (
     AIInterviewReviewIn,
     AIInterviewSettingsUpdate,
     AIInterviewTemplateCreate,
+    AIInterviewTemplateOut,
     AIInterviewTemplateUpdate,
     AnswerIn,
     CalibrationOut,
     InterviewCriterionBase,
     InterviewGuidelineOut,
+    InterviewQuestionBase,
     PublicInterviewQuestionOut,
     PublicInterviewSessionOut,
     RecordedAnswerOut,
@@ -62,7 +64,7 @@ from app.modules.recruitment.models import (
 )
 from fastapi import HTTPException
 from livekit import api as lk_api
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -381,7 +383,33 @@ def _get_template_or_404(db: Session, template_id: str) -> AIInterviewTemplate:
     return template
 
 
+def _validate_structure(questions: list[dict], criteria: list[dict]) -> None:
+    """ID pertanyaan & kunci kriteria unik, dan pertanyaan hanya merujuk
+    kriteria yang ada. Dulu form membuat ID `q{jumlah+1}` -- hapus q1 lalu
+    tambah pertanyaan menghasilkan dua "q2"; jawaban kandidat dipetakan lewat
+    ID, jadi salah satunya tertimpa diam-diam."""
+    ids = [str(q.get("id", "")) for q in questions]
+    dup_ids = sorted({i for i in ids if ids.count(i) > 1})
+    if dup_ids:
+        raise HTTPException(status_code=422, detail=f"ID pertanyaan ganda: {', '.join(dup_ids)}")
+    keys = [str(c.get("key", "")) for c in criteria]
+    dup_keys = sorted({k for k in keys if keys.count(k) > 1})
+    if dup_keys:
+        raise HTTPException(status_code=422, detail=f"Kunci kriteria ganda: {', '.join(dup_keys)}")
+    unknown = sorted(
+        {k for q in questions for k in q.get("criterion_keys") or [] if k not in set(keys)}
+    )
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Pertanyaan merujuk kriteria yang tidak ada: {', '.join(unknown)}",
+        )
+
+
 def create_template(db: Session, payload: AIInterviewTemplateCreate, user) -> AIInterviewTemplate:
+    _validate_structure(
+        [q.model_dump() for q in payload.questions], [c.model_dump() for c in payload.criteria]
+    )
     template = AIInterviewTemplate(
         job_order_id=payload.job_order_id,
         title=payload.title,
@@ -415,11 +443,73 @@ def get_template(db: Session, template_id: str) -> AIInterviewTemplate:
     return _get_template_or_404(db, template_id)
 
 
+def _response_counts(db: Session, template_ids: list) -> dict:
+    if not template_ids:
+        return {}
+    rows = db.execute(
+        select(AIInterviewResponse.template_id, func.count())
+        .where(AIInterviewResponse.template_id.in_(template_ids))
+        .group_by(AIInterviewResponse.template_id)
+    ).all()
+    return {tid: n for tid, n in rows}
+
+
+def templates_out(
+    db: Session, templates: list[AIInterviewTemplate]
+) -> list[AIInterviewTemplateOut]:
+    counts = _response_counts(db, [t.id for t in templates])
+    out = []
+    for t in templates:
+        item = AIInterviewTemplateOut.model_validate(t)
+        item.response_count = counts.get(t.id, 0)
+        out.append(item)
+    return out
+
+
+# Bagian pertanyaan yang boleh diubah walau template sudah dipakai: hanya
+# memengaruhi sesi suara BERIKUTNYA, tidak mengubah arti jawaban yang ada.
+_EDITABLE_WHEN_USED = {"follow_up_max", "follow_up_focus"}
+
+
+def _question_core(questions: list[dict]) -> list[dict]:
+    return [InterviewQuestionBase(**q).model_dump(exclude=_EDITABLE_WHEN_USED) for q in questions]
+
+
+def _criteria_core(criteria: list[dict]) -> list[dict]:
+    return [InterviewCriterionBase(**c).model_dump() for c in criteria]
+
+
 def update_template(
     db: Session, template_id: str, payload: AIInterviewTemplateUpdate
 ) -> AIInterviewTemplate:
     template = _get_template_or_404(db, template_id)
     data = payload.model_dump(exclude_unset=True)
+    used = _response_counts(db, [template.id]).get(template.id, 0)
+    if used:
+        locked: list[str] = []
+        if "mode" in data and data["mode"] != template.mode:
+            locked.append("mode")
+        if "questions" in data and _question_core(data["questions"] or []) != _question_core(
+            template.questions
+        ):
+            locked.append("pertanyaan")
+        if "criteria" in data and _criteria_core(data["criteria"] or []) != _criteria_core(
+            template.criteria
+        ):
+            locked.append("kriteria")
+        if locked:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Template sudah dipakai {used} kandidat -- {', '.join(locked)} tidak bisa "
+                    "diubah supaya hasil lama tetap bisa dibandingkan. Duplikat template "
+                    "untuk membuat versi baru."
+                ),
+            )
+    _validate_structure(
+        data["questions"] if "questions" in data else template.questions,
+        data["criteria"] if "criteria" in data else template.criteria,
+    )
     if "questions" in data:
         questions = data.pop("questions")
         template.questions_json = json.dumps(questions or [], ensure_ascii=False)
@@ -434,6 +524,25 @@ def update_template(
     db.commit()
     db.refresh(template)
     return template
+
+
+def duplicate_template(db: Session, template_id: str, user) -> AIInterviewTemplate:
+    """Salinan draft untuk membuat versi baru template yang sudah dipakai."""
+    source = _get_template_or_404(db, template_id)
+    copy = AIInterviewTemplate(
+        job_order_id=source.job_order_id,
+        title=f"{source.title} (salinan)"[:255],
+        objective=source.objective,
+        mode=source.mode,
+        questions_json=source.questions_json,
+        criteria_json=source.criteria_json,
+        guidelines_json=source.guidelines_json,
+        created_by=getattr(user, "id", None),
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return copy
 
 
 # ---------- Sisi staf: undang kandidat ----------

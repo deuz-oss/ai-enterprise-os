@@ -48,6 +48,8 @@ interface Template {
   questions: Question[];
   criteria: Criterion[];
   guidelines: Guideline[];
+  /** Kandidat yang pernah diundang; > 0 = pertanyaan/kriteria/mode terkunci. */
+  response_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -430,19 +432,304 @@ function GuidelinesEditor({
   );
 }
 
+/** ID pertanyaan unik: angka terbesar + 1. Dulu `q{jumlah+1}` -- hapus q1
+ * lalu tambah pertanyaan menghasilkan dua "q2" (jawaban kandidat dipetakan
+ * lewat ID). */
+function nextQuestionId(qs: Question[]): string {
+  const max = qs.reduce((m, q) => {
+    const n = Number(/^q(\d+)$/.exec(q.id)?.[1] ?? 0);
+    return Math.max(m, n);
+  }, 0);
+  return `q${max + 1}`;
+}
+
+/** Form buat & edit template. `locked` = template sudah dipakai kandidat:
+ * pertanyaan, kriteria & mode dikunci backend (409) supaya hasil lama tetap
+ * bisa dibandingkan; yang masih boleh: judul, tujuan, pedoman percakapan,
+ * dan pengaturan pertanyaan susulan. */
+function TemplateForm({
+  initial,
+  usedCount,
+  pending,
+  error,
+  onSubmit,
+  onCancel,
+  onDuplicate,
+}: {
+  initial: Template | null;
+  usedCount: number;
+  pending: boolean;
+  error: Error | null;
+  onSubmit: (body: Record<string, unknown>) => void;
+  onCancel: () => void;
+  onDuplicate?: () => void;
+}) {
+  const locked = usedCount > 0;
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [objective, setObjective] = useState(initial?.objective ?? "");
+  const [mode, setMode] = useState(initial?.mode ?? "async_text");
+  const [questions, setQuestions] = useState<Question[]>(initial?.questions ?? []);
+  const [criteria, setCriteria] = useState<Criterion[]>(initial?.criteria ?? []);
+  const [guidelines, setGuidelines] = useState<Guideline[]>(initial?.guidelines ?? []);
+  const isVoice = mode === "realtime_voice";
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onSubmit({
+      title,
+      objective: objective || null,
+      mode,
+      // Template terkunci: kirim pertanyaan apa adanya (urutan & isi tidak
+      // boleh berubah); selain itu rapikan urutan sesuai tampilan.
+      questions: locked
+        ? questions
+        : questions.filter((q) => q.prompt.trim()).map((q, i) => ({ ...q, order: i + 1 })),
+      criteria: locked ? criteria : criteria.filter((c) => c.key.trim() && c.label.trim()),
+      // Pedoman hanya dipakai agen suara real-time.
+      guidelines: isVoice ? guidelines.filter((g) => g.condition.trim() && g.response.trim()) : [],
+    });
+  }
+
+  const updateQuestion = (idx: number, patch: Partial<Question>) =>
+    setQuestions((qs) => qs.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
+  const updateCriterion = (idx: number, patch: Partial<Criterion>) =>
+    setCriteria((cs) => cs.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
+
+  return (
+    <form onSubmit={handleSubmit} className="card space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold text-[var(--text)]">
+          {initial ? `Edit template: ${initial.title}` : "Template baru"}
+        </h3>
+        <button type="button" onClick={onCancel} className="btn-secondary py-1 text-xs">
+          Batal
+        </button>
+      </div>
+      {locked && (
+        <div
+          className="rounded-lg p-3 text-xs text-[var(--text-muted)]"
+          style={{ backgroundColor: "var(--accent-tint)" }}
+        >
+          <p>
+            Template ini sudah dipakai <b className="text-[var(--text)]">{usedCount} kandidat</b>.
+            Pertanyaan, kriteria, dan mode dikunci supaya hasil yang sudah ada tetap bisa
+            dibandingkan. Judul, tujuan, pedoman percakapan, dan pengaturan pertanyaan susulan
+            masih bisa diubah.
+          </p>
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="mt-1.5 font-medium underline hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Duplikat untuk mengubah pertanyaan atau kriteria
+            </button>
+          )}
+        </div>
+      )}
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        required
+        placeholder="Judul interview *"
+        aria-label="Judul interview"
+        className="input w-full"
+      />
+      <textarea
+        value={objective}
+        onChange={(e) => setObjective(e.target.value)}
+        placeholder="Tujuan penilaian (opsional)"
+        aria-label="Tujuan penilaian"
+        className="input w-full"
+        rows={2}
+      />
+      <div>
+        <label htmlFor="mode" className="text-xs font-medium text-[var(--text-muted)]">
+          Mode Interview
+        </label>
+        <select
+          id="mode"
+          value={mode}
+          onChange={(e) => setMode(e.target.value)}
+          disabled={locked}
+          className="input mt-1 w-full"
+        >
+          <option value="async_text">Teks — kandidat ketik jawaban</option>
+          <option value="async_recording">
+            Rekaman jawaban — kandidat merekam jawaban suara per pertanyaan (butuh STT_BASE_URL)
+          </option>
+          <option value="realtime_voice">
+            Suara real-time — kandidat ngobrol langsung dengan AI (butuh infra LIVEKIT_*
+            dikonfigurasi, lihat .env.example)
+          </option>
+        </select>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-[var(--text-muted)]">Pertanyaan</p>
+        {questions.map((q, idx) => (
+          <div key={q.id} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <input
+                value={q.prompt}
+                onChange={(e) => updateQuestion(idx, { prompt: e.target.value })}
+                placeholder={`Pertanyaan ${idx + 1}`}
+                aria-label={`Pertanyaan ${idx + 1}`}
+                disabled={locked}
+                className="input flex-1 py-1 text-xs"
+              />
+              <input
+                value={q.criterion_keys.join(",")}
+                onChange={(e) =>
+                  updateQuestion(idx, {
+                    criterion_keys: e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="kriteria (pisah koma)"
+                aria-label={`Kriteria pertanyaan ${idx + 1}`}
+                disabled={locked}
+                className="input w-40 py-1 text-xs"
+              />
+              {!locked && (
+                <button
+                  type="button"
+                  onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
+                  className="text-xs text-red-600 dark:text-red-400"
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+            {isVoice && (
+              <div className="flex flex-wrap items-center gap-2 pl-3 text-[11px] text-[var(--text-muted)]">
+                <label htmlFor={`fu-max-${q.id}`}>Pertanyaan susulan maks.</label>
+                <select
+                  id={`fu-max-${q.id}`}
+                  value={q.follow_up_max ?? 1}
+                  onChange={(e) => updateQuestion(idx, { follow_up_max: Number(e.target.value) })}
+                  className="input w-16 py-0.5 text-xs"
+                >
+                  {[0, 1, 2, 3].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={q.follow_up_focus ?? ""}
+                  onChange={(e) => updateQuestion(idx, { follow_up_focus: e.target.value || null })}
+                  placeholder="yang digali (mis. hasil terukur, peran pribadi)"
+                  aria-label={`Fokus pertanyaan susulan ${idx + 1}`}
+                  maxLength={300}
+                  disabled={(q.follow_up_max ?? 1) === 0}
+                  className="input min-w-0 flex-1 py-0.5 text-xs"
+                />
+              </div>
+            )}
+          </div>
+        ))}
+        {!locked && (
+          <button
+            type="button"
+            onClick={() =>
+              setQuestions((qs) => [
+                ...qs,
+                {
+                  id: nextQuestionId(qs),
+                  order: qs.length + 1,
+                  type: "open_ended",
+                  prompt: "",
+                  options: null,
+                  criterion_keys: [],
+                  required: true,
+                  follow_up_max: 1,
+                  follow_up_focus: null,
+                },
+              ])
+            }
+            className="btn-secondary py-1 text-xs"
+          >
+            + Tambah Pertanyaan
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-[var(--text-muted)]">
+          Kriteria Penilaian (kunci harus cocok dengan yang dipakai di pertanyaan di atas)
+        </p>
+        {criteria.map((c, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <input
+              value={c.key}
+              onChange={(e) => updateCriterion(idx, { key: e.target.value })}
+              placeholder="kunci (mis. komunikasi)"
+              aria-label={`Kunci kriteria ${idx + 1}`}
+              disabled={locked}
+              className="input w-32 py-1 text-xs"
+            />
+            <input
+              value={c.label}
+              onChange={(e) => updateCriterion(idx, { label: e.target.value })}
+              placeholder="Label"
+              aria-label={`Label kriteria ${idx + 1}`}
+              disabled={locked}
+              className="input flex-1 py-1 text-xs"
+            />
+            <input
+              type="number"
+              step="0.1"
+              value={c.weight}
+              onChange={(e) => updateCriterion(idx, { weight: Number(e.target.value) })}
+              aria-label={`Bobot kriteria ${idx + 1}`}
+              disabled={locked}
+              className="input w-20 py-1 text-xs"
+            />
+            {!locked && (
+              <button
+                type="button"
+                onClick={() => setCriteria((cs) => cs.filter((_, i) => i !== idx))}
+                className="text-xs text-red-600 dark:text-red-400"
+              >
+                Hapus
+              </button>
+            )}
+          </div>
+        ))}
+        {!locked && (
+          <button
+            type="button"
+            onClick={() => setCriteria((cs) => [...cs, { key: "", label: "", weight: 1 }])}
+            className="btn-secondary py-1 text-xs"
+          >
+            + Tambah Kriteria
+          </button>
+        )}
+      </div>
+
+      {isVoice && <GuidelinesEditor value={guidelines} onChange={setGuidelines} />}
+
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error.message}</p>}
+      <button type="submit" disabled={pending} className="btn w-full">
+        {initial ? "Simpan Perubahan" : "Simpan Template (draft)"}
+      </button>
+    </form>
+  );
+}
+
 export default function AIInterview() {
   const qc = useQueryClient();
   // Fase 21 item 3 — deep-link dari tombol "Jadwalkan Interview" terunifikasi
   // di JobOrderDetail.tsx (mode AI): kandidat sudah terpilih begitu halaman
   // ini dibuka, recruiter tinggal pilih template.
   const [searchParams] = useSearchParams();
-  const [showForm, setShowForm] = useState(false);
+  // null = form tertutup; { template: null } = buat baru; selain itu = edit.
+  const [formState, setFormState] = useState<{ template: Template | null } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [criteria, setCriteria] = useState<Criterion[]>([]);
-  const [mode, setMode] = useState("async_text");
-  const [guidelines, setGuidelines] = useState<Guideline[]>([]);
-  const isVoice = mode === "realtime_voice";
   const [candidateIds, setCandidateIds] = useState<string[]>(() => {
     const preselected = searchParams.get("candidate_id");
     return preselected ? [preselected] : [];
@@ -499,15 +786,38 @@ export default function AIInterview() {
   };
 
   const createTemplate = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.post("/ai-interview/templates", body),
-    onSuccess: () => {
-      setShowForm(false);
-      setQuestions([]);
-      setCriteria([]);
-      setGuidelines([]);
-      setMode("async_text");
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post<Template>("/ai-interview/templates", body),
+    onSuccess: (created) => {
+      setFormState(null);
+      setSelectedId(created.id);
       invalidateTemplates();
     },
+  });
+
+  const updateTemplate = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch<Template>(`/ai-interview/templates/${id}`, body),
+    onSuccess: () => {
+      setFormState(null);
+      invalidateTemplates();
+    },
+  });
+
+  // Duplikat = cara mengubah pertanyaan/kriteria template yang sudah dipakai:
+  // salinan draft langsung dibuka di form edit.
+  const duplicateTemplate = useMutation({
+    mutationFn: (id: string) => api.post<Template>(`/ai-interview/templates/${id}/duplicate`),
+    onSuccess: (copy) => {
+      setSelectedId(copy.id);
+      setFormState({ template: copy });
+      invalidateTemplates();
+    },
+  });
+
+  const archiveTemplate = useMutation({
+    mutationFn: (id: string) => api.patch(`/ai-interview/templates/${id}`, { status: "arsip" }),
+    onSuccess: invalidateTemplates,
   });
 
   const activateTemplate = useMutation({
@@ -541,22 +851,6 @@ export default function AIInterview() {
     onSuccess: invalidateResponses,
   });
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    createTemplate.mutate({
-      title: form.get("title"),
-      objective: form.get("objective") || null,
-      mode,
-      questions: questions.filter((q) => q.prompt.trim()),
-      criteria: criteria.filter((c) => c.key.trim() && c.label.trim()),
-      // Pedoman hanya dipakai agen suara real-time.
-      guidelines: isVoice
-        ? guidelines.filter((g) => g.condition.trim() && g.response.trim())
-        : [],
-    });
-  }
-
   function handleReview(e: FormEvent<HTMLFormElement>, responseId: string) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -582,8 +876,11 @@ export default function AIInterview() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <PageHeader icon={MessagesSquare} title="AI Interview" />
-        <button className="btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Tutup" : "+ Template Baru"}
+        <button
+          className="btn"
+          onClick={() => setFormState(formState ? null : { template: null })}
+        >
+          {formState ? "Tutup" : "+ Template Baru"}
         </button>
       </div>
 
@@ -660,213 +957,25 @@ export default function AIInterview() {
         )}
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="card space-y-3">
-          <input name="title" required placeholder="Judul interview *" className="input w-full" />
-          <textarea
-            name="objective"
-            placeholder="Tujuan penilaian (opsional)"
-            className="input w-full"
-            rows={2}
-          />
-          <div>
-            <label htmlFor="mode" className="text-xs font-medium text-[var(--text-muted)]">
-              Mode Interview
-            </label>
-            <select
-              id="mode"
-              name="mode"
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="input mt-1 w-full"
-            >
-              <option value="async_text">Teks — kandidat ketik jawaban</option>
-              <option value="async_recording">
-                Rekaman jawaban — kandidat merekam jawaban suara per pertanyaan (butuh
-                STT_BASE_URL)
-              </option>
-              <option value="realtime_voice">
-                Suara real-time — kandidat ngobrol langsung dengan AI (butuh infra LIVEKIT_*
-                dikonfigurasi, lihat .env.example)
-              </option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-[var(--text-muted)]">Pertanyaan</p>
-            {questions.map((q, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={q.prompt}
-                    onChange={(e) =>
-                      setQuestions((qs) =>
-                        qs.map((item, i) => (i === idx ? { ...item, prompt: e.target.value } : item))
-                      )
-                    }
-                    placeholder={`Pertanyaan ${idx + 1}`}
-                    className="input flex-1 py-1 text-xs"
-                  />
-                  <input
-                    value={q.criterion_keys.join(",")}
-                    onChange={(e) =>
-                      setQuestions((qs) =>
-                        qs.map((item, i) =>
-                          i === idx
-                            ? {
-                                ...item,
-                                criterion_keys: e.target.value
-                                  .split(",")
-                                  .map((s) => s.trim())
-                                  .filter(Boolean),
-                              }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="kriteria (pisah koma)"
-                    className="input w-40 py-1 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== idx))}
-                    className="text-xs text-red-600 dark:text-red-400"
-                  >
-                    Hapus
-                  </button>
-                </div>
-                {isVoice && (
-                  <div className="flex flex-wrap items-center gap-2 pl-3 text-[11px] text-[var(--text-muted)]">
-                    <label htmlFor={`fu-max-${idx}`}>Pertanyaan susulan maks.</label>
-                    <select
-                      id={`fu-max-${idx}`}
-                      value={q.follow_up_max ?? 1}
-                      onChange={(e) =>
-                        setQuestions((qs) =>
-                          qs.map((item, i) =>
-                            i === idx ? { ...item, follow_up_max: Number(e.target.value) } : item
-                          )
-                        )
-                      }
-                      className="input w-16 py-0.5 text-xs"
-                    >
-                      {[0, 1, 2, 3].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      value={q.follow_up_focus ?? ""}
-                      onChange={(e) =>
-                        setQuestions((qs) =>
-                          qs.map((item, i) =>
-                            i === idx ? { ...item, follow_up_focus: e.target.value || null } : item
-                          )
-                        )
-                      }
-                      placeholder="yang digali (mis. hasil terukur, peran pribadi)"
-                      aria-label={`Fokus pertanyaan susulan ${idx + 1}`}
-                      maxLength={300}
-                      disabled={(q.follow_up_max ?? 1) === 0}
-                      className="input min-w-0 flex-1 py-0.5 text-xs"
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() =>
-                setQuestions((qs) => [
-                  ...qs,
-                  {
-                    id: `q${qs.length + 1}`,
-                    order: qs.length + 1,
-                    type: "open_ended",
-                    prompt: "",
-                    options: null,
-                    criterion_keys: [],
-                    required: true,
-                    follow_up_max: 1,
-                    follow_up_focus: null,
-                  },
-                ])
-              }
-              className="btn-secondary py-1 text-xs"
-            >
-              + Tambah Pertanyaan
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-[var(--text-muted)]">
-              Kriteria Penilaian (kunci harus cocok dengan yang dipakai di pertanyaan di atas)
-            </p>
-            {criteria.map((c, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  value={c.key}
-                  onChange={(e) =>
-                    setCriteria((cs) =>
-                      cs.map((item, i) => (i === idx ? { ...item, key: e.target.value } : item))
-                    )
-                  }
-                  placeholder="kunci (mis. komunikasi)"
-                  className="input w-32 py-1 text-xs"
-                />
-                <input
-                  value={c.label}
-                  onChange={(e) =>
-                    setCriteria((cs) =>
-                      cs.map((item, i) => (i === idx ? { ...item, label: e.target.value } : item))
-                    )
-                  }
-                  placeholder="Label"
-                  className="input flex-1 py-1 text-xs"
-                />
-                <input
-                  type="number"
-                  step="0.1"
-                  value={c.weight}
-                  onChange={(e) =>
-                    setCriteria((cs) =>
-                      cs.map((item, i) =>
-                        i === idx ? { ...item, weight: Number(e.target.value) } : item
-                      )
-                    )
-                  }
-                  className="input w-20 py-1 text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => setCriteria((cs) => cs.filter((_, i) => i !== idx))}
-                  className="text-xs text-red-600 dark:text-red-400"
-                >
-                  Hapus
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setCriteria((cs) => [...cs, { key: "", label: "", weight: 1 }])}
-              className="btn-secondary py-1 text-xs"
-            >
-              + Tambah Kriteria
-            </button>
-          </div>
-
-          {isVoice && <GuidelinesEditor value={guidelines} onChange={setGuidelines} />}
-
-          {createTemplate.error && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {(createTemplate.error as Error).message}
-            </p>
-          )}
-          <button type="submit" disabled={createTemplate.isPending} className="btn w-full">
-            Simpan Template (draft)
-          </button>
-        </form>
+      {formState && (
+        <TemplateForm
+          key={formState.template?.id ?? "baru"}
+          initial={formState.template}
+          usedCount={formState.template?.response_count ?? 0}
+          pending={createTemplate.isPending || updateTemplate.isPending}
+          error={(formState.template ? updateTemplate.error : createTemplate.error) as Error | null}
+          onCancel={() => setFormState(null)}
+          onDuplicate={
+            formState.template
+              ? () => duplicateTemplate.mutate(formState.template!.id)
+              : undefined
+          }
+          onSubmit={(body) =>
+            formState.template
+              ? updateTemplate.mutate({ id: formState.template.id, body })
+              : createTemplate.mutate(body)
+          }
+        />
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -903,16 +1012,49 @@ export default function AIInterview() {
                     <p className="text-sm text-[var(--text-muted)]">{selected.objective}</p>
                   )}
                 </div>
-                {selected.status === "draft" && (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {selected.status === "draft" && (
+                    <button
+                      className="btn-secondary py-1 text-xs"
+                      disabled={activateTemplate.isPending}
+                      onClick={() => activateTemplate.mutate(selected.id)}
+                    >
+                      Aktifkan
+                    </button>
+                  )}
                   <button
-                    className="btn-secondary"
-                    disabled={activateTemplate.isPending}
-                    onClick={() => activateTemplate.mutate(selected.id)}
+                    className="btn-secondary py-1 text-xs"
+                    onClick={() => {
+                      updateTemplate.reset();
+                      setFormState({ template: selected });
+                    }}
                   >
-                    Aktifkan
+                    Edit
                   </button>
-                )}
+                  <button
+                    className="btn-secondary py-1 text-xs"
+                    disabled={duplicateTemplate.isPending}
+                    onClick={() => duplicateTemplate.mutate(selected.id)}
+                  >
+                    Duplikat
+                  </button>
+                  {selected.status !== "arsip" && (
+                    <button
+                      className="btn-secondary py-1 text-xs"
+                      disabled={archiveTemplate.isPending}
+                      onClick={() => archiveTemplate.mutate(selected.id)}
+                      title="Template arsip tidak bisa dipakai mengundang kandidat baru"
+                    >
+                      Arsipkan
+                    </button>
+                  )}
+                </div>
               </div>
+              {selected.response_count > 0 && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  Dipakai {selected.response_count} kandidat — pertanyaan & kriteria terkunci.
+                </p>
+              )}
 
               {selected.status === "aktif" && (
                 <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>

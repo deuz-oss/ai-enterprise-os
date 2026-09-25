@@ -1400,3 +1400,99 @@ def test_forgotten_candidate_cannot_be_invited_again(client):
     ).json()
     assert invite["invited"] == []
     assert invite["skipped"][0]["reason"] == "Data kandidat sudah dihapus atas permintaannya"
+
+
+# ---------- Edit & duplikat template ----------
+
+
+def test_unused_template_fully_editable(client):
+    admin = _auth_header(client)
+    created = client.post(
+        "/api/v1/ai-interview/templates", headers=admin, json=_template_payload()
+    ).json()
+    assert created["response_count"] == 0
+    payload = _template_payload(mode="async_recording", title="Interview CS v2")
+    payload["questions"][0]["prompt"] = "Ceritakan komplain tersulit yang pernah Anda tangani."
+    edited = client.patch(
+        f"/api/v1/ai-interview/templates/{created['id']}", headers=admin, json=payload
+    )
+    assert edited.status_code == 200, edited.text
+    body = edited.json()
+    assert (body["mode"], body["title"]) == ("async_recording", "Interview CS v2")
+    assert body["questions"][0]["prompt"].startswith("Ceritakan komplain tersulit")
+
+
+def test_used_template_locks_questions_criteria_mode(client):
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin, mode="realtime_voice")
+    cand = _create_candidate(client, admin)
+    _invite(client, admin, template["id"], cand)
+    url = f"/api/v1/ai-interview/templates/{template['id']}"
+    assert client.get(url, headers=admin).json()["response_count"] == 1
+
+    changed = _template_payload(mode="realtime_voice")
+    changed["questions"][0]["prompt"] = "Pertanyaan lain sama sekali?"
+    locked = client.patch(url, headers=admin, json={"questions": changed["questions"]})
+    assert locked.status_code == 409 and "pertanyaan" in locked.json()["detail"]
+    assert client.patch(url, headers=admin, json={"mode": "async_text"}).status_code == 409
+    crit = _template_payload()["criteria"]
+    crit[0]["weight"] = 0.9
+    assert client.patch(url, headers=admin, json={"criteria": crit}).status_code == 409
+
+    # Yang tidak mengubah arti jawaban lama tetap boleh: judul, pedoman,
+    # pengaturan pertanyaan susulan -- dan payload lengkap dari form yang
+    # pertanyaannya tidak berubah.
+    same = _template_payload(mode="realtime_voice", title="Judul baru")
+    same["questions"][0]["follow_up_max"] = 3
+    same["guidelines"] = [{"condition": "Kandidat tanya shift", "response": "Shift 3x8 jam."}]
+    ok = client.patch(url, headers=admin, json=same)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["questions"][0]["follow_up_max"] == 3
+    assert ok.json()["title"] == "Judul baru"
+
+
+def test_duplicate_creates_editable_draft(client):
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin)
+    cand = _create_candidate(client, admin)
+    _invite(client, admin, template["id"], cand)
+    dup = client.post(f"/api/v1/ai-interview/templates/{template['id']}/duplicate", headers=admin)
+    assert dup.status_code == 201, dup.text
+    body = dup.json()
+    assert body["id"] != template["id"]
+    assert (body["status"], body["response_count"]) == ("draft", 0)
+    assert body["title"] == "Interview CS (salinan)"
+    assert body["questions"] == template["questions"]
+    changed = _template_payload()
+    changed["questions"][0]["prompt"] = "Versi baru pertanyaan pertama?"
+    edited = client.patch(
+        f"/api/v1/ai-interview/templates/{body['id']}",
+        headers=admin,
+        json={"questions": changed["questions"]},
+    )
+    assert edited.status_code == 200, edited.text
+
+
+def test_template_structure_validated(client):
+    admin = _auth_header(client)
+    dup_ids = _template_payload()
+    dup_ids["questions"][1]["id"] = "q1"
+    resp = client.post("/api/v1/ai-interview/templates", headers=admin, json=dup_ids)
+    assert resp.status_code == 422 and "q1" in resp.json()["detail"]
+
+    unknown = _template_payload()
+    unknown["questions"][0]["criterion_keys"] = ["tidak_ada"]
+    resp = client.post("/api/v1/ai-interview/templates", headers=admin, json=unknown)
+    assert resp.status_code == 422 and "tidak_ada" in resp.json()["detail"]
+
+    created = client.post(
+        "/api/v1/ai-interview/templates", headers=admin, json=_template_payload()
+    ).json()
+    # Menghapus kriteria yang masih dirujuk pertanyaan juga ditolak saat edit.
+    only_one = [_template_payload()["criteria"][0]]
+    resp = client.patch(
+        f"/api/v1/ai-interview/templates/{created['id']}",
+        headers=admin,
+        json={"criteria": only_one},
+    )
+    assert resp.status_code == 422 and "ketahanan" in resp.json()["detail"]

@@ -203,6 +203,9 @@ class AIInterviewTemplateOut(BaseModel):
     questions: list[InterviewQuestionBase]
     criteria: list[InterviewCriterionBase]
     guidelines: list[InterviewGuidelineBase] = []
+    # Jumlah kandidat yang pernah diundang. > 0 = pertanyaan, kriteria & mode
+    # terkunci (hasil lama harus tetap bisa dibandingkan) -> pakai duplikat.
+    response_count: int = 0
     created_at: datetime
     updated_at: datetime
 

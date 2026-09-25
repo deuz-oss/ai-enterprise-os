@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 65: AI Interview — edit, duplikat & arsip template
+
+Detail di `PRD.md` Fase 65.
+- Template AI Interview kini bisa diedit (sebelumnya hanya bisa dibuat). Template yang sudah dipakai kandidat mengunci pertanyaan, kriteria, dan mode supaya hasil lama tetap sebanding; judul, tujuan, pedoman percakapan, dan pengaturan pertanyaan susulan tetap bisa diubah.
+- Tombol Duplikat (salinan draft langsung terbuka untuk diedit) dan Arsipkan.
+
+### Fixed — Fase 65
+- Form template membuat ID pertanyaan `q{jumlah+1}`: menghapus pertanyaan lalu menambah yang baru menghasilkan ID ganda, dan jawaban kandidat (dipetakan lewat ID) tertimpa diam-diam. Kini ID unik, dan backend menolak ID pertanyaan/kunci kriteria ganda serta pertanyaan yang merujuk kriteria tidak ada.
+
 ### Fixed — cek gap AI Interview (setelah Fase 62-64)
 - Kandidat mode rekaman bisa terkunci permanen (tidak bisa rekam ulang maupun mengirim interview): saat 3x suara tidak tertangkap, saat STT server gangguan (kegagalan sistem ikut memakan jatah rekam), atau saat proses transkripsi hilang (status "diproses" abadi). Kini gangguan sistem mengembalikan jatah, transkripsi macet >10 menit dianggap gagal sistem, dan jawaban yang jatahnya habis boleh dikirim kosong.
 - Endpoint jawaban teks tidak memeriksa mode template: di mode rekaman, jawaban teks menimpa rekaman sehingga file suaranya tertinggal di storage tanpa ikut terhapus retensi/penarikan persetujuan; di mode suara real-time, kandidat bisa melewati percakapan dengan mengetik jawaban lalu submit. Pertanyaan yang tidak ada di template juga kini ditolak.
