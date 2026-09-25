@@ -19,13 +19,13 @@ lewat job/room dispatch metadata, lihat `backend/.../service.py::
 start_voice_session`). Ini sengaja, bukan keterbatasan: `_score()`/
 `set_tenant()` tetap satu-satunya sumber kebenaran di backend.
 
-CATATAN KEJUJURAN (lihat plan file): wiring end-to-end (dispatch, room
-join, sesi WebRTC, sintesis TTS) sudah diverifikasi jalan lewat
-`docker compose --profile voice up` sungguhan. Latensi percakapan nyata
-dan turn-taking masih BELUM PERNAH diuji nyata (butuh GPU yang tidak
-tersedia saat pass ini ditulis) -- STT tetap self-hosted CPU-mode di dev.
-Turn detector (2026-09-24) sama: model terpasang & termuat, tapi
-kalibrasi `endpointing` belum diuji dengan kandidat sungguhan.
+CATATAN KEJUJURAN: uji E2E 2026-09-26 dengan KANDIDAT SINTETIS (peserta
+LiveKit yang memutar jawaban lisan hasil TTS, lihat PRD Fase 66) --
+percakapan 2 pertanyaan lengkap, transkrip + offset, penilaian, rekaman,
+dan penutupan sesi berjalan di Docker CPU. Uji itu menemukan & memperbaiki:
+model STT default plugin (agen tak pernah mendengar kandidat), timeout STT,
+model whisper dilepas saat idle, jawaban 2 kalimat terpotong (VAD). Belum
+diuji: suara manusia sungguhan lewat mikrofon browser, dan latensi di GPU.
 """
 
 from __future__ import annotations
@@ -35,15 +35,17 @@ import hashlib
 import hmac
 import logging
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-from interview_flow import InterviewFlow, build_instructions, format_transcript
+from interview_flow import InterviewFlow, TurnClock, build_instructions, format_transcript
 from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    APIConnectOptions,
     JobContext,
     RunContext,
     cli,
@@ -52,6 +54,7 @@ from livekit.agents import (
     inference,
     room_io,
 )
+from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
 
@@ -74,6 +77,25 @@ STT_BASE_URL = os.environ["STT_BASE_URL"]
 # Indonesia kalau bahasanya diberi tahu, dan turn detector memakai bahasa
 # ini untuk memilih cara menilai "kalimat sudah selesai atau belum".
 STT_LANGUAGE = os.environ.get("STT_LANGUAGE") or "id"
+# Model WAJIB eksplisit: default plugin openai 1.7 = "gpt-4o-mini-transcribe"
+# (model OpenAI) yang ditolak faster-whisper-server self-hosted (500) --
+# ditemukan uji E2E 2026-09-26: agen tidak pernah bisa mendengar kandidat
+# sejak dependensi dipin ke 1.7. Sama dengan STT_MODEL backend & stt-server.
+STT_MODEL = os.environ.get("STT_MODEL") or "Systran/faster-whisper-small"
+# Batas waktu STT per ucapan. Default LiveKit 10 dtk + ulang 3x: whisper di
+# CPU butuh >10 dtk untuk jawaban ~12 dtk, jadi tiap jawaban ditranskripsi
+# ULANG sampai 4x (uji E2E: jeda 78 dtk sebelum pertanyaan berikutnya).
+STT_TIMEOUT_SEC = float(os.environ.get("STT_TIMEOUT_SEC") or 60)
+# Hening (dtk) yang mengakhiri satu segmen ucapan untuk STT. Default silero
+# 0.55: jeda antarkalimat memecah jawaban jadi beberapa segmen yang
+# ditranskripsi terpisah; dengan STT CPU, transkrip segmen terakhir baru tiba
+# SETELAH giliran dianggap selesai -> LLM hanya melihat kalimat pertama dan
+# pindah pertanyaan (uji E2E 2026-09-26). 1.2 = jeda antarkalimat tetap satu
+# segmen.
+VAD_MIN_SILENCE = float(os.environ.get("VAD_MIN_SILENCE") or 1.2)
+# Jeda tambahan (dtk) sebelum giliran kandidat dianggap selesai.
+ENDPOINTING_MIN_DELAY = float(os.environ.get("ENDPOINTING_MIN_DELAY") or 1.0)
+ENDPOINTING_MAX_DELAY = float(os.environ.get("ENDPOINTING_MAX_DELAY") or 6.0)
 # SENGAJA sama dengan backend's AI_BASE_URL/AI_API_KEY/AI_MODEL -- LLM
 # TIDAK self-hosted terpisah, lihat catatan strategi AI di PRD §14. TTS
 # JUGA lewat endpoint ini sekarang (lihat docstring di atas) -- bukan
@@ -116,6 +138,10 @@ class InterviewAgent(Agent):
         self._token = token
         self.flow = InterviewFlow(questions=list(context.get("questions") or []))
         self.submitted = False
+        # Waktu mulai bicara per item + awal rekaman -> offset per baris
+        # transkrip, untuk "dengar bukti" di halaman review.
+        self.clock = TurnClock()
+        self.recording_t0: float | None = None
 
     def _user_turns(self) -> int:
         """Jumlah giliran bicara kandidat (penjagaan "sudah dijawab")."""
@@ -148,9 +174,9 @@ class InterviewAgent(Agent):
         refusal = self.flow.end_refusal(candidate_requested_stop, self._user_turns())
         if refusal:
             return refusal
-        transcript = _format_transcript(self.session, self.flow)
+        transcript, offsets = _format_transcript(self.session, self)
         try:
-            await _submit_transcript(self._token, transcript)
+            await _submit_transcript(self._token, transcript, offsets)
             self.submitted = True
         except Exception:  # noqa: BLE001 - jangan sampai kegagalan submit bikin agent macet
             logger.exception("Gagal mengirim transkrip ke backend untuk token %s", self._token)
@@ -176,11 +202,13 @@ async def _fetch_context(token: str) -> dict:
         return resp.json()
 
 
-async def _submit_transcript(token: str, transcript: str) -> None:
+async def _submit_transcript(
+    token: str, transcript: str, offsets: list[float | None] | None = None
+) -> None:
     async with httpx.AsyncClient(timeout=30) as http:
         resp = await http.post(
             f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/complete",
-            json={"transcript": transcript},
+            json={"transcript": transcript, "line_offsets": offsets},
             headers=_agent_headers(token),
         )
         resp.raise_for_status()
@@ -215,12 +243,18 @@ async def _upload_recording(token: str, path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
-def _format_transcript(session: AgentSession, flow: InterviewFlow) -> str:
+def _format_transcript(
+    session: AgentSession, agent: InterviewAgent
+) -> tuple[str, list[float | None]]:
     items = [
-        (getattr(item, "role", None) or "", getattr(item, "text_content", None) or "")
+        (
+            getattr(item, "role", None) or "",
+            getattr(item, "text_content", None) or "",
+            agent.clock.starts.get(getattr(item, "id", "")),
+        )
         for item in session.history.items
     ]
-    return format_transcript(items, flow.markers)
+    return format_transcript(items, agent.flow.markers, agent.recording_t0)
 
 
 server = AgentServer()
@@ -236,7 +270,12 @@ async def entrypoint(ctx: JobContext) -> None:
     context = await _fetch_context(token)
 
     session = AgentSession(
-        stt=lk_openai.STT(base_url=STT_BASE_URL, api_key="not-needed", language=STT_LANGUAGE),
+        stt=lk_openai.STT(
+            base_url=STT_BASE_URL,
+            api_key="not-needed",
+            model=STT_MODEL,
+            language=STT_LANGUAGE,
+        ),
         llm=lk_openai.LLM(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, model=LLM_MODEL),
         tts=lk_openai.TTS(
             base_url=LLM_BASE_URL,
@@ -245,7 +284,10 @@ async def entrypoint(ctx: JobContext) -> None:
             voice=TTS_VOICE,
             instructions=TTS_INSTRUCTIONS,
         ),
-        vad=silero.VAD.load(),
+        vad=silero.VAD.load(min_silence_duration=VAD_MIN_SILENCE),
+        conn_options=SessionConnectOptions(
+            stt_conn_options=APIConnectOptions(max_retry=1, timeout=STT_TIMEOUT_SEC)
+        ),
         # Roadmap Fase 1 #4. Dulu hanya VAD: begitu kandidat diam sesaat
         # (wajar saat berpikir di tengah jawaban interview), AI langsung
         # memotong. Turn detector menilai dari ISI kalimat apakah kandidat
@@ -258,7 +300,12 @@ async def entrypoint(ctx: JobContext) -> None:
             # Lebih sabar dari default (0.5/3.0 dtk): interview = jawaban
             # panjang dengan jeda berpikir, beda dari percakapan CS singkat.
             # max_delay = batas tunggu saat model menilai kalimat belum usai.
-            "endpointing": {"min_delay": 0.8, "max_delay": 6.0},
+            # Bersama VAD_MIN_SILENCE menentukan berapa lama kandidat boleh
+            # diam sebelum dianggap selesai (~2 dtk). Bisa diatur tanpa rebuild.
+            "endpointing": {
+                "min_delay": ENDPOINTING_MIN_DELAY,
+                "max_delay": ENDPOINTING_MAX_DELAY,
+            },
         },
     )
 
@@ -275,10 +322,10 @@ async def entrypoint(ctx: JobContext) -> None:
         diputus kandidat tidak pernah sampai ke backend), lalu unggah rekaman."""
         await session.aclose()
         if not agent.submitted:
-            transcript = _format_transcript(session, agent.flow)
+            transcript, offsets = _format_transcript(session, agent)
             if "Kandidat:" in transcript:
                 try:
-                    await _submit_transcript(token, transcript)
+                    await _submit_transcript(token, transcript, offsets)
                     agent.submitted = True
                 except Exception:  # noqa: BLE001
                     logger.exception("Gagal mengirim transkrip parsial saat sesi berakhir")
@@ -290,6 +337,23 @@ async def entrypoint(ctx: JobContext) -> None:
 
     ctx.add_shutdown_callback(_finalize)
 
+    @session.on("user_state_changed")
+    def _on_user_state(ev) -> None:
+        if ev.new_state == "speaking":
+            agent.clock.speaking("user", ev.created_at)
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(ev) -> None:
+        if ev.new_state == "speaking":
+            agent.clock.speaking("assistant", ev.created_at)
+
+    @session.on("conversation_item_added")
+    def _on_item(ev) -> None:
+        role = getattr(ev.item, "role", None)
+        if role in ("user", "assistant"):
+            agent.clock.item_added(ev.item.id, role)
+
+    started_at = time.time()
     await session.start(
         room=ctx.room,
         agent=agent,
@@ -298,6 +362,11 @@ async def entrypoint(ctx: JobContext) -> None:
         # lokal session_directory/audio.ogg; traces/log/transkrip ke cloud mati.
         record={"audio": record, "traces": False, "logs": False, "transcript": False},
     )
+    # Titik nol rekaman (detik 0 file audio.ogg). Atribut privat LiveKit
+    # 1.7 -- bila berubah, jatuh ke waktu sebelum sesi dimulai (selisih
+    # biasanya < 1 dtk; UI memutar sedikit lebih awal).
+    recorder = getattr(session, "_recorder_io", None)
+    agent.recording_t0 = getattr(recorder, "recording_started_at", None) or started_at
     # Pertanyaan pertama disisipkan kode (lihat InterviewFlow.opening_instruction).
     await session.generate_reply(
         instructions=agent.flow.opening_instruction(len(session.history.items))

@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     # diganti ke TTS OpenAI. Cuma STT (stt_base_url, faster-whisper) yang
     # tetap self-hosted.
     livekit_url: str | None = None
+    # URL LiveKit yang dibuka BROWSER kandidat. `livekit_url` dipakai backend
+    # memanggil API LiveKit (di Docker: host internal ws://livekit:7880 yang
+    # tidak bisa dijangkau browser). Uji E2E 2026-09-26: voice/start dulu
+    # mengembalikan host internal -> kandidat sungguhan tidak bisa terhubung.
+    # Kosong = pakai livekit_url (setup tanpa Docker).
+    livekit_public_url: str | None = None
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None
     stt_base_url: str | None = None

@@ -330,7 +330,7 @@ def complete_voice_session(
     """Khusus agent: dulu kandidat bisa mengirim transkrip karangan sendiri
     lewat endpoint ini lalu dinilai."""
     service.verify_agent_signature(token, x_agent_signature)
-    service.complete_voice_session(db, token, payload.transcript)
+    service.complete_voice_session(db, token, payload.transcript, payload.line_offsets)
     return service.get_session(db, token)
 
 

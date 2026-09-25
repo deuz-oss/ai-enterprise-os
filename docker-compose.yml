@@ -56,6 +56,7 @@ services:
       STORAGE_ENDPOINT: http://minio:9000
       # URL unduhan untuk browser -- minio:9000 hanya dikenal di jaringan Docker.
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,6 +104,13 @@ services:
     profiles: ["voice"]
     environment:
       WHISPER__MODEL: "${STT_MODEL:-Systran/faster-whisper-small}"
+      # Uji E2E 2026-09-26: default TTL 300 dtk melepas model saat idle, lalu
+      # memuat ulang 39 dtk di CPU sibuk -> jawaban pertama tiap interview
+      # melewati batas 30 dtk plugin STT agen dan hilang. -1 = tetap dimuat.
+      WHISPER__TTL: "-1"
+      # float16 tidak efisien di CPU (peringatan ctranslate2); int8 jauh lebih
+      # cepat. Di server GPU ganti ke float16.
+      WHISPER__COMPUTE_TYPE: "${STT_COMPUTE_TYPE:-int8}"
     ports:
       - "127.0.0.1:8001:8000"
     volumes:
@@ -123,6 +131,7 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       STT_BASE_URL: http://stt-server:8000/v1
+      STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
       AI_BASE_URL: ${AI_BASE_URL}
       AI_API_KEY: ${AI_API_KEY}
       AI_MODEL: ${AI_MODEL:-gpt-4o-mini}

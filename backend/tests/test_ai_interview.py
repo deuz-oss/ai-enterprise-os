@@ -374,6 +374,13 @@ def test_voice_start_mints_token_and_dispatches_agent(client, monkeypatch):
     session = client.get(f"/api/v1/ai-interview/session/{token}")
     assert session.json()["status"] == "berlangsung"
 
+    # Uji E2E 2026-09-26: di Docker, livekit_url = host internal yang tidak
+    # bisa dijangkau browser; kandidat harus menerima URL publik.
+    monkeypatch.setattr(settings, "livekit_public_url", "wss://livekit.contoh.id")
+    again = client.post(f"/api/v1/ai-interview/session/{token}/voice/start")
+    assert again.status_code == 200, again.text
+    assert again.json()["url"] == "wss://livekit.contoh.id"
+
 
 _TEST_AGENT_SECRET = "test-livekit-secret-for-agent-signature"
 
@@ -1569,3 +1576,101 @@ def test_legacy_invalid_template_still_manageable(client):
     legacy["questions"][0]["prompt"] = "Diubah?"
     changed = client.patch(url, headers=admin, json={"questions": legacy["questions"]})
     assert changed.status_code == 422
+
+
+# ---------- Dengar bukti mode suara real-time ----------
+
+_VOICE_TRANSCRIPT = "\n".join(
+    [
+        "Pewawancara AI: Halo, ada 2 pertanyaan.",
+        "## Pertanyaan 1: Ceritakan pengalaman Anda menangani komplain pelanggan.",
+        "Pewawancara AI: Ceritakan pengalaman Anda menangani komplain pelanggan.",
+        "Kandidat: Saya selalu mendengarkan keluhan pelanggan sampai selesai.",
+        "## Pertanyaan 2: Bagaimana Anda menangani tekanan kerja?",
+        "Pewawancara AI: Bagaimana Anda menangani tekanan kerja?",
+        "Kandidat: Saya membuat daftar prioritas setiap pagi.",
+    ]
+)
+_VOICE_OFFSETS = [0.4, None, 5.1, 12.75, None, 30.2, 36.5]
+
+
+def test_locate_in_transcript_maps_question_and_second():
+    from app.modules.ai_interview.service import locate_in_transcript
+
+    questions = [
+        {"id": "q2", "order": 2, "prompt": "b"},
+        {"id": "q1", "order": 1, "prompt": "a"},
+    ]
+    ref = locate_in_transcript(
+        "membuat daftar prioritas", _VOICE_TRANSCRIPT, _VOICE_OFFSETS, questions
+    )
+    assert ref == {
+        "quote": "membuat daftar prioritas",
+        "question_id": "q2",
+        "start": 36.5,
+        "source": "session",
+    }
+    # Kalimat pewawancara tidak pernah jadi lokasi bukti kandidat.
+    miss = locate_in_transcript("menangani tekanan kerja", _VOICE_TRANSCRIPT, [], questions)
+    assert miss["question_id"] is None and miss["start"] is None
+    # Tanpa offset (agent lama): pertanyaan tetap diketahui, detik tidak.
+    no_time = locate_in_transcript(
+        "mendengarkan keluhan pelanggan", _VOICE_TRANSCRIPT, [], questions
+    )
+    assert (no_time["question_id"], no_time["start"]) == ("q1", None)
+
+
+def test_voice_evidence_links_to_session_recording_and_rescoring_uses_transcript(
+    client, monkeypatch
+):
+    admin = _auth_header(client)
+    _fake_scoring(
+        monkeypatch,
+        [
+            {
+                "komunikasi": (80, ["mendengarkan keluhan pelanggan"]),
+                "ketahanan": (70, ["membuat daftar prioritas"]),
+            }
+        ],
+    )
+    token, response_id = _voice_response(client, admin)
+    done = client.post(
+        f"/api/v1/ai-interview/session/{token}/voice/complete",
+        json={"transcript": _VOICE_TRANSCRIPT, "line_offsets": _VOICE_OFFSETS},
+        headers=_agent_headers(monkeypatch, token),
+    )
+    assert done.status_code == 200, done.text
+    detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin).json()
+    by_key = {b["criterion_key"]: b for b in detail["ai_score_breakdown"]}
+    assert by_key["komunikasi"]["evidence_refs"][0] == {
+        "quote": "mendengarkan keluhan pelanggan",
+        "question_id": "q1",
+        "start": 12.75,
+        "source": "session",
+    }
+    first_overall = detail["ai_score_overall"]
+    assert first_overall is not None
+
+    # Dulu "Nilai ulang" mode suara menilai `answers` (kosong) -> skor hilang.
+    rescored = client.post(f"/api/v1/ai-interview/responses/{response_id}/score", headers=admin)
+    assert rescored.status_code == 200, rescored.text
+    assert rescored.json()["ai_score_overall"] == first_overall
+    assert all(b["supported"] for b in rescored.json()["ai_score_breakdown"])
+
+
+def test_voice_offsets_dropped_when_not_aligned(client, monkeypatch):
+    from uuid import UUID
+
+    from app.modules.ai_interview.models import AIInterviewResponse
+
+    admin = _auth_header(client)
+    token, response_id = _voice_response(client, admin)
+    client.post(
+        f"/api/v1/ai-interview/session/{token}/voice/complete",
+        json={"transcript": _VOICE_TRANSCRIPT, "line_offsets": [1.0, 2.0]},
+        headers=_agent_headers(monkeypatch, token),
+    )
+    db = client.testing_session()
+    row = db.get(AIInterviewResponse, UUID(response_id))
+    assert row.transcript_offsets_json is None
+    db.close()

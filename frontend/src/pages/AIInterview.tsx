@@ -148,8 +148,17 @@ interface ScoreItem {
   score_runs?: (number | null)[];
   stable?: boolean;
   /** Fase 5: asal kutipan (pertanyaan) & detik mulainya di rekaman jawaban. */
-  evidence_refs?: { quote: string; question_id: string | null; start: number | null }[];
+  evidence_refs?: {
+    quote: string;
+    question_id: string | null;
+    start: number | null;
+    /** "session" = detik di rekaman sesi suara real-time; kosong = rekaman jawaban. */
+    source?: "session";
+  }[];
 }
+
+/** Target putar untuk rekaman sesi suara (bukan rekaman per jawaban). */
+const SESSION_TARGET = "__sesi__";
 
 function fmtSec(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
@@ -206,12 +215,15 @@ function ScoreBreakdown({
   items,
   model,
   questions,
+  hasSessionRecording,
   onPlayEvidence,
 }: {
   items: ScoreItem[];
   model: string | null;
   questions: Question[];
-  onPlayEvidence: (questionId: string, start: number) => void;
+  hasSessionRecording: boolean;
+  /** target = id pertanyaan (rekaman jawaban) atau SESSION_TARGET. */
+  onPlayEvidence: (target: string, start: number) => void;
 }) {
   const isRubric = items.some((b) => b.supported !== undefined);
   const runs = items.find((b) => b.score_runs)?.score_runs?.length ?? 1;
@@ -296,10 +308,17 @@ function ScoreBreakdown({
                         “{q}”
                         {qno && <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">{qno}</span>}
                       </span>
-                      {ref?.question_id && ref.start !== null && (
+                      {ref &&
+                        ref.start !== null &&
+                        (ref.source === "session" ? hasSessionRecording : ref.question_id) && (
                         <button
                           type="button"
-                          onClick={() => onPlayEvidence(ref.question_id!, ref.start!)}
+                          onClick={() =>
+                            onPlayEvidence(
+                              ref.source === "session" ? SESSION_TARGET : ref.question_id!,
+                              ref.start!
+                            )
+                          }
                           className="shrink-0 font-medium tabular-nums underline hover:opacity-80"
                           style={{ color: "var(--accent)" }}
                           aria-label={`Dengarkan kutipan di ${qno ?? "jawaban"} detik ${fmtSec(ref.start)}`}
@@ -1292,14 +1311,29 @@ export default function AIInterview() {
                   {r.ai_narrative && (
                     <p className="mt-2 text-sm text-[var(--text-muted)]">{r.ai_narrative}</p>
                   )}
-                  {r.has_recording && !r.data_purged_at && <RecordingPlayer responseId={r.id} />}
+                  {r.has_recording && !r.data_purged_at && (
+                    <RecordingPlayer
+                      responseId={r.id}
+                      seek={
+                        evidenceSeek?.responseId === r.id &&
+                        evidenceSeek.questionId === SESSION_TARGET
+                          ? evidenceSeek
+                          : null
+                      }
+                    />
+                  )}
                   {r.transcript_text && (
                     <TranscriptView raw={r.transcript_text} clean={r.transcript_clean} />
                   )}
                   {r.answers.length > 0 && (
                     <details
                       className="mt-1"
-                      open={evidenceSeek?.responseId === r.id ? true : undefined}
+                      open={
+                        evidenceSeek?.responseId === r.id &&
+                        evidenceSeek.questionId !== SESSION_TARGET
+                          ? true
+                          : undefined
+                      }
                     >
                       <summary className="cursor-pointer text-xs text-[var(--accent)]">
                         Lihat jawaban kandidat
@@ -1339,8 +1373,15 @@ export default function AIInterview() {
                       items={r.ai_score_breakdown}
                       model={r.ai_model}
                       questions={selected.questions}
-                      onPlayEvidence={(questionId, start) =>
-                        setEvidenceSeek({ responseId: r.id, questionId, at: start, nonce: Date.now() })
+                      hasSessionRecording={r.has_recording && !r.data_purged_at}
+                      onPlayEvidence={(target, start) =>
+                        setEvidenceSeek({
+                          responseId: r.id,
+                          questionId: target,
+                          // Titik nol rekaman sesi bisa meleset < 1 dtk: mulai sedikit lebih awal.
+                          at: target === SESSION_TARGET ? Math.max(0, start - 0.5) : start,
+                          nonce: Date.now(),
+                        })
                       }
                     />
                   )}

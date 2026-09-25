@@ -388,6 +388,9 @@ class VoiceContextOut(BaseModel):
 
 class VoiceCompleteIn(BaseModel):
     transcript: str
+    # Offset detik per baris transkrip (relatif awal rekaman); opsional --
+    # agent lama tidak mengirimnya.
+    line_offsets: list[float | None] | None = Field(default=None, max_length=5000)
 
 
 # ---------- Fase 0: persetujuan & retensi ----------

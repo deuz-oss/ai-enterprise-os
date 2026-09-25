@@ -220,15 +220,54 @@ def build_instructions(context: dict) -> str:
     return "\n".join(parts)
 
 
-def format_transcript(items: list[tuple[str, str]], markers: dict[int, str]) -> str:
-    """`items` = (role, text) per item riwayat, SEJAJAR indeksnya dengan
-    riwayat sesi (item tanpa teks, mis. pemanggilan tool, tetap dihitung
-    sebagai posisi supaya penanda jatuh di tempat yang benar)."""
+def format_transcript(
+    items: list[tuple[str, str]] | list[tuple[str, str, float | None]],
+    markers: dict[int, str],
+    t0: float | None = None,
+) -> tuple[str, list[float | None]]:
+    """`items` = (role, text[, mulai_bicara_epoch]) per item riwayat, SEJAJAR
+    indeksnya dengan riwayat sesi (item tanpa teks, mis. pemanggilan tool,
+    tetap dihitung sebagai posisi supaya penanda jatuh di tempat yang benar).
+
+    Kembalikan (transkrip, offset detik per baris relatif `t0` = awal
+    rekaman). Offset dikirim TERPISAH dari teks supaya format transkrip yang
+    dinilai tidak berubah; baris penanda/tanpa waktu = None."""
     lines: list[str] = []
-    for i, (role, text) in enumerate(items):
+    offsets: list[float | None] = []
+    for i, item in enumerate(items):
+        role = item[0]
+        # Satu pesan = satu baris. Uji E2E 2026-09-26: ucapan LLM berisi
+        # baris baru ("...pertanyaan.\n\nCeritakan...") sehingga jumlah baris
+        # transkrip != jumlah offset dan backend membuang semua offset.
+        text = " ".join(item[1].split())
+        start = item[2] if len(item) > 2 else None
         if i in markers:
             lines.append(markers[i])
+            offsets.append(None)
         if role and text:
             speaker = "Kandidat" if role == "user" else "Pewawancara AI"
             lines.append(f"{speaker}: {text}")
-    return "\n".join(lines)
+            offsets.append(
+                round(max(0.0, start - t0), 2) if start is not None and t0 is not None else None
+            )
+    return "\n".join(lines), offsets
+
+
+class TurnClock:
+    """Waktu MULAI bicara tiap item percakapan. Item riwayat LiveKit baru
+    dibuat setelah giliran selesai (created_at = akhir ucapan), jadi waktu
+    mulai diambil dari event status "speaking" pertama sejak item terakhir
+    peran yang sama -- satu giliran kandidat bisa terdiri dari beberapa
+    potongan bicara yang digabung turn detector."""
+
+    def __init__(self) -> None:
+        self._pending: dict[str, float] = {}
+        self.starts: dict[str, float] = {}
+
+    def speaking(self, role: str, at: float) -> None:
+        self._pending.setdefault(role, at)
+
+    def item_added(self, item_id: str, role: str) -> None:
+        at = self._pending.pop(role, None)
+        if at is not None:
+            self.starts[item_id] = at

@@ -6,6 +6,21 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 66: AI Interview — uji E2E suara & dengar bukti mode suara
+
+Detail di `PRD.md` Fase 66.
+- Kutipan bukti hasil interview suara real-time kini bisa diklik untuk memutar rekaman sesi di detik kandidat mulai mengucapkannya (agen mengirim offset waktu per baris transkrip; migrasi `ad1e2f3a4b5c`).
+- Setting `LIVEKIT_PUBLIC_URL` (URL LiveKit untuk browser kandidat), `STT_TIMEOUT_SEC`, `VAD_MIN_SILENCE`, `ENDPOINTING_MIN_DELAY/MAX_DELAY` (agen), `STT_COMPUTE_TYPE` (stt-server).
+
+### Fixed — Fase 66 (ditemukan uji E2E suara dengan kandidat sintetis)
+- **Agen suara tidak pernah bisa mendengar kandidat**: plugin STT LiveKit 1.7 memakai model default `gpt-4o-mini-transcribe` yang ditolak faster-whisper self-hosted (500); percakapan selalu macet setelah pertanyaan pertama. Kini model whisper dikirim eksplisit (`STT_MODEL`).
+- **Kandidat di browser tidak bisa terhubung ke LiveKit** di setup Docker: `voice/start` mengembalikan host internal `ws://livekit:7880`. Kini memakai `LIVEKIT_PUBLIC_URL` (default compose `ws://localhost:7880`).
+- Jawaban pertama tiap interview hilang: model whisper dilepas setelah 5 menit idle dan memuat ulang 39 dtk (> batas 30 dtk plugin STT). Kini model tetap dimuat dan memakai `int8` di CPU (transkripsi 9 dtk audio: 21 dtk -> 4 dtk).
+- Timeout STT 10 dtk bawaan LiveKit + ulang 3x membuat tiap jawaban ditranskripsi ulang sampai 4x (jeda 78 dtk); kini 60 dtk, 1x ulang.
+- Jawaban 2 kalimat terpotong: jeda antarkalimat memecah jawaban jadi segmen STT terpisah dan agen pindah pertanyaan sebelum kalimat terakhir tertranskripsi. Kini VAD menunggu 1,2 dtk hening.
+- "Nilai ulang" interview suara menilai jawaban kosong (skor hilang); kini menilai transkrip.
+- Offset per baris transkrip tidak sejajar bila ucapan AI berisi baris baru; kini satu pesan = satu baris.
+
 ### Fixed — cek gap Fase 65
 - Template AI Interview tidak bisa dikaitkan ke job order dari UI (form tanpa kolom job order, PATCH tidak menerima `job_order_id`, tombol "Mode AI" di Job Order hanya membawa kandidat) -- akibatnya keputusan pipeline di review (Fase 64) tidak pernah tersedia. Kini form punya pilihan job order (terkunci bila template sudah dipakai), tombol "Mode AI" membawa job order, template aktif job order itu terpilih otomatis, dan ada ajakan membuat template bila belum ada.
 - `job_order_id` template tidak divalidasi: UUID sembarang -> error 500 di PostgreSQL, ID job order tenant lain diterima.

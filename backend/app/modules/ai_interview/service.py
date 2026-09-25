@@ -15,6 +15,7 @@ import hmac
 import json
 import logging
 import secrets
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -282,6 +283,7 @@ def _purge_content(response: AIInterviewResponse, reason: str) -> None:
     response.answers_json = None
     response.transcript_text = None
     response.transcript_clean = None
+    response.transcript_offsets_json = None
     response.ai_score_overall = None
     response.ai_score_original = None
     response.ai_score_breakdown_json = None
@@ -909,6 +911,12 @@ def _score(db: Session, response: AIInterviewResponse, template: AIInterviewTemp
     """Kembalikan True kalau berhasil dinilai & sudah commit; False kalau AI
     gagal/tidak aktif (TIDAK melempar — caller putuskan apa yang terjadi
     kalau gagal, konsisten prinsip "AI gagal tidak boleh mematahkan alur")."""
+    if template.mode == AIInterviewMode.realtime_voice:
+        # Dulu "Nilai ulang" interview suara menilai `answers` (selalu kosong
+        # di mode ini) -> semua kriteria tanpa bukti, skor hilang.
+        if not response.transcript_text:
+            return False
+        return _score_transcript(db, response, template, response.transcript_text)
     answers_by_q = {a.get("question_id"): a.get("answer_text", "") for a in response.answers}
     qa_pairs = [
         {
@@ -921,7 +929,15 @@ def _score(db: Session, response: AIInterviewResponse, template: AIInterviewTemp
     ]
     user_payload = {"criteria": template.criteria, "qa": qa_pairs}
     candidate_text = "\n".join(str(a.get("answer_text", "")) for a in response.answers)
-    return _run_scoring(db, response, template, user_payload, candidate_text, response.answers)
+    answers = response.answers
+    return _run_scoring(
+        db,
+        response,
+        template,
+        user_payload,
+        candidate_text,
+        locator=lambda quote, related: locate_evidence(quote, answers, related),
+    )
 
 
 def _score_transcript(
@@ -935,7 +951,65 @@ def _score_transcript(
         for q in template.questions
     ]
     user_payload = {"criteria": template.criteria, "topics": topics, "transcript": transcript}
-    return _run_scoring(db, response, template, user_payload, _candidate_lines(transcript))
+    offsets = _transcript_offsets(response)
+    return _run_scoring(
+        db,
+        response,
+        template,
+        user_payload,
+        _candidate_lines(transcript),
+        locator=lambda quote, related: locate_in_transcript(
+            quote, transcript, offsets, template.questions, related
+        ),
+    )
+
+
+def _transcript_offsets(response: AIInterviewResponse) -> list:
+    try:
+        data = json.loads(response.transcript_offsets_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def locate_in_transcript(
+    quote: str,
+    transcript: str,
+    offsets: list,
+    questions: list[dict],
+    prefer_question_ids: set[str] | None = None,
+) -> dict:
+    """Varian `locate_evidence` untuk mode suara real-time: cari baris
+    "Kandidat:" yang memuat kutipan; pertanyaan asal dari penanda
+    "## Pertanyaan N" terakhir sebelum baris itu; detik dari offset baris
+    (dikirim agent). `source="session"` = putar rekaman sesi 2 kanal."""
+    ref: dict = {"quote": quote, "question_id": None, "start": None, "source": "session"}
+    first = next((_norm(p) for p in quote.replace("…", "...").split("...") if _norm(p)), "")
+    if not first:
+        return ref
+    ordered_ids = [str(q.get("id")) for q in sorted(questions, key=lambda q: q.get("order", 1))]
+    hits: list[tuple[str | None, float | None]] = []
+    current_qid: str | None = None
+    for i, line in enumerate(transcript.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("## Pertanyaan "):
+            number = stripped[len("## Pertanyaan ") :].split(":", 1)[0].strip()
+            idx = int(number) - 1 if number.isdigit() else -1
+            current_qid = ordered_ids[idx] if 0 <= idx < len(ordered_ids) else None
+            continue
+        if not stripped.startswith(_CANDIDATE_PREFIX):
+            continue
+        body = _norm(stripped[len(_CANDIDATE_PREFIX) :])
+        if f" {first} " in f" {body} ":
+            raw = offsets[i] if i < len(offsets) else None
+            start = float(raw) if isinstance(raw, int | float) else None
+            hits.append((current_qid, start))
+    if not hits:
+        return ref
+    preferred = prefer_question_ids or set()
+    qid, start = next((h for h in hits if h[0] in preferred), hits[0])
+    ref["question_id"], ref["start"] = qid, start
+    return ref
 
 
 # Label pembicara dari agent/main.py::_format_transcript.
@@ -1120,10 +1194,10 @@ def _run_scoring(
     template: AIInterviewTemplate,
     user_payload: dict,
     candidate_text: str,
-    answers: list[dict] | None = None,
+    locator: Callable[[str, set[str]], dict] | None = None,
 ) -> bool:
-    """`answers` (mode teks/rekaman) dipakai untuk memetakan tiap kutipan
-    bukti ke jawaban & detik rekamannya; mode suara real-time tidak punya."""
+    """`locator(kutipan, id_pertanyaan_terkait)` memetakan tiap kutipan bukti
+    ke pertanyaan & detik rekamannya (jawaban rekaman atau rekaman sesi)."""
     settings = get_settings()
     model = settings.ai_scoring_model or settings.ai_model
     runs: list[list[dict]] = []
@@ -1151,14 +1225,14 @@ def _run_scoring(
         return False
 
     breakdown, overall = merge_scoring_runs(runs, template.criteria)
-    if answers:
+    if locator is not None:
         for item in breakdown:
             related = {
                 str(q.get("id"))
                 for q in template.questions
                 if item["criterion_key"] in (q.get("criterion_keys") or [])
             }
-            item["evidence_refs"] = [locate_evidence(q, answers, related) for q in item["evidence"]]
+            item["evidence_refs"] = [locator(q, related) for q in item["evidence"]]
 
     response.ai_score_overall = overall
     response.ai_score_original = None  # skor baru -> koreksi lama tidak berlaku
@@ -1496,7 +1570,8 @@ async def start_voice_session(db: Session, token: str) -> VoiceSessionOut:
             response.started_at = response.started_at or datetime.now(UTC)
             db.commit()
 
-        return VoiceSessionOut(url=settings.livekit_url or "", token=access_token)
+        public_url = settings.livekit_public_url or settings.livekit_url or ""
+        return VoiceSessionOut(url=public_url, token=access_token)
     finally:
         set_tenant(prev_tenant)
 
@@ -1536,7 +1611,9 @@ def get_voice_context(db: Session, token: str) -> VoiceContextOut:
         set_tenant(prev_tenant)
 
 
-def complete_voice_session(db: Session, token: str, transcript: str) -> AIInterviewResponse:
+def complete_voice_session(
+    db: Session, token: str, transcript: str, line_offsets: list[float | None] | None = None
+) -> AIInterviewResponse:
     """Dipanggil agent worker saat percakapan selesai — mirror `submit_session()`
     tapi menerima transkrip percakapan penuh, bukan jawaban per-pertanyaan."""
     prev_tenant = get_tenant()
@@ -1550,6 +1627,11 @@ def complete_voice_session(db: Session, token: str, transcript: str) -> AIInterv
             raise HTTPException(status_code=422, detail="Interview ini sudah disubmit sebelumnya")
 
         response.transcript_text = transcript.strip()[:20000] or None
+        # Transkrip dipotong dari belakang -> offset tetap sejajar sebagai
+        # awalan; jumlah kurang dari baris = tidak sejajar, dibuang.
+        n_lines = len((response.transcript_text or "").splitlines())
+        if line_offsets and len(line_offsets) >= n_lines:
+            response.transcript_offsets_json = json.dumps(line_offsets[:n_lines])
         response.status = AIInterviewResponseStatus.submitted
         response.submitted_at = datetime.now(UTC)
         db.commit()

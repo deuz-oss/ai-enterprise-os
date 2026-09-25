@@ -137,6 +137,9 @@ class AIInterviewResponse(TenantMixin, Base):
     # dasar penilaian & kutipan bukti; versi dirapikan (tanpa "eh/anu",
     # pengulangan) hanya untuk dibaca reviewer.
     transcript_clean: Mapped[str | None] = mapped_column(Text)
+    # Offset detik per baris `transcript_text` (JSON list, None = tanpa
+    # waktu) relatif awal rekaman sesi -- "dengar bukti" mode suara.
+    transcript_offsets_json: Mapped[str | None] = mapped_column(Text)
     # Rekaman sesi suara (ogg/opus 2 kanal: 0 = kandidat, 1 = pewawancara AI),
     # direkam di agent lalu disimpan di object storage. Dihapus bersama isi
     # lain saat retensi/penarikan persetujuan (`_purge_content`).

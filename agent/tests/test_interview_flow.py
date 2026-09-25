@@ -10,6 +10,7 @@ from interview_flow import (  # noqa: E402
     CLOSING_LINE,
     MARKER_PREFIX,
     InterviewFlow,
+    TurnClock,
     build_instructions,
     format_transcript,
 )
@@ -124,13 +125,49 @@ def test_transcript_includes_markers_and_skips_tool_items():
         ("assistant", "Ceritakan pengalaman menangani komplain."),
         ("user", "Saya dengarkan pelanggan dulu."),
     ]
-    text = format_transcript(items, {1: "## Pertanyaan 1: Komplain"})
+    text, offsets = format_transcript(items, {1: "## Pertanyaan 1: Komplain"})
     assert text.splitlines() == [
         "Pewawancara AI: Halo, saya pewawancara AI.",
         "## Pertanyaan 1: Komplain",
         "Pewawancara AI: Ceritakan pengalaman menangani komplain.",
         "Kandidat: Saya dengarkan pelanggan dulu.",
     ]
+    assert offsets == [None, None, None, None]  # tanpa waktu -> tidak ada offset
+
+
+def test_transcript_offsets_relative_to_recording_start():
+    items = [
+        ("assistant", "Halo.", 1000.5),
+        ("", "", None),
+        ("user", "Saya dengarkan pelanggan dulu.", 1012.25),
+        ("user", "Tanpa waktu.", None),
+    ]
+    text, offsets = format_transcript(items, {1: "## Pertanyaan 1: Komplain"}, t0=1000.0)
+    assert len(offsets) == len(text.splitlines())
+    assert offsets == [0.5, None, 12.25, None]
+
+
+def test_multiline_message_stays_one_line_so_offsets_align():
+    """Regresi uji E2E: ucapan LLM berisi baris baru -> offset tidak sejajar."""
+    items = [("assistant", "Selamat datang.\n\nCeritakan pengalaman Anda.", 1001.0)]
+    text, offsets = format_transcript(items, {}, t0=1000.0)
+    assert text == "Pewawancara AI: Selamat datang. Ceritakan pengalaman Anda."
+    assert offsets == [1.0]
+
+
+def test_turn_clock_uses_first_speaking_start_of_each_turn():
+    """Satu giliran kandidat bisa berisi beberapa potongan bicara (jeda
+    berpikir); waktu mulai = potongan PERTAMA sejak item sebelumnya."""
+    clock = TurnClock()
+    clock.speaking("assistant", 5.0)
+    clock.item_added("a1", "assistant")
+    clock.speaking("user", 10.0)
+    clock.speaking("user", 14.0)  # lanjut bicara setelah jeda
+    clock.item_added("u1", "user")
+    clock.item_added("u2", "user")  # item tanpa event bicara -> tidak ada waktu
+    clock.speaking("user", 30.0)
+    clock.item_added("u3", "user")
+    assert clock.starts == {"a1": 5.0, "u1": 10.0, "u3": 30.0}
 
 
 def _g(condition: str, response: str, *, locked: bool, source: str) -> dict:

@@ -905,6 +905,40 @@ percakapan (Fase 63), atau batas pertanyaan susulan tidak bisa diperbaiki.
   -> validasi struktur hanya saat pertanyaan/kriteria benar-benar berubah
   (dibandingkan dalam bentuk ternormalisasi).
 
+### Fase 66 — AI Interview: Uji E2E Suara & Dengar Bukti Mode Suara — ✅ Selesai (2026-09-26)
+
+**Uji E2E dengan kandidat sintetis** (pertama kalinya percakapan suara diuji
+utuh): peserta LiveKit sungguhan bergabung dengan token dari `voice/start`,
+mendengarkan agen (deteksi selesai bicara dari energi audio), dan memutar
+jawaban lisan Bahasa Indonesia hasil TTS. Jalur penuh: dispatch agen ->
+sapaan & pertanyaan 1 -> STT whisper -> turn detector -> LLM + tool alur ->
+pertanyaan 2 -> penutup -> transkrip + offset -> penilaian 2 run -> unggah
+rekaman -> agen keluar. Lima iterasi uji menemukan 7 bug (lihat CHANGELOG),
+yang terparah:
+- agen **tidak pernah bisa mendengar kandidat** sejak LiveKit dipin 1.7
+  (model STT default plugin = model OpenAI, ditolak faster-whisper);
+- browser kandidat menerima URL LiveKit **internal Docker**;
+- jawaban pertama tiap interview hilang (model whisper dilepas saat idle,
+  muat ulang 39 dtk > batas 30 dtk plugin);
+- jawaban 2 kalimat terpotong (VAD memecah di jeda antarkalimat).
+
+Hasil akhir: 2 pertanyaan terjawab utuh di bawah penanda yang benar, skor
+stabil 85/85 & 80/80, kutipan bukti membawa detik rekaman sesi, rekaman
+tersimpan, agen menutup sesi dengan rapi. Diuji dengan `gpt-4.1-mini`
+(`AI_AGENT_MODEL`); dengan `gpt-4o-mini` agen sempat bertanya susulan tanpa
+izin tool di percakapan sungguhan -- rekomendasi Fase 63 terkonfirmasi.
+
+**Dengar bukti mode suara**: agen mencatat waktu mulai bicara per giliran
+(event `user_state_changed`/`agent_state_changed`, giliran = potongan
+bicara pertama sejak item sebelumnya) relatif terhadap awal rekaman, dikirim
+sebagai `line_offsets` terpisah dari teks transkrip. Backend menyimpan
+(`transcript_offsets_json`, migrasi `ad1e2f3a4b5c`, dibuang bila tidak
+sejajar), memetakan kutipan ke baris "Kandidat:" + pertanyaan dari penanda,
+dan UI memutar rekaman sesi 2 kanal 0,5 dtk sebelum detik itu.
+
+Belum diuji: suara manusia lewat mikrofon browser; latensi di GPU. Di CPU
+dev, jeda agen setelah kandidat selesai bicara ~10-12 dtk.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
