@@ -25,6 +25,11 @@ export function AIInterviewVoiceCall({
   const [micEnabled, setMicEnabled] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
+  // Panggilan pernah benar-benar tersambung (audio mengalir)? Dulu setiap
+  // Disconnected dianggap "interview selesai" -- koneksi WebRTC yang gagal
+  // (mis. LiveKit Docker mengiklankan IP internal) menampilkan "Terima kasih,
+  // jawaban Anda sudah kami terima" padahal kandidat belum bicara sama sekali.
+  const connectedRef = useRef(false);
   const audioContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,15 +53,23 @@ export function AIInterviewVoiceCall({
         }
       });
       room.on(RoomEvent.Disconnected, () => {
+        if (!connectedRef.current) return; // gagal tersambung -> ditangani catch
         setCallState("ended");
         onEnded();
       });
 
       await room.connect(session.url, session.token);
       await room.localParticipant.setMicrophoneEnabled(true);
+      connectedRef.current = true;
       setCallState("connected");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal memulai panggilan.");
+      roomRef.current?.disconnect();
+      const name = err instanceof Error ? err.name : "";
+      setErrorMsg(
+        name === "NotAllowedError"
+          ? "Akses mikrofon ditolak. Izinkan mikrofon untuk situs ini (ikon gembok di samping alamat), lalu coba lagi."
+          : "Panggilan tidak dapat tersambung. Periksa koneksi internet Anda lalu coba lagi; bila tetap gagal, hubungi tim rekrutmen."
+      );
       setCallState("error");
     }
   }

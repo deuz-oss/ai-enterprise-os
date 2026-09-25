@@ -939,6 +939,20 @@ dan UI memutar rekaman sesi 2 kanal 0,5 dtk sebelum detik itu.
 Belum diuji: suara manusia lewat mikrofon browser; latensi di GPU. Di CPU
 dev, jeda agen setelah kandidat selesai bicara ~10-12 dtk.
 
+### Uji suara manual (mikrofon sungguhan) — 2026-09-26
+
+Pertama kalinya kandidat manusia menjalankan interview suara lewat browser.
+Dua bug ditemukan & diperbaiki: (1) WebRTC tidak pernah tersambung dari host
+karena LiveKit di Docker mengiklankan IP container & IP publik --
+`--node-ip ${LIVEKIT_NODE_IP:-127.0.0.1}`; (2) panggilan gagal tampil sebagai
+"jawaban sudah diterima". Setelah perbaikan: audio dua arah, transkripsi
+Bahasa Indonesia, offset & kutipan bukti (detik 26,03), rekaman, penilaian
+(dua run 40/60 -> ditandai tidak stabil), dan kirim transkrip parsial saat
+kandidat menutup panggilan -- semua berjalan. Temuan perilaku: `gpt-4o-mini`
+bertanya susulan tanpa izin (batas 0) sehingga pertanyaan 2 tidak pernah
+diajukan -- konsisten dengan simulasi Fase 63; `gpt-4.1-mini` tertib di uji
+E2E.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

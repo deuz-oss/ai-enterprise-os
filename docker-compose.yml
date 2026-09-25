@@ -84,7 +84,12 @@ services:
   livekit:
     image: livekit/livekit-server:v1.10.0
     profiles: ["voice"]
-    command: ["--dev", "--bind", "0.0.0.0"]
+    # --node-ip = alamat yang diiklankan ke peserta WebRTC. Tanpa ini LiveKit
+    # mengiklankan IP container (172.x) yang tidak bisa dijangkau browser di
+    # host (Docker Desktop) -- panggilan kandidat gagal tersambung (uji manual
+    # 2026-09-26). Dev: 127.0.0.1 (port UDP di bawah diteruskan ke host).
+    # Produksi: IP publik server.
+    command: ["--dev", "--bind", "0.0.0.0", "--node-ip", "${LIVEKIT_NODE_IP:-127.0.0.1}"]
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       LIVEKIT_RTC_PORT_RANGE_START: "51000"

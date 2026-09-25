@@ -6,6 +6,10 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — uji suara manual (mikrofon sungguhan)
+- Panggilan suara dari browser tidak pernah tersambung di setup Docker: LiveKit mengiklankan IP container (172.x) dan IP publik internet, keduanya tidak bisa dijangkau browser di host. Kini `--node-ip` (setting `LIVEKIT_NODE_IP`, default dev `127.0.0.1`; produksi = IP publik server). Uji sintetis tidak menangkapnya karena berjalan di dalam jaringan Docker.
+- Panggilan yang gagal tersambung menampilkan "Terima kasih, jawaban Anda sudah kami terima" padahal kandidat belum bicara; kini tampil pesan error + Coba Lagi (termasuk petunjuk bila mikrofon ditolak).
+
 ### Added — Fase 66: AI Interview — uji E2E suara & dengar bukti mode suara
 
 Detail di `PRD.md` Fase 66.
