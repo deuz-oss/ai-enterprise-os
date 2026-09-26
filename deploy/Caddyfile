@@ -24,3 +24,11 @@
 files.{$DOMAIN} {
 	reverse_proxy minio:9000
 }
+
+# Interview suara AI (profile "voice"): sinyal LiveKit untuk browser kandidat
+# (wss://). Media WebRTC TIDAK lewat sini -- langsung ke port UDP/TCP server.
+# Butuh DNS record livekit.<DOMAIN> -> server ini. Bila profile voice tidak
+# dijalankan, host ini hanya membalas 502 (situs utama tidak terpengaruh).
+livekit.{$DOMAIN} {
+	reverse_proxy livekit:7880
+}

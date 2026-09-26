@@ -6,6 +6,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — deploy produksi interview suara
+- `docker-compose.prod.yml` profile `voice`: LiveKit (konfigurasi produksi `deploy/livekit.yaml` -- IP publik via STUN, TURN bawaan dengan rentang relai kecil), STT whisper (CPU int8, model tetap dimuat), dan agen. Deploy biasa tidak berubah.
+- `docker-compose.prod.gpu.yml`: override STT untuk server NVIDIA (image CUDA, float16). Belum diuji di mesin GPU.
+- Caddy melayani `livekit.<DOMAIN>` (wss) untuk browser kandidat; `LIVEKIT_PUBLIC_URL` default `wss://livekit.<DOMAIN>`.
+- `docs/DEPLOYMENT.md` bagian 5b: DNS, port firewall (7881/tcp, 50000-50100/udp, 3478/udp, 40000-40100/udp), variabel env, verifikasi.
+
 ### Fixed — uji suara manual (mikrofon sungguhan)
 - Panggilan suara dari browser tidak pernah tersambung di setup Docker: LiveKit mengiklankan IP container (172.x) dan IP publik internet, keduanya tidak bisa dijangkau browser di host. Kini `--node-ip` (setting `LIVEKIT_NODE_IP`, default dev `127.0.0.1`; produksi = IP publik server). Uji sintetis tidak menangkapnya karena berjalan di dalam jaringan Docker.
 - Panggilan yang gagal tersambung menampilkan "Terima kasih, jawaban Anda sudah kami terima" padahal kandidat belum bicara; kini tampil pesan error + Coba Lagi (termasuk petunjuk bila mikrofon ditolak).

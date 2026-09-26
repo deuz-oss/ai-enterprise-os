@@ -57,6 +57,9 @@ services:
       # dibuka browser -- minio:9000 hanya ada di jaringan Docker. Caddy
       # meneruskan files.<DOMAIN> ke MinIO (lihat deploy/Caddyfile).
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-https://files.${DOMAIN}}
+      # Interview suara (profile "voice"): URL LiveKit untuk BROWSER kandidat.
+      # Fitur tetap nonaktif selama LIVEKIT_URL (.env.production) kosong.
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-wss://livekit.${DOMAIN}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,8 +101,80 @@ services:
       - minio
     logging: *logging
 
+  # ---- Interview suara AI (opsional) ----
+  # TIDAK ikut `docker compose up` biasa; aktifkan dengan
+  #   docker compose -f docker-compose.prod.yml --profile voice up -d
+  # Prasyarat (DNS livekit.<DOMAIN>, port firewall, variabel .env.production)
+  # di docs/DEPLOYMENT.md bagian "Interview suara". Server dengan GPU:
+  # tambahkan -f docker-compose.prod.gpu.yml untuk STT.
+
+  livekit:
+    image: livekit/livekit-server:v1.10.0
+    profiles: ["voice"]
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./deploy/livekit.yaml:/etc/livekit.yaml:ro
+    # Sinyal (7880) TIDAK dipublikasikan: lewat Caddy (wss://livekit.<DOMAIN>).
+    # Media WebRTC & TURN harus langsung ke server.
+    ports:
+      - "7881:7881" # WebRTC TCP (cadangan bila UDP diblokir)
+      - "50000-50100:50000-50100/udp" # media WebRTC
+      - "3478:3478/udp" # TURN
+      - "40000-40100:40000-40100/udp" # relai TURN
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7880"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    logging: *logging
+
+  stt-server:
+    # Default CPU (jalan di server mana pun). Server GPU: override
+    # docker-compose.prod.gpu.yml (image CUDA + float16).
+    image: fedirz/faster-whisper-server:latest-cpu
+    profiles: ["voice"]
+    restart: unless-stopped
+    environment:
+      WHISPER__MODEL: "${STT_MODEL:-Systran/faster-whisper-small}"
+      # Model tetap dimuat (default melepas saat idle 5 menit lalu memuat
+      # ulang puluhan detik -> jawaban pertama melewati batas STT agen).
+      WHISPER__TTL: "-1"
+      WHISPER__COMPUTE_TYPE: "${STT_COMPUTE_TYPE:-int8}"
+    volumes:
+      - stt_model_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+    logging: *logging
+
+  ai-interview-agent:
+    build: ./agent
+    profiles: ["voice"]
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      BACKEND_API_URL: http://backend:8000/api/v1
+      # Agen tersambung ke LiveKit lewat jaringan internal compose.
+      LIVEKIT_URL: ws://livekit:7880
+      STT_BASE_URL: http://stt-server:8000/v1
+    depends_on:
+      livekit:
+        condition: service_healthy
+      stt-server:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    logging: *logging
+
 volumes:
   pgdata:
   minio:
   caddy_data:
   caddy_config:
+  stt_model_cache:

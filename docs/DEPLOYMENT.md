@@ -91,6 +91,62 @@ Uji restore berkala (disarangan bulanan):
 ./deploy/restore.sh /var/backups/aeos/<timestamp>
 ```
 
+## 5b. Interview suara AI (opsional)
+
+Mode "suara real-time" AI Interview butuh 3 layanan tambahan (LiveKit, STT
+whisper, agen) yang ada di profile `voice` -- deploy biasa tidak menjalankannya.
+
+**Prasyarat**
+
+1. DNS record `livekit.<DOMAIN>` -> IP server (Caddy menerbitkan TLS-nya).
+2. Buka port di firewall server/cloud (selain 80/443):
+
+   | Port | Protokol | Fungsi |
+   |---|---|---|
+   | 7881 | TCP | WebRTC cadangan (jaringan yang blokir UDP) |
+   | 50000-50100 | UDP | media WebRTC |
+   | 3478 | UDP | TURN (kandidat di balik NAT ketat) |
+   | 40000-40100 | UDP | relai TURN |
+
+3. Server dengan IP publik langsung (LiveKit mendeteksinya lewat STUN,
+   `deploy/livekit.yaml` -> `use_external_ip`). Di balik NAT/load balancer,
+   IP yang diiklankan harus disesuaikan -- tanpa IP yang bisa dijangkau
+   browser, panggilan kandidat tidak pernah tersambung.
+4. `.env.production`: isi `LIVEKIT_URL=ws://livekit:7880`,
+   `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (>= 32 karakter),
+   `STT_BASE_URL=http://stt-server:8000/v1`, `AI_BASE_URL`/`AI_API_KEY`
+   (LLM + TTS OpenAI), disarankan `AI_AGENT_MODEL=gpt-4.1-mini`.
+
+**Menjalankan**
+
+```bash
+# CPU (jalan di server mana pun; jeda agen ~10 dtk setelah kandidat bicara)
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile voice up -d --build
+
+# GPU NVIDIA (butuh NVIDIA Container Toolkit; jeda ~1-2 dtk, bisa model whisper lebih besar)
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.gpu.yml \
+  --env-file .env.production --profile voice up -d --build
+```
+
+Unduhan model whisper pertama (~480 MB untuk `small`) terjadi saat
+transkripsi pertama dan disimpan di volume `stt_model_cache`.
+
+**Verifikasi**
+
+```bash
+docker compose -f docker-compose.prod.yml logs livekit | grep "starting LiveKit"   # nodeIP = IP publik server
+docker compose -f docker-compose.prod.yml logs ai-interview-agent | grep "registered worker"
+```
+
+Lalu buat template mode "Suara real-time", undang kandidat uji, dan lakukan
+panggilan dari browser di jaringan LUAR server (mis. HP dengan data seluler)
+-- uji dari dalam server/jaringan Docker tidak membuktikan konektivitas
+kandidat (pelajaran uji 2026-09-26).
+
+**Catatan**: rekaman suara kandidat adalah data biometrik (UU PDP) -- agen
+menolak merekam bila `LIVEKIT_URL` mengarah ke LiveKit Cloud; tetap self-host.
+Konfigurasi GPU belum diuji di mesin GPU sungguhan.
+
 ## 6. Catatan operasional
 
 - **Skema**: sumber kebenaran = Alembic. Di production `create_all`

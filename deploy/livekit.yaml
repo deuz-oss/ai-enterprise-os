@@ -1,0 +1,30 @@
+# Konfigurasi LiveKit PRODUKSI untuk interview suara AI (profile "voice" di
+# docker-compose.prod.yml). Kunci API TIDAK di sini -- dibaca dari env
+# LIVEKIT_KEYS ("<key>: <secret>") yang disusun compose dari .env.production.
+#
+# Jalur koneksi kandidat:
+#   - sinyal  : wss://livekit.<DOMAIN>  (Caddy -> livekit:7880, TLS otomatis)
+#   - media   : UDP 50000-50100 langsung ke server (paling cepat)
+#   - cadangan: TCP 7881 (jaringan yang memblokir UDP)
+#   - TURN    : UDP 3478 + relai UDP 40000-40100 (kandidat di balik NAT
+#               ketat, mis. operator seluler / jaringan kantor)
+# Port-port di atas WAJIB dibuka di firewall server (lihat docs/DEPLOYMENT.md).
+
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Iklankan IP publik server (dicari lewat STUN). Pelajaran uji lokal
+  # 2026-09-26: tanpa IP yang benar, LiveKit mengiklankan IP container yang
+  # tidak bisa dijangkau browser dan panggilan tidak pernah tersambung.
+  use_external_ip: true
+turn:
+  enabled: true
+  udp_port: 3478
+  # Port relai TURN (default LiveKit 30000-40000 -- terlalu lebar untuk
+  # dibuka di firewall). Rentang kecil ini cukup untuk puluhan sesi paralel.
+  relay_range_start: 40000
+  relay_range_end: 40100
+logging:
+  level: info
