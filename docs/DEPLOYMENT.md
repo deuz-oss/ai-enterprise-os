@@ -91,6 +91,39 @@ Uji restore berkala (disarangan bulanan):
 ./deploy/restore.sh /var/backups/aeos/<timestamp>
 ```
 
+## 5a. Server baru: checklist & skrip penyiapan
+
+Belum punya server? Urutan paling cepat:
+
+1. **Sewa VPS Ubuntu 22.04/24.04 dengan IP publik** (bukan PaaS seperti
+   Railway/Render/Vercel -- interview suara butuh port UDP langsung).
+   Spesifikasi: tanpa interview suara 2 vCPU / 4 GB; **dengan interview
+   suara di CPU minimal 4 vCPU / 8 GB**, disk 50 GB. GPU NVIDIA opsional
+   (jeda agen ~1-2 dtk vs ~10 dtk di CPU). Data kandidat (termasuk rekaman
+   suara) tunduk UU PDP -- utamakan pusat data di Indonesia.
+2. **DNS** (A record ke IP server): `<DOMAIN>`, `files.<DOMAIN>`, dan
+   `livekit.<DOMAIN>` bila interview suara dipakai. Tunggu sampai resolve
+   sebelum langkah 4 (Caddy perlu DNS untuk menerbitkan TLS).
+3. **Firewall di panel provider** (security group): buka 22, 80, 443, dan
+   bila interview suara: 7881/tcp, 50000-50100/udp, 3478/udp, 40000-40100/udp.
+4. **Jalankan skrip penyiapan** di server:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/deuz-oss/ai-enterprise-os/main/deploy/setup-vps.sh -o setup-vps.sh
+   sudo bash setup-vps.sh
+   ```
+
+   Skrip menginstal Docker, mengatur ufw, meng-clone repo ke `/opt/aeos`,
+   membuat `.env.production` dengan secret acak (tidak menimpa yang ada), lalu
+   build & menjalankan stack (+ profile `voice` / override GPU bila dipilih).
+   Repo privat: clone manual dulu dengan deploy key, lalu jalankan skrip dari
+   `/opt/aeos` (skrip memakai repo yang sudah ada).
+5. **Isi `AI_BASE_URL` / `AI_API_KEY`** di `/opt/aeos/.env.production`, lalu
+   ulangi perintah `up -d` yang dicetak skrip.
+6. **Uji dari jaringan luar**: login `https://<DOMAIN>`, buat template mode
+   suara, undang kandidat uji, dan lakukan panggilan dari HP dengan data
+   seluler (bukan dari server / jaringan yang sama).
+
 ## 5b. Interview suara AI (opsional)
 
 Mode "suara real-time" AI Interview butuh 3 layanan tambahan (LiveKit, STT

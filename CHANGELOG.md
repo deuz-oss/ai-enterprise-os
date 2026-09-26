@@ -10,6 +10,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - `docker-compose.prod.yml` profile `voice`: LiveKit (konfigurasi produksi `deploy/livekit.yaml` -- IP publik via STUN, TURN bawaan dengan rentang relai kecil), STT whisper (CPU int8, model tetap dimuat), dan agen. Deploy biasa tidak berubah.
 - `docker-compose.prod.gpu.yml`: override STT untuk server NVIDIA (image CUDA, float16). Belum diuji di mesin GPU.
 - Caddy melayani `livekit.<DOMAIN>` (wss) untuk browser kandidat; `LIVEKIT_PUBLIC_URL` default `wss://livekit.<DOMAIN>`.
+- `deploy/setup-vps.sh`: penyiapan VPS Ubuntu satu perintah (Docker, ufw, clone, `.env.production` dengan secret acak, build + jalankan termasuk profile suara/GPU) dan checklist server baru di `docs/DEPLOYMENT.md` bagian 5a (spesifikasi, DNS, firewall provider, uji dari jaringan luar).
 - `docs/DEPLOYMENT.md` bagian 5b: DNS, port firewall (7881/tcp, 50000-50100/udp, 3478/udp, 40000-40100/udp), variabel env, verifikasi.
 
 ### Fixed — uji suara manual (mikrofon sungguhan)
