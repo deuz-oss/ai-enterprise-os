@@ -148,6 +148,13 @@ body {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-tint);
   }
+  /* Field nonaktif harus terlihat nonaktif -- dulu identik dengan field yang
+     bisa diedit (mis. pertanyaan terkunci di edit template AI Interview). */
+  .input:disabled {
+    background-color: var(--hover);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
   /* Kartu ala mockup dashboard.html: rounded-xl, border tipis, tanpa bayangan mencolok. */
   .card {
     @apply rounded-xl p-4;
