@@ -4,7 +4,7 @@ import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatRupiah } from "../api/client";
 import { toast } from "sonner";
-import { confirmDialog, confirmToast } from "../components/ui";
+import { confirmDialog, confirmToast, PeriodPicker } from "../components/ui";
 import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
@@ -65,7 +65,7 @@ type Tab = "jurnal" | "coa" | "periode" | "ai" | "aging" | "assets" | "purchases
 export default function Accounting() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("jurnal");
-  const [year, setYear] = useState(2026);
+  const [year, setYear] = useState(() => new Date().getFullYear());
   const [lines, setLines] = useState<LineIn[]>([
     { account_code: "1-1100", debit: 0, credit: 0, client_dim_id: null },
     { account_code: "4-1000", debit: 0, credit: 0, client_dim_id: null },
@@ -828,21 +828,13 @@ function FixedAssetsPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            value={depYear}
-            onChange={(e) => setDepYear(Number(e.target.value))}
-            className="input w-24"
-            aria-label="Tahun susutan"
-          />
-          <input
-            type="number"
-            min={1}
-            max={12}
-            value={depMonth}
-            onChange={(e) => setDepMonth(Number(e.target.value))}
-            className="input w-20"
-            aria-label="Bulan susutan"
+          <PeriodPicker
+            value={{ year: depYear, month: depMonth }}
+            onChange={(p) => {
+              setDepYear(p.year);
+              setDepMonth(p.month);
+            }}
+            label="periode susutan"
           />
           <button
             className="btn-secondary"

@@ -6,8 +6,10 @@ import {
   Button,
   confirmDialog,
   confirmToast,
+  currentPeriod,
   HeaderCanvas,
   KpiCard,
+  PeriodPicker,
   PreflightAlert,
   StatusPill,
 } from "../components/ui";
@@ -43,6 +45,57 @@ interface RunRow {
   client_id: string | null;
   status: string;
   finalized_at: string | null;
+  slip_count: number;
+}
+
+// Tahapan run payroll, urutan mengikuti `_ALLOWED_TRANSITIONS` di
+// backend/app/modules/payroll/service.py. Dulu baris run menampilkan 3-4 link
+// teks sejajar (Generate · Kirim · Finalisasi) tanpa tahu langkah mana yang
+// berlaku sekarang -- Finalisasi bahkan muncul saat slip belum dibuat (422).
+const RUN_STEPS: Record<RunRow["run_type"], string[]> = {
+  internal: ["Generate slip", "Finalisasi", "Payment Request"],
+  proyek: ["Generate slip", "Approval klien", "Proses finance", "Finalisasi", "Payment Request"],
+};
+
+function runStepIndex(r: RunRow): number {
+  const hasSlips = r.slip_count > 0;
+  if (r.run_type === "internal") {
+    if (r.status === "final") return 2;
+    return hasSlips || r.status === "finance_processing" ? 1 : 0;
+  }
+  switch (r.status) {
+    case "submitted_to_client":
+      return 1;
+    case "client_approved":
+      return 2;
+    case "finance_processing":
+      return 3;
+    case "final":
+      return 4;
+    default: // draft / client_rejected
+      return hasSlips ? 1 : 0;
+  }
+}
+
+function RunSteps({ run }: { run: RunRow }) {
+  const steps = RUN_STEPS[run.run_type];
+  const current = runStepIndex(run);
+  return (
+    <div className="mt-1 flex items-center gap-1.5" title={steps.join(" → ")}>
+      <div className="flex gap-0.5" aria-hidden="true">
+        {steps.map((step, i) => (
+          <span
+            key={step}
+            className="h-1.5 w-4 rounded-full"
+            style={{ backgroundColor: i <= current ? "var(--accent)" : "var(--border)" }}
+          />
+        ))}
+      </div>
+      <span className="text-xs" style={{ color: "var(--th-color)" }}>
+        Langkah {current + 1}/{steps.length}: {steps[current]}
+      </span>
+    </div>
+  );
 }
 
 interface ClientRow {
@@ -284,7 +337,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
   if (!runId)
     return (
       <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>
-        Pilih payroll run (klik "Slip Gaji") untuk melihat grid Saltab.
+        Pilih payroll run (klik "Lihat Slip") untuk melihat grid Saltab.
       </p>
     );
   if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
@@ -597,7 +650,8 @@ function SaltabTable({ runId }: { runId: string | null }) {
 
 export default function Payroll() {
   const qc = useQueryClient();
-  const [period, setPeriod] = useState({ year: 2026, month: 8 });
+  // Dulu hardcode { year: 2026, month: 8 } -- halaman selalu terbuka di Agustus 2026.
+  const [period, setPeriod] = useState(currentPeriod);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runType, setRunType] = useState<"internal" | "proyek">("internal");
   const [createClientId, setCreateClientId] = useState("");
@@ -692,6 +746,73 @@ export default function Payroll() {
   });
   // Finalisasi tidak bisa dibatalkan (tidak ada reopen di backend) dan memposting
   // jurnal otomatis -- wajib dialog modal + ketik periode, bukan klik langsung.
+  /** Satu tombol untuk langkah berikutnya run ini (lihat RUN_STEPS). */
+  function renderNextAction(r: RunRow) {
+    const editable = r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected");
+    if (editable && r.slip_count === 0) {
+      return (
+        <Button size="sm" disabled={generateSlips.isPending} onClick={() => generateSlips.mutate(r.id)}>
+          Generate Slip
+        </Button>
+      );
+    }
+    if (editable && r.run_type === "proyek") {
+      return (
+        <Button
+          size="sm"
+          disabled={submitToClient.isPending}
+          onClick={() =>
+            submitToClient.mutate(r.id, {
+              onSuccess: (d) => setClientLink({ link: d.link, expires: d.expires_at }),
+            })
+          }
+        >
+          {r.status === "client_rejected" ? "Kirim Ulang ke Klien" : "Kirim ke Klien"}
+        </Button>
+      );
+    }
+    if ((editable && r.run_type === "internal") || r.status === "finance_processing") {
+      return (
+        <Button size="sm" variant="danger" disabled={finalizeRun.isPending} onClick={() => askFinalize(r)}>
+          Finalisasi…
+        </Button>
+      );
+    }
+    if (r.status === "client_approved") {
+      return (
+        <Button size="sm" disabled={startProcessing.isPending} onClick={() => startProcessing.mutate(r.id)}>
+          Mulai Proses Finance
+        </Button>
+      );
+    }
+    if (r.status === "submitted_to_client") {
+      return (
+        <span className="text-xs" style={{ color: "var(--th-color)" }}>
+          Menunggu keputusan klien
+        </span>
+      );
+    }
+    if (r.status === "final") {
+      return (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={createPr.isPending}
+          title="Ajukan Payment Request pembayaran gaji"
+          onClick={() =>
+            createPr.mutate(
+              { payroll_run_id: r.id, pr_type: r.run_type },
+              { onSuccess: () => window.location.assign("/payment-requests") }
+            )
+          }
+        >
+          + Payment Request
+        </Button>
+      );
+    }
+    return null;
+  }
+
   function askFinalize(r: RunRow) {
     const period = `${r.month}/${r.year}`;
     confirmDialog({
@@ -754,22 +875,7 @@ export default function Payroll() {
         showRangePicker={false}
         actions={
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            value={period.month}
-            min={1}
-            max={12}
-            onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
-            className="input w-20"
-            aria-label="Bulan periode payroll"
-          />
-          <input
-            type="number"
-            value={period.year}
-            onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
-            className="input w-24"
-            aria-label="Tahun periode payroll"
-          />
+          <PeriodPicker value={period} onChange={setPeriod} label="periode payroll" />
           <select
             value={runType}
             onChange={(e) => setRunType(e.target.value as "internal" | "proyek")}
@@ -981,74 +1087,30 @@ export default function Payroll() {
                   </td>
                   <td className="td py-1.5">
                     <StatusPill domain="payroll_run" status={r.status} />
+                    <RunSteps run={r} />
                   </td>
-                  <td className="td py-1.5 space-x-2 whitespace-nowrap text-sm">
-                    <button onClick={() => setSelectedRunId(r.id)} style={{ color: "var(--accent)" }} className="font-medium hover:opacity-80">
-                      Slip Gaji
-                    </button>
-                    {(r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
-                      <>
-                        <button onClick={() => generateSlips.mutate(r.id)} style={{ color: "var(--text-muted)" }} className="hover:opacity-80">
-                          Generate
-                        </button>
-                        {r.run_type === "proyek" ? (
+                  <td className="td py-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {renderNextAction(r)}
+                      <button
+                        onClick={() => setSelectedRunId(r.id)}
+                        className="btn-ghost text-xs"
+                        title="Lihat slip gaji & grid Saltab run ini"
+                      >
+                        Lihat Slip
+                      </button>
+                      {r.slip_count > 0 &&
+                        (r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
                           <button
-                            onClick={() =>
-                              submitToClient.mutate(r.id, {
-                                onSuccess: (d) => setClientLink({ link: d.link, expires: d.expires_at }),
-                              })
-                            }
-                            style={{ color: "var(--accent)" }}
-                            className="font-medium hover:opacity-80"
+                            onClick={() => generateSlips.mutate(r.id)}
+                            disabled={generateSlips.isPending}
+                            className="btn-ghost text-xs"
+                            title="Hanya menambah slip untuk karyawan aktif yang belum punya slip; slip yang sudah ada tidak diubah."
                           >
-                            Kirim ke Klien
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => askFinalize(r)}
-                            disabled={finalizeRun.isPending}
-                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                          >
-                            Finalisasi
+                            Generate lagi
                           </button>
                         )}
-                      </>
-                    )}
-                    {r.status === "client_approved" && (
-                      <button onClick={() => startProcessing.mutate(r.id)} className="font-medium text-blue-600 hover:text-blue-800">
-                        Mulai Proses Finance
-                      </button>
-                    )}
-                    {r.status === "finance_processing" && (
-                      <button
-                            onClick={() => askFinalize(r)}
-                            disabled={finalizeRun.isPending}
-                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                          >
-                        Finalisasi
-                      </button>
-                    )}
-                    {r.status === "submitted_to_client" && (
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>menunggu keputusan klien</span>
-                    )}
-                    {r.status === "final" && (
-                      <button
-                        onClick={() =>
-                          createPr.mutate(
-                            { payroll_run_id: r.id, pr_type: r.run_type },
-                            {
-                              onSuccess: () =>
-                                window.location.assign("/payment-requests"),
-                            }
-                          )
-                        }
-                        style={{ color: "var(--accent)" }}
-                        className="font-medium hover:opacity-80"
-                        title="Ajukan Payment Request pembayaran gaji"
-                      >
-                        + Payment Request
-                      </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );

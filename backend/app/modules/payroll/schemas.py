@@ -107,6 +107,10 @@ class RunOut(BaseModel):
     status: PayrollRunStatus
     finalized_at: datetime | None
     created_at: datetime
+    # Jumlah slip di run ini -- UI memakai ini untuk menentukan langkah
+    # berikutnya (Generate dulu vs Finalisasi/Kirim ke Klien). Hanya diisi di
+    # GET /runs; endpoint lain default 0.
+    slip_count: int = 0
 
 
 class ClientLinkCreate(BaseModel):

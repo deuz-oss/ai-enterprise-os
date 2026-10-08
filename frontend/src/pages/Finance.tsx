@@ -105,7 +105,7 @@ const KODE_TRANSAKSI_OPTIONS = [
 export default function Finance() {
   const qc = useQueryClient();
   const [showGenerate, setShowGenerate] = useState(false);
-  const [cfYear, setCfYear] = useState(2026);
+  const [cfYear, setCfYear] = useState(() => new Date().getFullYear());
   const [forecast, setForecast] = useState<ForecastResult | null>(null);
   const [fakturOpenId, setFakturOpenId] = useState<string | null>(null);
   const [fakturError, setFakturError] = useState<string | null>(null);

@@ -1,3 +1,4 @@
+import { PeriodPicker } from "../components/ui";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -83,22 +84,7 @@ export default function ClientPortal() {
           {data.client_name} &middot; Rekap kehadiran &amp; lembur karyawan
         </p>
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1}
-            max={12}
-            value={period.month}
-            onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
-            className="input w-20"
-            aria-label="Bulan"
-          />
-          <input
-            type="number"
-            value={period.year}
-            onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
-            className="input w-24"
-            aria-label="Tahun"
-          />
+          <PeriodPicker value={period} onChange={setPeriod} label="periode laporan" />
         </div>
       </div>
 

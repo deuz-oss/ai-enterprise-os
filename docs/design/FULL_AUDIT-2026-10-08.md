@@ -35,6 +35,9 @@ requirements.
 > adopted on the pages with no error UI, single date formatters, semantic
 > status tokens + `.num`. Rolling `.num`/`TableStateRow` out to every table is
 > Phase 3 (`DataTable`).
+> **Phase 2** implemented as CHANGELOG "Fase 69": Pipeline side panel with
+> `?lead=` URL, Payroll run stepper + `slip_count`, `PeriodPicker`, tablet
+> header fix, dead period control removed, FAB padding, English nav labels.
 
 ---
 

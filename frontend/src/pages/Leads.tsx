@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, downloadFile, formatCurrency, formatRupiah } from "../api/client";
 import {
@@ -23,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, KpiCard } from "../components/ui";
+import { Badge, EmptyState, KpiCard } from "../components/ui";
 import { confirmToast, promptToast } from "../components/ui/dialogToast";
 import { Pagination } from "../components/Pagination";
 import { CustomFieldsSection } from "../components/CustomFieldsSection";
@@ -211,7 +212,53 @@ export default function Leads() {
   const [showImport, setShowImport] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importResult, setImportResult] = useState<LeadImportResult | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Lead terpilih disimpan di URL (`/leads?lead=<id>`) -- bisa dibagikan,
+  // tombol Back menutup panel, dan refresh tetap membuka lead yang sama.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get("lead");
+  const setSelectedId = (id: string | null) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set("lead", id);
+        else next.delete("lead");
+        return next;
+      },
+      // Hanya MEMBUKA panel yang menambah entri history; ganti lead / tutup
+      // menimpa, supaya Back tidak membuka lagi lead yang baru ditutup.
+      { replace: Boolean(selectedId) }
+    );
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerTriggerRef = useRef<Element | null>(null);
+  useEffect(() => {
+    if (!selectedId) {
+      const trigger = drawerTriggerRef.current;
+      drawerTriggerRef.current = null;
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+      return;
+    }
+    // Ingat pemicu terakhir di luar panel (baris yang diklik), supaya fokus
+    // kembali ke baris itu saat panel ditutup -- termasuk saat ganti lead.
+    const active = document.activeElement;
+    if (active && !drawerRef.current?.contains(active)) drawerTriggerRef.current = active;
+    drawerRef.current?.focus();
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const target = e.target as HTMLElement | null;
+      // Jangan buang isian yang sedang diketik (form aktivitas/kontak).
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("lead");
+          return next;
+        },
+        { replace: true }
+      );
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedId, setSearchParams]);
   const [view, setView] = useState<"tabel" | "papan">("tabel");
   const [offset, setOffset] = useState(0);
   const [stageFilter, setStageFilter] = useState("");
@@ -1086,7 +1133,39 @@ export default function Leads() {
       )}
 
       {selectedId && (
-        <div className="card">
+        <>
+          {/* Latar hanya di layar sempit, di desktop tabel tetap bisa diklik
+              untuk pindah lead tanpa menutup panel. */}
+          <div className="fixed inset-0 top-14 z-30 bg-black/30 lg:hidden" aria-hidden="true" onClick={() => setSelectedId(null)} />
+          {/* Panel non-modal (bukan <dialog> modal): isi panel memakai
+              confirmToast/promptToast sonner, yang tidak bisa diklik di bawah
+              top layer dialog modal. */}
+          <aside
+            ref={drawerRef}
+            tabIndex={-1}
+            aria-label="Detail lead"
+            className="fixed bottom-0 right-0 top-14 z-40 w-full max-w-[640px] overflow-y-auto p-4 shadow-xl outline-none sm:p-5"
+            style={{ backgroundColor: "var(--bg-elevated)", borderLeft: "1px solid var(--border)" }}
+          >
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              className="btn-ghost inline-flex items-center gap-1.5"
+              onClick={() => setSelectedId(null)}
+              aria-label="Tutup detail lead"
+            >
+              <X className="h-4 w-4" aria-hidden="true" /> Tutup
+            </button>
+          </div>
+          {!leadsLookup?.some((l) => l.id === selectedId) ? (
+            leadsLookup && (
+              <EmptyState
+                title="Lead tidak ditemukan."
+                description="Lead mungkin sudah dihapus atau tautannya salah."
+              />
+            )
+          ) : (
+          <>
           {(() => {
             const lead = leadsLookup?.find((l) => l.id === selectedId);
             if (!lead) return null;
@@ -1587,7 +1666,10 @@ export default function Leads() {
               </li>
             )}
           </ul>
-        </div>
+          </>
+          )}
+          </aside>
+        </>
       )}
     </div>
   );

@@ -230,6 +230,21 @@ def test_finalize_run_locks(client):
     assert again.status_code == 409  # run final terkunci
 
 
+def test_list_runs_menyertakan_slip_count(client):
+    """UI Payroll memilih langkah berikutnya dari slip_count (Phase 2 audit)."""
+    headers = _auth_header(client)
+    _create_employee(client, headers)
+    run = _create_run(client, headers)
+
+    def count() -> int:
+        runs = client.get("/api/v1/payroll/runs", headers=headers).json()
+        return next(r for r in runs if r["id"] == run["id"])["slip_count"]
+
+    assert count() == 0
+    client.post(f"/api/v1/payroll/runs/{run['id']}/generate", headers=headers, json={})
+    assert count() == 1
+
+
 def test_duplicate_run_rejected(client):
     headers = _auth_header(client)
     _create_run(client, headers, year=2026, month=7)

@@ -5,9 +5,10 @@ import secrets
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
@@ -173,6 +174,12 @@ def create_run(db: Session, payload: RunCreate) -> PayrollRun:
 def list_runs(db: Session) -> list[PayrollRun]:
     stmt = select(PayrollRun).order_by(PayrollRun.year.desc(), PayrollRun.month.desc())
     return list(db.execute(stmt).scalars())
+
+
+def slip_counts(db: Session) -> dict[UUID, int]:
+    """Jumlah slip per run dalam satu query (bukan memuat semua slip)."""
+    rows = db.execute(select(Payslip.run_id, func.count(Payslip.id)).group_by(Payslip.run_id)).all()
+    return {run_id: int(count) for run_id, count in rows}
 
 
 def get_run(db: Session, run_id: str) -> PayrollRun:

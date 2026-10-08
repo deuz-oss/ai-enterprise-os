@@ -4,7 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
 import { api, downloadFile, formatDate, formatRupiah, formatTime, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, confirmDialog, confirmToast, DetailLoadState, PillTabs } from "../components/ui";
+import {
+  Badge,
+  confirmDialog,
+  confirmToast,
+  DetailLoadState,
+  PeriodPicker,
+  PillTabs,
+} from "../components/ui";
 import type { EmployeeRow } from "./Employees";
 
 /** Halaman detail karyawan (`/employees/:id`) -- konsolidasi 11 seksi yang
@@ -1854,22 +1861,7 @@ export default function EmployeeDetail() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="font-semibold" style={{ color: "var(--text)" }}>Rekap Bulanan</h2>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={12}
-                      value={attPeriod.month}
-                      onChange={(e) => setAttPeriod({ ...attPeriod, month: Number(e.target.value) })}
-                      className="input w-20"
-                      aria-label="Bulan"
-                    />
-                    <input
-                      type="number"
-                      value={attPeriod.year}
-                      onChange={(e) => setAttPeriod({ ...attPeriod, year: Number(e.target.value) })}
-                      className="input w-24"
-                      aria-label="Tahun"
-                    />
+                    <PeriodPicker value={attPeriod} onChange={setAttPeriod} label="rekap absensi" />
                   </div>
                 </div>
                 {attendanceSummary ? (
@@ -2438,7 +2430,7 @@ export default function EmployeeDetail() {
                 </h2>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                   Kosong = absen bebas di mana saja. Terisi = wajib clock-in/out dalam radius
-                  lokasi itu (dikelola di halaman Klien, kartu &ldquo;Lokasi Kantor&rdquo;).
+                  lokasi itu (dikelola di halaman Clients, kartu &ldquo;Lokasi Kantor&rdquo;).
                 </p>
                 <select
                   key={`site-${employee.site_id ?? "none"}`}

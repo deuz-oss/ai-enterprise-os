@@ -88,12 +88,12 @@ const CATEGORY_ORDER: Category[] = [
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", end: true },
   { to: "/leads", label: "Pipeline", bundle: "crm" },
-  { to: "/clients", label: "Klien", bundle: "crm" },
-  { to: "/quotations", label: "Quotation", bundle: "crm" },
-  { to: "/agreements", label: "Agreement", bundle: "crm" },
+  { to: "/clients", label: "Clients", bundle: "crm" },
+  { to: "/quotations", label: "Quotations", bundle: "crm" },
+  { to: "/agreements", label: "Agreements", bundle: "crm" },
   { to: "/suppressed-contacts", label: "Suppression List", bundle: "crm" },
   { to: "/job-orders", label: "Job Orders", bundle: "recruitment" },
-  { to: "/referral", label: "Referral", bundle: "recruitment" },
+  { to: "/referral", label: "Referrals", bundle: "recruitment" },
   {
     to: "/talent-pool",
     label: "Talent Pool",
@@ -108,14 +108,14 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/blacklist",
-    label: "Black Lists",
+    label: "Blacklist",
     bundle: "recruitment",
     roles: ["admin", "recruiter", "management"],
   },
-  { to: "/employees", label: "Karyawan", bundle: "workforce" },
+  { to: "/employees", label: "Employees", bundle: "workforce" },
   {
     to: "/attendance",
-    label: "Absensi",
+    label: "Attendance",
     bundle: "workforce",
     roles: ["admin", "hr", "operations", "management"],
   },
@@ -124,18 +124,18 @@ const NAV_ITEMS: NavItem[] = [
   // desain Fase 28 (docs/design/design.md §7), beda dari pengelompokan
   // Opsi F lama yang menyatukan payroll dengan Revenue Cloud.
   { to: "/payroll", label: "Payroll", bundle: "workforce" },
-  { to: "/portal-saya", label: "Portal Saya", roles: ["karyawan"], bundle: "workforce" },
+  { to: "/portal-saya", label: "My Portal", roles: ["karyawan"], bundle: "workforce" },
   // Payment Request ada di Finance & Accounting sesuai referensi definitif
   // component-implementation-spec.md §3.0 -- sebelumnya salah taruh di
   // Workforce tanpa alasan terdokumentasi (temuan 2026-09-06).
   {
     to: "/payment-requests",
-    label: "Payment Request",
+    label: "Payment Requests",
     bundle: "finance_accounting",
     roles: ["admin", "operations", "hr", "finance", "management"],
   },
   { to: "/finance", label: "Finance", bundle: "finance_accounting" },
-  { to: "/accounting", label: "Akunting", bundle: "finance_accounting" },
+  { to: "/accounting", label: "Accounting", bundle: "finance_accounting" },
   // Kelola rate ber-versi — role finance ke atas.
   {
     to: "/rates",
@@ -147,7 +147,7 @@ const NAV_ITEMS: NavItem[] = [
   // seperti Rate Configuration.
   {
     to: "/billing",
-    label: "Pembayaran",
+    label: "Billing",
     roles: ["admin", "finance", "management"],
     bundle: "administration",
   },
@@ -155,10 +155,10 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/audit", label: "Audit", roles: ["admin", "management"], bundle: "administration" },
   // Kelola akun tim & role — hanya admin (dibutuhkan utk buat akun role "karyawan"
   // sebelum bisa ditautkan ke data karyawan di halaman People & Ops).
-  { to: "/users", label: "Pengguna", roles: ["admin"], bundle: "administration" },
+  { to: "/users", label: "Users", roles: ["admin"], bundle: "administration" },
   // Manajemen tenant SaaS — hanya platform_admin (Brian), menu tersendiri
   // (dulu cuma bisa diakses lewat URL langsung, tanpa link menu apa pun).
-  { to: "/platform", label: "Manajemen Tenant", roles: ["platform_admin"] },
+  { to: "/platform", label: "Tenant Management", roles: ["platform_admin"] },
 ];
 
 // Emoji untuk command palette (hasil pencarian entitas di CommandPalette.tsx
@@ -439,8 +439,6 @@ export default function Layout() {
     .join("")
     .toUpperCase();
 
-  const periodLabelRaw = new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-  const periodLabel = periodLabelRaw.charAt(0).toUpperCase() + periodLabelRaw.slice(1);
 
   // --accent TIDAK pernah di-override per halaman — tetap warisi default
   // tema (:root/.dark) di semua tempat (logo, tombol primer, highlight nav
@@ -485,7 +483,7 @@ export default function Layout() {
 
         {me.data?.tenant_name && (
           <span
-            className="hidden shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm md:flex"
+            className="hidden shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm lg:flex"
             style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg)" }}
             title="Workspace aktif"
           >
@@ -521,15 +519,6 @@ export default function Layout() {
           >
             <Search className="h-[18px] w-[18px]" />
           </button>
-          <button
-            className="hidden cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm sm:flex"
-            style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)", color: "var(--text)" }}
-            title="Periode tampilan (segera dapat difilter)"
-          >
-            <Calendar className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
-            {periodLabel}
-            <ChevronDown className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
-          </button>
           {balance.data && (() => {
             const totalRemaining = balance.data.cycle_remaining + balance.data.credit_balance;
             // Persentase cuma bermakna relatif ke jatah bulanan langganan --
@@ -559,7 +548,7 @@ export default function Layout() {
                     e.stopPropagation();
                     navigate("/billing", { state: { tab: "topup" } });
                   }}
-                  className="ml-1 shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium text-white transition-colors hover:brightness-110"
+                  className="ml-1 hidden shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium text-white transition-colors hover:brightness-110 xl:inline-flex"
                   style={{ backgroundColor: solidBg }}
                 >
                   Top Up
@@ -601,12 +590,12 @@ export default function Layout() {
                 {initials}
               </span>
               <span
-                className="hidden max-w-[140px] truncate text-sm font-medium sm:block"
+                className="hidden max-w-[140px] truncate text-sm font-medium lg:block"
                 style={{ color: "var(--text)" }}
               >
                 {me.data?.full_name ?? "..."}
               </span>
-              <ChevronDown className="hidden h-4 w-4 shrink-0 sm:block" style={{ color: "var(--text-muted)" }} />
+              <ChevronDown className="hidden h-4 w-4 shrink-0 lg:block" style={{ color: "var(--text-muted)" }} />
             </button>
             {accountMenuOpen && (
               <div
@@ -720,7 +709,9 @@ export default function Layout() {
 
         {/* ===== Konten ===== */}
         <main className="min-h-[calc(100vh-56px)] flex-1 overflow-x-auto">
-          <div className="mx-auto w-full max-w-[1440px] px-4 py-5 lg:px-6 lg:py-6">
+          {/* pb-24: ruang di bawah supaya FAB "Tanya AEOS AI" tidak menutupi
+              baris/tombol terakhir halaman (audit 2026-10-08 §7 U7). */}
+          <div className="mx-auto w-full max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pt-6">
             <Suspense fallback={<PageFallback />}>
               <Outlet />
             </Suspense>
@@ -733,7 +724,7 @@ export default function Layout() {
         <>
           {!helpDismissed && (
             <div
-              className="fixed bottom-4 left-4 z-20 hidden items-center gap-2 rounded-lg px-3 py-2 text-[11.5px] md:flex"
+              className="fixed bottom-4 left-4 z-20 hidden items-center gap-2 rounded-lg px-3 py-2 text-[11.5px] md:flex lg:left-[17rem]"
               style={{
                 backgroundColor: "var(--bg-elevated)",
                 border: "1px solid var(--border)",

@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 69: Audit 2026-10-08 Phase 2 (UX inti)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §7, §9, §10.
+- **Pipeline**: detail lead kini panel kanan yang langsung terlihat (dulu dirender di bawah seluruh tabel, di luar layar). Lead terpilih ada di URL (`/leads?lead=<id>`) sehingga bisa dibagikan/di-refresh; Escape menutup (kecuali saat mengetik), fokus kembali ke baris pemicu. Panel non-modal agar konfirmasi toast di dalamnya tetap bisa diklik.
+- **Payroll — stepper per run**: tiap run menampilkan tahapnya (internal: Generate slip → Finalisasi → Payment Request; proyek: + Approval klien → Proses finance) dan SATU tombol langkah berikutnya, menggantikan 3–4 link teks sejajar. Finalisasi tidak lagi ditawarkan sebelum slip dibuat (dulu berakhir 422). `GET /payroll/runs` kini menyertakan `slip_count` (satu query COUNT).
+- **Fixed**: periode Payroll di-hardcode Agustus 2026; tahun default Akuntansi & cashflow Finance di-hardcode 2026. Kini mengikuti tanggal berjalan.
+- `PeriodPicker` (bulan sebagai pilihan bernama + tahun) menggantikan input angka bulan di Payroll, Absensi, rekap absensi Karyawan, susutan Akuntansi, dan portal klien.
+- **Header**: tidak lagi melebar ke 1011 px di tablet 820 px (seluruh halaman tergeser horizontal); tombol periode "Oktober 2026" yang tidak berfungsi dihapus; nama user, chip workspace, dan tombol Top Up hanya tampil di layar lebar.
+- FAB "Tanya AEOS AI" tidak lagi menutupi baris/tombol terakhir halaman (padding bawah konten); chip bantuan ⌘K tidak lagi menimpa tombol Mode Gelap di sidebar.
+- **Label navigasi diseragamkan ke Bahasa Inggris** (keputusan produk): Clients, Quotations, Agreements, Referrals, Blacklist, Employees, Attendance, My Portal, Payment Requests, Accounting, Billing, Users, Tenant Management. Judul halaman belum diubah.
+
 ### Changed — Fase 68: Audit 2026-10-08 Phase 1 (fondasi design system)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §12–§13.

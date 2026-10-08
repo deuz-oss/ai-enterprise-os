@@ -1,7 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
-import { PreflightAlert } from "../components/ui";
+import { PeriodPicker, PreflightAlert } from "../components/ui";
 import { api, downloadFile, formatTime } from "../api/client";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
@@ -161,22 +161,7 @@ export default function Attendance() {
       </CalloutBlock>
 
       <div className="card flex flex-wrap items-center gap-2">
-        <input
-          type="number"
-          value={period.month}
-          min={1}
-          max={12}
-          onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
-          className="input w-20"
-          aria-label="Bulan"
-        />
-        <input
-          type="number"
-          value={period.year}
-          onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })}
-          className="input w-24"
-          aria-label="Tahun"
-        />
+        <PeriodPicker value={period} onChange={setPeriod} label="periode absensi" />
         {/* C2: toggle Tabel / Kalender ala segmented view */}
         <div
           className="flex overflow-hidden rounded text-sm"

@@ -517,7 +517,7 @@ export default function ClientDetail() {
               <h2 className="font-semibold" style={{ color: "var(--text)" }}>Lokasi Kantor</h2>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 Klien dengan banyak cabang bisa punya beberapa lokasi. Karyawan yang ditautkan ke
-                salah satu lokasi ini (di halaman Karyawan) wajib absen dalam radiusnya; tanpa
+                salah satu lokasi ini (di halaman Employees) wajib absen dalam radiusnya; tanpa
                 lokasi, absen tetap bebas seperti biasa.
               </p>
             </div>

@@ -62,7 +62,11 @@ def set_client_approval(
 
 @router.get("/runs", response_model=list[RunOut])
 def list_runs(db: Session = Depends(get_db)):
-    return service.list_runs(db)
+    counts = service.slip_counts(db)
+    return [
+        RunOut.model_validate(run).model_copy(update={"slip_count": counts.get(run.id, 0)})
+        for run in service.list_runs(db)
+    ]
 
 
 @router.post("/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)

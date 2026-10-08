@@ -126,7 +126,7 @@ export default function Referral() {
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Pengaturan Program</h2>
         <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
           Karyawan yang mereferensikan kandidat dapat kode referral otomatis
-          (lihat halaman Karyawan). Reward cair otomatis 3 bulan setelah
+          (lihat halaman Employees). Reward cair otomatis 3 bulan setelah
           kandidat placement.
         </p>
         <form

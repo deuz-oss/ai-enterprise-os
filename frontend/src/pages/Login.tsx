@@ -260,7 +260,7 @@ export default function Login() {
                     Akses mengikuti status langganan tenant
                   </div>
                   <div className="text-amber-800 dark:text-amber-400">
-                    Jika akses terkunci, minta admin tenant memilih paket di halaman Pembayaran,
+                    Jika akses terkunci, minta admin tenant memilih paket di halaman Billing,
                     atau hubungi platform admin.
                   </div>
                 </div>
