@@ -1,3 +1,4 @@
+import { PayrollRunReview, type RunReview } from "../components/PayrollRunReview";
 import type { ClientRow } from "./Clients";
 import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useRef, useState } from "react";
@@ -819,8 +820,13 @@ export default function Payroll() {
     }
     if ((editable && r.run_type === "internal") || r.status === "finance_processing") {
       return (
-        <Button size="sm" variant="danger" disabled={finalizeRun.isPending} onClick={() => askFinalize(r)}>
-          Finalisasi…
+        <Button
+          size="sm"
+          variant="danger"
+          disabled={finalizeRun.isPending || reviewingRunId === r.id}
+          onClick={() => askFinalize(r)}
+        >
+          {reviewingRunId === r.id ? "Meninjau…" : "Finalisasi…"}
         </Button>
       );
     }
@@ -859,12 +865,31 @@ export default function Payroll() {
     return null;
   }
 
-  function askFinalize(r: RunRow) {
+  // Tinjauan dulu (Phase 6 audit): dialog Finalisasi menampilkan perubahan
+  // dibanding run final sebelumnya. Gagal memuat tinjauan tidak memblokir.
+  const [reviewingRunId, setReviewingRunId] = useState<string | null>(null);
+  async function askFinalize(r: RunRow) {
     const period = `${r.month}/${r.year}`;
+    setReviewingRunId(r.id);
+    let review: RunReview | null = null;
+    try {
+      review = await api.get<RunReview>(`/payroll/runs/${r.id}/review`);
+    } catch {
+      review = null;
+    } finally {
+      setReviewingRunId(null);
+    }
     confirmDialog({
       title: `Finalisasi payroll ${period}?`,
       message:
         "Run akan dikunci, slip gaji tidak bisa diubah lagi, dan jurnal payroll diposting otomatis ke akuntansi. Tindakan ini tidak bisa dibatalkan.",
+      details: review ? (
+        <PayrollRunReview review={review} />
+      ) : (
+        <p className="text-sm" style={{ color: "var(--th-color)" }}>
+          Tinjauan otomatis gagal dimuat -- periksa slip secara manual sebelum melanjutkan.
+        </p>
+      ),
       confirmLabel: "Finalisasi & Kunci",
       requireText: period,
       onConfirm: () =>

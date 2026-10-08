@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
 /**
@@ -24,6 +24,8 @@ export interface ConfirmDialogOptions {
   tone?: "danger" | "primary";
   /** Kalau diisi, user wajib mengetik teks ini persis sebelum tombol aktif. */
   requireText?: string;
+  /** Konten tambahan di bawah pesan (mis. hasil tinjauan sebelum finalisasi). */
+  details?: ReactNode;
   onConfirm: () => void;
 }
 
@@ -93,7 +95,9 @@ export function ConfirmDialogHost() {
       onClose={handleClosed}
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-message"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl p-0 backdrop:bg-black/45"
+      className={`m-auto w-[calc(100%-2rem)] rounded-xl p-0 backdrop:bg-black/45 ${
+        options?.details ? "max-w-2xl" : "max-w-md"
+      }`}
       style={{
         backgroundColor: "var(--bg-elevated)",
         color: "var(--text)",
@@ -122,6 +126,12 @@ export function ConfirmDialogHost() {
               </p>
             </div>
           </div>
+
+          {options.details && (
+            <div className="max-h-[50vh] overflow-y-auto rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              {options.details}
+            </div>
+          )}
 
           {options.requireText && (
             <div className="space-y-1.5">

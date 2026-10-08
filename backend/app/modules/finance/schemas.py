@@ -119,3 +119,14 @@ class CashFlowSummary(BaseModel):
     inflow: float
     outflow: float
     net: float
+
+
+class ReminderDraftOut(BaseModel):
+    """Draf pengingat pembayaran (Phase 6 audit) -- tidak dikirim otomatis."""
+
+    invoice_id: str
+    to: str | None
+    subject: str
+    body: str
+    days_overdue: int
+    source: str  # ai | template

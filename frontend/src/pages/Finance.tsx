@@ -1,3 +1,4 @@
+import { ReminderDraftDialog, type ReminderDraft } from "../components/ReminderDraftDialog";
 import type { ClientRow } from "./Clients";
 import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
@@ -459,6 +460,13 @@ export default function Finance() {
       invalidate();
     },
   });
+  // Collection assistant (Phase 6 audit): draf email, tidak dikirim otomatis.
+  const [reminderDraft, setReminderDraft] = useState<ReminderDraft | null>(null);
+  const reminder = useMutation({
+    mutationFn: (invoiceId: string) => api.post<ReminderDraft>(`/finance/invoices/${invoiceId}/reminder-draft`),
+    onSuccess: setReminderDraft,
+    onError: (e) => toast.error(`Gagal menyusun draf: ${(e as Error).message}`),
+  });
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/finance/invoices/${id}`, { status }),
@@ -643,22 +651,40 @@ export default function Finance() {
         emptyTitle={invoices?.length === 0 ? "Belum ada invoice." : "Tidak ada invoice untuk status ini."}
       />
 
+      {reminderDraft && <ReminderDraftDialog draft={reminderDraft} onClose={() => setReminderDraft(null)} />}
+
       <div className="card">
         <h2 className="font-semibold text-rose-700 dark:text-rose-400">Aging — Tagihan Terlambat</h2>
         {(aging ?? []).length === 0 ? (
           <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>Tidak ada tagihan lewat jatuh tempo.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
-            {aging!.map((a) => (
-              <li key={a.invoice_id} className="flex justify-between rounded-lg bg-rose-50 p-2 dark:bg-rose-500/10">
-                <span>
-                  {a.client_name} · {a.invoice_no}
-                </span>
-                <span className="font-medium text-rose-700 dark:text-rose-400">
-                  {formatRupiah(a.total_due)} · {a.days_overdue} hari ({a.bucket})
-                </span>
-              </li>
-            ))}
+            {/* Terlama dulu = prioritas penagihan. */}
+            {[...aging!]
+              .sort((x, y) => y.days_overdue - x.days_overdue)
+              .map((a) => (
+                <li
+                  key={a.invoice_id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-rose-50 p-2 dark:bg-rose-500/10"
+                >
+                  <span>
+                    {a.client_name} · {a.invoice_no}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <span className="font-medium tabular-nums text-rose-700 dark:text-rose-400">
+                      {formatRupiah(a.total_due)} · {a.days_overdue} hari ({a.bucket})
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary px-2 py-1 text-xs"
+                      disabled={reminder.isPending && reminder.variables === a.invoice_id}
+                      onClick={() => reminder.mutate(a.invoice_id)}
+                    >
+                      {reminder.isPending && reminder.variables === a.invoice_id ? "Menyusun…" : "Draf pengingat"}
+                    </button>
+                  </span>
+                </li>
+              ))}
           </ul>
         )}
       </div>

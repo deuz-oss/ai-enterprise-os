@@ -50,6 +50,10 @@ requirements.
 > 2-1400), `useMe` + shared types, cache cleared on login/logout, Vitest in CI.
 > Correction: `/overview` is 17 ms / 27 constant queries in-process; the 4.1 s
 > in §13 and Top-20 #20 was the Docker stack on :8000, not the endpoint.
+> **Phase 6** as CHANGELOG "Fase 73": AI opportunities #1 (payroll
+> pre-finalize review) and #2 (receivables reminder drafts) shipped with
+> deterministic findings + optional, labelled AI text that never sends or
+> writes data. Opportunities #3-#10 remain open.
 
 ---
 

@@ -20,6 +20,7 @@ from app.modules.finance.schemas import (
     InvoiceGenerateRequest,
     InvoiceOut,
     InvoiceUpdate,
+    ReminderDraftOut,
     TaxInvoiceReplace,
     TaxInvoiceSet,
 )
@@ -165,6 +166,14 @@ def update_invoice(invoice_id: str, payload: InvoiceUpdate, db: Session = Depend
 @router.put("/invoices/{invoice_id}/tax-invoice", response_model=InvoiceOut)
 def set_tax_invoice(invoice_id: str, payload: TaxInvoiceSet, db: Session = Depends(get_db)):
     return service.set_tax_invoice(db, invoice_id, payload)
+
+
+@router.post("/invoices/{invoice_id}/reminder-draft", response_model=ReminderDraftOut)
+def reminder_draft(invoice_id: str, db: Session = Depends(get_db)):
+    """Draf email pengingat (tidak mengirim apa pun -- untuk disalin user)."""
+    from app.modules.finance.reminder import draft_payment_reminder
+
+    return draft_payment_reminder(db, invoice_id)
 
 
 @router.post("/invoices/{invoice_id}/tax-invoice/send", response_model=InvoiceOut)

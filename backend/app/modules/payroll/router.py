@@ -17,6 +17,7 @@ from app.modules.payroll.schemas import (
     PayslipOut,
     RunCreate,
     RunOut,
+    RunReviewOut,
     SalaryHoldCreate,
     SalaryHoldOut,
     SaltabComponentCreate,
@@ -67,6 +68,14 @@ def list_runs(db: Session = Depends(get_db)):
         RunOut.model_validate(run).model_copy(update={"slip_count": counts.get(run.id, 0)})
         for run in service.list_runs(db)
     ]
+
+
+@router.get("/runs/{run_id}/review", response_model=RunReviewOut)
+def review_run(run_id: str, db: Session = Depends(get_db)):
+    """Temuan deterministik vs run final sebelumnya, untuk dialog Finalisasi."""
+    from app.modules.payroll.review import review_run as build_review
+
+    return build_review(db, service.get_run(db, run_id))
 
 
 @router.post("/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)

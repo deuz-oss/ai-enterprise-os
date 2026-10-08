@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Fase 73: Audit 2026-10-08 Phase 6 (AI di dalam alur kerja)
+
+Prinsip: angka & temuan dihitung deterministik dari data; AI hanya merangkum/menyusun teks, diberi label, opsional (fitur tetap jalan tanpa `AI_BASE_URL`), dan tidak pernah mengubah data atau mengirim apa pun.
+- **Tinjauan sebelum finalisasi payroll**: `GET /payroll/runs/{id}/review` membandingkan run dengan run FINAL sebelumnya (jenis & klien sama) -- total bruto/net/PPh21/jumlah slip beserta selisih, plus temuan per karyawan: net pay negatif, bruto nol, net berubah ≥20%, PPh21 naik ≥50%, karyawan baru, karyawan yang hilang. Dialog Finalisasi kini menampilkan tinjauan ini di atas kolom ketik-periode; ringkasan AI 2-3 kalimat (`payroll.pre_finalize_review`) muncul bila AI aktif, diberi label "Ringkasan AI".
+- **Asisten penagihan**: daftar Aging di Finance diurutkan dari yang paling lama terlambat dan tiap baris punya "Draf pengingat" -- `POST /finance/invoices/{id}/reminder-draft` menyusun email pengingat (template; AI bila aktif, `finance.payment_reminder`). Draf AI ditolak & kembali ke template bila tidak memuat nomor invoice dan nominal persis dari sistem. Dialog menyediakan sunting, Salin, dan "Buka di email" -- aplikasi tidak mengirim apa pun.
+- **Fixed**: prediksi pembayaran klien (Akuntansi AI) masih menghitung invoice draft sebagai outstanding; kini memakai definisi piutang tunggal `RECEIVABLE_STATUSES`.
+- `ConfirmDialog` mendukung konten `details`.
+
 ### Fixed — Fase 72: Audit 2026-10-08 Phase 5 (uang Decimal di jurnal, data layer, unit test frontend)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md`.

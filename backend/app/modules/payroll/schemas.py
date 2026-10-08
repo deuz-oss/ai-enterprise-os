@@ -228,3 +228,36 @@ class EmployeePayslipOut(BaseModel):
     gross: float
     tax_pph21: float
     net_pay: float
+
+
+# ---------- Tinjauan sebelum finalisasi (Phase 6 audit) ----------
+
+
+class ReviewFinding(BaseModel):
+    severity: str  # high | medium | info
+    kind: str
+    employee_id: str | None
+    employee_name: str | None
+    message: str
+
+
+class ReviewTotal(BaseModel):
+    current: float
+    previous: float | None
+
+
+class ReviewPeriodRef(BaseModel):
+    run_id: str
+    period: str
+
+
+class RunReviewOut(BaseModel):
+    run_id: str
+    period: str
+    compared_to: ReviewPeriodRef | None
+    totals: dict[str, ReviewTotal]
+    findings: list[ReviewFinding]
+    findings_total: int
+    # Ringkasan AI opsional atas temuan di atas; None bila AI tidak aktif.
+    summary: str | None
+    summary_source: str  # ai | none

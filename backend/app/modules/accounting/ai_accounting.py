@@ -585,6 +585,7 @@ def predict_client_payments(db: Session) -> dict:
     paparan overdue berjalan. Prioritas = outstanding × skor risiko.
     """
     from app.modules.clients.models import Client
+    from app.modules.finance.service import RECEIVABLE_STATUSES
 
     today = date.today()
     invoices = db.execute(select(Invoice)).scalars().all()
@@ -612,7 +613,8 @@ def predict_client_payments(db: Session) -> dict:
         outstanding = [
             i
             for i in client_invs
-            if i.paid_at is None and i.status in (InvoiceStatus.draft, InvoiceStatus.sent)
+            # Definisi piutang tunggal (draft bukan piutang) -- lihat Phase 0.
+            if i.paid_at is None and i.status in RECEIVABLE_STATUSES
         ]
         outstanding_total = sum(float(i.total_due) for i in outstanding)
         overdue_total = sum(
