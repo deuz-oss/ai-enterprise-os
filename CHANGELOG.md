@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 68: Audit 2026-10-08 Phase 1 (fondasi design system)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §12–§13.
+- **Code splitting per route** (`App.tsx`, `React.lazy`): JS awal turun dari 2,25 MB (610 KB gzip) satu chunk menjadi 315 KB (96 KB gzip). Portal publik (karier, onboarding) tidak lagi mengunduh LiveKit/Tiptap/Recharts. Suspense halaman internal ada di Layout sehingga sidebar tetap tampil saat chunk dimuat; chunk gagal (deploy baru saat tab terbuka) memicu satu kali reload otomatis.
+- **Primitive state** `components/ui/states.tsx`: `Skeleton`, `EmptyState`, `ErrorState` (membedakan 403 "Tidak ada akses", 404, dan gagal jaringan/server dengan tombol Coba lagi), `QueryState`, `TableStateRow`, `DetailLoadState` (+ tautan kembali), dan `PageFallback`.
+- Dipakai di halaman yang sebelumnya tidak menampilkan error query sama sekali: Klien, Pengguna, Audit, Billing, Black Lists, Referral, Dashboard, dan detail Klien/Karyawan/Kandidat/Job Order. Sebelumnya API gagal atau 403 tampil sebagai "Belum ada data"; Klien menampilkan "Tidak ada klien untuk status ini" saat masih memuat.
+- **Fixed**: Dashboard dan detail Job Order menampilkan "Memuat..." selamanya bila request gagal atau record tidak ada.
+- Query tidak lagi di-retry untuk respons 4xx (403/404/422 tidak akan berubah); retry sekali hanya untuk jaringan/5xx. Sebelumnya halaman 403 tertahan di status loading, karena retry ditunda TanStack saat tab tidak fokus.
+- **Format tanggal tunggal** `formatDate` / `formatDateTime` / `formatTime` (`api/client.ts`) menggantikan 37 pemanggilan `toLocale*String` ad hoc dan ISO mentah di tabel Klien, Karyawan, Finance ("17 Agu 2026"). Tanggal `YYYY-MM-DD` diparse sebagai tanggal lokal.
+- Token status semantik `--success/--warning/--danger/--info/--danger-tint` (lolos AA di kedua tema) dan utilitas `.num` (rata kanan, tabular, nowrap) untuk kolom angka.
+
 ### Fixed — Fase 67: Audit 2026-10-08 Phase 0 (angka keuangan & aksi tak terbatalkan)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md`.

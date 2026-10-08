@@ -2,7 +2,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { PreflightAlert } from "../components/ui";
-import { api, downloadFile } from "../api/client";
+import { api, downloadFile, formatTime } from "../api/client";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 
@@ -457,8 +457,8 @@ export default function Attendance() {
                     <span className="pill p-gray">{STATUS_LABELS[r.status] ?? r.status}</span>
                   </td>
                   <td className="td text-xs">
-                    {r.clock_in ? new Date(r.clock_in).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "—"} /{" "}
-                    {r.clock_out ? new Date(r.clock_out).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    {r.clock_in ? formatTime(r.clock_in) : "—"} /{" "}
+                    {r.clock_out ? formatTime(r.clock_out) : "—"}
                   </td>
                   <td className="td">{r.overtime_hours}</td>
                   <td className="td text-xs">{r.source}</td>

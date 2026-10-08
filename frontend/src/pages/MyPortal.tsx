@@ -1,6 +1,6 @@
 import { FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatRupiah } from "../api/client";
+import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
 import {
   ArrowLeft,
   Bell,
@@ -900,7 +900,7 @@ export default function MyPortal() {
                 <td className="td font-medium">{d.title}</td>
                 <td className="td">{d.document_type}</td>
                 <td className="td">v{d.version}</td>
-                <td className="td">{new Date(d.uploaded_at).toLocaleDateString("id-ID")}</td>
+                <td className="td">{formatDate(d.uploaded_at)}</td>
                 <td className="td">
                   <button
                     onClick={() => openDownload(`/me/documents/${d.id}/download-url`)}
@@ -1386,7 +1386,7 @@ export default function MyPortal() {
                   </p>
                   {n.body && <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{n.body}</p>}
                   <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                    {new Date(n.created_at).toLocaleString("id-ID")}
+                    {formatDateTime(n.created_at)}
                   </p>
                 </div>
                 {!n.read_at && (

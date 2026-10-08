@@ -106,7 +106,8 @@ export function ConfirmDialogHost() {
           <div className="flex gap-3">
             {danger && (
               <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: "var(--danger-tint)", color: "var(--danger)" }}
                 aria-hidden="true"
               >
                 <AlertTriangle className="h-5 w-5" />

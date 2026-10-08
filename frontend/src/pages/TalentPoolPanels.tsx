@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile } from "../api/client";
+import { api, downloadFile, formatDateTime } from "../api/client";
 import { AiResultCard, type Screening } from "../components/Ai";
 import { CalloutBlock } from "../components/workspace";
 import { confirmToast } from "../components/ui";
@@ -384,7 +384,7 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
           {(activityLog.data ?? []).map((a) => (
             <li key={a.id} className="text-xs" style={{ color: "var(--th-color)" }}>
               <span style={{ color: "var(--text)" }}>{a.action}</span> ·{" "}
-              {new Date(a.created_at).toLocaleString("id-ID")}
+              {formatDateTime(a.created_at)}
             </li>
           ))}
           {activityLog.data?.length === 0 && (

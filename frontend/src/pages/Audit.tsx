@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Shield } from "lucide-react";
 import { PageHeader } from "../components/workspace";
+import { TableStateRow } from "../components/ui";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, formatDateTime } from "../api/client";
 
 interface AuditItem {
   id: string;
@@ -35,7 +36,7 @@ export default function Audit() {
   const [actionPrefix, setActionPrefix] = useState("");
   const [entityType, setEntityType] = useState("");
 
-  const { data } = useQuery({
+  const auditQuery = useQuery({
     queryKey: ["audit", actionPrefix, entityType],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -46,6 +47,7 @@ export default function Audit() {
       );
     },
   });
+  const data = auditQuery.data;
 
   return (
     <div className="space-y-4">
@@ -96,7 +98,7 @@ export default function Audit() {
             {(data?.items ?? []).map((item) => (
               <tr key={item.id} className="transition-colors hover:bg-[var(--hover)]">
                 <td className="td whitespace-nowrap text-xs" style={{ color: "var(--text-muted)" }}>
-                  {new Date(item.created_at).toLocaleString("id-ID")}
+                  {formatDateTime(item.created_at)}
                 </td>
                 <td className="td">
                   <span className={`pill ${badgeCls(item.action)}`}>
@@ -116,13 +118,12 @@ export default function Audit() {
                 </td>
               </tr>
             ))}
-            {data?.items.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada event audit.
-                </td>
-              </tr>
-            )}
+            <TableStateRow
+              query={auditQuery}
+              colSpan={6}
+              isEmpty={(data?.items.length ?? 0) === 0}
+              emptyTitle={actionPrefix || entityType ? "Tidak ada event untuk filter ini." : "Belum ada event audit."}
+            />
           </tbody>
         </table>
       </div>

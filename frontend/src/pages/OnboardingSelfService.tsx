@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, formatDateTime } from "../api/client";
 
 /** Halaman publik onboarding self-service kandidat -- TANPA Layout/sidebar,
  * tanpa login, diakses via link ber-token yang dibagikan HR dari kartu
@@ -248,7 +248,7 @@ export default function OnboardingSelfService() {
           untuk proses onboarding sebagai karyawan baru.
         </p>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Link berlaku s.d. {new Date(data.expires_at).toLocaleString("id-ID")}
+          Link berlaku s.d. {formatDateTime(data.expires_at)}
         </p>
       </div>
 

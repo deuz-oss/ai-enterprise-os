@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Info, Zap } from "lucide-react";
-import { api, formatRupiah } from "../api/client";
+import { api, formatDateTime, formatRupiah } from "../api/client";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { PillTabs } from "../components/ui";
+import { PillTabs, TableStateRow } from "../components/ui";
 
 interface BalanceSummary {
   cycle_remaining: number;
@@ -283,7 +283,7 @@ export default function Billing() {
             <tbody>
               {(transactions.data ?? []).map((t) => (
                 <tr key={t.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <td className="td">{new Date(t.created_at).toLocaleString("id-ID")}</td>
+                  <td className="td">{formatDateTime(t.created_at)}</td>
                   <td className="td">{t.ref_event}</td>
                   <td
                     className={`td text-right tabular-nums ${t.amount < 0 ? "" : "text-emerald-700 dark:text-emerald-400"}`}
@@ -295,13 +295,12 @@ export default function Billing() {
                   <td className="td text-right tabular-nums">{formatRupiah(t.balance_after)}</td>
                 </tr>
               ))}
-              {(transactions.data ?? []).length === 0 && (
-                <tr>
-                  <td className="td text-center" colSpan={4} style={{ color: "var(--text-muted)" }}>
-                    Belum ada transaksi.
-                  </td>
-                </tr>
-              )}
+              <TableStateRow
+                query={transactions}
+                colSpan={4}
+                isEmpty={(transactions.data ?? []).length === 0}
+                emptyTitle="Belum ada transaksi."
+              />
             </tbody>
           </table>
         </div>

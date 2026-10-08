@@ -2,7 +2,7 @@ import { Fragment, FormEvent, useState } from "react";
 import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, ShoppingCart } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatRupiah } from "../api/client";
+import { api, formatDate, formatRupiah } from "../api/client";
 import { toast } from "sonner";
 import { confirmDialog, confirmToast } from "../components/ui";
 import AccountingAi from "./AccountingAi";
@@ -440,7 +440,7 @@ export default function Accounting() {
                       {String(p.month).padStart(2, "0")}/{p.year}
                     </td>
                     <td className="td text-xs">
-                      {p.closed_at ? new Date(p.closed_at).toLocaleDateString("id-ID") : "-"}
+                      {p.closed_at ? formatDate(p.closed_at) : "-"}
                     </td>
                     <td className="td text-xs">{p.notes ?? "-"}</td>
                     <td className="td">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, formatRupiah, ApiError } from "../api/client";
+import { api, ApiError, formatDateTime, formatRupiah } from "../api/client";
 
 /** Halaman publik approval payroll klien -- TANPA Layout/sidebar, tanpa
  * login, diakses via link ber-token yang dibagikan dari Payroll.tsx
@@ -103,7 +103,7 @@ export default function PayrollClientPortal() {
           {data.client ?? "Klien"} &middot; Periode {data.month}/{data.year}
         </p>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Berlaku s.d. {new Date(data.expires_at).toLocaleString("id-ID")}
+          Berlaku s.d. {formatDateTime(data.expires_at)}
         </p>
       </div>
 

@@ -4,7 +4,7 @@ import { Archive, CheckCircle2, FileEdit, MessagesSquare, ShieldCheck } from "lu
 import { PageHeader } from "../components/workspace";
 import { KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, formatDate } from "../api/client";
 import { RecordingPlayer, type SeekRequest } from "../components/RecordingPlayer";
 
 interface Question {
@@ -1305,7 +1305,7 @@ export default function AIInterview() {
                           ? "Data kandidat dihapus atas permintaannya"
                           : "Masa retensi berakhir"}{" "}
                       — jawaban, transkrip, dan hasil AI dihapus pada{" "}
-                      {new Date(r.data_purged_at).toLocaleDateString("id-ID")}.
+                      {formatDate(r.data_purged_at)}.
                     </p>
                   )}
                   {r.ai_narrative && (

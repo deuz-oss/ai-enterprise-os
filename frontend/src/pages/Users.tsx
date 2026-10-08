@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserCheck, UserCog, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
 import { api } from "../api/client";
 
 interface UserRow {
@@ -26,10 +26,11 @@ const ROLES = [
 
 export default function Users() {
   const qc = useQueryClient();
-  const { data: users } = useQuery({
+  const usersQuery = useQuery({
     queryKey: ["users"],
     queryFn: () => api.get<UserRow[]>("/auth/users"),
   });
+  const users = usersQuery.data;
   const [statusTab, setStatusTab] = useState("");
   const activeCount = (users ?? []).filter((u) => u.is_active).length;
   const inactiveCount = (users ?? []).filter((u) => !u.is_active).length;
@@ -142,13 +143,12 @@ export default function Users() {
                 </td>
               </tr>
             ))}
-            {filteredUsers.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Tidak ada pengguna untuk status ini.
-                </td>
-              </tr>
-            )}
+            <TableStateRow
+              query={usersQuery}
+              colSpan={4}
+              isEmpty={filteredUsers.length === 0}
+              emptyTitle="Tidak ada pengguna untuk status ini."
+            />
           </tbody>
         </table>
       </div>

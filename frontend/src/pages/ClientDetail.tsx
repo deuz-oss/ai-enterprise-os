@@ -2,9 +2,9 @@ import { FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, formatDateTime } from "../api/client";
 import { initials } from "../components/workspace";
-import { Badge, PillTabs, confirmToast } from "../components/ui";
+import { Badge, DetailLoadState, PillTabs, confirmToast } from "../components/ui";
 
 interface ClientDetailData {
   id: string;
@@ -240,14 +240,15 @@ export default function ClientDetail() {
     });
   }
 
-  if (isLoading) {
-    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
-  }
-  if (error || !client || !id) {
+  if (isLoading || error || !client || !id) {
     return (
-      <p className="text-sm text-red-600 dark:text-red-400">
-        {error ? (error as Error).message : "Klien tidak ditemukan."}
-      </p>
+      <DetailLoadState
+        isLoading={isLoading}
+        error={error}
+        notFoundTitle="Klien tidak ditemukan."
+        backTo="/clients"
+        backLabel="Kembali ke daftar klien"
+      />
     );
   }
 
@@ -455,9 +456,9 @@ export default function ClientDetail() {
             {portalAccess ? (
               <div className="space-y-2">
                 <p className="text-sm" style={{ color: "var(--text)" }}>
-                  Dibuat {new Date(portalAccess.created_at).toLocaleString("id-ID")}
+                  Dibuat {formatDateTime(portalAccess.created_at)}
                   {portalAccess.last_accessed_at
-                    ? ` · terakhir diakses ${new Date(portalAccess.last_accessed_at).toLocaleString("id-ID")}`
+                    ? ` · terakhir diakses ${formatDateTime(portalAccess.last_accessed_at)}`
                     : " · belum pernah diakses"}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -638,7 +639,7 @@ export default function ClientDetail() {
                 <tr key={l.id}>
                   <td className="td font-medium">{l.action}</td>
                   <td className="td font-mono text-xs">{l.user_id ? `${l.user_id.slice(0, 8)}…` : "-"}</td>
-                  <td className="td">{new Date(l.created_at).toLocaleString("id-ID")}</td>
+                  <td className="td">{formatDateTime(l.created_at)}</td>
                 </tr>
               ))}
               {(auditLogs?.items ?? []).length === 0 && (

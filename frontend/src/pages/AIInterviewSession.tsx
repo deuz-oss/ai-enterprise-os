@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, formatDateTime } from "../api/client";
 import { AIInterviewRecording } from "./AIInterviewRecording";
 import { AIInterviewVoiceCall } from "./AIInterviewVoiceCall";
 
@@ -280,7 +280,7 @@ export default function AIInterviewSession() {
         {data.objective && <p className="text-sm text-[var(--text-muted)]">{data.objective}</p>}
         {data.expires_at && (
           <p className="text-xs text-[var(--text-muted)]">
-            Berlaku sampai {new Date(data.expires_at).toLocaleString("id-ID")}
+            Berlaku sampai {formatDateTime(data.expires_at)}
           </p>
         )}
       </div>

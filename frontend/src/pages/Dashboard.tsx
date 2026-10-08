@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { CalloutBlock } from "../components/workspace";
-import { KpiCard, StatusPill, HeaderCanvas } from "../components/ui";
+import { ErrorState, HeaderCanvas, KpiCard, PageFallback, StatusPill } from "../components/ui";
 import { api, formatRupiah } from "../api/client";
 
 interface Overview {
@@ -384,10 +384,11 @@ function RevenueTrendChart({ data }: { data: { month: string; revenue: number }[
 /// ranking utk margin). Data 100% tetap dari /overview + /chat/digest +
 /// /finance/invoices yang sudah ada -- tidak ada angka yang dikarang.
 export default function Dashboard() {
-  const { data, isLoading } = useQuery({
+  const overviewQuery = useQuery({
     queryKey: ["overview"],
     queryFn: () => api.get<Overview>("/overview"),
   });
+  const data = overviewQuery.data;
   const { data: digest } = useQuery({
     queryKey: ["chat-digest"],
     queryFn: () => api.get<Digest>("/chat/digest"),
@@ -416,8 +417,16 @@ export default function Dashboard() {
     queryFn: () => api.get<{ full_name: string }>("/auth/me"),
   });
 
-  if (isLoading || !data)
-    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
+  // Dulu `isLoading || !data` -> kalau /overview gagal, "Memuat..." selamanya.
+  if (!data) {
+    return overviewQuery.isError ? (
+      <div className="card">
+        <ErrorState error={overviewQuery.error} onRetry={overviewQuery.refetch} />
+      </div>
+    ) : (
+      <PageFallback />
+    );
+  }
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
   const recentInvoices = [...(invoices ?? [])].reverse().slice(0, 5);

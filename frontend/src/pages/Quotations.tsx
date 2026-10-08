@@ -1,7 +1,7 @@
 import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileSignature, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
-import { api } from "../api/client";
+import { api, formatDate } from "../api/client";
 import { toast } from "sonner";
 import {
   Badge,
@@ -294,7 +294,7 @@ export default function Quotations() {
                       {STATUS_LABEL[q.status] ?? q.status}
                     </Badge>
                   </td>
-                  <td className="td">{new Date(q.created_at).toLocaleDateString("id-ID")}</td>
+                  <td className="td">{formatDate(q.created_at)}</td>
                   <td className="td" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {q.status === "draft" && (

@@ -30,6 +30,11 @@ requirements.
 > **Status 2026-10-08 (later):** Phase 0 implemented. P0 #1–#3 and P1 #4,
 > #5, #7 (persistent `confirmToast`), and the login-error announcement are
 > fixed. See CHANGELOG "Fase 67".
+> **Phase 1** implemented as CHANGELOG "Fase 68": route-level code splitting
+> (initial JS 610 → 96 KB gzip), state primitives (`components/ui/states.tsx`)
+> adopted on the pages with no error UI, single date formatters, semantic
+> status tokens + `.num`. Rolling `.num`/`TableStateRow` out to every table is
+> Phase 3 (`DataTable`).
 
 ---
 

@@ -13,7 +13,7 @@ import {
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
-import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
+import { api, downloadFile, formatDateTime, formatRupiah, previewFile } from "../api/client";
 
 interface EmployeeRow {
   id: string;
@@ -952,7 +952,7 @@ export default function Payroll() {
             >
               Salin URL
             </button>
-            <span className="text-xs">berlaku s.d. {new Date(clientLink.expires).toLocaleString("id-ID")}</span>
+            <span className="text-xs">berlaku s.d. {formatDateTime(clientLink.expires)}</span>
           </div>
         </CalloutBlock>
       )}

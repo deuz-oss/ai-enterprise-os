@@ -4,7 +4,7 @@ import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
 import { confirmDialog, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile, formatRupiah } from "../api/client";
+import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
 
 interface ClientRow {
   id: string;
@@ -374,11 +374,11 @@ export default function Finance() {
                     <td className="td">{formatRupiah(Number(i.payroll_total))}</td>
                     <td className="td">{formatRupiah(Number(i.ppn_amount))}</td>
                     <td className="td font-semibold">{formatRupiah(Number(i.total_due))}</td>
-                    <td className="td text-xs">
+                    <td className="td whitespace-nowrap text-xs">
                       {i.issued_date && (
-                        <div style={{ color: "var(--text-muted)" }}>Terbit: {i.issued_date}</div>
+                        <div style={{ color: "var(--th-color)" }}>Terbit: {formatDate(i.issued_date)}</div>
                       )}
-                      {i.due_date ?? "-"}
+                      {formatDate(i.due_date)}
                     </td>
                     <td className="td">
                       {i.status === "terkirim" || i.status === "draft" ? (
@@ -393,7 +393,7 @@ export default function Finance() {
                       )}
                       {i.paid_at && (
                         <div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {new Date(i.paid_at).toLocaleDateString("id-ID")}
+                          {formatDate(i.paid_at)}
                         </div>
                       )}
                     </td>

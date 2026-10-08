@@ -28,8 +28,8 @@ import {
   Users,
   User as UserIcon,
 } from "lucide-react";
-import { api, formatRupiah } from "../api/client";
-import { Badge, Button, Card, confirmToast, PillTabs } from "../components/ui";
+import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
+import { Badge, Button, Card, confirmToast, DetailLoadState, PillTabs } from "../components/ui";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
 import type { ClientRow } from "./Clients";
@@ -191,11 +191,12 @@ export default function JobOrderDetail() {
     DEFAULT_ONBOARDING_DOC_TYPES
   );
 
-  const { data: jo } = useQuery({
+  const joQuery = useQuery({
     queryKey: ["job-order", id],
     queryFn: () => api.get<JobOrder>(`/recruitment/job-orders/${id}`),
     enabled: Boolean(id),
   });
+  const jo = joQuery.data;
   const { data: docTemplates } = useQuery({
     queryKey: ["job-order-templates"],
     queryFn: () => api.get<JobOrderTemplateT[]>("/recruitment/job-order-templates?active_only=true"),
@@ -399,8 +400,17 @@ export default function JobOrderDetail() {
     });
   }
 
+  // Dulu `!jo` -> "Memuat..." selamanya kalau job order tidak ada / 403.
   if (!jo) {
-    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
+    return (
+      <DetailLoadState
+        isLoading={joQuery.isPending && Boolean(id)}
+        error={joQuery.error}
+        notFoundTitle="Job order tidak ditemukan."
+        backTo="/job-orders"
+        backLabel="Kembali ke Job Orders"
+      />
+    );
   }
 
   const steps = pipelineSteps(jo.requires_ojt);
@@ -491,7 +501,7 @@ export default function JobOrderDetail() {
             <Button size="sm" variant="secondary" onClick={openGeneratedDocument}>
               <Download className="h-3.5 w-3.5" /> Unduh Dokumen
               {jo.generated_document_at
-                ? ` (${new Date(jo.generated_document_at).toLocaleDateString("id-ID")})`
+                ? ` (${formatDate(jo.generated_document_at)})`
                 : ""}
             </Button>
           )}
@@ -760,13 +770,13 @@ export default function JobOrderDetail() {
               >
                 <Phone className="h-3.5 w-3.5" />
                 {p.offering_call_done
-                  ? `Offering call ✓ ${p.offering_call_at ? new Date(p.offering_call_at).toLocaleDateString("id-ID") : ""}`
+                  ? `Offering call ✓ ${p.offering_call_at ? formatDate(p.offering_call_at) : ""}`
                   : "Catat Offering Call"}
               </Button>
               <Button size="sm" variant="secondary" onClick={() => setShowOfferingForm((v) => !v)}>
                 <Mail className="h-3.5 w-3.5" />
                 {p.offering_signed_at
-                  ? `Surat ditandatangani ✓ ${new Date(p.offering_signed_at).toLocaleDateString("id-ID")}`
+                  ? `Surat ditandatangani ✓ ${formatDate(p.offering_signed_at)}`
                   : p.offering_letter_object_key
                     ? "Surat terkirim — kirim ulang?"
                     : "Kirim Surat Penawaran"}
@@ -964,7 +974,7 @@ export default function JobOrderDetail() {
                   >
                     {i.interview_type === "klien" ? "Klien" : "Internal"}
                   </span>
-                  {new Date(i.scheduled_at).toLocaleString("id-ID")}
+                  {formatDateTime(i.scheduled_at)}
                   {i.location ? ` · ${i.location}` : ""} · <span className="capitalize">{i.status}</span>
                   {i.score !== null && (
                     <span className="ml-1 pill p-green text-[10px]">Skor {i.score}</span>

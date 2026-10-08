@@ -1,3 +1,5 @@
+import { formatDateTime } from "../api/client";
+
 export interface Screening {
   id: string;
   candidate_id: string;
@@ -87,7 +89,7 @@ export function AiResultCard({ screening }: { screening: Screening }) {
         </div>
       )}
       <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
-        {new Date(screening.created_at).toLocaleString("id-ID")}
+        {formatDateTime(screening.created_at)}
       </p>
     </div>
   );

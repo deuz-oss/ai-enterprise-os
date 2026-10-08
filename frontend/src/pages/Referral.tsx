@@ -5,7 +5,7 @@ import { useEmployeeLookup } from "../api/employees";
 import { api, formatRupiah } from "../api/client";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
-import { confirmDialog, KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { confirmDialog, KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
 
 /** Program referral karyawan (Fase 27) — jalur sourcing ketiga di samping
  * Job Portal (Fase 16) dan Talent Pool. Halaman baru berdiri sendiri,
@@ -56,10 +56,11 @@ export default function Referral() {
     queryKey: ["referral-setting"],
     queryFn: () => api.get<ReferralSetting>("/recruitment/referral-setting"),
   });
-  const { data: rewards } = useQuery({
+  const rewardsQuery = useQuery({
     queryKey: ["referral-rewards"],
     queryFn: () => api.get<ReferralReward[]>("/recruitment/referral-rewards"),
   });
+  const rewards = rewardsQuery.data;
   const [statusTab, setStatusTab] = useState("");
   const filteredRewards = useMemo(
     () => (rewards ?? []).filter((r) => !statusTab || r.status === statusTab),
@@ -235,13 +236,12 @@ export default function Referral() {
                 </td>
               </tr>
             ))}
-            {filteredRewards.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {(rewards ?? []).length === 0 ? "Belum ada reward referral." : "Tidak ada reward untuk status ini."}
-                </td>
-              </tr>
-            )}
+            <TableStateRow
+              query={rewardsQuery}
+              colSpan={6}
+              isEmpty={filteredRewards.length === 0}
+              emptyTitle={(rewards ?? []).length === 0 ? "Belum ada reward referral." : "Tidak ada reward untuk status ini."}
+            />
           </tbody>
         </table>
       </div>

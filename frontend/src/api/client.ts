@@ -158,6 +158,51 @@ export function formatRupiah(value: number | null | undefined): string {
   }).format(value);
 }
 
+// ---------- Tanggal ----------
+// Satu format tanggal untuk seluruh app (audit 2026-10-08 §8): dulu campur
+// "17/8/2026", "17/8/2026, 14.05.00", dan ISO mentah "2026-08-17".
+
+type DateInput = string | Date | null | undefined;
+
+/** "YYYY-MM-DD" (kolom DATE dari API) diparse sebagai tanggal LOKAL -- `new
+ * Date("2026-08-17")` dibaca sebagai tengah malam UTC dan bisa mundur sehari
+ * di zona waktu negatif. Datetime lengkap (ada jam) diparse apa adanya. */
+function toDate(value: string | Date): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatWith(value: DateInput, options: Intl.DateTimeFormatOptions): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const d = toDate(value);
+  return d ? new Intl.DateTimeFormat("id-ID", options).format(d) : String(value);
+}
+
+/** "17 Agu 2026" */
+export function formatDate(value: DateInput): string {
+  return formatWith(value, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** "17 Agu 2026, 14.05" */
+export function formatDateTime(value: DateInput): string {
+  return formatWith(value, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** "14.05" */
+export function formatTime(value: DateInput): string {
+  return formatWith(value, { hour: "2-digit", minute: "2-digit" });
+}
+
 // Fase 46 -- multi-currency (Lead.currency), dipakai selain formatRupiah
 // yang tetap IDR-only untuk modul lain (payroll/finance/accounting).
 export function formatCurrency(

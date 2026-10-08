@@ -1,9 +1,9 @@
 import { FormEvent, useState } from "react";
 import { Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, QueryState, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, formatDate } from "../api/client";
 
 interface Candidate {
   id: string;
@@ -72,6 +72,7 @@ export default function Blacklist() {
     ditolak: rejected.data,
   };
   const entries = byTab[tab];
+  const activeQuery = { menunggu_review: pending, disetujui: approved, ditolak: rejected }[tab] ?? pending;
   const statusTabs: PillTab[] = TABS.map((t) => ({
     key: t.key,
     label: t.label,
@@ -169,8 +170,12 @@ export default function Blacklist() {
       <PillTabs tabs={statusTabs} value={tab} onChange={setTab} />
 
       <div className="card space-y-0 p-0">
-        {(entries ?? []).length === 0 && (
-          <p className="p-3 text-sm text-[var(--text-muted)]">Tidak ada data.</p>
+        {(activeQuery.isPending || activeQuery.isError || (entries ?? []).length === 0) && (
+          <div className="p-3">
+            <QueryState query={activeQuery} isEmpty={(entries ?? []).length === 0} compact>
+              {null}
+            </QueryState>
+          </div>
         )}
         {(entries ?? []).map((entry) => (
           <div key={entry.id} className="border-t p-3" style={{ borderColor: "var(--border)" }}>
@@ -184,7 +189,7 @@ export default function Blacklist() {
                   </span>
                   <span className="text-xs text-[var(--text-muted)]">
                     Diajukan {entry.requested_by_name ?? "?"} ·{" "}
-                    {new Date(entry.requested_at).toLocaleDateString("id-ID")}
+                    {formatDate(entry.requested_at)}
                   </span>
                   {entry.reviewed_by_name && (
                     <span className="text-xs text-[var(--text-muted)]">

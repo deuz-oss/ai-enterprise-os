@@ -2,9 +2,9 @@ import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, CalendarClock, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, formatDate } from "../api/client";
 
 export interface ClientRow {
   id: string;
@@ -23,10 +23,11 @@ export default function Clients() {
   const [showForm, setShowForm] = useState(false);
   const [statusTab, setStatusTab] = useState("semua");
 
-  const { data: clients } = useQuery({
+  const clientsQuery = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
+  const clients = clientsQuery.data;
 
   const filteredClients = useMemo(
     () => (clients ?? []).filter((c) => statusTab === "semua" || c.status === statusTab),
@@ -150,7 +151,7 @@ export default function Clients() {
                 <td className="td">{c.npwp ?? "-"}</td>
                 <td className="td">{c.pic_name ?? "-"}</td>
                 <td className="td">{c.job_count}</td>
-                <td className="td">{c.contract_end ?? "-"}</td>
+                <td className="td whitespace-nowrap">{formatDate(c.contract_end)}</td>
                 <td className="td">
                   <span className={`pill ${c.status === "aktif" ? "p-green" : "p-gray"}`}>
                     {c.status}
@@ -158,13 +159,13 @@ export default function Clients() {
                 </td>
               </tr>
             ))}
-            {filteredClients.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {clients?.length === 0 ? "Belum ada klien." : "Tidak ada klien untuk status ini."}
-                </td>
-              </tr>
-            )}
+            <TableStateRow
+              query={clientsQuery}
+              colSpan={6}
+              isEmpty={filteredClients.length === 0}
+              emptyTitle={clients?.length === 0 ? "Belum ada klien." : "Tidak ada klien untuk status ini."}
+              emptyDescription={clients?.length === 0 ? "Tambahkan klien pertama lewat tombol + Klien Baru." : undefined}
+            />
           </tbody>
         </table>
       </div>

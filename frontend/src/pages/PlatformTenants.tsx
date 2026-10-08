@@ -4,7 +4,7 @@ import { PageHeader } from "../components/workspace";
 import { KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
-import { api, formatRupiah } from "../api/client";
+import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
 
 interface TenantRow {
   id: string;
@@ -405,7 +405,7 @@ export default function PlatformTenants() {
                   )}
                 </td>
                 <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
-                  {new Date(t.created_at).toLocaleDateString("id-ID")}
+                  {formatDate(t.created_at)}
                 </td>
                 <td className="td">
                   {t.status === "aktif" ? (
@@ -671,7 +671,7 @@ export default function PlatformTenants() {
                           {billingSummary.recent_transactions.map((tx) => (
                             <tr key={tx.id}>
                               <td className="py-1.5" style={{ color: "var(--text-muted)" }}>
-                                {new Date(tx.created_at).toLocaleString("id-ID")}
+                                {formatDateTime(tx.created_at)}
                               </td>
                               <td className="py-1.5" style={{ color: "var(--text)" }}>
                                 {tx.ref_event}

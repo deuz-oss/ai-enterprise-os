@@ -2,9 +2,9 @@ import { useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
-import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
+import { api, downloadFile, formatDate, formatRupiah, formatTime, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, confirmDialog, confirmToast, PillTabs } from "../components/ui";
+import { Badge, confirmDialog, confirmToast, DetailLoadState, PillTabs } from "../components/ui";
 import type { EmployeeRow } from "./Employees";
 
 /** Halaman detail karyawan (`/employees/:id`) -- konsolidasi 11 seksi yang
@@ -694,14 +694,15 @@ export default function EmployeeDetail() {
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/employees/${id}/send-payslip-email`),
   });
 
-  if (isLoading) {
-    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
-  }
-  if (error || !employee || !id) {
+  if (isLoading || error || !employee || !id) {
     return (
-      <p className="text-sm text-red-600 dark:text-red-400">
-        {error ? (error as Error).message : "Karyawan tidak ditemukan."}
-      </p>
+      <DetailLoadState
+        isLoading={isLoading}
+        error={error}
+        notFoundTitle="Karyawan tidak ditemukan."
+        backTo="/employees"
+        backLabel="Kembali ke daftar karyawan"
+      />
     );
   }
 
@@ -1808,8 +1809,8 @@ export default function EmployeeDetail() {
                           {formatRupiah(h.amount)} — {h.reason}
                         </p>
                         <p className="text-xs" style={{ color: "var(--th-color)" }}>
-                          Ditahan {new Date(h.held_at).toLocaleDateString("id-ID")}
-                          {h.released_at && ` · Dicairkan ${new Date(h.released_at).toLocaleDateString("id-ID")}`}
+                          Ditahan {formatDate(h.held_at)}
+                          {h.released_at && ` · Dicairkan ${formatDate(h.released_at)}`}
                         </p>
                       </div>
                       <span className={`pill ${h.status === "held" ? "p-yellow" : "p-green"}`}>
@@ -1915,11 +1916,11 @@ export default function EmployeeDetail() {
                         </td>
                         <td className="td text-xs">
                           {r.clock_in
-                            ? new Date(r.clock_in).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+                            ? formatTime(r.clock_in)
                             : "—"}{" "}
                           /{" "}
                           {r.clock_out
-                            ? new Date(r.clock_out).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+                            ? formatTime(r.clock_out)
                             : "—"}
                         </td>
                         <td className="td">{r.overtime_hours}</td>

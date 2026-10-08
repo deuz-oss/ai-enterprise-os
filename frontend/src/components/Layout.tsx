@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -45,6 +45,7 @@ import {
 import { api, clearToken, formatRupiah, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
 import { ConfirmDialogHost } from "./ui/ConfirmDialog";
+import { PageFallback } from "./ui/PageFallback";
 
 interface NavItem {
   to: string;
@@ -720,7 +721,9 @@ export default function Layout() {
         {/* ===== Konten ===== */}
         <main className="min-h-[calc(100vh-56px)] flex-1 overflow-x-auto">
           <div className="mx-auto w-full max-w-[1440px] px-4 py-5 lg:px-6 lg:py-6">
-            <Outlet />
+            <Suspense fallback={<PageFallback />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

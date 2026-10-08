@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
-import { api } from "../api/client";
+import { api, formatTime } from "../api/client";
 import {
   ArrowLeft,
   AtSign,
@@ -137,10 +137,6 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatFull(iso: string): string {

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { Badge, Card, PillTabs } from "../components/ui";
+import { Badge, Card, DetailLoadState, PillTabs } from "../components/ui";
 import { initials } from "../components/workspace";
 import { IntakeReviewPanel, ScreeningPanel, HistoryPanel } from "./TalentPoolPanels";
 import type { JobOrder } from "./JobOrders";
@@ -111,14 +111,15 @@ export default function TalentPoolDetail() {
   const jobOrderTitle = (jobOrderId: string) =>
     (jobOrders ?? []).find((j) => j.id === jobOrderId)?.title ?? jobOrderId;
 
-  if (isLoading) {
-    return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
-  }
-  if (error || !data) {
+  if (isLoading || error || !data) {
     return (
-      <p className="text-sm text-red-600 dark:text-red-400">
-        {error ? (error as Error).message : "Kandidat tidak ditemukan."}
-      </p>
+      <DetailLoadState
+        isLoading={isLoading}
+        error={error}
+        notFoundTitle="Kandidat tidak ditemukan."
+        backTo="/talent-pool"
+        backLabel="Kembali ke Talent Pool"
+      />
     );
   }
 

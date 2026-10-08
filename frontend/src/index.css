@@ -47,6 +47,15 @@
      --text-muted lain yang belum diverifikasi kontrasnya satu-satu.
      Versi dark tidak perlu diubah (5.6:1, sudah lolos AA). */
   --th-color: #55627a;
+  /* Status semantik untuk TEKS & ikon di atas --bg-elevated / --hover (audit
+     2026-10-08 §12). Shade dipilih yang lolos AA 4.5:1 di kedua permukaan --
+     beda dari pasangan Tailwind 600 yang gagal di salah satu tema (lihat
+     project memory ui-audit-cycle, putaran 3). Badge/pill tetap pakai .p-*. */
+  --success: #047857;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #1d4ed8;
+  --danger-tint: #fef2f2;
 }
 
 .dark {
@@ -71,6 +80,11 @@
   --cat-finance: #fdba74;
   --cat-administration: #cbd5e1;
   --th-color: var(--text-muted);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #60a5fa;
+  --danger-tint: rgba(239, 68, 68, 0.15);
 }
 
 html,
@@ -203,6 +217,14 @@ body {
   .td {
     @apply px-3 py-2.5 text-sm;
     color: var(--text);
+  }
+  /* Angka di tabel: rata kanan, digit sama lebar, tidak terpotong ke baris
+     baru -- konvensi aplikasi keuangan (audit 2026-10-08 §8). Pakai di <th>
+     dan <td> kolom uang/jumlah: className="td num". */
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 }
 

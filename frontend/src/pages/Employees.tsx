@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
-import { api, downloadFile } from "../api/client";
+import { api, downloadFile, formatDate } from "../api/client";
 import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
 import { HeaderCanvas, KpiCard, PillTabs, PreflightAlert, StatusPill, type PillTab } from "../components/ui";
@@ -712,7 +712,7 @@ export default function Employees() {
                   </div>
                 </td>
                 <td className="td py-1.5">{e.phone ?? "-"}</td>
-                <td className="td py-1.5">{e.join_date ?? "-"}</td>
+                <td className="td whitespace-nowrap py-1.5">{formatDate(e.join_date)}</td>
                 <td className="td py-1.5">
                   <StatusPill domain="employee" status={e.status} />
                 </td>
