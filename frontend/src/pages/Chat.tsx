@@ -1679,7 +1679,9 @@ export default function Chat() {
                   </div>
                 )}
 
-                <div className="flex items-end gap-1 p-1.5">
+                {/* Textarea di bawah memakai outline-none; cincin fokus dipindah ke
+                    kotak pembungkus supaya tetap terlihat saat diakses keyboard. */}
+                <div className="flex items-end gap-1 rounded-lg p-1.5 focus-within:shadow-[0_0_0_2px_var(--accent)]">
                   <input
                     ref={fileInputRef}
                     type="file"

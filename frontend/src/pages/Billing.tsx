@@ -110,21 +110,21 @@ export default function Billing() {
               <div className="flex items-center gap-3">
                 <Zap className="h-8 w-8 shrink-0" />
                 <div>
-                  <p className="text-xs opacity-80">Saldo Tersedia</p>
+                  <p className="text-xs font-medium">Saldo Tersedia</p>
                   <p className="text-2xl font-bold tabular-nums">{formatRupiah(totalRemaining)}</p>
-                  {pct !== null && <p className="text-xs opacity-80">{pct}% dari kuota bulanan</p>}
+                  {pct !== null && <p className="text-xs font-medium">{pct}% dari kuota bulanan</p>}
                 </div>
               </div>
               <div className="ml-auto flex flex-wrap gap-6 border-l pl-6" style={{ borderColor: "currentColor" }}>
                 <div>
-                  <p className="text-xs opacity-80">Sisa jatah bulan ini</p>
+                  <p className="text-xs font-medium">Sisa jatah bulan ini</p>
                   <p className="text-sm font-semibold tabular-nums">
                     {formatRupiah(balance.data.cycle_remaining)}
-                    <span className="font-normal opacity-70"> / {formatRupiah(balance.data.cycle_included)}</span>
+                    <span className="font-normal"> / {formatRupiah(balance.data.cycle_included)}</span>
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs opacity-80">Saldo top up</p>
+                  <p className="text-xs font-medium">Saldo top up</p>
                   <p className="text-sm font-semibold tabular-nums">{formatRupiah(balance.data.credit_balance)}</p>
                 </div>
               </div>

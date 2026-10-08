@@ -20,5 +20,5 @@ export {
 } from "./states";
 export { PageFallback } from "./PageFallback";
 export { DataTable, type Column } from "./DataTable";
-export { currentPeriod, PeriodPicker, type Period } from "./PeriodPicker";
+export { currentPeriod, MONTH_NAMES, PeriodPicker, type Period } from "./PeriodPicker";
 export { confirmDialog, ConfirmDialogHost, type ConfirmDialogOptions } from "./ConfirmDialog";

@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 71: Audit 2026-10-08 Phase 4 (responsif & aksesibilitas)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §10–§11.
+- **Tabel jadi kartu di HP**: `DataTable` menampilkan tiap baris sebagai kartu label: nilai di bawah breakpoint `sm` (total, baris ekspansi, klik baris, dan state loading/error ikut). Varian `plain` untuk tabel di dalam kartu lain.
+- **Portal Saya** (permukaan utama karyawan di HP): 6 tabel (kontrak, dokumen, slip gaji, koreksi absensi, lembur, cuti) pindah ke `DataTable`; slip gaji menampilkan "Diterima" tepat di bawah periode; tanggal ISO mentah diformat.
+- Form tanpa label terlihat diberi label (pengajuan lembur & cuti -- tanggal mulai/sampai dulu dua input tanggal tanpa keterangan; koreksi absensi; Tutup Bulan Akuntansi; Generate Invoice Finance). Placeholder bulan/tahun berisi defaultValue sehingga labelnya tidak pernah tampil. Sisa input angka bulan diganti pilihan bulan.
+- **Navigasi keyboard**: skip link "Lewati ke konten utama"; drawer sidebar mobile `inert` saat tertutup (dulu ±25 link tak terlihat tetap bisa di-Tab), tombol menu dengan `aria-expanded`/`aria-controls`, fokus masuk ke drawer saat dibuka dan kembali ke tombol menu (atau ke konten bila menutup karena pindah halaman); cincin fokus `:focus-visible` konsisten untuk tombol/link/baris tabel; kotak pesan Chat kini menampilkan fokus.
+- **Kontras & nama aksesibel**: token `--cat-workforce`/`--cat-finance` light naik ke shade 700 (label kategori Dashboard 3.2–3.8:1 → ≥5:1); teks saldo Billing tanpa opacity; tombol tutup PreflightAlert diberi nama; area gulir tabel (DataTable, Audit) bisa difokus keyboard.
+- Sapuan axe-core (WCAG 2.0/2.1/2.2 AA termasuk target-size) di 12 halaman admin + 7 seksi Portal Saya pada 390 px: semua temuan di atas diperbaiki.
+
 ### Changed — Fase 70: Audit 2026-10-08 Phase 3 (Data UX, gelombang 1)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §8.

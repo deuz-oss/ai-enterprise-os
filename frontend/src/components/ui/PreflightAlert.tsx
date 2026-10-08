@@ -35,8 +35,13 @@ export function PreflightAlert({ title, summary, actionLabel, onAction, onDismis
           </button>
         )}
         {onDismiss && (
-          <button onClick={onDismiss} className="cursor-pointer rounded p-0.5 hover:opacity-70" style={{ color: "#92400E" }}>
-            <X className="h-4 w-4" />
+          <button
+            onClick={onDismiss}
+            className="cursor-pointer rounded p-0.5 hover:opacity-70"
+            style={{ color: "#92400E" }}
+            aria-label="Tutup peringatan"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>

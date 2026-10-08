@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -241,6 +241,38 @@ export default function Layout() {
   const [inboxOpen, setInboxOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Drawer mobile (< lg): saat tertutup sidebar hanya digeser keluar layar,
+  // jadi link-nya tetap bisa di-Tab tanpa terlihat (audit 2026-10-08 §11).
+  // `inert` saat tertutup; fokus masuk ke drawer saat dibuka dan kembali ke
+  // tombol menu saat ditutup.
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+  const asideRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const wasDrawerOpen = useRef(false);
+  // true bila drawer ditutup karena pindah halaman -> fokus ke konten baru,
+  // bukan kembali ke tombol menu.
+  const closedByNavigation = useRef(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  useEffect(() => {
+    const aside = asideRef.current;
+    if (!aside) return;
+    const drawerOpen = !isDesktop && sidebarOpen;
+    aside.inert = !isDesktop && !sidebarOpen;
+    if (drawerOpen && !wasDrawerOpen.current) {
+      aside.querySelector<HTMLElement>("a[href], button")?.focus();
+    } else if (!drawerOpen && wasDrawerOpen.current && !isDesktop) {
+      // Hanya saat transisi buka -> tutup (bukan tiap render).
+      if (closedByNavigation.current) document.getElementById("main-content")?.focus();
+      else menuButtonRef.current?.focus();
+    }
+    closedByNavigation.current = false;
+    wasDrawerOpen.current = drawerOpen;
+  });
   const [helpDismissed, setHelpDismissed] = useState(
     () => localStorage.getItem("aeos_helpchip") === "0"
   );
@@ -304,6 +336,7 @@ export default function Layout() {
 
   // Drawer mobile: tutup otomatis begitu pindah halaman (klik nav item).
   useEffect(() => {
+    if (wasDrawerOpen.current) closedByNavigation.current = true;
     setSidebarOpen(false);
   }, [location.pathname]);
 
@@ -447,18 +480,28 @@ export default function Layout() {
   // tetap netral gelap.
   return (
     <div className="min-h-screen">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--accent-contrast)] focus:shadow-lg"
+        style={{ backgroundColor: "var(--accent)" }}
+      >
+        Lewati ke konten utama
+      </a>
       {/* ===== Topbar (lebar penuh) ===== */}
       <header
         className="sticky top-0 z-20 flex h-14 items-center gap-3 px-4 lg:px-6"
         style={{ backgroundColor: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
       >
         <button
+          ref={menuButtonRef}
           onClick={() => setSidebarOpen(true)}
           className="cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--hover)] lg:hidden"
           style={{ color: "var(--text-muted)" }}
-          title="Buka menu"
+          aria-label="Buka menu navigasi"
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
         <button
           onClick={() => navigate("/")}
@@ -638,12 +681,14 @@ export default function Layout() {
 
         {/* ===== Sidebar (drawer overlay di mobile, statis sejak breakpoint lg) ===== */}
         <aside
+          ref={asideRef}
+          id="app-sidebar"
           className={`fixed left-0 top-14 z-40 flex h-[calc(100vh-56px)] w-64 shrink-0 flex-col overflow-y-auto transition-transform duration-200 lg:sticky lg:z-auto lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           style={{ backgroundColor: "var(--sidebar)", borderRight: "1px solid var(--border)" }}
         >
-          <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+          <nav className="flex-1 space-y-5 overflow-y-auto p-3" aria-label="Navigasi utama">
             <PageTreeSection pathname={location.pathname} visible={isTenantUser()} />
             {groups.map((g) => (
               <div key={g.label}>
@@ -708,7 +753,7 @@ export default function Layout() {
         </aside>
 
         {/* ===== Konten ===== */}
-        <main className="min-h-[calc(100vh-56px)] flex-1 overflow-x-auto">
+        <main id="main-content" tabIndex={-1} className="min-h-[calc(100vh-56px)] flex-1 overflow-x-auto outline-none">
           {/* pb-24: ruang di bawah supaya FAB "Tanya AEOS AI" tidak menutupi
               baris/tombol terakhir halaman (audit 2026-10-08 §7 U7). */}
           <div className="mx-auto w-full max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pt-6">

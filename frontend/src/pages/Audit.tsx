@@ -82,7 +82,9 @@ export default function Audit() {
         />
       </div>
 
-      <div className="card overflow-x-auto p-0">
+      {/* tabIndex: area gulir horizontal harus bisa difokus keyboard
+          (axe scrollable-region-focusable). */}
+      <div className="card overflow-x-auto p-0" tabIndex={0} role="region" aria-label="Tabel event audit">
         <table className="w-full">
           <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
             <tr>

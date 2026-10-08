@@ -2,7 +2,15 @@ import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
-import { confirmDialog, DataTable, KpiCard, PillTabs, type Column, type PillTab } from "../components/ui";
+import {
+  type Column,
+  confirmDialog,
+  DataTable,
+  KpiCard,
+  MONTH_NAMES,
+  type PillTab,
+  PillTabs,
+} from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
 
@@ -549,16 +557,34 @@ export default function Finance() {
 
       {showGenerate && (
         <form onSubmit={handleGenerate} className="card grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <select name="client_id" required className="input">
-            {(clients ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input name="month" type="number" min={1} max={12} required placeholder="Bulan payrol" className="input" />
-          <input name="year" type="number" required placeholder="Tahun payrol" className="input" />
-          <input name="fee_amount" type="number" placeholder="Fee management (Rp)" className="input" />
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Klien</span>
+            <select name="client_id" required className="input">
+              {(clients ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Bulan payroll</span>
+            <select name="month" required defaultValue={new Date().getMonth() + 1} className="input">
+              {MONTH_NAMES.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Tahun payroll</span>
+            <input name="year" type="number" required defaultValue={new Date().getFullYear()} className="input" />
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Fee management (Rp)</span>
+            <input name="fee_amount" type="number" min={0} className="input" />
+          </label>
           <button type="submit" disabled={generateInvoice.isPending} className="btn sm:col-span-4">
             Buat Invoice dari Payrol
           </button>

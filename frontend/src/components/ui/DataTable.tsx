@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { Pagination } from "../Pagination";
-import { TableStateRow, type QueryLike } from "./states";
+import { EmptyState, QueryState, TableStateRow, type QueryLike } from "./states";
 
 /**
  * Tabel data standar (audit 2026-10-08 §8, Phase 3). Sebelumnya 57 `<table>`
@@ -49,6 +49,8 @@ export function DataTable<T>({
   pageSize,
   maxHeight = "70vh",
   label,
+  mobileCards = true,
+  plain = false,
 }: {
   rows: T[] | undefined;
   columns: Column<T>[];
@@ -66,6 +68,11 @@ export function DataTable<T>({
   maxHeight?: string;
   /** Nama tabel untuk screen reader. */
   label: string;
+  /** Di bawah breakpoint `sm`, tampilkan tiap baris sebagai kartu label: nilai
+   * (bukan tabel yang digeser horizontal). Default aktif. */
+  mobileCards?: boolean;
+  /** Tanpa bingkai kartu -- untuk tabel yang sudah berada di dalam kartu lain. */
+  plain?: boolean;
 }) {
   const [sort, setSort] = useState<SortState>(defaultSort);
   const [offset, setOffset] = useState(0);
@@ -129,10 +136,102 @@ export function DataTable<T>({
     )
   );
 
+  const ready = !query || (!query.isPending && !query.isError);
+  const cards = mobileCards && (
+    <div
+      className="space-y-2 sm:hidden"
+      // role list hanya bila ada item (axe aria-required-children).
+      role={ready && total > 0 ? "list" : undefined}
+      aria-label={ready && total > 0 ? label : undefined}
+    >
+      {!ready || total === 0 ? (
+        <div className={plain ? "" : "card"}>
+          {query && !ready ? (
+            <QueryState query={query} compact>
+              {null}
+            </QueryState>
+          ) : (
+            <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} compact />
+          )}
+        </div>
+      ) : (
+        visible.map((row) => {
+          const [first, ...rest] = columns;
+          const expanded = renderExpanded?.(row);
+          const selected = isRowSelected?.(row) ?? false;
+          return (
+            <div
+              key={rowKey(row)}
+              role="listitem"
+              className={plain ? "space-y-2 border-t py-3" : "card space-y-2"}
+              style={selected ? { backgroundColor: "var(--accent-tint)" } : undefined}
+            >
+              <div
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-current={selected ? "true" : undefined}
+                className={onRowClick ? "cursor-pointer" : undefined}
+              >
+                <div className={`text-sm font-medium ${first.className ?? ""}`} style={{ color: "var(--text)" }}>
+                  {first.cell(row)}
+                </div>
+                <dl className="mt-1.5 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
+                  {rest.map((c) => (
+                    <Fragment key={c.key}>
+                      <dt style={{ color: "var(--th-color)" }}>{c.header}</dt>
+                      {/* Tanpa inline color: kelas kolom (mis. merah potongan) harus menang. */}
+                      <dd className={`min-w-0 ${c.numeric ? "tabular-nums" : ""} ${c.className ?? ""}`}>
+                        {c.cell(row)}
+                      </dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </div>
+              {expanded}
+            </div>
+          );
+        })
+      )}
+      {ready && hasFooter && total > 0 && (
+        <dl className="card grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm font-semibold">
+          {columns
+            .filter((c) => c.footer !== undefined && c.numeric)
+            .map((c) => (
+              <Fragment key={c.key}>
+                <dt style={{ color: "var(--th-color)" }}>Total {c.header}</dt>
+                <dd className="tabular-nums" style={{ color: "var(--text)" }}>
+                  {c.footer}
+                </dd>
+              </Fragment>
+            ))}
+        </dl>
+      )}
+    </div>
+  );
+
   return (
     <>
-      <div className="card overflow-auto p-0" style={{ maxHeight }}>
-        <table className="w-full" aria-label={label}>
+      {cards}
+      <div
+        className={`${plain ? "" : "card p-0"} overflow-auto ${mobileCards ? "hidden sm:block" : ""}`}
+        style={{ maxHeight }}
+        // Area gulir (header sticky + tabel lebar) harus bisa difokus agar bisa
+        // digulir dengan keyboard (axe scrollable-region-focusable).
+        tabIndex={0}
+        role="region"
+        aria-label={label}
+      >
+        <table className="w-full">
           {/* Dasar solid: --hover di dark mode transparan, header sticky tanpa
               dasar akan tembus memperlihatkan baris yang lewat di bawahnya. */}
           <thead className="sticky top-0 z-[1]" style={{ backgroundColor: "var(--bg-elevated)" }}>

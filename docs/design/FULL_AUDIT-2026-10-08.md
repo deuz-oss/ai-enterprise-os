@@ -40,7 +40,11 @@ requirements.
 > header fix, dead period control removed, FAB padding, English nav labels.
 > **Phase 3 (wave 1)** as CHANGELOG "Fase 70": `DataTable` primitive on Finance
 > invoices, Payroll BPJS recap, Employees, Clients; invoice mark-paid now
-> confirmed. 53 hand-built tables remain (largest: Accounting 8, MyPortal 6).
+> confirmed. 47 hand-built tables remain (largest: Accounting 8).
+> **Phase 4** as CHANGELOG "Fase 71": DataTable mobile card mode, MyPortal's 6
+> tables migrated, skip link, inert mobile drawer with focus management,
+> global :focus-visible, labelled ESS/finance forms, contrast fixes; axe-core
+> WCAG 2.2 AA sweep (12 admin pages + 7 ESS sections at 390px).
 
 ---
 

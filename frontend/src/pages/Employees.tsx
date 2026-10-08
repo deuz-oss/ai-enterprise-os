@@ -6,14 +6,15 @@ import { api, downloadFile, formatDate } from "../api/client";
 import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
 import {
+  type Column,
   DataTable,
   HeaderCanvas,
   KpiCard,
+  PeriodPicker,
+  type PillTab,
   PillTabs,
   PreflightAlert,
   StatusPill,
-  type Column,
-  type PillTab,
 } from "../components/ui";
 
 export interface EmployeeRow {
@@ -568,26 +569,7 @@ export default function Employees() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Pengajuan Cuti / Izin</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="number"
-                value={exportPeriod.month}
-                min={1}
-                max={12}
-                onChange={(e) =>
-                  setExportPeriod({ ...exportPeriod, month: Number(e.target.value) })
-                }
-                className="input w-16"
-                title="Bulan (untuk rekap absensi)"
-              />
-              <input
-                type="number"
-                value={exportPeriod.year}
-                onChange={(e) =>
-                  setExportPeriod({ ...exportPeriod, year: Number(e.target.value) })
-                }
-                className="input w-20"
-                title="Tahun"
-              />
+              <PeriodPicker value={exportPeriod} onChange={setExportPeriod} label="periode laporan" />
               <button
                 className="btn-secondary text-xs"
                 onClick={() =>

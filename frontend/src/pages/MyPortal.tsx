@@ -1,3 +1,4 @@
+import { type Column, DataTable, PeriodPicker } from "../components/ui";
 import { FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
@@ -555,27 +556,31 @@ export default function MyPortal() {
     queryFn: () => api.get<Profile>("/me/profile"),
     retry: false,
   });
-  const { data: contracts } = useQuery({
+  const contractsQuery = useQuery({
     queryKey: ["me-contracts"],
     queryFn: () => api.get<ContractRow[]>("/me/contracts"),
   });
-  const { data: documents } = useQuery({
+  const contracts = contractsQuery.data;
+  const documentsQuery = useQuery({
     queryKey: ["me-documents"],
     queryFn: () => api.get<DocumentRow[]>("/me/documents"),
   });
-  const { data: payslips } = useQuery({
+  const documents = documentsQuery.data;
+  const payslipsQuery = useQuery({
     queryKey: ["me-payslips"],
     queryFn: () => api.get<PayslipRow[]>("/me/payslips"),
   });
+  const payslips = payslipsQuery.data;
   const { data: attendance } = useQuery({
     queryKey: ["me-attendance", attPeriod],
     queryFn: () =>
       api.get<AttendanceRow[]>(`/me/attendance?year=${attPeriod.year}&month=${attPeriod.month}`),
   });
-  const { data: leaves } = useQuery({
+  const leavesQuery = useQuery({
     queryKey: ["me-leaves"],
     queryFn: () => api.get<LeaveRow[]>("/me/leave-requests"),
   });
+  const leaves = leavesQuery.data;
   const { data: leaveBalance } = useQuery({
     queryKey: ["me-leave-balance", today.getFullYear()],
     queryFn: () =>
@@ -585,14 +590,16 @@ export default function MyPortal() {
     queryKey: ["me-notifications"],
     queryFn: () => api.get<AppNotification[]>("/me/notifications"),
   });
-  const { data: corrections } = useQuery({
+  const correctionsQuery = useQuery({
     queryKey: ["me-corrections"],
     queryFn: () => api.get<AttendanceCorrectionRow[]>("/me/attendance-corrections"),
   });
-  const { data: overtimeRequests } = useQuery({
+  const corrections = correctionsQuery.data;
+  const overtimeQuery = useQuery({
     queryKey: ["me-overtime"],
     queryFn: () => api.get<OvertimeRequestRow[]>("/me/overtime-requests"),
   });
+  const overtimeRequests = overtimeQuery.data;
 
   const { data: attendanceToday } = useQuery({
     queryKey: ["me-attendance-today"],
@@ -726,6 +733,172 @@ export default function MyPortal() {
   const greeting = hour < 11 ? "Selamat pagi" : hour < 15 ? "Selamat siang" : hour < 19 ? "Selamat sore" : "Selamat malam";
   const unreadCount = (notifications ?? []).filter((n) => !n.read_at).length;
 
+  // ---------- Kolom tabel (DataTable: tampil sebagai kartu di layar HP) ----------
+  const statusColumn = {
+    key: "status",
+    header: "Status",
+    cell: (r: { status: string }) => <span className={`badge ${LEAVE_STATUS_BADGES[r.status] ?? ""}`}>{r.status}</span>,
+  };
+  const noteColumn = {
+    key: "note",
+    header: "Catatan HR",
+    cell: (r: { decision_note: string | null }) => r.decision_note ?? "-",
+  };
+  const cancelColumn = (cancel: { mutate: (id: string) => void; isPending: boolean }) => ({
+    key: "aksi",
+    header: "Aksi",
+    cell: (r: { id: string; status: string }) =>
+      r.status === "menunggu" ? (
+        <button
+          onClick={() => cancel.mutate(r.id)}
+          disabled={cancel.isPending}
+          className="text-sm font-medium text-rose-700 hover:text-rose-800 dark:text-rose-400"
+        >
+          Batalkan
+        </button>
+      ) : null,
+  });
+  const downloadButton = (path: string, label = "Unduh") => (
+    <button
+      onClick={() => openDownload(path)}
+      className="text-sm font-medium hover:opacity-80"
+      style={{ color: "var(--accent)" }}
+    >
+      {label}
+    </button>
+  );
+
+  const contractColumns: Column<ContractRow>[] = [
+    { key: "no", header: "Nomor Kontrak", className: "font-medium", cell: (c) => c.contract_no },
+    { key: "period", header: "Periode", cell: (c) => `${formatDate(c.start_date)} s.d. ${formatDate(c.end_date)}` },
+    { key: "sign", header: "Status TTD", cell: (c) => c.sign_status },
+    {
+      key: "file",
+      header: "File",
+      cell: (c) => (c.file_name ? downloadButton(`/me/contracts/${c.id}/download-url`) : "-"),
+    },
+  ];
+  const documentColumns: Column<DocumentRow>[] = [
+    { key: "title", header: "Judul", className: "font-medium", cell: (d) => d.title },
+    { key: "type", header: "Jenis", cell: (d) => d.document_type },
+    { key: "version", header: "Versi", cell: (d) => `v${d.version}` },
+    { key: "uploaded", header: "Diunggah", cell: (d) => formatDate(d.uploaded_at) },
+    { key: "aksi", header: "Aksi", cell: (d) => downloadButton(`/me/documents/${d.id}/download-url`) },
+  ];
+  // "Diterima" sengaja kolom kedua: di HP (kartu) angka yang paling dicari
+  // karyawan langsung terlihat di bawah periode.
+  const payslipColumns: Column<PayslipRow>[] = [
+    {
+      key: "period",
+      header: "Periode",
+      className: "font-medium",
+      cell: (p) => `${MONTHS[p.month - 1]} ${p.year}`,
+      sortValue: (p) => p.year * 100 + p.month,
+    },
+    {
+      key: "net",
+      header: "Diterima",
+      numeric: true,
+      className: "font-semibold text-emerald-700 dark:text-emerald-400",
+      cell: (p) => formatRupiah(Number(p.net_pay)),
+    },
+    { key: "base", header: "Gaji Pokok", numeric: true, cell: (p) => formatRupiah(Number(p.base_salary)) },
+    { key: "allowance", header: "Tunjangan", numeric: true, cell: (p) => formatRupiah(Number(p.allowance)) },
+    {
+      key: "overtime",
+      header: "Lembur",
+      numeric: true,
+      cell: (p) => (p.overtime_hours > 0 ? `${p.overtime_hours} jam · ${formatRupiah(Number(p.overtime_amount))}` : "-"),
+    },
+    { key: "gross", header: "Bruto", numeric: true, cell: (p) => formatRupiah(Number(p.gross)) },
+    {
+      key: "pph21",
+      header: "PPh21",
+      numeric: true,
+      className: "text-rose-700 dark:text-rose-400",
+      cell: (p) => `-${formatRupiah(Number(p.tax_pph21))}`,
+    },
+    {
+      key: "deductions",
+      header: "Potongan",
+      numeric: true,
+      className: "text-rose-700 dark:text-rose-400",
+      cell: (p) => `-${formatRupiah(Number(p.deductions))}`,
+    },
+  ];
+  const correctionColumns: Column<AttendanceCorrectionRow>[] = [
+    {
+      key: "period",
+      header: "Periode",
+      className: "font-medium",
+      cell: (c) => `${String(c.month).padStart(2, "0")}/${c.year}`,
+    },
+    {
+      key: "usulan",
+      header: "Usulan",
+      cell: (c) =>
+        `${c.requested_present_days} hari hadir · ${c.requested_overtime_hours} jam lembur${c.reason ? ` · ${c.reason}` : ""}`,
+    },
+    statusColumn,
+    noteColumn,
+    cancelColumn(cancelCorrection),
+  ];
+  const overtimeColumns: Column<OvertimeRequestRow>[] = [
+    { key: "date", header: "Tanggal", className: "font-medium", cell: (o) => formatDate(o.date) },
+    { key: "hours", header: "Jam Diajukan", cell: (o) => `${o.requested_hours} jam` },
+    { key: "reason", header: "Alasan", cell: (o) => o.reason ?? "-" },
+    statusColumn,
+    noteColumn,
+    cancelColumn(cancelOvertime),
+  ];
+  const leaveColumns: Column<LeaveRow>[] = [
+    {
+      key: "type",
+      header: "Jenis",
+      className: "font-medium",
+      cell: (lv) => LEAVE_TYPES.find((t) => t.value === lv.leave_type)?.label ?? lv.leave_type,
+    },
+    {
+      key: "date",
+      header: "Tanggal",
+      cell: (lv) => `${formatDate(lv.start_date)} s.d. ${formatDate(lv.end_date)}${lv.reason ? ` · ${lv.reason}` : ""}`,
+    },
+    statusColumn,
+    noteColumn,
+    {
+      key: "file",
+      header: "Lampiran",
+      className: "whitespace-nowrap",
+      cell: (lv) =>
+        lv.file_name ? (
+          downloadButton(
+            `/me/leave-requests/${lv.id}/attachment/download-url`,
+            `Lampiran (${(lv.file_size / 1024).toFixed(0)} KB)`
+          )
+        ) : lv.status === "menunggu" ? (
+          <label className="cursor-pointer text-sm font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
+            + Lampirkan
+            <input
+              type="file"
+              className="sr-only"
+              aria-label="Lampirkan file ke pengajuan cuti"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append("file", file);
+                uploadAttachment.mutate({ id: lv.id, formData: fd });
+                e.target.value = "";
+              }}
+            />
+          </label>
+        ) : (
+          "-"
+        ),
+    },
+    cancelColumn(cancelLeave),
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader icon={UserCircle} title="Portal Saya" subtitle={`${greeting}, ${profile.full_name}`} />
@@ -834,47 +1007,18 @@ export default function MyPortal() {
           <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Kontrak Kerja</h2>
         </div>
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Nomor Kontrak</th>
-              <th className="th">Periode</th>
-              <th className="th">Status TTD</th>
-              <th className="th">File</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(contracts ?? []).map((c) => (
-              <tr key={c.id}>
-                <td className="td font-medium">{c.contract_no}</td>
-                <td className="td">
-                  {c.start_date ?? "-"} s.d. {c.end_date ?? "-"}
-                </td>
-                <td className="td">{c.sign_status}</td>
-                <td className="td">
-                  {c.file_name ? (
-                    <button
-                      onClick={() => openDownload(`/me/contracts/${c.id}/download-url`)}
-                      className="text-sm font-medium hover:opacity-80"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      Unduh
-                    </button>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-              </tr>
-            ))}
-            {contracts?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada kontrak kerja.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        {/* px-4 di HP: kartu induk p-0 (tabel desktop rata tepi). */}
+        <div className="px-4 pb-4 sm:p-0">
+          <DataTable
+            plain
+            label="Kontrak kerja saya"
+            rows={contracts}
+            columns={contractColumns}
+            rowKey={(r) => r.id}
+            query={contractsQuery}
+            emptyTitle="Belum ada kontrak kerja."
+          />
+        </div>
       </div>
       )}
 
@@ -884,43 +1028,18 @@ export default function MyPortal() {
           <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Dokumen Saya</h2>
         </div>
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Judul</th>
-              <th className="th">Jenis</th>
-              <th className="th">Versi</th>
-              <th className="th">Diunggah</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(documents ?? []).map((d) => (
-              <tr key={d.id}>
-                <td className="td font-medium">{d.title}</td>
-                <td className="td">{d.document_type}</td>
-                <td className="td">v{d.version}</td>
-                <td className="td">{formatDate(d.uploaded_at)}</td>
-                <td className="td">
-                  <button
-                    onClick={() => openDownload(`/me/documents/${d.id}/download-url`)}
-                    className="text-sm font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    Unduh
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {documents?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada dokumen.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        {/* px-4 di HP: kartu induk p-0 (tabel desktop rata tepi). */}
+        <div className="px-4 pb-4 sm:p-0">
+          <DataTable
+            plain
+            label="Dokumen saya"
+            rows={documents}
+            columns={documentColumns}
+            rowKey={(r) => r.id}
+            query={documentsQuery}
+            emptyTitle="Belum ada dokumen."
+          />
+        </div>
       </div>
       )}
 
@@ -930,49 +1049,19 @@ export default function MyPortal() {
           <BackLink onClick={() => setActiveSection(null)} />
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Riwayat Slip Gaji</h2>
         </div>
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Periode</th>
-              <th className="th">Gaji Pokok</th>
-              <th className="th">Tunjangan</th>
-              <th className="th">Lembur</th>
-              <th className="th">Bruto</th>
-              <th className="th">PPh21</th>
-              <th className="th">Potongan</th>
-              <th className="th">Diterima</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(payslips ?? []).map((s) => (
-              <tr key={s.id}>
-                <td className="td font-medium">
-                  {MONTHS[s.month - 1]} {s.year}
-                </td>
-                <td className="td">{formatRupiah(Number(s.base_salary))}</td>
-                <td className="td">{formatRupiah(Number(s.allowance))}</td>
-                <td className="td">
-                  {s.overtime_hours > 0
-                    ? `${s.overtime_hours} jam · ${formatRupiah(Number(s.overtime_amount))}`
-                    : "-"}
-                </td>
-                <td className="td">{formatRupiah(Number(s.gross))}</td>
-                <td className="td text-rose-600 dark:text-rose-400">-{formatRupiah(Number(s.tax_pph21))}</td>
-                <td className="td text-rose-600 dark:text-rose-400">-{formatRupiah(Number(s.deductions))}</td>
-                <td className="td font-semibold text-emerald-700 dark:text-emerald-400">
-                  {formatRupiah(Number(s.net_pay))}
-                </td>
-              </tr>
-            ))}
-            {payslips?.length === 0 && (
-              <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada slip gaji yang difinalisasi.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        {/* px-4 di HP: kartu induk p-0 (tabel desktop rata tepi). */}
+        <div className="px-4 pb-4 sm:p-0">
+          <DataTable
+            plain
+            label="Riwayat slip gaji"
+            rows={payslips}
+            columns={payslipColumns}
+            rowKey={(r) => r.id}
+            query={payslipsQuery}
+            defaultSort={{ key: "period", dir: "desc" }}
+            emptyTitle="Belum ada slip gaji yang difinalisasi."
+          />
+        </div>
       </div>
       )}
 
@@ -983,24 +1072,7 @@ export default function MyPortal() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ color: "var(--text)" }}>Rekap Kehadiran</h2>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={attPeriod.month}
-              onChange={(e) =>
-                setAttPeriod({ ...attPeriod, month: Number(e.target.value) })
-              }
-              className="input w-20"
-            />
-            <input
-              type="number"
-              value={attPeriod.year}
-              onChange={(e) =>
-                setAttPeriod({ ...attPeriod, year: Number(e.target.value) })
-              }
-              className="input w-24"
-            />
+            <PeriodPicker value={attPeriod} onChange={setAttPeriod} label="rekap kehadiran" />
           </div>
         </div>
         {(attendance ?? []).map((a) => (
@@ -1024,7 +1096,7 @@ export default function MyPortal() {
       <div className="card">
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Koreksi Absensi</h2>
         <form
-          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_auto_1fr_auto]"
+          className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_auto_auto_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
             const form = new FormData(e.currentTarget);
@@ -1038,41 +1110,36 @@ export default function MyPortal() {
             e.currentTarget.reset();
           }}
         >
-          <input
-            name="month"
-            type="number"
-            min={1}
-            max={12}
-            required
-            placeholder="Bulan"
-            defaultValue={attPeriod.month}
-            className="input w-24"
-          />
-          <input
-            name="year"
-            type="number"
-            required
-            placeholder="Tahun"
-            defaultValue={attPeriod.year}
-            className="input w-24"
-          />
+          {/* Label terlihat: dulu placeholder saja, padahal bulan/tahun berisi
+              defaultValue sehingga placeholder-nya tidak pernah tampil. */}
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Bulan</span>
+            <select name="month" required defaultValue={attPeriod.month} className="input w-auto">
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Tahun</span>
+            <input name="year" type="number" required defaultValue={attPeriod.year} className="input w-24" />
+          </label>
           <div className="flex gap-2">
-            <input
-              name="present_days"
-              type="number"
-              min={0}
-              placeholder="Hari hadir"
-              className="input w-28"
-            />
-            <input
-              name="overtime_hours"
-              type="number"
-              min={0}
-              placeholder="Jam lembur"
-              className="input w-28"
-            />
+            <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+              <span>Hari hadir</span>
+              <input name="present_days" type="number" min={0} className="input w-28" />
+            </label>
+            <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+              <span>Jam lembur</span>
+              <input name="overtime_hours" type="number" min={0} className="input w-28" />
+            </label>
           </div>
-          <input name="reason" placeholder="Alasan koreksi" className="input" />
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Alasan koreksi</span>
+            <input name="reason" className="input" />
+          </label>
           <button disabled={createCorrection.isPending} className="btn">
             Ajukan
           </button>
@@ -1082,53 +1149,17 @@ export default function MyPortal() {
             {(createCorrection.error as Error).message}
           </p>
         )}
-        <table className="mt-3 w-full">
-          <thead>
-            <tr>
-              <th className="th">Periode</th>
-              <th className="th">Usulan</th>
-              <th className="th">Status</th>
-              <th className="th">Catatan HR</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(corrections ?? []).map((c) => (
-              <tr key={c.id}>
-                <td className="td font-medium">
-                  {String(c.month).padStart(2, "0")}/{c.year}
-                </td>
-                <td className="td">
-                  {c.requested_present_days} hari hadir · {c.requested_overtime_hours} jam lembur
-                  {c.reason ? ` · ${c.reason}` : ""}
-                </td>
-                <td className="td">
-                  <span className={`badge ${LEAVE_STATUS_BADGES[c.status] ?? ""}`}>
-                    {c.status}
-                  </span>
-                </td>
-                <td className="td">{c.decision_note ?? "-"}</td>
-                <td className="td">
-                  {c.status === "menunggu" && (
-                    <button
-                      onClick={() => cancelCorrection.mutate(c.id)}
-                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                    >
-                      Batalkan
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {corrections?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada pengajuan koreksi absensi.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="mt-3">
+          <DataTable
+            plain
+            label="Pengajuan koreksi absensi"
+            rows={corrections}
+            columns={correctionColumns}
+            rowKey={(r) => r.id}
+            query={correctionsQuery}
+            emptyTitle="Belum ada pengajuan koreksi absensi."
+          />
+        </div>
       </div>
       </>
       )}
@@ -1138,7 +1169,7 @@ export default function MyPortal() {
         <BackLink onClick={() => setActiveSection(null)} />
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Ajukan Lembur</h2>
         <form
-          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_1fr_auto]"
+          className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_auto_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
             const form = new FormData(e.currentTarget);
@@ -1150,17 +1181,18 @@ export default function MyPortal() {
             e.currentTarget.reset();
           }}
         >
-          <input name="date" type="date" required className="input" />
-          <input
-            name="requested_hours"
-            type="number"
-            min={1}
-            max={24}
-            required
-            placeholder="Jam lembur"
-            className="input w-32"
-          />
-          <input name="reason" placeholder="Alasan (opsional)" className="input" />
+<label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Tanggal lembur</span>
+            <input name="date" type="date" required className="input" />
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Jam lembur</span>
+            <input name="requested_hours" type="number" min={1} max={24} required className="input w-32" />
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Alasan (opsional)</span>
+            <input name="reason" className="input" />
+          </label>
           <button disabled={submitOvertime.isPending} className="btn">
             Ajukan
           </button>
@@ -1168,50 +1200,17 @@ export default function MyPortal() {
         {submitOvertime.error && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(submitOvertime.error as Error).message}</p>
         )}
-        <table className="mt-3 w-full">
-          <thead>
-            <tr>
-              <th className="th">Tanggal</th>
-              <th className="th">Jam Diajukan</th>
-              <th className="th">Alasan</th>
-              <th className="th">Status</th>
-              <th className="th">Catatan HR</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(overtimeRequests ?? []).map((o) => (
-              <tr key={o.id}>
-                <td className="td font-medium">{o.date}</td>
-                <td className="td">{o.requested_hours} jam</td>
-                <td className="td">{o.reason ?? "-"}</td>
-                <td className="td">
-                  <span className={`badge ${LEAVE_STATUS_BADGES[o.status] ?? ""}`}>
-                    {o.status}
-                  </span>
-                </td>
-                <td className="td">{o.decision_note ?? "-"}</td>
-                <td className="td">
-                  {o.status === "menunggu" && (
-                    <button
-                      onClick={() => cancelOvertime.mutate(o.id)}
-                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                    >
-                      Batalkan
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {overtimeRequests?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada pengajuan lembur.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="mt-3">
+          <DataTable
+            plain
+            label="Pengajuan lembur"
+            rows={overtimeRequests}
+            columns={overtimeColumns}
+            rowKey={(r) => r.id}
+            query={overtimeQuery}
+            emptyTitle="Belum ada pengajuan lembur."
+          />
+        </div>
       </div>
       )}
 
@@ -1246,7 +1245,7 @@ export default function MyPortal() {
       <div className="card">
         <h2 className="font-semibold" style={{ color: "var(--text)" }}>Ajukan Cuti / Izin</h2>
         <form
-          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto]"
+          className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
             const form = new FormData(e.currentTarget);
@@ -1259,16 +1258,28 @@ export default function MyPortal() {
             e.currentTarget.reset();
           }}
         >
-          <select name="leave_type" className="input w-auto" defaultValue="cuti_tahunan">
-            {LEAVE_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <input name="start_date" type="date" required className="input" />
-          <input name="end_date" type="date" required className="input" />
-          <input name="reason" placeholder="Alasan (opsional)" className="input" />
+<label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Jenis</span>
+            <select name="leave_type" className="input w-auto" defaultValue="cuti_tahunan">
+              {LEAVE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Mulai</span>
+            <input name="start_date" type="date" required className="input" />
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Sampai</span>
+            <input name="end_date" type="date" required className="input" />
+          </label>
+          <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+            <span>Alasan (opsional)</span>
+            <input name="reason" className="input" />
+          </label>
           <button disabled={submitLeave.isPending} className="btn">
             Ajukan
           </button>
@@ -1276,83 +1287,17 @@ export default function MyPortal() {
         {submitLeave.error && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(submitLeave.error as Error).message}</p>
         )}
-        <table className="mt-3 w-full">
-          <thead>
-            <tr>
-              <th className="th">Jenis</th>
-              <th className="th">Tanggal</th>
-              <th className="th">Status</th>
-              <th className="th">Catatan HR</th>
-              <th className="th">Lampiran</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(leaves ?? []).map((lv) => (
-              <tr key={lv.id}>
-                <td className="td">
-                  {LEAVE_TYPES.find((t) => t.value === lv.leave_type)?.label ?? lv.leave_type}
-                </td>
-                <td className="td">
-                  {lv.start_date} s.d. {lv.end_date}
-                  {lv.reason ? ` · ${lv.reason}` : ""}
-                </td>
-                <td className="td">
-                  <span className={`badge ${LEAVE_STATUS_BADGES[lv.status] ?? ""}`}>
-                    {lv.status}
-                  </span>
-                </td>
-                <td className="td">{lv.decision_note ?? "-"}</td>
-                <td className="td whitespace-nowrap">
-                  {lv.file_name ? (
-                    <button
-                      onClick={() => openDownload(`/me/leave-requests/${lv.id}/attachment/download-url`)}
-                      className="text-sm font-medium hover:opacity-80"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      Lampiran ({(lv.file_size / 1024).toFixed(0)} KB)
-                    </button>
-                  ) : lv.status === "menunggu" ? (
-                    <label className="cursor-pointer text-sm font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
-                      + Lampirkan
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const fd = new FormData();
-                          fd.append("file", file);
-                          uploadAttachment.mutate({ id: lv.id, formData: fd });
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td className="td">
-                  {lv.status === "menunggu" && (
-                    <button
-                      onClick={() => cancelLeave.mutate(lv.id)}
-                      className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                    >
-                      Batalkan
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {leaves?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada pengajuan cuti/izin.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="mt-3">
+          <DataTable
+            plain
+            label="Pengajuan cuti dan izin"
+            rows={leaves}
+            columns={leaveColumns}
+            rowKey={(r) => r.id}
+            query={leavesQuery}
+            emptyTitle="Belum ada pengajuan cuti/izin."
+          />
+        </div>
       </div>
       </>
       )}

@@ -698,7 +698,14 @@ export default function Payroll() {
   });
   const bpjsRecap = bpjsQuery.data;
   const bpjsColumns: Column<BpjsRow>[] = [
-    { key: "name", header: "Karyawan", className: "font-medium", cell: (r) => r.full_name, sortValue: (r) => r.full_name },
+    {
+      key: "name",
+      header: "Karyawan",
+      className: "font-medium",
+      cell: (r) => r.full_name,
+      sortValue: (r) => r.full_name,
+      footer: "Total",
+    },
     {
       key: "no_tk",
       header: "No BPJS TK",
@@ -711,7 +718,6 @@ export default function Payroll() {
       numeric: true,
       cell: (r) => formatRupiah(r.salary_kesehatan),
       sortValue: (r) => r.salary_kesehatan,
-      footer: "Total",
     },
     {
       key: "employer",

@@ -3,7 +3,7 @@ export interface Period {
   month: number;
 }
 
-const MONTHS = [
+export const MONTH_NAMES = [
   "Januari",
   "Februari",
   "Maret",
@@ -47,7 +47,7 @@ export function PeriodPicker({
         onChange={(e) => onChange({ ...value, month: Number(e.target.value) })}
         aria-label={`Bulan ${label}`}
       >
-        {MONTHS.map((name, i) => (
+        {MONTH_NAMES.map((name, i) => (
           <option key={name} value={i + 1}>
             {name}
           </option>

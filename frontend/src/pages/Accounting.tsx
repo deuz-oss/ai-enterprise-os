@@ -4,7 +4,7 @@ import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatRupiah } from "../api/client";
 import { toast } from "sonner";
-import { confirmDialog, confirmToast, PeriodPicker } from "../components/ui";
+import { confirmDialog, confirmToast, MONTH_NAMES, PeriodPicker } from "../components/ui";
 import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
@@ -387,28 +387,26 @@ export default function Accounting() {
             auto-journal melewati periode tertutup. Buka ulang tercatat di audit.
           </CalloutBlock>          <div className="card space-y-2">
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Tutup Bulan</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={12}
-                placeholder="Bulan"
-                defaultValue={new Date().getMonth() + 1}
-                id="close-month"
-                className="input w-24"
-              />
-              <input
-                type="number"
-                placeholder="Tahun"
-                defaultValue={year}
-                id="close-year"
-                className="input w-24"
-              />
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+                <span>Bulan</span>
+                <select defaultValue={new Date().getMonth() + 1} id="close-month" className="input w-auto">
+                  {MONTH_NAMES.map((m, i) => (
+                    <option key={m} value={i + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
+                <span>Tahun</span>
+                <input type="number" defaultValue={year} id="close-year" className="input w-24" />
+              </label>
               <button
                 className="btn-secondary"
                 onClick={() => {
                   const m = Number(
-                    (document.getElementById("close-month") as HTMLInputElement).value
+                    (document.getElementById("close-month") as HTMLSelectElement).value
                   );
                   const y = Number(
                     (document.getElementById("close-year") as HTMLInputElement).value
