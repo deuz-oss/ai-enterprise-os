@@ -5,8 +5,16 @@ import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile, formatDate } from "../api/client";
 import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
-import { HeaderCanvas, KpiCard, PillTabs, PreflightAlert, StatusPill, type PillTab } from "../components/ui";
-import { Pagination } from "../components/Pagination";
+import {
+  DataTable,
+  HeaderCanvas,
+  KpiCard,
+  PillTabs,
+  PreflightAlert,
+  StatusPill,
+  type Column,
+  type PillTab,
+} from "../components/ui";
 
 export interface EmployeeRow {
   id: string;
@@ -147,24 +155,70 @@ export default function Employees() {
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
   });
-  const [offset, setOffset] = useState(0);
   // Tab/Pill filter (§1.5) atas status -- backend belum expose param filter
   // ini, jadi difilter+dipaginasi di klien dari `employeesLookup` (endpoint
   // yang sama, sudah dipakai widget lain untuk lookup nama lintas-halaman).
   const [statusTab, setStatusTab] = useState("");
-  const pageLimit = 50;
+  const [search, setSearch] = useState("");
+  const employeesQuery = useEmployeeLookup<EmployeeRow>();
   const {
     data: employeesLookup,
     total: employeesLookupTotal,
     truncated: employeesTruncated,
-  } = useEmployeeLookup<EmployeeRow>();
-  const allEmployees = employeesLookup ?? [];
-  const filteredEmployees = useMemo(
-    () => allEmployees.filter((e) => !statusTab || e.status === statusTab),
-    [allEmployees, statusTab]
-  );
-  const employees = filteredEmployees.slice(offset, offset + pageLimit);
-  const employeesTotal = filteredEmployees.length;
+  } = employeesQuery;
+  const allEmployees = useMemo(() => employeesLookup ?? [], [employeesLookup]);
+  const filteredEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allEmployees.filter(
+      (e) =>
+        (!statusTab || e.status === statusTab) &&
+        (!q || [e.full_name, e.employee_no, e.phone].some((v) => v?.toLowerCase().includes(q)))
+    );
+  }, [allEmployees, statusTab, search]);
+  const employeeColumns: Column<EmployeeRow>[] = [
+    {
+      key: "employee_no",
+      header: "No. Induk",
+      className: "font-mono text-xs",
+      cell: (e) => e.employee_no,
+      sortValue: (e) => e.employee_no,
+    },
+    {
+      key: "name",
+      header: "Nama",
+      sortValue: (e) => e.full_name,
+      cell: (e) => (
+        <div className="flex items-center gap-2">
+          <span
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-[var(--accent-contrast)]"
+            style={{ backgroundColor: "var(--accent)" }}
+            aria-hidden="true"
+          >
+            {e.full_name
+              .split(" ")
+              .map((w) => w[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase()}
+          </span>
+          <span className="font-medium">{e.full_name}</span>
+        </div>
+      ),
+    },
+    { key: "phone", header: "Telepon", cell: (e) => e.phone ?? "-" },
+    {
+      key: "join_date",
+      header: "Masuk",
+      cell: (e) => <span className="whitespace-nowrap">{formatDate(e.join_date)}</span>,
+      sortValue: (e) => e.join_date,
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (e) => <StatusPill domain="employee" status={e.status} />,
+      sortValue: (e) => e.status,
+    },
+  ];
   const statusTabs: PillTab[] = [
     { key: "", label: "Semua", count: allEmployees.length },
     { key: "aktif", label: "Aktif", count: allEmployees.filter((e) => e.status === "aktif").length },
@@ -659,77 +713,35 @@ export default function Employees() {
         />
       )}
 
-      <PillTabs
-        tabs={statusTabs}
-        value={statusTab}
-        onChange={(k) => {
-          setStatusTab(k);
-          setOffset(0);
-        }}
-      />
-
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">No. Induk</th>
-              <th className="th">Nama</th>
-              <th className="th">Telepon</th>
-              <th className="th">Masuk</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {employees.map((e) => (
-              <tr
-                key={e.id}
-                onClick={() => navigate(`/employees/${e.id}`)}
-                onKeyDown={(ev) => {
-                  if (ev.key === "Enter" || ev.key === " ") {
-                    ev.preventDefault();
-                    navigate(`/employees/${e.id}`);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer hover:bg-[var(--hover)] transition-colors"
-              >
-                <td className="td py-1.5 font-mono text-xs">{e.employee_no}</td>
-                <td className="td py-1.5">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-[var(--accent-contrast)]"
-                      style={{ backgroundColor: "var(--accent)" }}
-                    >
-                      {e.full_name
-                        .split(" ")
-                        .map((w) => w[0])
-                        .slice(0, 2)
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <span className="font-medium">{e.full_name}</span>
-                  </div>
-                </td>
-                <td className="td py-1.5">{e.phone ?? "-"}</td>
-                <td className="td whitespace-nowrap py-1.5">{formatDate(e.join_date)}</td>
-                <td className="td py-1.5">
-                  <StatusPill domain="employee" status={e.status} />
-                </td>
-              </tr>
-            ))}
-            {employees.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {allEmployees.length === 0 ? "Belum ada karyawan." : "Tidak ada karyawan untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="flex flex-wrap items-center gap-3">
+        <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari nama, no. induk, atau telepon…"
+          aria-label="Cari karyawan"
+          className="input w-full sm:ml-auto sm:w-72"
+        />
       </div>
 
-      <Pagination offset={offset} limit={pageLimit} total={employeesTotal} onOffsetChange={setOffset} />
+      <DataTable
+        label="Daftar karyawan"
+        rows={filteredEmployees}
+        columns={employeeColumns}
+        rowKey={(e) => e.id}
+        query={employeesQuery}
+        onRowClick={(e) => navigate(`/employees/${e.id}`)}
+        defaultSort={{ key: "employee_no", dir: "desc" }}
+        pageSize={50}
+        emptyTitle={
+          allEmployees.length === 0
+            ? "Belum ada karyawan."
+            : search
+              ? "Tidak ada karyawan yang cocok dengan pencarian."
+              : "Tidak ada karyawan untuk status ini."
+        }
+      />
 
     </div>
   );

@@ -4,9 +4,11 @@ import { CalloutBlock } from "../components/workspace";
 import { toast } from "sonner";
 import {
   Button,
+  type Column,
   confirmDialog,
   confirmToast,
   currentPeriod,
+  DataTable,
   HeaderCanvas,
   KpiCard,
   PeriodPicker,
@@ -689,11 +691,55 @@ export default function Payroll() {
     queryFn: () => api.get<SlipRow[]>(`/payroll/runs/${selectedRunId}/slips`),
     enabled: Boolean(selectedRunId),
   });
-  const { data: bpjsRecap } = useQuery({
+  const bpjsQuery = useQuery({
     queryKey: ["bpjs", period],
     queryFn: () =>
       api.get<BpjsRecap>(`/bpjs/contributions/${period.year}/${period.month}`),
   });
+  const bpjsRecap = bpjsQuery.data;
+  const bpjsColumns: Column<BpjsRow>[] = [
+    { key: "name", header: "Karyawan", className: "font-medium", cell: (r) => r.full_name, sortValue: (r) => r.full_name },
+    {
+      key: "no_tk",
+      header: "No BPJS TK",
+      className: "font-mono text-xs",
+      cell: (r) => r.bpjs_ketenagakerjaan_no ?? "-",
+    },
+    {
+      key: "salary",
+      header: "Gaji Kes (cap)",
+      numeric: true,
+      cell: (r) => formatRupiah(r.salary_kesehatan),
+      sortValue: (r) => r.salary_kesehatan,
+      footer: "Total",
+    },
+    {
+      key: "employer",
+      header: "Iuran Perusahaan",
+      numeric: true,
+      cell: (r) => formatRupiah(r.employer_total),
+      sortValue: (r) => r.employer_total,
+      footer: formatRupiah(bpjsRecap?.summary.employer_total ?? 0),
+    },
+    {
+      key: "employee",
+      header: "Potongan Karyawan",
+      numeric: true,
+      className: "text-rose-700 dark:text-rose-400",
+      cell: (r) => `-${formatRupiah(r.employee_total)}`,
+      sortValue: (r) => r.employee_total,
+      footer: `-${formatRupiah(bpjsRecap?.summary.employee_total ?? 0)}`,
+    },
+    {
+      key: "total",
+      header: "Total",
+      numeric: true,
+      className: "font-semibold",
+      cell: (r) => formatRupiah(r.grand_total),
+      sortValue: (r) => r.grand_total,
+      footer: formatRupiah(bpjsRecap?.summary.grand_total ?? 0),
+    },
+  ];
 
   // Sinyal anomali NYATA (bukan 3 contoh ilustratif di spec -- PPh21 salah
   // hitung/NPWP kedaluwarsa/NIK duplikat tidak punya data pendukung di
@@ -1254,9 +1300,9 @@ export default function Payroll() {
         <SaltabTable runId={selectedRunId} />
       </div>
 
-      <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
-          <h2 className="font-semibold" style={{ color: "var(--text)" }}>
+      <section className="space-y-2" aria-labelledby="bpjs-recap-title">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="bpjs-recap-title" className="font-semibold" style={{ color: "var(--text)" }}>
             Rekap Iuran BPJS — {period.year}-{String(period.month).padStart(2, "0")}
           </h2>
           <div className="flex gap-2">
@@ -1276,50 +1322,16 @@ export default function Payroll() {
             </button>
           </div>
         </div>
-        <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Karyawan</th>
-              <th className="th">No BPJS TK</th>
-              <th className="th text-right">Gaji Kes (cap)</th>
-              <th className="th text-right">Iuran Perusahaan</th>
-              <th className="th text-right">Potongan Karyawan</th>
-              <th className="th text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(bpjsRecap?.rows ?? []).map((r) => (
-              <tr key={r.employee_id}>
-                <td className="td font-medium">{r.full_name}</td>
-                <td className="td font-mono text-xs">{r.bpjs_ketenagakerjaan_no ?? "-"}</td>
-                <td className="td text-right tabular-nums">{formatRupiah(r.salary_kesehatan)}</td>
-                <td className="td text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{formatRupiah(r.employer_total)}</td>
-                <td className="td text-rose-600 dark:text-rose-400 text-right tabular-nums">-{formatRupiah(r.employee_total)}</td>
-                <td className="td font-semibold text-right tabular-nums">{formatRupiah(r.grand_total)}</td>
-              </tr>
-            ))}
-            {bpjsRecap && bpjsRecap.rows.length > 0 && (
-              <tr className="font-bold" style={{ backgroundColor: "var(--hover)" }}>
-                <td className="td" colSpan={3}>
-                  Total
-                </td>
-                <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.employer_total)}</td>
-                <td className="td text-rose-700 dark:text-rose-400 text-right tabular-nums">
-                  -{formatRupiah(bpjsRecap.summary.employee_total)}
-                </td>
-                <td className="td text-right tabular-nums">{formatRupiah(bpjsRecap.summary.grand_total)}</td>
-              </tr>
-            )}
-            {bpjsRecap?.rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Tidak ada karyawan aktif.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+        <DataTable
+          label={`Rekap iuran BPJS ${period.month}/${period.year}`}
+          rows={bpjsRecap?.rows}
+          columns={bpjsColumns}
+          rowKey={(r) => r.employee_id}
+          query={bpjsQuery}
+          defaultSort={{ key: "name", dir: "asc" }}
+          emptyTitle="Tidak ada karyawan aktif."
+        />
+      </section>
 
       {/* Kartu Info Baris Bawah (§1.7) -- kesiapan rekening & kepatuhan BPJS
           dari data karyawan yang sudah di-fetch, bukan jadwal cut-off
@@ -1361,7 +1373,7 @@ export default function Payroll() {
           </div>
           <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
             {!selectedRunId
-              ? "Pilih run (\"Slip Gaji\") untuk memeriksa net pay."
+              ? "Pilih run (\"Lihat Slip\") untuk memeriksa net pay."
               : negativeNetPaySlips.length === 0
                 ? "Tidak ada slip dengan net pay negatif pada run ini."
                 : `${negativeNetPaySlips.length} slip pada run ini punya net pay negatif -- lihat tabel Slip Gaji di atas.`}

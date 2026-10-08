@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 70: Audit 2026-10-08 Phase 3 (Data UX, gelombang 1)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §8.
+- **`DataTable`** (`components/ui/DataTable.tsx`): sort per kolom (`aria-sort`, nilai kosong selalu di akhir), header sticky dengan dasar solid (aman di dark mode), kolom angka rata kanan + digit tabular, baris total (footer sticky), state loading/error/403/kosong bawaan, baris yang bisa diklik & dijangkau keyboard, baris ekspansi (form inline), dan paginasi klien SETELAH sort.
+- Dipakai di empat tabel prioritas: **Invoice Finance** (+ kolom Klien, total Payroll/PPN/Total), **Rekap Iuran BPJS** Payroll, **Karyawan** (+ pencarian nama/no. induk/telepon), **Klien** (+ pencarian perusahaan/PIC/NPWP).
+- **Fixed**: "tandai lunas" invoice Finance langsung jalan sekali klik, padahal status lunas final dan memposting jurnal pelunasan; kini lewat dialog konfirmasi (terlewat di Fase 67).
+- Form Klien Baru: label terlihat di atas field (dulu placeholder saja), error simpan ditampilkan (dulu diam), tombol "Menyimpan…" saat proses.
+- 53 tabel lain (25 file) belum dimigrasi; prioritas berikutnya Akuntansi, Portal Saya, Absensi, Rates.
+
 ### Changed — Fase 69: Audit 2026-10-08 Phase 2 (UX inti)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §7, §9, §10.

@@ -1,8 +1,8 @@
-import { Fragment, FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
-import { confirmDialog, KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { confirmDialog, DataTable, KpiCard, PillTabs, type Column, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
 
@@ -121,7 +121,7 @@ export default function Finance() {
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
-  const { data: invoices } = useQuery({
+  const invoicesQuery = useQuery({
     queryKey: ["invoices", clientFilter],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -130,6 +130,7 @@ export default function Finance() {
       return api.get<InvoiceRow[]>(`/finance/invoices${qs ? `?${qs}` : ""}`);
     },
   });
+  const invoices = invoicesQuery.data;
   const { data: aging } = useQuery({
     queryKey: ["aging"],
     queryFn: () => api.get<AgingRow[]>("/finance/invoices/aging"),
@@ -143,6 +144,269 @@ export default function Finance() {
     () => (invoices ?? []).filter((i) => statusTab === "semua" || i.status === statusTab),
     [invoices, statusTab]
   );
+  // ---------- Tabel invoice (DataTable) ----------
+  const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "-";
+  const sumOf = (key: "payroll_total" | "ppn_amount" | "total_due") =>
+    filteredInvoices.reduce((sum, inv) => sum + Number(inv[key]), 0);
+
+  // Dulu sekali klik: status dibayar final (backend menolak perubahan
+  // berikutnya, 409) dan memposting jurnal pelunasan otomatis.
+  function askMarkPaid(i: InvoiceRow) {
+    confirmDialog({
+      title: `Tandai ${i.invoice_no} lunas?`,
+      message:
+        `Invoice ${formatRupiah(Number(i.total_due))} untuk ${clientName(i.client_id)} dicatat sudah dibayar dan jurnal pelunasan diposting. Status lunas tidak bisa diubah kembali.` +
+        (i.status === "draft" ? " Catatan: invoice ini masih draft (belum tercatat terkirim ke klien)." : ""),
+      confirmLabel: "Tandai Lunas",
+      tone: "primary",
+      onConfirm: () =>
+        updateStatus.mutate(
+          { id: i.id, status: "dibayar" },
+          {
+            onSuccess: () => toast.success(`${i.invoice_no} ditandai lunas`),
+            onError: (e) => toast.error(`Gagal: ${(e as Error).message}`),
+          }
+        ),
+    });
+  }
+
+  function renderFakturCell(i: InvoiceRow) {
+    const fakturStatus = i.tax_invoice_status ?? "belum_buat";
+    const ft = FAKTUR_LABELS[fakturStatus] ?? FAKTUR_LABELS.belum_buat;
+    const isOpen = fakturOpenId === i.id;
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            title={i.faktur_status_detail ?? undefined}
+            onClick={() => {
+              setFakturError(null);
+              setFakturOpenId(isOpen ? null : i.id);
+            }}
+            className={`badge cursor-pointer ${ft.cls}`}
+          >
+            {i.no_seri_faktur ? `${i.no_seri_faktur} · ` : ""}
+            {ft.label}
+          </button>
+          {(fakturStatus === "belum_buat" || fakturStatus === "draft" || fakturStatus === "ditolak") && (
+            <button
+              className="btn-secondary px-2 py-1 text-xs"
+              disabled={sendTaxInvoice.isPending}
+              onClick={() => sendTaxInvoice.mutate(i.id)}
+            >
+              Kirim ke DJP
+            </button>
+          )}
+          {fakturStatus === "approved" && (
+            <button
+              className="btn-secondary px-2 py-1 text-xs"
+              onClick={() => downloadFile(`/finance/invoices/${i.id}/tax-invoice/pdf`)}
+            >
+              Unduh PDF
+            </button>
+          )}
+          {fakturStatus === "approved" && i.efaktur_qr_url && (
+            <a
+              href={i.efaktur_qr_url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary px-2 py-1 text-xs"
+            >
+              QR e-Faktur
+            </a>
+          )}
+          {fakturStatus === "approved" && i.tax_invoice_date && (
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {i.tax_invoice_date}
+            </span>
+          )}
+          {i.faktur_pengganti_ref && (
+            <span className="pill p-yellow text-[10px]">Pengganti</span>
+          )}
+          {fakturStatus !== "belum_buat" &&
+            fakturStatus !== "dibatalkan" &&
+            fakturStatus !== "pengganti" && (
+              <button
+                className="text-xs"
+                style={{ color: "var(--text-muted)" }}
+                disabled={cancelTaxInvoice.isPending}
+                onClick={() =>
+                  confirmDialog({
+                    title: `Batalkan faktur pajak ${i.invoice_no}?`,
+                    message:
+                      "Status faktur pajak menjadi dibatalkan dan tidak bisa diaktifkan lagi. Untuk koreksi, buat faktur pengganti.",
+                    confirmLabel: "Batalkan Faktur",
+                    requireText: i.invoice_no,
+                    onConfirm: () =>
+                      cancelTaxInvoice.mutate(i.id, {
+                        onSuccess: () => toast.success(`Faktur pajak ${i.invoice_no} dibatalkan`),
+                        onError: (e) => toast.error(`Gagal membatalkan: ${(e as Error).message}`),
+                      }),
+                  })
+                }
+              >
+                Batalkan
+              </button>
+            )}
+        </div>
+    );
+  }
+
+  function renderFakturForm(i: InvoiceRow) {
+    return (
+      <form
+        onSubmit={(e) => handleSetFaktur(e, i.id)}
+        className="grid grid-cols-1 gap-2 py-2 sm:grid-cols-3"
+      >
+        <input
+          name="lawan_nama"
+          defaultValue={i.lawan_nama ?? ""}
+          placeholder="Nama lawan transaksi"
+          required
+          className="input"
+        />
+        <input
+          name="lawan_npwp"
+          defaultValue={i.lawan_npwp ?? ""}
+          placeholder="NPWP lawan (xx.xxx.xxx.x-xxx.xxx)"
+          required
+          className="input"
+        />
+        <input
+          name="lawan_alamat"
+          defaultValue={i.lawan_alamat ?? ""}
+          placeholder="Alamat lawan transaksi"
+          className="input"
+        />
+        <input
+          name="dpp_amount"
+          type="number"
+          defaultValue={i.dpp_amount ?? Number(i.total_due)}
+          placeholder="DPP (Rp)"
+          required
+          className="input"
+        />
+        <select name="kode_transaksi" defaultValue={i.kode_transaksi ?? "01"} className="input">
+          {KODE_TRANSAKSI_OPTIONS.map((k) => (
+            <option key={k.value} value={k.value}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+        <input
+          name="no_seri_faktur"
+          defaultValue={i.no_seri_faktur ?? ""}
+          placeholder="No. Seri Faktur (010.001-26.xxxxxxxx)"
+          required
+          className="input"
+        />
+        <div className="flex items-center gap-2 sm:col-span-3">
+          <button type="submit" disabled={setTaxInvoice.isPending} className="btn">
+            Simpan Faktur
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setFakturOpenId(null)}
+          >
+            Batal
+          </button>
+          {fakturError && <span className="text-xs text-rose-700 dark:text-rose-400">{fakturError}</span>}
+        </div>
+      </form>
+    );
+  }
+
+  const invoiceColumns: Column<InvoiceRow>[] = [
+    {
+      key: "invoice_no",
+      header: "No. Invoice",
+      className: "font-mono text-xs whitespace-nowrap",
+      cell: (i) => i.invoice_no,
+      sortValue: (i) => i.invoice_no,
+    },
+    {
+      key: "client",
+      header: "Klien",
+      cell: (i) => clientName(i.client_id),
+      sortValue: (i) => clientName(i.client_id),
+    },
+    {
+      key: "period",
+      header: "Periode",
+      className: "whitespace-nowrap",
+      cell: (i) => `${String(i.month).padStart(2, "0")}/${i.year}`,
+      sortValue: (i) => i.year * 100 + i.month,
+    },
+    {
+      key: "payroll_total",
+      header: "Payroll",
+      numeric: true,
+      cell: (i) => formatRupiah(Number(i.payroll_total)),
+      sortValue: (i) => Number(i.payroll_total),
+      footer: formatRupiah(sumOf("payroll_total")),
+    },
+    {
+      key: "ppn",
+      header: "PPN",
+      numeric: true,
+      cell: (i) => formatRupiah(Number(i.ppn_amount)),
+      sortValue: (i) => Number(i.ppn_amount),
+      footer: formatRupiah(sumOf("ppn_amount")),
+    },
+    {
+      key: "total_due",
+      header: "Total",
+      numeric: true,
+      className: "font-semibold",
+      cell: (i) => formatRupiah(Number(i.total_due)),
+      sortValue: (i) => Number(i.total_due),
+      footer: formatRupiah(sumOf("total_due")),
+    },
+    {
+      key: "due_date",
+      header: "Jatuh Tempo",
+      className: "whitespace-nowrap text-xs",
+      sortValue: (i) => i.due_date,
+      cell: (i) => (
+        <>
+          {i.issued_date && <div style={{ color: "var(--th-color)" }}>Terbit: {formatDate(i.issued_date)}</div>}
+          {formatDate(i.due_date)}
+        </>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      className: "whitespace-nowrap",
+      sortValue: (i) => i.status,
+      cell: (i) => {
+        const st = STATUS_LABELS[i.status] ?? STATUS_LABELS.draft;
+        return (
+          <>
+            <span className={`badge ${st.cls}`}>{st.label}</span>
+            {/* Draft juga boleh (sama seperti sebelumnya): UI belum punya aksi
+                draft -> terkirim, jadi ini satu-satunya jalan melunasi draft. */}
+            {(i.status === "terkirim" || i.status === "draft") && (
+              <button
+                onClick={() => askMarkPaid(i)}
+                disabled={updateStatus.isPending}
+                className="btn-secondary ml-1 px-2 py-0.5 text-xs"
+              >
+                Tandai lunas…
+              </button>
+            )}
+            {i.paid_at && (
+              <div className="mt-1 text-xs" style={{ color: "var(--th-color)" }}>
+                {formatDate(i.paid_at)}
+              </div>
+            )}
+          </>
+        );
+      },
+    },
+    { key: "faktur", header: "Faktur Pajak", cell: renderFakturCell },
+  ];
+
   const statusTabs: PillTab[] = useMemo(() => {
     const all = invoices ?? [];
     return [
@@ -346,212 +610,16 @@ export default function Finance() {
         </select>
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">No. Invoice</th>
-              <th className="th">Periode</th>
-              <th className="th">Payrol</th>
-              <th className="th">PPN</th>
-              <th className="th">Total</th>
-              <th className="th">Jatuh Tempo</th>
-              <th className="th">Status</th>
-              <th className="th">Faktur Pajak</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {filteredInvoices.map((i) => {
-              const st = STATUS_LABELS[i.status] ?? STATUS_LABELS.draft;
-              const fakturStatus = i.tax_invoice_status ?? "belum_buat";
-              const ft = FAKTUR_LABELS[fakturStatus] ?? FAKTUR_LABELS.belum_buat;
-              const isOpen = fakturOpenId === i.id;
-              return (
-                <Fragment key={i.id}>
-                  <tr>
-                    <td className="td font-mono text-xs">{i.invoice_no}</td>
-                    <td className="td">{String(i.month).padStart(2, "0")}/{i.year}</td>
-                    <td className="td">{formatRupiah(Number(i.payroll_total))}</td>
-                    <td className="td">{formatRupiah(Number(i.ppn_amount))}</td>
-                    <td className="td font-semibold">{formatRupiah(Number(i.total_due))}</td>
-                    <td className="td whitespace-nowrap text-xs">
-                      {i.issued_date && (
-                        <div style={{ color: "var(--th-color)" }}>Terbit: {formatDate(i.issued_date)}</div>
-                      )}
-                      {formatDate(i.due_date)}
-                    </td>
-                    <td className="td">
-                      {i.status === "terkirim" || i.status === "draft" ? (
-                        <button
-                          onClick={() => updateStatus.mutate({ id: i.id, status: "dibayar" })}
-                          className={`badge cursor-pointer ${st.cls}`}
-                        >
-                          {st.label} → tandai lunas
-                        </button>
-                      ) : (
-                        <span className={`badge ${st.cls}`}>{st.label}</span>
-                      )}
-                      {i.paid_at && (
-                        <div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {formatDate(i.paid_at)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="td">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          title={i.faktur_status_detail ?? undefined}
-                          onClick={() => {
-                            setFakturError(null);
-                            setFakturOpenId(isOpen ? null : i.id);
-                          }}
-                          className={`badge cursor-pointer ${ft.cls}`}
-                        >
-                          {i.no_seri_faktur ? `${i.no_seri_faktur} · ` : ""}
-                          {ft.label}
-                        </button>
-                        {(fakturStatus === "belum_buat" || fakturStatus === "draft" || fakturStatus === "ditolak") && (
-                          <button
-                            className="btn-secondary px-2 py-1 text-xs"
-                            disabled={sendTaxInvoice.isPending}
-                            onClick={() => sendTaxInvoice.mutate(i.id)}
-                          >
-                            Kirim ke DJP
-                          </button>
-                        )}
-                        {fakturStatus === "approved" && (
-                          <button
-                            className="btn-secondary px-2 py-1 text-xs"
-                            onClick={() => downloadFile(`/finance/invoices/${i.id}/tax-invoice/pdf`)}
-                          >
-                            Unduh PDF
-                          </button>
-                        )}
-                        {fakturStatus === "approved" && i.efaktur_qr_url && (
-                          <a
-                            href={i.efaktur_qr_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn-secondary px-2 py-1 text-xs"
-                          >
-                            QR e-Faktur
-                          </a>
-                        )}
-                        {fakturStatus === "approved" && i.tax_invoice_date && (
-                          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                            {i.tax_invoice_date}
-                          </span>
-                        )}
-                        {i.faktur_pengganti_ref && (
-                          <span className="pill p-yellow text-[10px]">Pengganti</span>
-                        )}
-                        {fakturStatus !== "belum_buat" &&
-                          fakturStatus !== "dibatalkan" &&
-                          fakturStatus !== "pengganti" && (
-                            <button
-                              className="text-xs"
-                              style={{ color: "var(--text-muted)" }}
-                              disabled={cancelTaxInvoice.isPending}
-                              onClick={() =>
-                                confirmDialog({
-                                  title: `Batalkan faktur pajak ${i.invoice_no}?`,
-                                  message:
-                                    "Status faktur pajak menjadi dibatalkan dan tidak bisa diaktifkan lagi. Untuk koreksi, buat faktur pengganti.",
-                                  confirmLabel: "Batalkan Faktur",
-                                  requireText: i.invoice_no,
-                                  onConfirm: () =>
-                                    cancelTaxInvoice.mutate(i.id, {
-                                      onSuccess: () => toast.success(`Faktur pajak ${i.invoice_no} dibatalkan`),
-                                      onError: (e) => toast.error(`Gagal membatalkan: ${(e as Error).message}`),
-                                    }),
-                                })
-                              }
-                            >
-                              Batalkan
-                            </button>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                  {isOpen && (
-                    <tr>
-                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                        <form
-                          onSubmit={(e) => handleSetFaktur(e, i.id)}
-                          className="grid grid-cols-1 gap-2 py-2 sm:grid-cols-3"
-                        >
-                          <input
-                            name="lawan_nama"
-                            defaultValue={i.lawan_nama ?? ""}
-                            placeholder="Nama lawan transaksi"
-                            required
-                            className="input"
-                          />
-                          <input
-                            name="lawan_npwp"
-                            defaultValue={i.lawan_npwp ?? ""}
-                            placeholder="NPWP lawan (xx.xxx.xxx.x-xxx.xxx)"
-                            required
-                            className="input"
-                          />
-                          <input
-                            name="lawan_alamat"
-                            defaultValue={i.lawan_alamat ?? ""}
-                            placeholder="Alamat lawan transaksi"
-                            className="input"
-                          />
-                          <input
-                            name="dpp_amount"
-                            type="number"
-                            defaultValue={i.dpp_amount ?? Number(i.total_due)}
-                            placeholder="DPP (Rp)"
-                            required
-                            className="input"
-                          />
-                          <select name="kode_transaksi" defaultValue={i.kode_transaksi ?? "01"} className="input">
-                            {KODE_TRANSAKSI_OPTIONS.map((k) => (
-                              <option key={k.value} value={k.value}>
-                                {k.label}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            name="no_seri_faktur"
-                            defaultValue={i.no_seri_faktur ?? ""}
-                            placeholder="No. Seri Faktur (010.001-26.xxxxxxxx)"
-                            required
-                            className="input"
-                          />
-                          <div className="flex items-center gap-2 sm:col-span-3">
-                            <button type="submit" disabled={setTaxInvoice.isPending} className="btn">
-                              Simpan Faktur
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={() => setFakturOpenId(null)}
-                            >
-                              Batal
-                            </button>
-                            {fakturError && <span className="text-xs text-rose-700 dark:text-rose-400">{fakturError}</span>}
-                          </div>
-                        </form>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {filteredInvoices.length === 0 && (
-              <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {invoices?.length === 0 ? "Belum ada invoice." : "Tidak ada invoice untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar invoice"
+        rows={filteredInvoices}
+        columns={invoiceColumns}
+        rowKey={(i) => i.id}
+        query={invoicesQuery}
+        defaultSort={{ key: "invoice_no", dir: "desc" }}
+        renderExpanded={(i) => (fakturOpenId === i.id ? renderFakturForm(i) : null)}
+        emptyTitle={invoices?.length === 0 ? "Belum ada invoice." : "Tidak ada invoice untuk status ini."}
+      />
 
       <div className="card">
         <h2 className="font-semibold text-rose-700 dark:text-rose-400">Aging — Tagihan Terlambat</h2>

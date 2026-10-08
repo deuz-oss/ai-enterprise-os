@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, CalendarClock, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
+import { DataTable, KpiCard, PillTabs, type Column, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate } from "../api/client";
 
@@ -22,6 +22,7 @@ export default function Clients() {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [statusTab, setStatusTab] = useState("semua");
+  const [search, setSearch] = useState("");
 
   const clientsQuery = useQuery({
     queryKey: ["clients"],
@@ -29,10 +30,14 @@ export default function Clients() {
   });
   const clients = clientsQuery.data;
 
-  const filteredClients = useMemo(
-    () => (clients ?? []).filter((c) => statusTab === "semua" || c.status === statusTab),
-    [clients, statusTab]
-  );
+  const filteredClients = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (clients ?? []).filter(
+      (c) =>
+        (statusTab === "semua" || c.status === statusTab) &&
+        (!q || [c.name, c.pic_name, c.npwp].some((v) => v?.toLowerCase().includes(q)))
+    );
+  }, [clients, statusTab, search]);
   const statusTabs: PillTab[] = useMemo(() => {
     const all = clients ?? [];
     return [
@@ -64,6 +69,30 @@ export default function Clients() {
     },
   });
 
+  const columns: Column<ClientRow>[] = [
+    {
+      key: "name",
+      header: "Perusahaan",
+      cell: (c) => <span className="font-medium">{c.name}</span>,
+      sortValue: (c) => c.name,
+    },
+    { key: "npwp", header: "NPWP", cell: (c) => c.npwp ?? "-" },
+    { key: "pic", header: "PIC", cell: (c) => c.pic_name ?? "-", sortValue: (c) => c.pic_name },
+    { key: "jobs", header: "Jobs", numeric: true, cell: (c) => c.job_count, sortValue: (c) => c.job_count },
+    {
+      key: "contract_end",
+      header: "Akhir Kontrak",
+      cell: (c) => <span className="whitespace-nowrap">{formatDate(c.contract_end)}</span>,
+      sortValue: (c) => c.contract_end,
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (c) => <span className={`pill ${c.status === "aktif" ? "p-green" : "p-gray"}`}>{c.status}</span>,
+      sortValue: (c) => c.status,
+    },
+  ];
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -86,14 +115,33 @@ export default function Clients() {
       </div>
 
       {showForm && (
+        // Label terlihat di atas field (dulu placeholder saja -- hilang saat
+        // mengetik, dan placeholder input tanggal tidak pernah tampil).
         <form onSubmit={handleCreate} className="card grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <input name="name" required placeholder="Nama perusahaan klien *" className="input" />
-          <input name="npwp" placeholder="NPWP" className="input" />
-          <input name="pic_name" placeholder="Nama PIC" className="input" />
-          <input name="pic_phone" placeholder="Telepon PIC" className="input" />
-          <input name="contract_end" type="date" placeholder="Akhir kontrak" className="input" />
+          {(
+            [
+              ["name", "Nama perusahaan", "text", true],
+              ["npwp", "NPWP", "text", false],
+              ["pic_name", "Nama PIC", "text", false],
+              ["pic_phone", "Telepon PIC", "tel", false],
+              ["contract_end", "Akhir kontrak", "date", false],
+            ] as const
+          ).map(([name, label, type, required]) => (
+            <label key={name} className="space-y-1 text-sm" style={{ color: "var(--text)" }}>
+              <span className="font-medium">
+                {label}
+                {required && <span className="text-red-700 dark:text-red-400"> *</span>}
+              </span>
+              <input name={name} type={type} required={required} className="input" />
+            </label>
+          ))}
+          {createClient.isError && (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-400 sm:col-span-3">
+              Gagal menyimpan klien: {(createClient.error as Error).message}
+            </p>
+          )}
           <button type="submit" disabled={createClient.isPending} className="btn sm:col-span-3">
-            Simpan Klien
+            {createClient.isPending ? "Menyimpan…" : "Simpan Klien"}
           </button>
         </form>
       )}
@@ -118,57 +166,36 @@ export default function Clients() {
         <KpiCard label="Klien Berhenti" value={churnedCount} icon={UserX} iconTone="neutral" />
       </div>
 
-      <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
-
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Perusahaan</th>
-              <th className="th">NPWP</th>
-              <th className="th">PIC</th>
-              <th className="th">Jobs</th>
-              <th className="th">Akhir Kontrak</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {filteredClients.map((c) => (
-              <tr
-                key={c.id}
-                onClick={() => navigate(`/clients/${c.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate(`/clients/${c.id}`);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer transition-colors hover:bg-[var(--hover)]"
-              >
-                <td className="td font-medium">{c.name}</td>
-                <td className="td">{c.npwp ?? "-"}</td>
-                <td className="td">{c.pic_name ?? "-"}</td>
-                <td className="td">{c.job_count}</td>
-                <td className="td whitespace-nowrap">{formatDate(c.contract_end)}</td>
-                <td className="td">
-                  <span className={`pill ${c.status === "aktif" ? "p-green" : "p-gray"}`}>
-                    {c.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            <TableStateRow
-              query={clientsQuery}
-              colSpan={6}
-              isEmpty={filteredClients.length === 0}
-              emptyTitle={clients?.length === 0 ? "Belum ada klien." : "Tidak ada klien untuk status ini."}
-              emptyDescription={clients?.length === 0 ? "Tambahkan klien pertama lewat tombol + Klien Baru." : undefined}
-            />
-          </tbody>
-        </table>
+      <div className="flex flex-wrap items-center gap-3">
+        <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari perusahaan, PIC, atau NPWP…"
+          aria-label="Cari klien"
+          className="input w-full sm:ml-auto sm:w-72"
+        />
       </div>
+
+      <DataTable
+        label="Daftar klien"
+        rows={filteredClients}
+        columns={columns}
+        rowKey={(c) => c.id}
+        query={clientsQuery}
+        onRowClick={(c) => navigate(`/clients/${c.id}`)}
+        defaultSort={{ key: "name", dir: "asc" }}
+        pageSize={50}
+        emptyTitle={
+          clients?.length === 0
+            ? "Belum ada klien."
+            : search
+              ? "Tidak ada klien yang cocok dengan pencarian."
+              : "Tidak ada klien untuk status ini."
+        }
+        emptyDescription={clients?.length === 0 ? "Tambahkan klien pertama lewat tombol + Klien Baru." : undefined}
+      />
     </div>
   );
 }

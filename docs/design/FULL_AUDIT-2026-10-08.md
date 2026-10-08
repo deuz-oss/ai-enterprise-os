@@ -38,6 +38,9 @@ requirements.
 > **Phase 2** implemented as CHANGELOG "Fase 69": Pipeline side panel with
 > `?lead=` URL, Payroll run stepper + `slip_count`, `PeriodPicker`, tablet
 > header fix, dead period control removed, FAB padding, English nav labels.
+> **Phase 3 (wave 1)** as CHANGELOG "Fase 70": `DataTable` primitive on Finance
+> invoices, Payroll BPJS recap, Employees, Clients; invoice mark-paid now
+> confirmed. 53 hand-built tables remain (largest: Accounting 8, MyPortal 6).
 
 ---
 
