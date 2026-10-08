@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -105,10 +106,7 @@ export default function ClientDetail() {
   const [gpsCoord, setGpsCoord] = useState<{ lat: string; lng: string } | null>(null);
   const siteFormRef = useRef<HTMLFormElement>(null);
 
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ role: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
   const isManagement = me?.role === "admin" || me?.role === "management";
 
   const { data: client, isLoading, error } = useQuery({

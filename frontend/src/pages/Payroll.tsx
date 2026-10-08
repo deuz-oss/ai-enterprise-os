@@ -1,3 +1,5 @@
+import type { ClientRow } from "./Clients";
+import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertCircle, Landmark, ShieldAlert, Users } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
@@ -98,11 +100,6 @@ function RunSteps({ run }: { run: RunRow }) {
       </span>
     </div>
   );
-}
-
-interface ClientRow {
-  id: string;
-  name: string;
 }
 
 interface SlipRow {
@@ -682,10 +679,7 @@ export default function Payroll() {
   });
   // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
   // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
   const { data: slips } = useQuery({
     queryKey: ["slips", selectedRunId],
     queryFn: () => api.get<SlipRow[]>(`/payroll/runs/${selectedRunId}/slips`),

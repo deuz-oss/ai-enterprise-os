@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -232,10 +233,7 @@ export default function Employees() {
   // (kontrak, dokumen, BPJS, asuransi, cuti, TTE) masih 403 untuk role ini --
   // guard query + JSX-nya lewat `isOpsOnly` biar tidak menampilkan section
   // yang pasti gagal.
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ role: string; full_name: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
   const isOpsOnly = me?.role === "operations";
   const { data: expiring } = useQuery({
     queryKey: ["contracts-expiring"],

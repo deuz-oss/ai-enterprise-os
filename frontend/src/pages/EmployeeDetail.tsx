@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -368,10 +369,7 @@ export default function EmployeeDetail() {
   const [showVaccineForm, setShowVaccineForm] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ role: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
   const isOpsOnly = me?.role === "operations";
 
   const { data: employee, isLoading, error } = useQuery({

@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Fase 72: Audit 2026-10-08 Phase 5 (uang Decimal di jurnal, data layer, unit test frontend)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md`.
+- **Jurnal finalisasi payroll hilang diam-diam**: baris jurnal dihitung float & dibulatkan per baris, sedangkan sisi kredit hanya net + PPh21 + BPJS karyawan. Potongan lain (admin bank non-Mandiri, gaji ditahan, potongan manual) membuat debit ≠ kredit sehingga `post_auto_event` menolak jurnal -- run tetap final tanpa jurnal di buku besar (terbukti lewat test: debit 5.123.457 vs kredit 5.116.957, selisih = admin bank 6.500). Kini dihitung Decimal (pembulatan setengah-ke-atas) dan selisih potongan masuk akun baru **2-1400 Potongan Gaji Lain-lain (Kliring)** (liabilitas, untuk direklasifikasi akuntan; tenant lama mendapat akun ini otomatis saat jurnal pertama).
+- `post_auto_event` menormalisasi semua baris ke Decimal sen sebelum cek keseimbangan, sehingga sisa biner float (0,1 + 0,2) tidak lagi menolak jurnal yang seimbang. Jurnal invoice terbit/lunas dan eksekusi payment request kini mengirim Decimal.
+- **Frontend**: hook `useMe()` (`api/auth.ts`, tipe `Me`/`UserRole`) menggantikan 12 query `/auth/me` dengan 6 bentuk tipe berbeda; tipe `ClientRow` tidak lagi diduplikasi.
+- Cache query dibersihkan saat logout & login -- dulu user berikutnya di browser yang sama sempat melihat data user sebelumnya.
+- **Vitest** (dev dependency) + `npm test` di CI: test formatter tanggal/rupiah (dengan TZ America/New_York agar bug parsing tanggal lokal tertangkap), guard `safeNextPath`, `sortRows` DataTable, `currentPeriod`.
+- Profil `/overview`: 17 ms / 27 query in-process dengan jumlah query konstan -- angka 4,1 dtk di audit berasal dari stack Docker, bukan endpoint; tidak ada perubahan.
+
 ### Changed — Fase 71: Audit 2026-10-08 Phase 4 (responsif & aksesibilitas)
 
 Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md` §10–§11.

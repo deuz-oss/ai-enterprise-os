@@ -45,6 +45,11 @@ requirements.
 > tables migrated, skip link, inert mobile drawer with focus management,
 > global :focus-visible, labelled ESS/finance forms, contrast fixes; axe-core
 > WCAG 2.2 AA sweep (12 admin pages + 7 ESS sections at 390px).
+> **Phase 5** as CHANGELOG "Fase 72": Decimal journal posting (fixed payroll
+> journals silently rejected when slips had non-tax deductions; new account
+> 2-1400), `useMe` + shared types, cache cleared on login/logout, Vitest in CI.
+> Correction: `/overview` is 17 ms / 27 constant queries in-process; the 4.1 s
+> in §13 and Top-20 #20 was the Docker stack on :8000, not the endpoint.
 
 ---
 

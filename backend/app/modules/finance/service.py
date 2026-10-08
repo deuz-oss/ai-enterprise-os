@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
-from app.core.money import round_rupiah, to_decimal
+from app.core.money import ZERO, round_rupiah, to_decimal
 from app.modules import audit
 from app.modules.clients.models import Client
 from app.modules.finance.models import (
@@ -172,14 +172,15 @@ def generate_invoice(
 
         # Dr Piutang (net PPh 23) + Dr PPh 23 dibayar di muka
         #   = Cr Pendapatan + Cr PPN Keluaran.
+        # Sudah Decimal rupiah (round_rupiah di atas) -- jangan dikonversi float.
         lines = [
-            ("1-1200", float(total_due), 0.0),
-            ("4-1000", 0.0, float(subtotal)),
+            ("1-1200", total_due, ZERO),
+            ("4-1000", ZERO, subtotal),
         ]
         if pph23_amount:
-            lines.append(("1-1350", float(pph23_amount), 0.0))
+            lines.append(("1-1350", pph23_amount, ZERO))
         if ppn_amount:
-            lines.append(("2-1300", 0.0, float(ppn_amount)))
+            lines.append(("2-1300", ZERO, ppn_amount))
         post = post_auto_event(  # noqa: F841
             db,
             tenant_id=invoice.tenant_id,
@@ -239,8 +240,8 @@ def update_invoice(db: Session, invoice_id: str, payload: InvoiceUpdate) -> Invo
                     entry_date=date.today(),
                     description=f"Pelunasan invoice {invoice.invoice_no}",
                     lines=[
-                        ("1-1100", float(invoice.total_due), 0.0),
-                        ("1-1200", 0.0, float(invoice.total_due)),
+                        ("1-1100", to_decimal(invoice.total_due), ZERO),
+                        ("1-1200", ZERO, to_decimal(invoice.total_due)),
                     ],
                 )
             except Exception:  # noqa: BLE001
@@ -790,8 +791,8 @@ def execute_payment_request(db: Session, *, user, pr_id: str) -> PaymentRequest:
             entry_date=date.today(),
             description=f"Eksekusi PR {pr.pr_number}",
             lines=[
-                ("2-1000", round(float(pr.amount)), 0.0),
-                ("1-1100", 0.0, round(float(pr.amount))),
+                ("2-1000", round_rupiah(pr.amount), ZERO),
+                ("1-1100", ZERO, round_rupiah(pr.amount)),
             ],
         )
     except Exception:  # noqa: BLE001

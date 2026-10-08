@@ -1,3 +1,4 @@
+import type { ClientRow } from "./Clients";
 import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
@@ -13,11 +14,6 @@ import {
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
-
-interface ClientRow {
-  id: string;
-  name: string;
-}
 
 interface InvoiceRow {
   id: string;

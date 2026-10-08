@@ -21,6 +21,10 @@ DEFAULT_COA: list[tuple[str, str, str, str, bool, bool]] = [
     ("2-1100", "Utang PPh 21", "liabilitas_pendek", "kredit", False, False),
     ("2-1200", "Utang BPJS", "liabilitas_pendek", "kredit", False, False),
     ("2-1300", "Utang PPN Keluaran", "liabilitas_pendek", "kredit", False, False),
+    # Kliring potongan gaji selain PPh 21 & BPJS (admin bank, gaji ditahan,
+    # potongan manual). Tanpa akun ini jurnal payroll_finalized tidak seimbang
+    # dan ditolak diam-diam (audit 2026-10-08 Phase 5). Direklasifikasi akuntan.
+    ("2-1400", "Potongan Gaji Lain-lain (Kliring)", "liabilitas_pendek", "kredit", False, False),
     ("3-1000", "Modal Disetor", "ekuitas", "kredit", False, False),
     ("3-2000", "Laba Ditahan", "ekuitas", "kredit", False, False),
     ("3-3000", "Laba Tahun Berjalan", "ekuitas", "kredit", False, False),

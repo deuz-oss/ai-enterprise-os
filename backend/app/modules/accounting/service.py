@@ -6,7 +6,9 @@ langsung — hanya melalui `post_auto_event`.
 """
 
 from calendar import monthrange
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
@@ -15,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
-from app.core.money import to_decimal
+from app.core.money import ZERO, to_decimal
 from app.modules.accounting.coa_template import DEFAULT_COA
 from app.modules.accounting.models import (
     Account,
@@ -472,6 +474,14 @@ def delete_memorial_entry(db: Session, entry_id: str) -> None:
 # ---------- Mesin auto-journal (PRD §8.3) ----------
 
 
+_CENT = Decimal("0.01")
+
+
+def _to_cents(value: Any) -> Decimal:
+    """Nilai baris jurnal -> Decimal 2 desimal (setengah ke atas)."""
+    return to_decimal(value).quantize(_CENT, rounding=ROUND_HALF_UP)
+
+
 def post_auto_event(
     db: Session,
     *,
@@ -481,7 +491,7 @@ def post_auto_event(
     source_ref_id,
     entry_date: date,
     description: str,
-    lines: list[tuple[str, float, float]],  # (account_code, debit, credit)
+    lines: Sequence[tuple[str, Any, Any]],  # (account_code, debit, credit) -- Decimal/int/float
     client_dim_id=None,
     reference: str | None = None,
 ) -> JournalEntry | None:
@@ -522,8 +532,12 @@ def post_auto_event(
     # Jurnal otomatis langsung berstatus posted (tanpa lewat post_entry), jadi
     # validasi keseimbangan wajib di sini juga -- dulu invoice ber-PPh 23
     # terposting timpang tanpa ada yang menolak.
-    total_debit = sum(to_decimal(d) for _, d, _ in lines)
-    total_credit = sum(to_decimal(c) for _, _, c in lines)
+    # Normalisasi ke Decimal sen (kolom Numeric(14,2)) SEBELUM cek seimbang:
+    # nilai float hasil penjumlahan bisa membawa sisa biner (…0000001) yang
+    # membuat jurnal ditolak walau secara rupiah seimbang.
+    lines = [(code, _to_cents(d), _to_cents(c)) for code, d, c in lines]
+    total_debit = sum((d for _, d, _ in lines), ZERO)
+    total_credit = sum((c for _, _, c in lines), ZERO)
     if total_debit != total_credit:
         import logging
 

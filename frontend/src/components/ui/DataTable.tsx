@@ -34,6 +34,28 @@ export interface Column<T> {
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
+/**
+ * Sort stabil (salinan baru). Nilai kosong (null/undefined/"") SELALU di akhir,
+ * apa pun arahnya; angka dibandingkan numerik; teks pakai collation "id" dengan
+ * `numeric: true` (EMP-2 sebelum EMP-10). Diekspor untuk unit test.
+ */
+export function sortRows<T>(
+  rows: readonly T[],
+  get: (row: T) => string | number | null | undefined,
+  dir: "asc" | "desc"
+): T[] {
+  const factor = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = get(a);
+    const vb = get(b);
+    const aEmpty = va === null || va === undefined || va === "";
+    const bEmpty = vb === null || vb === undefined || vb === "";
+    if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1;
+    if (typeof va === "number" && typeof vb === "number") return (va - vb) * factor;
+    return String(va).localeCompare(String(vb), "id", { numeric: true, sensitivity: "base" }) * factor;
+  });
+}
+
 export function DataTable<T>({
   rows,
   columns,
@@ -81,17 +103,7 @@ export function DataTable<T>({
     const list = rows ?? [];
     const col = sort && columns.find((c) => c.key === sort.key);
     if (!sort || !col?.sortValue) return list;
-    const get = col.sortValue;
-    const factor = sort.dir === "asc" ? 1 : -1;
-    return [...list].sort((a, b) => {
-      const va = get(a);
-      const vb = get(b);
-      const aEmpty = va === null || va === undefined || va === "";
-      const bEmpty = vb === null || vb === undefined || vb === "";
-      if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1;
-      if (typeof va === "number" && typeof vb === "number") return (va - vb) * factor;
-      return String(va).localeCompare(String(vb), "id", { numeric: true, sensitivity: "base" }) * factor;
-    });
+    return sortRows(list, col.sortValue, sort.dir);
   }, [rows, columns, sort]);
 
   // Kembali ke halaman pertama kalau jumlah baris berubah (filter/tab).

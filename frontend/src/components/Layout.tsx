@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -276,15 +277,8 @@ export default function Layout() {
   const [helpDismissed, setHelpDismissed] = useState(
     () => localStorage.getItem("aeos_helpchip") === "0"
   );
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () =>
-      api.get<{ email: string; full_name: string; role: string; tenant_name: string | null }>(
-        "/auth/me"
-      ),
-    enabled: Boolean(getToken()),
-    retry: false,
-  });
+  const me = useMe({ enabled: Boolean(getToken()), retry: false });
+  const queryClient = useQueryClient();
   // Badge Kotak Masuk dari notifikasi in-app sungguhan.
   const unread = useQuery({
     queryKey: ["notif-unread"],
@@ -656,6 +650,9 @@ export default function Layout() {
                 <button
                   onClick={() => {
                     clearToken();
+                    // Buang cache sesi ini: tanpa ini user berikutnya di browser
+                    // yang sama sempat melihat data (dan identitas) user lama.
+                    queryClient.clear();
                     navigate("/login");
                   }}
                   className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--hover)]"

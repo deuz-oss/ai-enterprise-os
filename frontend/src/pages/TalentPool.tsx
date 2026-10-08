@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { Fragment, FormEvent, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -110,10 +111,7 @@ interface MatchItem {
 
 function BrandingCard() {
   const qc = useQueryClient();
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
-  });
+  const me = useMe();
   const canEdit = me.data?.role === "admin" || me.data?.role === "management";
   const branding = useQuery({
     queryKey: ["cv-branding"],
@@ -261,10 +259,7 @@ function BrandingCard() {
 
 function FieldSettingsCard() {
   const qc = useQueryClient();
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
-  });
+  const me = useMe();
   const canEdit = me.data?.role === "admin" || me.data?.role === "management";
   const settings = useQuery({
     queryKey: ["talentpool-field-settings"],

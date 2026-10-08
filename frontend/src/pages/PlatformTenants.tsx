@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, Building2, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "../components/workspace";
@@ -103,10 +104,7 @@ export default function PlatformTenants() {
   const qc = useQueryClient();
   const [provisioned, setProvisioned] = useState<Provisioned | null>(null);
 
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ role: string }>("/auth/me"),
-  });
+  const me = useMe();
   const { data: tenants, isLoading } = useQuery({
     queryKey: ["platform-tenants"],
     queryFn: () => api.get<TenantRow[]>("/platform/tenants"),

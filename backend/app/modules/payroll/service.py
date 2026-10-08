@@ -1361,31 +1361,54 @@ def finalize_run(db: Session, run_id: str) -> PayrollRun:
     try:
         from app.modules.accounting.service import post_auto_event
 
-        gross_total = sum(float(s.gross) for s in run.slips)
-        net_total = sum(float(s.net_pay) for s in run.slips)
-        tax_total = sum(float(s.tax_pph21) for s in run.slips)
-        bpjs_er = sum(
-            float(c.amount) for s in run.slips for c in s.components if c.code == "bpjs_employer"
+        # Decimal + pembulatan rupiah setengah-ke-atas (core/money.py). Sisi
+        # kredit memuat SEMUA potongan: selisih bruto - neto - PPh21 - BPJS
+        # karyawan (admin bank, gaji ditahan, potongan manual, sisa pembulatan)
+        # masuk akun kliring 2-1400. Dulu selisih itu tidak dijurnal sehingga
+        # debit != kredit dan jurnal ditolak diam-diam (Phase 5 audit).
+        gross_total = round_rupiah(sum((to_decimal(s.gross) for s in run.slips), ZERO))
+        net_total = round_rupiah(sum((to_decimal(s.net_pay) for s in run.slips), ZERO))
+        tax_total = round_rupiah(sum((to_decimal(s.tax_pph21) for s in run.slips), ZERO))
+        bpjs_er = round_rupiah(
+            sum(
+                (
+                    to_decimal(c.amount)
+                    for s in run.slips
+                    for c in s.components
+                    if c.code == "bpjs_employer"
+                ),
+                ZERO,
+            )
         )
-        bpjs_emp = sum(
-            float(c.amount)
-            for s in run.slips
-            for c in s.components
-            if c.code in ("bpjs_kesehatan_py", "jht_py", "jp_py")
+        bpjs_emp = round_rupiah(
+            sum(
+                (
+                    to_decimal(c.amount)
+                    for s in run.slips
+                    for c in s.components
+                    if c.code in ("bpjs_kesehatan_py", "jht_py", "jp_py")
+                ),
+                ZERO,
+            )
         )
+        other_deductions = gross_total - net_total - tax_total - bpjs_emp
         event = (
             "payroll_finalized_internal"
             if run.run_type == PayrollRunType.internal
             else "payroll_finalized_proyek"
         )
-        lines: list[tuple[str, float, float]] = [("5-1000", round(gross_total), 0.0)]
+        lines: list[tuple[str, Decimal, Decimal]] = [("5-1000", gross_total, ZERO)]
         if bpjs_er:
-            lines.append(("5-3000", round(bpjs_er), 0.0))
-        lines.append(("2-1000", 0.0, round(net_total)))
+            lines.append(("5-3000", bpjs_er, ZERO))
+        lines.append(("2-1000", ZERO, net_total))
         if tax_total:
-            lines.append(("2-1100", 0.0, round(tax_total)))
+            lines.append(("2-1100", ZERO, tax_total))
         if bpjs_emp + bpjs_er:
-            lines.append(("2-1200", 0.0, round(bpjs_emp + bpjs_er)))
+            lines.append(("2-1200", ZERO, bpjs_emp + bpjs_er))
+        if other_deductions > 0:
+            lines.append(("2-1400", ZERO, other_deductions))
+        elif other_deductions < 0:
+            lines.append(("2-1400", -other_deductions, ZERO))
         post_auto_event(
             db,
             tenant_id=run.tenant_id,

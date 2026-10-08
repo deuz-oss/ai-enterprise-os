@@ -1,3 +1,5 @@
+import type { ClientRow } from "./Clients";
+import { useMe } from "../api/auth";
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -75,11 +77,6 @@ interface DigestItem {
 interface Digest {
   date: string;
   items: DigestItem[];
-}
-
-interface ClientRow {
-  id: string;
-  name: string;
 }
 
 interface InvoiceRow {
@@ -412,10 +409,7 @@ export default function Dashboard() {
   });
   // Query key "me" sama dengan Layout.tsx -- react-query dedupe otomatis,
   // tidak ada request tambahan, cuma baca cache yang sama untuk sapaan nama.
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
 
   // Dulu `isLoading || !data` -> kalau /overview gagal, "Memuat..." selamanya.
   if (!data) {

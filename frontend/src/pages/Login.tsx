@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Info, Lock, Mail, Sparkles, ArrowRight } from "lucide-react";
 import { api, safeNextPath, setToken } from "../api/client";
@@ -18,6 +19,7 @@ import { Button, Card } from "../components/ui";
  */
 export default function Login() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const sessionExpired = searchParams.get("expired") === "1";
   const nextPath = safeNextPath(searchParams.get("next"));
@@ -38,6 +40,8 @@ export default function Login() {
         user: { role: string };
       }>("/auth/login", { email, password });
       setToken(data.access_token);
+      // Sesi baru = cache baru (identitas, role, data tenant user sebelumnya).
+      queryClient.clear();
       const target =
         data.user.role === "platform_admin"
           ? "/platform"

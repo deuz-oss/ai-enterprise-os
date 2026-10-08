@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
@@ -104,10 +105,7 @@ const BUSINESS_STATUS_COLORS: Record<string, string> = {
  * ubah. */
 function HrDocumentSettingsCard() {
   const qc = useQueryClient();
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ role: string }>("/auth/me"),
-  });
+  const me = useMe();
   const canEdit = me.data?.role === "admin" || me.data?.role === "management";
   const settings = useQuery({
     queryKey: ["hr-document-settings"],
@@ -204,10 +202,7 @@ export default function JobOrders() {
   // berdampingan dengan business_status), tidak dikembalikan di sini.
   // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
   // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ full_name: string }>("/auth/me"),
-  });
+  const { data: me } = useMe();
   const { data: jobOrdersAll } = useQuery({
     queryKey: ["job-orders", clientFilter],
     queryFn: () =>

@@ -1,3 +1,4 @@
+import { useMe } from "../api/auth";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
@@ -56,10 +57,7 @@ function ApprovalChainPanel() {
   const qc = useQueryClient();
   const [rows, setRows] = useState<{ kind: "role"; role: string }[]>([]);
   const [dirty, setDirty] = useState(false);
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<{ email: string; full_name: string; role: string }>("/auth/me"),
-  });
+  const me = useMe();
   const canEdit = me.data?.role === "admin" || me.data?.role === "management";
   const chain = useQuery({
     queryKey: ["pr-chain"],
