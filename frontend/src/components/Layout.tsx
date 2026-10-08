@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { api, clearToken, formatRupiah, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
+import { ConfirmDialogHost } from "./ui/ConfirmDialog";
 
 interface NavItem {
   to: string;
@@ -766,6 +767,7 @@ export default function Layout() {
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={paletteItems} />
       <Toaster theme={dark ? "dark" : "light"} position="top-right" richColors closeButton />
+      <ConfirmDialogHost />
     </div>
   );
 }

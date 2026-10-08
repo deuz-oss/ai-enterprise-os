@@ -2,7 +2,17 @@ import { Fragment, FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileSignature, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api } from "../api/client";
-import { Badge, Button, Card, KpiCard, PillTabs, promptToast, type PillTab } from "../components/ui";
+import { toast } from "sonner";
+import {
+  Badge,
+  Button,
+  Card,
+  confirmDialog,
+  KpiCard,
+  PillTabs,
+  promptToast,
+  type PillTab,
+} from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
 
@@ -315,7 +325,24 @@ export default function Quotations() {
                         </>
                       )}
                       {q.status === "approved" && (
-                        <Button size="sm" onClick={() => send.mutate(q.id)}>
+                        <Button
+                          size="sm"
+                          disabled={send.isPending}
+                          onClick={() =>
+                            confirmDialog({
+                              title: "Kirim quotation ke klien?",
+                              message:
+                                "Quotation akan dikirim ke email PIC klien. Email yang sudah terkirim tidak bisa ditarik kembali.",
+                              confirmLabel: "Kirim",
+                              tone: "primary",
+                              onConfirm: () =>
+                                send.mutate(q.id, {
+                                  onSuccess: () => toast.success("Quotation terkirim ke klien"),
+                                  onError: (e) => toast.error(`Gagal mengirim: ${(e as Error).message}`),
+                                }),
+                            })
+                          }
+                        >
                           <Send className="h-3.5 w-3.5" /> Kirim
                         </Button>
                       )}

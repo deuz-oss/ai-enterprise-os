@@ -45,3 +45,11 @@ def round_rupiah(value: Any) -> Decimal:
 
 def rupiah_int(value: Any) -> int:
     return int(round_rupiah(value))
+
+
+def format_rupiah(value: Any) -> str:
+    """Teks rupiah format Indonesia (titik ribuan), mis. `Rp4.357.602.000` --
+    bukan `f"{x:,.0f}"` yang menghasilkan koma ala en-US."""
+    amount = rupiah_int(value)
+    sign = "-" if amount < 0 else ""
+    return f"{sign}Rp{abs(amount):,}".replace(",", ".")

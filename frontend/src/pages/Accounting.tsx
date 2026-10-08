@@ -3,7 +3,8 @@ import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, S
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
-import { confirmToast } from "../components/ui";
+import { toast } from "sonner";
+import { confirmDialog, confirmToast } from "../components/ui";
 import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
@@ -219,7 +220,20 @@ export default function Accounting() {
               tab ini. Isi form tidak berubah, cuma posisinya. */}
           <JournalList
             year={year}
-            onPost={(id) => postEntry.mutate(id)}
+            onPost={(id) =>
+              confirmDialog({
+                title: "Posting jurnal memorial?",
+                message:
+                  "Jurnal yang sudah diposting masuk ke buku besar dan tidak bisa diedit atau dihapus — koreksi hanya lewat jurnal balik.",
+                confirmLabel: "Posting",
+                tone: "primary",
+                onConfirm: () =>
+                  postEntry.mutate(id, {
+                    onSuccess: () => toast.success("Jurnal diposting"),
+                    onError: (e) => toast.error(`Gagal posting: ${(e as Error).message}`),
+                  }),
+              })
+            }
             onReverse={(id, reason) => reverseEntry.mutate({ id, reason })}
             onDelete={(id) => deleteEntry.mutate(id)}
           />

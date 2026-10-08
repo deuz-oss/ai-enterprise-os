@@ -21,9 +21,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.llm import ai_configured, chat_completion
+from app.core.money import format_rupiah, to_decimal
 from app.modules.clients.models import Client
 from app.modules.ess.models import LeaveRequest, LeaveStatus
-from app.modules.finance.models import Invoice, InvoiceStatus, PaymentRequest, PaymentRequestStatus
+from app.modules.finance.models import Invoice, PaymentRequest, PaymentRequestStatus
+from app.modules.finance.service import RECEIVABLE_STATUSES, receivables_summary
 from app.modules.hrd.models import Employee, EmploymentContract
 from app.modules.payroll.models import PayrollRun, PayrollRunStatus
 from app.modules.presales.models import Lead
@@ -178,18 +180,12 @@ def _staff_context(db: Session) -> list[str]:
             f"Payment Request menunggu approval: {len(waiting_prs)} senilai Rp{total:,.0f}"
         )
 
-    outstanding = (
-        db.execute(
-            select(Invoice).where(Invoice.status.in_([InvoiceStatus.draft, InvoiceStatus.sent]))
-        )
-        .scalars()
-        .all()
-    )
-    overdue = [i for i in outstanding if i.due_date and i.due_date < today]
-    if outstanding:
+    receivables = receivables_summary(db, today)
+    if receivables["outstanding_count"]:
         parts.append(
-            f"Invoice belum lunas: {len(outstanding)} (overdue {len(overdue)}, "
-            f"total tertagih Rp{sum(float(i.total_due) for i in outstanding):,.0f})"
+            f"Invoice terkirim belum lunas: {receivables['outstanding_count']} "
+            f"(overdue {receivables['overdue_count']}, "
+            f"total tertagih {format_rupiah(receivables['outstanding_total'])})"
         )
 
     runs = (
@@ -420,7 +416,9 @@ def daily_digest(db: Session, user) -> dict:
                 }
             )
         invoices = (
-            db.execute(select(Invoice).where(Invoice.status == InvoiceStatus.sent)).scalars().all()
+            db.execute(select(Invoice).where(Invoice.status.in_(RECEIVABLE_STATUSES)))
+            .scalars()
+            .all()
         )
         overdue = [i for i in invoices if i.due_date and i.due_date < today]
         if overdue:
@@ -428,7 +426,7 @@ def daily_digest(db: Session, user) -> dict:
                 {
                     "type": "invoice_overdue",
                     "detail": f"{len(overdue)} invoice melewati jatuh tempo "
-                    f"(Rp{sum(float(i.total_due) for i in overdue):,.0f})",
+                    f"({format_rupiah(sum(to_decimal(i.total_due) for i in overdue))})",
                     "refs": [i.invoice_no for i in overdue[:5]],
                 }
             )

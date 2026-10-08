@@ -1,5 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
+import { PreflightAlert } from "../components/ui";
 import { api, downloadFile } from "../api/client";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
@@ -76,10 +78,8 @@ export default function Attendance() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data: employees } = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => api.get<EmployeeRow[]>("/employees"),
-  });
+  const { data: employees, total: employeesTotal, truncated: employeesTruncated } =
+    useEmployeeLookup<EmployeeRow>();
 
   const { data: records } = useQuery({
     queryKey: ["attendance-records", period],
@@ -147,6 +147,13 @@ export default function Attendance() {
   return (
     <div className="space-y-4">
       <PageHeader icon={Calendar} title="Absensi Harian" subtitle="Record harian clock-in/out, impor mesin fingerprint, dan validasi dua jalur" />
+
+      {employeesTruncated && (
+        <PreflightAlert
+          title="Data karyawan terpotong"
+          summary={`Hanya ${(employees ?? []).length} dari ${employeesTotal} karyawan yang termuat (batas ${EMPLOYEE_LOOKUP_LIMIT}). Karyawan di luar daftar ini tidak bisa dipilih di Input Manual dan namanya tidak tampil di tabel.`}
+        />
+      )}
 
       <CalloutBlock tone="info">
         Validasi dua jalur: karyawan <b>internal</b> divalidasi HR, karyawan <b>eksternal</b> divalidasi

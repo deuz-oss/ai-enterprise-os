@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Fase 67: Audit 2026-10-08 Phase 0 (angka keuangan & aksi tak terbatalkan)
+
+Detail temuan di `docs/design/FULL_AUDIT-2026-10-08.md`.
+- **Definisi piutang tunggal**: aging report ikut menghitung invoice *draft* (belum ditagihkan) sebagai piutang lewat jatuh tempo, sedangkan KPI Dashboard tidak — Finance menampilkan outstanding Rp10,1 M vs Dashboard Rp4,36 M untuk data yang sama. Kini `finance/service.py::RECEIVABLE_STATUSES` (hanya `terkirim`) + `receivables_summary()` dipakai aging, Dashboard, digest AI, dan KPI halaman Finance.
+- Teks rupiah dari backend (urgent action Dashboard, digest AI) memakai format en-US (`Rp4,357,602,000`); kini `core/money.py::format_rupiah` (`Rp4.357.602.000`).
+- **Dialog konfirmasi modal** (`components/ui/ConfirmDialog.tsx`, `<dialog>` native: fokus terkurung, Escape, fokus kembali ke pemicu) untuk aksi yang tidak bisa dibatalkan, yang sebelumnya langsung jalan sekali klik: finalisasi payroll (wajib ketik periode), batalkan faktur pajak (wajib ketik no. invoice), tandai reward referral dibayar, posting jurnal, kirim quotation ke klien, kirim slip gaji via email. Aksi-aksi ini kini juga menampilkan toast sukses/gagal (sebelumnya gagal diam-diam).
+- `confirmToast` tidak lagi hilang sendiri setelah 4 detik.
+- **Daftar karyawan terpotong diam-diam**: Payroll & Absensi memanggil `/employees` tanpa `limit` sehingga kena default backend 200 — jumlah "karyawan aktif", preflight anomali, dan teks konfirmasi Run Payroll salah untuk tenant >200 karyawan. Kini satu hook `api/employees.ts::useEmployeeLookup` (batas 1000) dipakai Payroll, Absensi, Karyawan, Referral, dengan peringatan "Data karyawan terpotong" bila `X-Total-Count` lebih besar.
+- **Sesi kedaluwarsa**: 401 dulu hanya menghapus token, user tetap di halaman dengan KPI nol & tombol aksi aktif. Kini diarahkan ke `/login?expired=1&next=...` (path `next` divalidasi, tolak URL eksternal) dengan pesan "Sesi Anda berakhir", lalu kembali ke halaman semula setelah login.
+- Pesan error login kini diumumkan screen reader (`role="alert"`).
+
 ### Added — deploy produksi interview suara
 - `docker-compose.prod.yml` profile `voice`: LiveKit (konfigurasi produksi `deploy/livekit.yaml` -- IP publik via STUN, TURN bawaan dengan rentang relai kecil), STT whisper (CPU int8, model tetap dimuat), dan agen. Deploy biasa tidak berubah.
 - `docker-compose.prod.gpu.yml`: override STT untuk server NVIDIA (image CUDA, float16). Belum diuji di mesin GPU.

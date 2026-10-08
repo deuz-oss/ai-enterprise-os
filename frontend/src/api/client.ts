@@ -22,6 +22,27 @@ export class ApiError extends Error {
   }
 }
 
+/** Path internal yang aman dipakai sebagai tujuan setelah login (`?next=`):
+ * harus relatif ke app ini -- tolak `//evil.com` / URL absolut (open redirect). */
+export function safeNextPath(next: string | null): string | null {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) {
+    return null;
+  }
+  return next;
+}
+
+/** Sesi ditolak backend (token kedaluwarsa/dicabut). Dulu token cuma dihapus
+ * tanpa pindah halaman, sehingga user tetap melihat halaman dengan KPI nol dan
+ * tombol aksi aktif (audit 2026-10-08 §14). Hard navigation sengaja dipakai
+ * supaya cache query milik sesi lama ikut terbuang. */
+function handleSessionExpired() {
+  clearToken();
+  const { pathname, search } = window.location;
+  if (pathname.startsWith("/login")) return;
+  const next = encodeURIComponent(pathname + search);
+  window.location.replace(`/login?expired=1&next=${next}`);
+}
+
 async function rawRequest(path: string, options: RequestInit = {}): Promise<{ resp: Response; data: unknown }> {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -32,7 +53,11 @@ async function rawRequest(path: string, options: RequestInit = {}): Promise<{ re
   const resp = await fetch(`${API_URL}${path}`, { ...options, headers });
   const data = resp.status === 204 ? undefined : await resp.json().catch(() => null);
   if (!resp.ok) {
-    if (resp.status === 401) clearToken();
+    // Tanpa token (mis. portal publik ber-token URL) 401 bukan berarti sesi habis.
+    if (resp.status === 401) {
+      if (token) handleSessionExpired();
+      else clearToken();
+    }
     const detail =
       data && typeof data === "object" && "detail" in data
         ? String((data as Record<string, unknown>).detail)

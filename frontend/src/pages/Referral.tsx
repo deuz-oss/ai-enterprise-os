@@ -1,9 +1,11 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Gift, Wallet } from "lucide-react";
+import { useEmployeeLookup } from "../api/employees";
 import { api, formatRupiah } from "../api/client";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { toast } from "sonner";
+import { confirmDialog, KpiCard, PillTabs, type PillTab } from "../components/ui";
 
 /** Program referral karyawan (Fase 27) — jalur sourcing ketiga di samping
  * Job Portal (Fase 16) dan Talent Pool. Halaman baru berdiri sendiri,
@@ -79,10 +81,7 @@ export default function Referral() {
   const unpaidTotal = (rewards ?? [])
     .filter((r) => r.status === "pending" || r.status === "eligible")
     .reduce((sum, r) => sum + Number(r.amount), 0);
-  const { data: employees } = useQuery({
-    queryKey: ["employees-lookup"],
-    queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
-  });
+  const { data: employees } = useEmployeeLookup<EmployeeRow>();
   const { data: candidates } = useQuery({
     queryKey: ["candidates-lookup"],
     queryFn: () => api.get<CandidateRow[]>("/recruitment/candidates?limit=1000"),
@@ -214,7 +213,19 @@ export default function Referral() {
                 <td className="td">
                   {(r.status === "pending" || r.status === "eligible") && (
                     <button
-                      onClick={() => markPaid.mutate(r.id)}
+                      onClick={() =>
+                        confirmDialog({
+                          title: "Tandai reward referral sudah dibayar?",
+                          message: `Reward ${formatRupiah(r.amount)} akan dicatat lunas. Pastikan pembayaran memang sudah ditransfer.`,
+                          confirmLabel: "Tandai Dibayar",
+                          tone: "primary",
+                          onConfirm: () =>
+                            markPaid.mutate(r.id, {
+                              onSuccess: () => toast.success("Reward referral ditandai dibayar"),
+                              onError: (e) => toast.error(`Gagal: ${(e as Error).message}`),
+                            }),
+                        })
+                      }
                       disabled={markPaid.isPending}
                       className="btn-secondary text-xs"
                     >

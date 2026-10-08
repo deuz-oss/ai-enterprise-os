@@ -252,6 +252,37 @@ def update_invoice(db: Session, invoice_id: str, payload: InvoiceUpdate) -> Invo
     return invoice
 
 
+# Satu-satunya definisi piutang (AR) yang dipakai Dashboard, Finance, aging, dan
+# AI collab. Draft BELUM ditagihkan ke klien, jadi bukan piutang dan tidak bisa
+# "lewat jatuh tempo" -- dulu aging ikut menghitung draft sementara KPI
+# Dashboard tidak, sehingga dua layar menampilkan total outstanding berbeda
+# (audit 2026-10-08, docs/design/FULL_AUDIT-2026-10-08.md §8 D2).
+RECEIVABLE_STATUSES = (InvoiceStatus.sent,)
+
+
+def receivables_summary(db: Session, today: date | None = None) -> dict[str, float | int]:
+    """Total piutang & yang lewat jatuh tempo, menurut `RECEIVABLE_STATUSES`."""
+    today = today or date.today()
+    outstanding_total, outstanding_count = db.execute(
+        select(func.coalesce(func.sum(Invoice.total_due), 0), func.count(Invoice.id)).where(
+            Invoice.status.in_(RECEIVABLE_STATUSES)
+        )
+    ).one()
+    overdue_total, overdue_count = db.execute(
+        select(func.coalesce(func.sum(Invoice.total_due), 0), func.count(Invoice.id)).where(
+            Invoice.status.in_(RECEIVABLE_STATUSES),
+            Invoice.due_date.is_not(None),
+            Invoice.due_date < today,
+        )
+    ).one()
+    return {
+        "outstanding_total": float(outstanding_total or 0),
+        "outstanding_count": int(outstanding_count or 0),
+        "overdue_total": float(overdue_total or 0),
+        "overdue_count": int(overdue_count or 0),
+    }
+
+
 def _aging_bucket(days_overdue: int) -> str:
     if days_overdue <= 30:
         return "1-30"
@@ -261,10 +292,10 @@ def _aging_bucket(days_overdue: int) -> str:
 
 
 def aging_report(db: Session) -> list[AgingRow]:
-    """Invoice belum dibayar yang melewati jatuh tempo, dikelompokkan per bucket."""
+    """Piutang (lihat `RECEIVABLE_STATUSES`) yang melewati jatuh tempo, per bucket."""
     stmt = (
         select(Invoice)
-        .where(Invoice.status.in_([InvoiceStatus.draft, InvoiceStatus.sent]))
+        .where(Invoice.status.in_(RECEIVABLE_STATUSES))
         .where(Invoice.due_date.is_not(None))
         .where(Invoice.due_date < date.today())
         .order_by(Invoice.due_date)

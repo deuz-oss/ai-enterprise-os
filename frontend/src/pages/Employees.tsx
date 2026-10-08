@@ -1,10 +1,11 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile } from "../api/client";
 import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
-import { HeaderCanvas, KpiCard, PillTabs, StatusPill, type PillTab } from "../components/ui";
+import { HeaderCanvas, KpiCard, PillTabs, PreflightAlert, StatusPill, type PillTab } from "../components/ui";
 import { Pagination } from "../components/Pagination";
 
 export interface EmployeeRow {
@@ -152,10 +153,11 @@ export default function Employees() {
   // yang sama, sudah dipakai widget lain untuk lookup nama lintas-halaman).
   const [statusTab, setStatusTab] = useState("");
   const pageLimit = 50;
-  const { data: employeesLookup } = useQuery({
-    queryKey: ["employees-lookup"],
-    queryFn: () => api.get<EmployeeRow[]>("/employees?limit=1000"),
-  });
+  const {
+    data: employeesLookup,
+    total: employeesLookupTotal,
+    truncated: employeesTruncated,
+  } = useEmployeeLookup<EmployeeRow>();
   const allEmployees = employeesLookup ?? [];
   const filteredEmployees = useMemo(
     () => allEmployees.filter((e) => !statusTab || e.status === statusTab),
@@ -649,6 +651,13 @@ export default function Employees() {
         />
         <KpiCard label="Payroll Terkunci" value={payrollLockedCount} icon={Lock} iconTone="neutral" />
       </div>
+
+      {employeesTruncated && (
+        <PreflightAlert
+          title="Data karyawan terpotong"
+          summary={`Hanya ${allEmployees.length} dari ${employeesLookupTotal} karyawan yang termuat (batas ${EMPLOYEE_LOOKUP_LIMIT}). Hitungan, tab status, dan daftar di bawah belum mencakup semua karyawan.`}
+        />
+      )}
 
       <PillTabs
         tabs={statusTabs}

@@ -1,8 +1,18 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertCircle, Landmark, ShieldAlert, Users } from "lucide-react";
 import { CalloutBlock } from "../components/workspace";
-import { Button, confirmToast, HeaderCanvas, KpiCard, PreflightAlert, StatusPill } from "../components/ui";
+import { toast } from "sonner";
+import {
+  Button,
+  confirmDialog,
+  confirmToast,
+  HeaderCanvas,
+  KpiCard,
+  PreflightAlert,
+  StatusPill,
+} from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 
 interface EmployeeRow {
@@ -330,7 +340,18 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 Preview Slip Gaji
               </button>
               <button
-                onClick={() => sendPayslip.mutate(row.employee_id)}
+                onClick={() =>
+                  confirmDialog({
+                    title: "Kirim slip gaji via email?",
+                    message: `Slip gaji ${row.employee_name} akan dikirim ke email karyawan. Email yang sudah terkirim tidak bisa ditarik kembali.`,
+                    confirmLabel: "Kirim Email",
+                    tone: "primary",
+                    onConfirm: () =>
+                      sendPayslip.mutate(row.employee_id, {
+                        onSuccess: () => toast.success(`Slip gaji ${row.employee_name} terkirim`),
+                      }),
+                  })
+                }
                 disabled={sendPayslip.isPending}
                 className="cursor-pointer text-xs font-medium hover:opacity-80"
                 style={{ color: "var(--accent)" }}
@@ -587,10 +608,11 @@ export default function Payroll() {
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
 
-  const { data: employees } = useQuery({
-    queryKey: ["employees"],
-    queryFn: () => api.get<EmployeeRow[]>("/employees"),
-  });
+  const {
+    data: employees,
+    total: employeesTotal,
+    truncated: employeesTruncated,
+  } = useEmployeeLookup<EmployeeRow>();
   const { data: attendance } = useQuery({
     queryKey: ["attendance", period],
     queryFn: () =>
@@ -668,6 +690,23 @@ export default function Payroll() {
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/finalize`, {}),
     onSuccess: invalidateAll,
   });
+  // Finalisasi tidak bisa dibatalkan (tidak ada reopen di backend) dan memposting
+  // jurnal otomatis -- wajib dialog modal + ketik periode, bukan klik langsung.
+  function askFinalize(r: RunRow) {
+    const period = `${r.month}/${r.year}`;
+    confirmDialog({
+      title: `Finalisasi payroll ${period}?`,
+      message:
+        "Run akan dikunci, slip gaji tidak bisa diubah lagi, dan jurnal payroll diposting otomatis ke akuntansi. Tindakan ini tidak bisa dibatalkan.",
+      confirmLabel: "Finalisasi & Kunci",
+      requireText: period,
+      onConfirm: () =>
+        finalizeRun.mutate(r.id, {
+          onSuccess: () => toast.success(`Payroll ${period} difinalisasi`),
+          onError: (e) => toast.error(`Gagal finalisasi: ${(e as Error).message}`),
+        }),
+    });
+  }
   const submitToClient = useMutation({
     mutationFn: (runId: string) =>
       api.post<{ status: string; expires_at: string; link: string }>(
@@ -766,10 +805,14 @@ export default function Payroll() {
               ]
                 .filter((v): v is string => Boolean(v))
                 .join(", ");
+              const truncatedNote = employeesTruncated
+                ? ` PERHATIAN: daftar karyawan terpotong (${(employees ?? []).length} dari ${employeesTotal}), jumlah karyawan aktif ini belum lengkap.`
+                : "";
               const message =
-                totalAnomalies > 0
+                (totalAnomalies > 0
                   ? `Jalankan payroll ${period.month}/${period.year} untuk ${activeEmployees.length} karyawan aktif? Perhatian: ${anomalySummary}.`
-                  : `Jalankan payroll ${period.month}/${period.year} untuk ${activeEmployees.length} karyawan aktif?`;
+                  : `Jalankan payroll ${period.month}/${period.year} untuk ${activeEmployees.length} karyawan aktif?`) +
+                truncatedNote;
               confirmToast(
                 message,
                 () =>
@@ -788,6 +831,13 @@ export default function Payroll() {
         </div>
         }
       />
+
+      {employeesTruncated && (
+        <PreflightAlert
+          title="Data karyawan terpotong"
+          summary={`Hanya ${(employees ?? []).length} dari ${employeesTotal} karyawan yang termuat (batas ${EMPLOYEE_LOOKUP_LIMIT}). Jumlah karyawan aktif & pemeriksaan anomali di halaman ini belum mencakup semua karyawan.`}
+        />
+      )}
 
       {totalAnomalies > 0 && !alertDismissed && (
         <PreflightAlert
@@ -954,7 +1004,11 @@ export default function Payroll() {
                             Kirim ke Klien
                           </button>
                         ) : (
-                          <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
+                          <button
+                            onClick={() => askFinalize(r)}
+                            disabled={finalizeRun.isPending}
+                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
+                          >
                             Finalisasi
                           </button>
                         )}
@@ -966,7 +1020,11 @@ export default function Payroll() {
                       </button>
                     )}
                     {r.status === "finance_processing" && (
-                      <button onClick={() => finalizeRun.mutate(r.id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-800">
+                      <button
+                            onClick={() => askFinalize(r)}
+                            disabled={finalizeRun.isPending}
+                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
+                          >
                         Finalisasi
                       </button>
                     )}

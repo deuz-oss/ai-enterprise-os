@@ -1,7 +1,8 @@
 import { Fragment, FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import { toast } from "sonner";
+import { confirmDialog, KpiCard, PillTabs, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatRupiah } from "../api/client";
 
@@ -156,8 +157,11 @@ export default function Finance() {
 
   // KPI row (§1.3) -- 4 kartu, semua angka dihitung dari `invoices`/`aging`
   // yang sudah di-fetch halaman ini, bukan endpoint baru.
+  // Piutang = invoice TERKIRIM belum dibayar. Draft belum ditagihkan ke klien,
+  // jadi bukan piutang -- definisi yang sama dipakai backend
+  // (`finance/service.py::RECEIVABLE_STATUSES`) untuk aging & Dashboard.
   const outstanding = useMemo(
-    () => (invoices ?? []).filter((i) => i.status === "draft" || i.status === "terkirim"),
+    () => (invoices ?? []).filter((i) => i.status === "terkirim"),
     [invoices]
   );
   const outstandingTotal = outstanding.reduce((sum, i) => sum + Number(i.total_due), 0);
@@ -303,14 +307,14 @@ export default function Finance() {
           value={formatRupiah(outstandingTotal)}
           icon={Receipt}
           iconTone="info"
-          context={`${outstanding.length} faktur belum terlunasi`}
+          context={`${outstanding.length} invoice terkirim belum lunas`}
         />
         <KpiCard
           label="Jatuh Tempo"
           value={formatRupiah(overdueTotal)}
           icon={AlertTriangle}
           iconTone="danger"
-          context={`${(aging ?? []).length} faktur lewat tempo`}
+          context={`${(aging ?? []).length} invoice lewat tempo`}
           badge={(aging ?? []).length > 0 ? { label: "Kritis", tone: "danger" } : undefined}
         />
         <KpiCard
@@ -448,7 +452,20 @@ export default function Finance() {
                               className="text-xs"
                               style={{ color: "var(--text-muted)" }}
                               disabled={cancelTaxInvoice.isPending}
-                              onClick={() => cancelTaxInvoice.mutate(i.id)}
+                              onClick={() =>
+                                confirmDialog({
+                                  title: `Batalkan faktur pajak ${i.invoice_no}?`,
+                                  message:
+                                    "Status faktur pajak menjadi dibatalkan dan tidak bisa diaktifkan lagi. Untuk koreksi, buat faktur pengganti.",
+                                  confirmLabel: "Batalkan Faktur",
+                                  requireText: i.invoice_no,
+                                  onConfirm: () =>
+                                    cancelTaxInvoice.mutate(i.id, {
+                                      onSuccess: () => toast.success(`Faktur pajak ${i.invoice_no} dibatalkan`),
+                                      onError: (e) => toast.error(`Gagal membatalkan: ${(e as Error).message}`),
+                                    }),
+                                })
+                              }
                             >
                               Batalkan
                             </button>

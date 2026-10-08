@@ -14,6 +14,9 @@ export function confirmToast(
   options?: { confirmLabel?: string; cancelLabel?: string }
 ) {
   toast(message, {
+    // Jangan hilang sendiri: default sonner 4 detik membuat konfirmasi gampang
+    // terlewat (audit 2026-10-08 §11, WCAG 2.2.1).
+    duration: Infinity,
     action: { label: options?.confirmLabel ?? "Ya, lanjutkan", onClick: onConfirm },
     cancel: { label: options?.cancelLabel ?? "Batal", onClick: () => {} },
   });

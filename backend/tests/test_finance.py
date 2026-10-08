@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+import pytest
+
 from tests.conftest import _auth_header
 
 
@@ -135,6 +137,50 @@ def test_invoice_paid_and_aging(client):
         json={"status": "draft"},
     )
     assert reopen.status_code == 409
+
+
+def test_draft_invoice_bukan_piutang_dan_konsisten_dengan_dashboard(client):
+    """Draft lewat jatuh tempo TIDAK boleh masuk aging; total outstanding/overdue
+    Dashboard harus sama dengan aging (audit 2026-10-08 §8 D2)."""
+    headers = _auth_header(client)
+    client_id, _ = _seed_client_with_payroll(client, headers, name="PT Draft Lama")
+    invoice = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 6, "fee_amount": 500_000},
+    ).json()
+    overdue_date = (date.today() - timedelta(days=10)).isoformat()
+    resp = client.patch(
+        f"/api/v1/finance/invoices/{invoice['id']}",
+        headers=headers,
+        json={"due_date": overdue_date},
+    )
+    assert resp.status_code == 200 and resp.json()["status"] == "draft"
+
+    assert client.get("/api/v1/finance/invoices/aging", headers=headers).json() == []
+    finance = client.get("/api/v1/overview", headers=headers).json()["finance"]
+    assert finance["outstanding"] == 0
+    assert finance["overdue"] == 0
+
+    resp = client.patch(
+        f"/api/v1/finance/invoices/{invoice['id']}",
+        headers=headers,
+        json={"status": "terkirim"},
+    )
+    assert resp.status_code == 200
+    aging = client.get("/api/v1/finance/invoices/aging", headers=headers).json()
+    finance = client.get("/api/v1/overview", headers=headers).json()["finance"]
+    assert len(aging) == 1
+    assert finance["overdue"] == 1
+    assert finance["outstanding"] == pytest.approx(sum(a["total_due"] for a in aging))
+
+
+def test_format_rupiah_pakai_titik_ribuan():
+    from app.core.money import format_rupiah
+
+    assert format_rupiah(4_357_602_000) == "Rp4.357.602.000"
+    assert format_rupiah(0) == "Rp0"
+    assert format_rupiah(-1500.5) == "-Rp1.501"
 
 
 def test_cashflow_crud_and_summary(client):

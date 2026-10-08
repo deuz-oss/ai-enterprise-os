@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Info, Lock, Mail, Sparkles, ArrowRight } from "lucide-react";
-import { api, setToken } from "../api/client";
+import { api, safeNextPath, setToken } from "../api/client";
 import { Button, Card } from "../components/ui";
 
 /** Login dua panel ala mockup login.html — hero brand (desktop) + form.
@@ -18,6 +18,9 @@ import { Button, Card } from "../components/ui";
  */
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get("expired") === "1";
+  const nextPath = safeNextPath(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,7 +44,9 @@ export default function Login() {
           : data.user.role === "karyawan"
             ? "/portal-saya"
             : "/";
-      navigate(target);
+      // Kembali ke halaman sebelum sesi habis; Layout tetap membatasi path
+      // untuk platform_admin/karyawan, jadi `next` tidak melebarkan akses.
+      navigate(nextPath ?? target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
     } finally {
@@ -148,8 +153,20 @@ export default function Login() {
                 Gunakan email &amp; kata sandi akun tenant Anda.
               </p>
 
+              {sessionExpired && !error && (
+                <p
+                  role="status"
+                  className="mt-4 rounded-xl border p-3 text-sm"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)", color: "var(--text)" }}
+                >
+                  Sesi Anda berakhir. Silakan masuk lagi untuk melanjutkan.
+                </p>
+              )}
               {error && (
-                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
+                <p
+                  role="alert"
+                  className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400"
+                >
                   {error}
                 </p>
               )}

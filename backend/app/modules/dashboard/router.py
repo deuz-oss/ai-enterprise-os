@@ -201,25 +201,12 @@ def overview(db: Session = Depends(get_db)):
             ).scalar()
             or 0
         )
-        finance_summary["outstanding"] = (
-            db.execute(
-                select(func.coalesce(func.sum(Invoice.total_due), 0)).where(
-                    Invoice.status == InvoiceStatus.sent
-                )
-            ).scalar()
-            or 0
-        )
-        # Overdue = sent + due_date < today
-        finance_summary["overdue"] = (
-            db.execute(
-                select(func.count(Invoice.id)).where(
-                    Invoice.status == InvoiceStatus.sent,
-                    Invoice.due_date.is_not(None),
-                    Invoice.due_date < date.today(),
-                )
-            ).scalar()
-            or 0
-        )
+        # Definisi piutang tunggal, sama dengan halaman Finance & aging.
+        from app.modules.finance.service import receivables_summary
+
+        receivables = receivables_summary(db)
+        finance_summary["outstanding"] = receivables["outstanding_total"]
+        finance_summary["overdue"] = receivables["overdue_count"]
         # Faktur pajak PRD v2.0
         try:
             faktur_belum = (

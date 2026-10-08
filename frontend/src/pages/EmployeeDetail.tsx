@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
 import { api, downloadFile, formatRupiah, previewFile } from "../api/client";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, confirmToast, PillTabs } from "../components/ui";
+import { Badge, confirmDialog, confirmToast, PillTabs } from "../components/ui";
 import type { EmployeeRow } from "./Employees";
 
 /** Halaman detail karyawan (`/employees/:id`) -- konsolidasi 11 seksi yang
@@ -1757,7 +1757,16 @@ export default function EmployeeDetail() {
                           </button>
                           {" · "}
                           <button
-                            onClick={() => sendPayslipEmail.mutate(p.run_id)}
+                            onClick={() =>
+                              confirmDialog({
+                                title: "Kirim slip gaji via email?",
+                                message:
+                                  "Slip gaji periode ini akan dikirim ke email karyawan. Email yang sudah terkirim tidak bisa ditarik kembali.",
+                                confirmLabel: "Kirim Email",
+                                tone: "primary",
+                                onConfirm: () => sendPayslipEmail.mutate(p.run_id),
+                              })
+                            }
                             disabled={sendPayslipEmail.isPending}
                             className="text-xs font-medium hover:opacity-80"
                             style={{ color: "var(--accent)" }}

@@ -9,3 +9,4 @@ export { DonutChart, type DonutSlice } from "./DonutChart";
 export { PillTabs, type PillTab } from "./PillTabs";
 export { PreflightAlert } from "./PreflightAlert";
 export { confirmToast, promptToast } from "./dialogToast";
+export { confirmDialog, ConfirmDialogHost, type ConfirmDialogOptions } from "./ConfirmDialog";
