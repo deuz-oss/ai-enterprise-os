@@ -215,3 +215,46 @@ def test_reconciliation_uses_project_run_of_the_invoiced_client(client):
     # seperti saat invoice dibuat -> tidak ada "total_beda" palsu.
     assert rec["findings"] == [], rec["findings"]
     assert rec["totals"]["overtime_billed"] == 3
+
+
+def test_generate_invoice_with_multiple_runs_in_period_picks_general_run(client):
+    """Regresi: run internal + run proyek klien lain di periode yang sama dulu
+    membuat generate invoice error 500 (MultipleResultsFound)."""
+    headers = _auth_header(client)
+    client_id, employee_id = _seed(client, headers)
+    _attendance(client, headers, employee_id, overtime=0, approve=True)
+    other = client.post("/api/v1/clients", headers=headers, json={"name": "PT Lain"}).json()["id"]
+    internal = client.post(
+        "/api/v1/payroll/runs", headers=headers, json={"year": 2026, "month": 7}
+    ).json()["id"]
+    resp = client.post(f"/api/v1/payroll/runs/{internal}/generate", headers=headers, json={})
+    assert resp.status_code == 201, resp.text
+    resp = client.post(
+        "/api/v1/payroll/runs",
+        headers=headers,
+        json={"year": 2026, "month": 7, "run_type": "proyek", "client_id": other},
+    )
+    assert resp.status_code == 201, resp.text
+    other_run = resp.json()["id"]
+
+    resp = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 7, "fee_amount": 0},
+    )
+    assert resp.status_code == 201, resp.text
+    inv = resp.json()
+    assert inv["payroll_run_id"] == internal
+    assert inv["payroll_total"] > 0
+
+    rec = _recon(client, headers, inv["id"])
+    assert rec["run_id"] == internal
+    assert rec["findings"] == [], rec["findings"]
+
+    # Run proyek klien lain tidak boleh dipakai untuk menagih klien ini.
+    resp = client.post(
+        "/api/v1/finance/invoices/generate",
+        headers=headers,
+        json={"client_id": client_id, "year": 2026, "month": 8, "run_id": other_run},
+    )
+    assert resp.status_code == 422, resp.text

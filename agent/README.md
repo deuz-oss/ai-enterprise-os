@@ -37,6 +37,14 @@ sengaja memberi 503 (pola sama seperti `AI_BASE_URL` kosong).
 `AI_TTS_MODEL`/`AI_TTS_VOICE` opsional (default `gpt-4o-mini-tts`/`ash`
 kalau kosong).
 
+**Versi dependensi** dikunci di `requirements.lock` (dipakai Dockerfile;
+`pyproject.toml` hanya rentang). Lock awal = versi persis di image yang
+sudah teruji (2026-09-26). Setelah mengubah dependensi, regenerasi:
+
+```
+uv pip compile pyproject.toml --universal --python-version 3.12 -o requirements.lock
+```
+
 ## Keterbatasan yang jujur perlu diketahui (per 2026-09-02)
 
 Ditulis di mesin dev **tanpa GPU NVIDIA** — jadi:

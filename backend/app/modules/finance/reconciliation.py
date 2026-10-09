@@ -16,9 +16,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.llm import ai_configured, chat_completion
-from app.core.money import ZERO, format_rupiah, to_decimal
+from app.core.money import format_rupiah, to_decimal
 from app.modules.finance.models import Invoice
-from app.modules.finance.service import _get_invoice, _payroll_total_for_client
+from app.modules.finance.service import (
+    _get_invoice,
+    billed_by_components,
+    payroll_total_for_run,
+    select_billing_run,
+)
 from app.modules.hrd.models import Employee
 from app.modules.payroll.models import (
     AttendanceSummary,
@@ -35,24 +40,28 @@ TOTAL_TOLERANCE = Decimal("1")
 
 
 def _pick_run(db: Session, invoice: Invoice) -> PayrollRun | None:
-    """Run sumber tagihan: run proyek milik klien bila ada, selain itu run umum.
+    """Run sumber tagihan: yang tersimpan di invoice bila ada.
 
-    Invoice tidak menyimpan run_id, jadi dipilih ulang dengan urutan: final
-    lebih dulu, lalu yang terbaru dibuat.
+    Invoice lama (sebelum kolom payroll_run_id) dipilih ulang: run proyek
+    milik klien dulu -- jalur invoice otomatis saat klien menyetujui payrol
+    proyek -- lalu aturan yang sama dengan generate invoice tanpa run_id.
     """
-    runs = list(
-        db.execute(
+    if invoice.payroll_run_id is not None:
+        return db.get(PayrollRun, invoice.payroll_run_id)
+    own = [
+        r
+        for r in db.execute(
             select(PayrollRun).where(
-                PayrollRun.year == invoice.year, PayrollRun.month == invoice.month
+                PayrollRun.year == invoice.year,
+                PayrollRun.month == invoice.month,
+                PayrollRun.client_id == invoice.client_id,
             )
         ).scalars()
-    )
-    own = [r for r in runs if r.client_id == invoice.client_id]
-    pool = own or [r for r in runs if r.client_id is None]
-    if not pool:
-        return None
-    finals = [r for r in pool if r.status == PayrollRunStatus.final]
-    return max(finals or pool, key=lambda r: str(r.created_at or ""))
+    ]
+    if own:
+        finals = [r for r in own if r.status == PayrollRunStatus.final]
+        return max(finals or own, key=lambda r: str(r.created_at or ""))
+    return select_billing_run(db, invoice.client_id, invoice.year, invoice.month)
 
 
 def _client_employee_ids(db: Session, client_id: UUID) -> set[UUID]:
@@ -69,7 +78,7 @@ def _client_employee_ids(db: Session, client_id: UUID) -> set[UUID]:
 def reconcile_invoice(db: Session, invoice_id: str) -> dict:
     invoice = _get_invoice(db, invoice_id)
     run = _pick_run(db, invoice)
-    project_run = run is not None and run.client_id == invoice.client_id
+    project_run = run is not None and billed_by_components(run)
 
     # Run proyek sudah khusus klien ini; run umum disaring lewat placement.
     client_emps: set[UUID] = set() if project_run else _client_employee_ids(db, invoice.client_id)
@@ -169,14 +178,7 @@ def reconcile_invoice(db: Session, invoice_id: str) -> dict:
     # invoice dibuat, mis. run digenerate ulang).
     current_total: Decimal | None = None
     if run is not None and slips:
-        if project_run:
-            current_total = to_decimal(
-                _payroll_total_for_client(
-                    db, invoice.client_id, invoice.year, invoice.month, run_id=run.id
-                )
-            )
-        else:
-            current_total = sum((to_decimal(s.gross) for s in slips), ZERO)
+        current_total = to_decimal(payroll_total_for_run(db, run, invoice.client_id))
         billed = to_decimal(invoice.payroll_total)
         if abs(billed - current_total) > TOTAL_TOLERANCE:
             add(

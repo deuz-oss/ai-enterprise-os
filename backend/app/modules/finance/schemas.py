@@ -34,6 +34,7 @@ class InvoiceOut(BaseModel):
     year: int
     month: int
     payroll_total: float
+    payroll_run_id: UUID | None = None
     fee_amount: float
     ppn_rate: float
     ppn_amount: float

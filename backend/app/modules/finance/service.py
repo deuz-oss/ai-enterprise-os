@@ -33,7 +33,7 @@ from app.modules.finance.tax_config import (
     DEFAULT_PPN_RATE,
 )
 from app.modules.hrd.models import Employee
-from app.modules.payroll.models import PayrollRun, Payslip
+from app.modules.payroll.models import PayrollRun, PayrollRunStatus, Payslip
 from app.modules.rates.service import get_effective_billing
 from app.modules.recruitment.models import JobOrder, Placement
 
@@ -50,26 +50,66 @@ def _generate_invoice_no(db: Session) -> str:
     return f"INV/{date.today().year}/{count + 1:04d}"
 
 
-def _payroll_total_for_client(
-    db: Session, client_id: UUID, year: int, month: int, run_id: UUID | None = None
-) -> float:
-    """Total slip gaji karyawan klien (via placement → job order).
+def select_billing_run(db: Session, client_id: UUID, year: int, month: int) -> PayrollRun | None:
+    """Run sumber tagihan bila invoice dibuat tanpa run_id.
 
-    Bila run_id diberikan (payrol proyek dua jalur), total dihitung dari
-    line-item Saltab: Σ earnings + Σ passthrough (BPJS perusahaan).
+    Dulu query ini `scalar_one_or_none()` atas tahun+bulan saja, sehingga
+    periode dengan lebih dari satu run (mis. run internal + run proyek klien
+    lain) membuat generate invoice error 500. Urutan sekarang: run umum
+    (tanpa klien) lebih dulu, lalu run proyek milik klien ini; run proyek
+    klien lain tidak pernah dipakai. Di antara kandidat, run final
+    didahulukan, lalu yang terbaru dibuat.
     """
+    runs = list(
+        db.execute(
+            select(PayrollRun).where(PayrollRun.year == year, PayrollRun.month == month)
+        ).scalars()
+    )
+    pool = [r for r in runs if r.client_id is None] or [r for r in runs if r.client_id == client_id]
+    if not pool:
+        return None
+    finals = [r for r in pool if r.status == PayrollRunStatus.final]
+    return max(finals or pool, key=lambda r: str(r.created_at or ""))
+
+
+def billed_by_components(run: PayrollRun) -> bool:
+    """Run proyek ditagih dari line-item Saltab, run umum dari bruto slip."""
+    return run.client_id is not None
+
+
+def _resolve_billing_run(
+    db: Session, client_id: UUID, year: int, month: int, run_id: UUID | None
+) -> PayrollRun:
     if run_id is not None:
+        run = db.get(PayrollRun, parse_uuid(str(run_id)))
+        if run is None:
+            raise HTTPException(status_code=404, detail="Payrol tidak ditemukan")
+        if run.client_id is not None and run.client_id != client_id:
+            raise HTTPException(status_code=422, detail="Payrol proyek ini milik klien lain")
+        return run
+    run = select_billing_run(db, client_id, year, month)
+    if run is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Belum ada payrol periode {month}/{year} untuk ditagihkan",
+        )
+    return run
+
+
+def payroll_total_for_run(db: Session, run: PayrollRun, client_id: UUID) -> float:
+    """Total payroll yang ditagihkan ke klien dari satu run.
+
+    Run proyek: Σ earnings + Σ passthrough (BPJS perusahaan) dari line-item
+    Saltab. Run umum: Σ bruto slip karyawan klien (via placement → job order).
+    """
+    if billed_by_components(run):
         from app.modules.payroll.models import PayslipComponent
 
-        rows = (
-            db.execute(select(Payslip.id).where(Payslip.run_id == parse_uuid(str(run_id))))
-            .scalars()
-            .all()
-        )
+        rows = db.execute(select(Payslip.id).where(Payslip.run_id == run.id)).scalars().all()
         if not rows:
             raise HTTPException(
                 status_code=422,
-                detail=f"Belum ada slip gaji pada payrol {str(run_id)[:8]} untuk ditagihkan",
+                detail=f"Belum ada slip gaji pada payrol {str(run.id)[:8]} untuk ditagihkan",
             )
         comps = db.execute(
             select(PayslipComponent.ctype, func.coalesce(func.sum(PayslipComponent.amount), 0))
@@ -79,14 +119,6 @@ def _payroll_total_for_client(
         totals = {ctype.value: float(amount) for ctype, amount in comps}
         return totals.get("earnings", 0) + totals.get("passthrough", 0)
 
-    run = db.execute(
-        select(PayrollRun).where(PayrollRun.year == year, PayrollRun.month == month)
-    ).scalar_one_or_none()
-    if run is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Belum ada payrol periode {month}/{year} untuk ditagihkan",
-        )
     total = db.execute(
         select(func.coalesce(func.sum(Payslip.gross), 0))
         .join(Employee, Payslip.employee_id == Employee.id)
@@ -112,13 +144,10 @@ def generate_invoice(
     if duplicate is not None:
         raise HTTPException(status_code=409, detail="Invoice untuk periode ini sudah ada")
 
-    payroll_total = _payroll_total_for_client(
-        db,
-        payload.client_id,
-        payload.year,
-        payload.month,
-        run_id=run_id or payload.run_id,
+    billing_run = _resolve_billing_run(
+        db, payload.client_id, payload.year, payload.month, run_id or payload.run_id
     )
+    payroll_total = payroll_total_for_run(db, billing_run, payload.client_id)
     # Ambil tarif ber-versi untuk periode invoice (fallback ke konstanta kode)
     billing_cfg = get_effective_billing(db, date(payload.year, payload.month, 1))
     default_ppn = float(billing_cfg.ppn_rate) if billing_cfg else DEFAULT_PPN_RATE
@@ -140,6 +169,7 @@ def generate_invoice(
         year=payload.year,
         month=payload.month,
         payroll_total=payroll_total,
+        payroll_run_id=billing_run.id,
         fee_amount=payload.fee_amount,
         ppn_rate=ppn_rate,
         ppn_amount=ppn_amount,

@@ -6,11 +6,20 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Dependensi agent AI Interview dipin
+
+- `agent/requirements.lock` (universal, Python 3.12) kini dipakai `agent/Dockerfile`. Isinya persis versi di image agent yang sudah berjalan (livekit-agents 1.7.1, onnxruntime 1.30.0, numpy 2.5.3, ...), jadi build berikutnya tidak menarik rilis baru diam-diam. Cara regenerasi di `agent/README.md`.
+
+### Fixed — Generate invoice saat satu periode punya beberapa run payroll
+
+- **Error 500**: generate invoice tanpa `run_id` mencari run hanya berdasarkan tahun+bulan (`scalar_one_or_none`), sehingga periode dengan run internal + run proyek (klien mana pun) gagal dengan `MultipleResultsFound`. Kini `select_billing_run`: run umum dulu, lalu run proyek milik klien itu; run proyek klien lain tidak pernah dipakai; run final didahulukan.
+- `run_id` eksplisit kini divalidasi: tidak ditemukan → 404, run proyek milik klien lain → 422. Run internal dengan `run_id` eksplisit dulu ditagih dari line-item Saltab SEMUA karyawan di run (lintas klien); kini dari bruto slip karyawan klien itu saja, sama seperti tanpa `run_id`.
+- Kolom baru `invoices.payroll_run_id` (migrasi `b2c3d4e5f6a7`) menyimpan run sumber tagihan; rekonsiliasi invoice ↔ absensi memakainya alih-alih menebak. Invoice lama tetap NULL dan dipilih ulang seperti sebelumnya.
+
 ### Added — Rekonsiliasi invoice ↔ absensi (peluang AI #3 audit 2026-10-08)
 
 - `GET /finance/invoices/{id}/reconciliation` mencocokkan yang DITAGIH (slip payroll karyawan klien pada periode invoice) dengan absensi yang DISETUJUI klien. Temuan deterministik: ditagih tanpa rekap absensi, absensi belum disetujui, 0 hari hadir, jam lembur slip ≠ absensi, absensi disetujui tetapi tidak ditagih, dan payroll di invoice ≠ total slip saat ini. Ringkasan AI 2-3 kalimat (`finance.invoice_attendance_reconciliation`) hanya bila AI aktif, diberi label, tidak mengubah apa pun; tanpa scheduler.
 - Tabel invoice Finance punya kolom "Cek absensi" yang membuka panel rekonsiliasi tepat di bawah barisnya.
-- Batasan: invoice tidak menyimpan `run_id`, jadi run sumber dipilih ulang -- run proyek milik klien bila ada (jalur invoice otomatis), selain itu run umum periode itu; run final didahulukan.
 - **Fixed**: baris ekspansi `DataTable` (form faktur, panel rekonsiliasi, detail quotation/agreement) terpotong di kiri saat tabel lebar digulir ke kanan -- kini selebar area yang terlihat (sticky).
 
 ### Changed — Dependensi runtime dipin & migrasi tabel tersisa

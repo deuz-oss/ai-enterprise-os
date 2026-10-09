@@ -79,6 +79,11 @@ class Invoice(TenantMixin, Base):
     year: Mapped[int] = mapped_column(Integer, index=True)
     month: Mapped[int] = mapped_column(Integer, index=True)
     payroll_total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    # Run payroll sumber tagihan; NULL untuk invoice sebelum kolom ini ada
+    # (rekonsiliasi lalu memilih ulang run-nya).
+    payroll_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("payroll_runs.id"), default=None, index=True
+    )
     fee_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     ppn_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
     ppn_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
