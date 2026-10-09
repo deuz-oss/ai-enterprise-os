@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatRupiah, safeNextPath } from "./client";
+import { formatDate, formatDateTime, formatRupiah, parseRupiahInput, safeNextPath } from "./client";
 
 describe("formatDate", () => {
   it("memformat tanggal Indonesia", () => {
@@ -46,4 +46,24 @@ describe("safeNextPath (open redirect setelah login)", () => {
       expect(safeNextPath(value as string | null)).toBeNull();
     }
   );
+});
+
+describe("parseRupiahInput", () => {
+  it.each([
+    ["Rp 1.500.000", 1500000],
+    ["1.500.000,50", 1500001], // dibulatkan ke rupiah
+    ["1.500.000,49", 1500000],
+    ["1,500,000.00", 1500000],
+    ["1500000", 1500000],
+    ["1.500", 1500],
+    ["2500,5", 2501],
+    ["", 0],
+    ["  ", 0],
+  ])("%s -> %d", (raw, expected) => {
+    expect(parseRupiahInput(raw)).toBe(expected);
+  });
+
+  it.each(["abc", "1.50.000", "1,5,0", "-500", "1.500.000,505", "12.34.56"])("menolak %s", (raw) => {
+    expect(parseRupiahInput(raw)).toBeNull();
+  });
 });

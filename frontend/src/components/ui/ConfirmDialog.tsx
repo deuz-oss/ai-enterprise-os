@@ -27,7 +27,12 @@ export interface ConfirmDialogOptions {
   /** Konten tambahan di bawah pesan (mis. hasil tinjauan sebelum finalisasi). */
   details?: ReactNode;
   /** Kolom teks opsional (mis. alasan); nilainya diteruskan ke onConfirm. */
-  input?: { label: string; placeholder?: string };
+  input?: {
+    label: string;
+    placeholder?: string;
+    /** Kembalikan pesan error untuk menonaktifkan tombol konfirmasi, atau null. */
+    validate?: (value: string) => string | null;
+  };
   onConfirm: (inputValue: string) => void;
 }
 
@@ -91,7 +96,8 @@ export function ConfirmDialogHost() {
     run(value);
   }
 
-  const canConfirm = !options?.requireText || typed.trim() === options.requireText;
+  const inputError = options?.input?.validate ? options.input.validate(inputValue.trim()) : null;
+  const canConfirm = (!options?.requireText || typed.trim() === options.requireText) && !inputError;
   const danger = (options?.tone ?? "danger") === "danger";
 
   return (
@@ -149,7 +155,14 @@ export function ConfirmDialogHost() {
                 placeholder={options.input.placeholder}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                aria-invalid={inputError ? true : undefined}
+                aria-describedby={inputError ? "confirm-dialog-extra-error" : undefined}
               />
+              {inputError && (
+                <p id="confirm-dialog-extra-error" className="text-xs" style={{ color: "var(--danger)" }}>
+                  {inputError}
+                </p>
+              )}
             </div>
           )}
 

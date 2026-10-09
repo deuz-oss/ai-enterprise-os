@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, ShoppingCart } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatDate, formatRupiah } from "../api/client";
+import { api, formatDate, formatRupiah, parseRupiahInput } from "../api/client";
 import { toast } from "sonner";
 import {
   confirmDialog,
@@ -907,9 +907,16 @@ function FixedAssetsPanel() {
       title: `Lepas aset "${a.name}"?`,
       message: `Nilai buku ${formatRupiah(a.book_value)}. Aset ditandai dilepas dan jurnal laba/rugi pelepasan diposting. Tindakan ini tidak bisa dibatalkan.`,
       confirmLabel: "Lepas Aset",
-      input: { label: "Hasil pelepasan (Rp) -- kosongkan bila tidak ada", placeholder: "mis. 1.500.000" },
+      input: {
+        label: "Hasil pelepasan (Rp) -- kosongkan bila tidak ada",
+        placeholder: "mis. 1.500.000",
+        validate: (raw) => {
+          const value = parseRupiahInput(raw);
+          return value === null ? "Nominal tidak terbaca. Contoh: 1.500.000 atau 1500000." : null;
+        },
+      },
       onConfirm: (raw) => {
-        const proceeds = Number(raw.replace(/[^\d]/g, "")) || 0;
+        const proceeds = parseRupiahInput(raw) ?? 0;
         disposeAsset.mutate(
           { id: a.id, proceeds },
           {

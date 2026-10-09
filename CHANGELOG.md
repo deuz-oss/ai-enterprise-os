@@ -12,7 +12,8 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Neraca Saldo** kini punya baris total debit/kredit dan indikator "Seimbang" / "Tidak seimbang: selisih Rp…". Utang jatuh tempo, aset tetap (harga, akumulasi, nilai buku), dan pembelian (jumlah, PPN) juga diberi total.
 - Daftar jurnal: kolom Jumlah, baris akun ditampilkan per baris (dulu satu string panjang), paginasi 50.
 - **Fixed**: "Balik Jurnal" memakai `window.prompt()` -- menekan Batal tetap membalik jurnal yang sudah diposting. Kini dialog dengan kolom alasan; Batal benar-benar membatalkan.
-- **Fixed**: "Lepas Aset" (tidak bisa dibatalkan) memakai `window.prompt()`; input seperti "Rp 1.500.000" diam-diam menjadi hasil pelepasan 0. Kini dialog konfirmasi dengan kolom nominal yang membaca angka berformat.
+- **Fixed**: "Lepas Aset" (tidak bisa dibatalkan) memakai `window.prompt()`; input seperti "Rp 1.500.000" diam-diam menjadi hasil pelepasan 0. Kini dialog konfirmasi dengan kolom nominal.
+- **Fixed (cek gap)**: parser nominal versi pertama dialog itu membuang semua non-digit, sehingga "1.500.000,50" terbaca Rp150.000.050 dan "1,500,000.00" Rp150.000.000 (100× lipat). Kini `parseRupiahInput` (`api/client.ts`) membaca format Indonesia, Inggris, dan angka polos; format ambigu/tidak terbaca menonaktifkan tombol konfirmasi dengan pesan error (`ConfirmDialog` input `validate`). 15 unit test baru.
 - "Buka Ulang" periode tutup buku kini lewat dialog konfirmasi.
 - `ConfirmDialog` mendukung kolom teks opsional (`input`), nilainya diteruskan ke `onConfirm`.
 

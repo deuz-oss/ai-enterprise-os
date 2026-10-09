@@ -203,6 +203,32 @@ export function formatTime(value: DateInput): string {
   return formatWith(value, { hour: "2-digit", minute: "2-digit" });
 }
 
+// ---------- Input nominal ----------
+
+/**
+ * Baca nominal rupiah yang diketik user. Menerima format Indonesia
+ * ("1.500.000,50"), format Inggris ("1,500,000.00"), dan angka polos
+ * ("1500000"); awalan "Rp" & spasi diabaikan. Hasil dibulatkan ke rupiah.
+ * Kosong -> 0. Format yang tidak bisa dibaca dengan pasti -> null (penanya
+ * wajib menolak, bukan menebak). Dulu dialog Lepas Aset membuang semua
+ * non-digit sehingga "1.500.000,50" terbaca 150.000.050 (cek gap 2026-10-09).
+ */
+export function parseRupiahInput(raw: string): number | null {
+  const s = raw.replace(/rp/gi, "").replace(/\s/g, "");
+  if (s === "") return 0;
+  let normalized: string | null = null;
+  if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(s) || /^\d+,\d{1,2}$/.test(s)) {
+    normalized = s.replace(/\./g, "").replace(",", "."); // Indonesia
+  } else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(s) || /^\d+\.\d{1,2}$/.test(s)) {
+    normalized = s.replace(/,/g, ""); // Inggris
+  } else if (/^\d+$/.test(s)) {
+    normalized = s;
+  }
+  if (normalized === null) return null;
+  const value = Number(normalized);
+  return Number.isFinite(value) ? Math.round(value) : null;
+}
+
 // Fase 46 -- multi-currency (Lead.currency), dipakai selain formatRupiah
 // yang tetap IDR-only untuk modul lain (payroll/finance/accounting).
 export function formatCurrency(
