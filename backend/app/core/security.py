@@ -45,10 +45,41 @@ def verify_and_update_password(plain: str, hashed: str) -> tuple[bool, str | Non
     return ok, new_hash
 
 
-def create_access_token(subject: str, tenant_id: UUID | None = None) -> str:
+def create_access_token(subject: str, tenant_id: UUID | None = None, token_version: int = 0) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "exp": expire, "tid": str(tenant_id) if tenant_id else None}
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "tid": str(tenant_id) if tenant_id else None,
+        # Versi token user (users.token_version): dinaikkan saat password
+        # berubah sehingga semua token terbit sebelumnya ditolak.
+        "tv": token_version,
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
+def token_version_matches(payload: dict, user) -> bool:
+    """Token masih berlaku untuk versi user saat ini?
+
+    Token terbit sebelum klaim `tv` ada dianggap versi 0, sehingga rilis ini
+    tidak memaksa semua user logout -- token lama baru ditolak setelah user
+    tsb. mengganti password.
+    """
+    claim = payload.get("tv", 0)
+    if not isinstance(claim, int) or isinstance(claim, bool):
+        return False
+    return claim == (user.token_version or 0)
+
+
+def revoke_user_tokens(user) -> None:
+    """Batalkan semua token user yang sudah terbit (caller yang commit)."""
+    user.token_version = (user.token_version or 0) + 1
+
+
+def access_token_for(user) -> str:
+    return create_access_token(
+        str(user.id), tenant_id=user.tenant_id, token_version=user.token_version or 0
+    )
 
 
 def decode_token(token: str) -> str | None:
@@ -80,11 +111,12 @@ def get_current_user(
     )
     if credentials is None:
         raise unauthorized
-    subject = decode_token(credentials.credentials)
-    if subject is None:
+    payload = decode_token_payload(credentials.credentials)
+    subject = payload.get("sub") if payload else None
+    if not payload or not subject:
         raise unauthorized
     try:
-        user_id = UUID(subject)
+        user_id = UUID(str(subject))
     except ValueError:
         raise unauthorized from None
     # Cari user tanpa filter tenant (konteks belum ada pada titik ini).
@@ -92,7 +124,7 @@ def get_current_user(
         select(User).where(User.id == user_id).execution_options(include_with_loader_criteria=False)
     )
     user = db.execute(stmt).scalar_one_or_none()
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or not token_version_matches(payload, user):
         raise unauthorized
     # Sumber kebenaran tenant adalah DB akun, bukan klaim token.
     set_tenant(user.tenant_id)

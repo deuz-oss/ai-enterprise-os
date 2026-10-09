@@ -1,7 +1,7 @@
 import { type Column, DataTable, PeriodPicker } from "../components/ui";
 import { FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
+import { api, formatDate, formatDateTime, formatRupiah, setToken } from "../api/client";
 import {
   ArrowLeft,
   Bell,
@@ -709,9 +709,13 @@ export default function MyPortal() {
   });
   const changePassword = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api.post("/auth/change-password", body),
-    onSuccess: () =>
-      setPasswordMsg({ ok: true, text: "Password berhasil diganti." }),
+      api.post<{ access_token: string }>("/auth/change-password", body),
+    // Backend mencabut semua token lama: simpan token baru supaya perangkat
+    // ini tetap login (perangkat lain harus login ulang).
+    onSuccess: (res) => {
+      setToken(res.access_token);
+      setPasswordMsg({ ok: true, text: "Password berhasil diganti. Perangkat lain sudah dikeluarkan." });
+    },
     onError: (err) =>
       setPasswordMsg({ ok: false, text: err instanceof Error ? err.message : "Gagal" }),
   });

@@ -49,7 +49,7 @@ def test_change_password_sendiri(client):
         headers=headers,
         json={"old_password": "password123", "new_password": "password456"},
     )
-    assert ok.status_code == 204
+    assert ok.status_code == 200, ok.text
 
     # Login dengan password lama gagal; baru berhasil
     old_login = client.post(

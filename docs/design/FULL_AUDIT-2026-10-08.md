@@ -229,7 +229,7 @@ non-functional control (see U3). The `/candidates` route only redirects.
 | Background jobs | **Major gap (future)** | No queue/scheduler. Contract-expiry reminders, payslip email batches, and AI indexing all run in-request or manually. MVP-acceptable; becomes P1 at ~10 tenants |
 | Notifications | **Partially supported** | In-app inbox + unread count; email sends are inline |
 | AI features | **Already supported (broadly)** | RAG, forecast, lead brief, screening, interview evidence, accounting AI, chat @AEOS |
-| Session security | **Partially supported** | JWT in `localStorage`, 480-min expiry (`config.py:22`), no revocation on password change (no token versioning; still open from Fase 57) |
+| Session security | **Partially supported** | JWT in `localStorage`, 480-min expiry (`config.py:22`), no revocation on password change (no token versioning; still open from Fase 57). **Fixed 2026-10-10**: `users.token_version` + JWT claim `tv`, bumped on change/reset/admin-set password (open WebSockets are not force-closed) |
 
 **MVP vs future:** report-definition consistency, the 200-row truncation,
 and unsafe irreversible actions are **MVP problems now**. The queue,

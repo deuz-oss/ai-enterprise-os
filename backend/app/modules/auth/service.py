@@ -5,7 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import hash_password, verify_and_update_password, verify_password
+from app.core.security import (
+    hash_password,
+    revoke_user_tokens,
+    verify_and_update_password,
+    verify_password,
+)
 from app.core.tenancy import get_tenant
 from app.modules.auth.models import PasswordResetToken, User, UserRole
 from app.modules.auth.schemas import UserCreate
@@ -133,6 +138,8 @@ def consume_password_reset_token(db: Session, raw_token: str, new_password: str)
     if user is None or not user.is_active:
         raise HTTPException(status_code=404, detail="Akun tidak ditemukan")
     user.hashed_password = hash_password(new_password)
+    # Siapa pun yang memegang token lama (mis. pencuri password) ikut keluar.
+    revoke_user_tokens(user)
     row.used_at = datetime.now(UTC)
     db.commit()
     db.refresh(user)
@@ -146,4 +153,6 @@ def change_own_password(db: Session, user: User, old_password: str, new_password
     if len(new_password) < 8:
         raise HTTPException(status_code=422, detail="Password minimal 8 karakter")
     user.hashed_password = hash_password(new_password)
+    # Semua sesi lain keluar; endpoint mengembalikan token baru untuk sesi ini.
+    revoke_user_tokens(user)
     db.commit()

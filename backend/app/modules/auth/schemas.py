@@ -48,6 +48,13 @@ class UserUpdate(BaseModel):
     new_password: str | None = None
 
 
+class ChangePasswordOut(BaseModel):
+    """Token baru untuk sesi ini setelah token lama dicabut."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
 class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str

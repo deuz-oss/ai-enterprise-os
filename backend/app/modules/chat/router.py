@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import decode_token, get_current_user
+from app.core.security import decode_token_payload, get_current_user, token_version_matches
 from app.modules.chat import service
 
 # Sengaja tanpa require_roles(...): Chat Workspace itu fitur Foundation
@@ -20,8 +20,9 @@ async def chat_ws(websocket: WebSocket, token: str = Query("")):
     """WebSocket chat real-time (PRD §9.4): handshake JWT via query token."""
     from app.core.database import SessionLocal
 
-    user_id = decode_token(token)
-    if not user_id:
+    payload = decode_token_payload(token)
+    user_id = str(payload.get("sub") or "") if payload else ""
+    if not payload or not user_id:
         await websocket.close(code=1008)
         return
     # Session DB hanya untuk lookup user lalu segera ditutup: dulu session
@@ -32,7 +33,9 @@ async def chat_ws(websocket: WebSocket, token: str = Query("")):
     db = SessionLocal()
     try:
         user = db.get(User, _parse(user_id))  # type: ignore[attr-defined]
-        active = user is not None and user.is_active
+        # Cek versi token juga di sini: WS tidak lewat get_current_user, jadi
+        # tanpa ini token yang sudah dicabut masih bisa membuka chat.
+        active = user is not None and user.is_active and token_version_matches(payload, user)
         tenant_id = str(user.tenant_id or "platform") if user is not None else ""
         user_id_str = str(user.id) if user is not None else ""
     finally:

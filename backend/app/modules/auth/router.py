@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,16 +7,18 @@ from app.core.database import get_db, parse_uuid
 from app.core.permissions import AUTH_ADMIN_ONLY_ROLES
 from app.core.ratelimit import get_limiter
 from app.core.security import (
-    create_access_token,
+    access_token_for,
     get_current_user,
     hash_password,
     require_roles,
+    revoke_user_tokens,
 )
 from app.core.tenancy import get_request_meta
 from app.modules import audit
 from app.modules.auth.models import User, UserRole
 from app.modules.auth.schemas import (
     ChangePasswordIn,
+    ChangePasswordOut,
     ForgotPasswordAckOut,
     ForgotPasswordIn,
     LoginRequest,
@@ -133,7 +135,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         tenant_id=user.tenant_id,
     )
     return Token(
-        access_token=create_access_token(str(user.id), tenant_id=user.tenant_id),
+        access_token=access_token_for(user),
         user=UserOut.model_validate(user),
     )
 
@@ -148,13 +150,17 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
     return UserOut.model_validate(current_user).model_copy(update={"tenant_name": tenant_name})
 
 
-@router.post("/change-password", status_code=204)
+@router.post("/change-password", response_model=ChangePasswordOut)
 def change_password(
     payload: ChangePasswordIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """User aktif mengganti password sendiri (wajib password lama)."""
+    """User aktif mengganti password sendiri (wajib password lama).
+
+    Semua token lama dicabut; token baru dikembalikan supaya perangkat yang
+    dipakai sekarang tetap login (perangkat lain harus login ulang).
+    """
     change_own_password(db, current_user, payload.old_password, payload.new_password)
     audit.log_event(
         db,
@@ -164,7 +170,7 @@ def change_password(
         actor=current_user.id,
         tenant_id=current_user.tenant_id,
     )
-    return Response(status_code=204)
+    return ChangePasswordOut(access_token=access_token_for(current_user))
 
 
 @router.post("/users/{user_id}/password-reset-token", response_model=PasswordResetIssueOut)
@@ -337,6 +343,8 @@ def update_user(
         if len(new_password) < 8:
             raise HTTPException(status_code=422, detail="Password minimal 8 karakter")
         user.hashed_password = hash_password(new_password)
+        # Password diset admin (mis. akun dibajak): semua sesi user ini keluar.
+        revoke_user_tokens(user)
     db.commit()
     db.refresh(user)
     return user

@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -51,4 +51,7 @@ class User(Base):
         Enum(UserRole, native_enum=False, length=50), default=UserRole.management
     )
     is_active: Mapped[bool] = mapped_column(default=True)
+    # Naik setiap password berubah; token JWT membawa versi ini (klaim `tv`)
+    # dan ditolak bila tidak sama -- revokasi tanpa tabel blacklist.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

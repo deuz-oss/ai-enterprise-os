@@ -6,6 +6,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Security — Token dicabut saat password berubah
+
+- Dulu JWT tetap berlaku sampai 480 menit setelah password diganti/di-reset, jadi pemegang token curian tetap masuk (temuan sejak Fase 57). Kini `users.token_version` (migrasi `c3d4e5f6a7b8`) dibawa token sebagai klaim `tv`; versi naik saat ganti password sendiri, reset via email, dan password diset admin -- semua token lama langsung ditolak (401), termasuk handshake WebSocket chat yang tidak lewat `get_current_user`.
+- `POST /auth/change-password` kini 200 dengan token baru (dulu 204): perangkat yang dipakai tetap login, perangkat lain keluar. Portal Saya menyimpan token baru itu.
+- Token terbit sebelum rilis ini (tanpa `tv`) dianggap versi 0, jadi rilis tidak memaksa siapa pun logout. Klaim `tv` yang bukan bilangan bulat ditolak. Re-hash password otomatis saat login tidak mencabut sesi.
+- Batasan: koneksi WebSocket yang SUDAH terbuka tidak diputus saat revokasi (cek hanya saat handshake); JWT masih di `localStorage`.
+
 ### Changed — Dependensi agent AI Interview dipin
 
 - `agent/requirements.lock` (universal, Python 3.12) kini dipakai `agent/Dockerfile`. Isinya persis versi di image agent yang sudah berjalan (livekit-agents 1.7.1, onnxruntime 1.30.0, numpy 2.5.3, ...), jadi build berikutnya tidak menarik rilis baru diam-diam. Cara regenerasi di `agent/README.md`.
