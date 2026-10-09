@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { CalloutBlock } from "../components/workspace";
+import { KpiAnomaliesCard } from "../components/KpiAnomalies";
 import { ErrorState, HeaderCanvas, KpiCard, PageFallback, StatusPill } from "../components/ui";
 import { api, formatRupiah } from "../api/client";
 
@@ -535,6 +536,11 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Perubahan besar KPI (bulan penuh vs sebelumnya) -- angka pembanding
+          sungguhan dari backend, jadi bukan delta karangan (lihat catatan
+          Business Pulse di bawah). Tidak tampil bila tidak ada yang berubah besar. */}
+      <KpiAnomaliesCard />
 
       {/* ===== Business Pulse: hero + KPI sekunder =====
           Bobot visual asimetris (§10 brief: PRIMARY/SECONDARY/TERTIARY,

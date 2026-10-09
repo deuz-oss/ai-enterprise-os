@@ -64,7 +64,15 @@ requirements.
 > re-check: skip link, mobile drawer (main now inert while open; menu button
 > toggles), payroll review & reminder dialogs (reminder now returns focus).
 > **Decision 2-1400**: stays a *liability clearing* account (Potongan Gaji
-> Lain-lain) -- accountants reclassify; no code change. #4-#10 remain open.
+> Lain-lain) -- accountants reclassify; no code change.
+> **2026-10-10**: opportunity #8 shipped as deterministic per-rule score
+> reasons (sum = score) + labelled AI sentence in the Job Orders match panel
+> and Talent Pool tooltip; not in the kanban (would re-run embeddings per
+> view until match results are persisted). #7 shipped as deterministic
+> quotation margin checks from template field roles + BPJS engine cost.
+> #10 shipped as month-over-month KPI change sentences + top client
+> drivers (grouped by event month: paid/issued/finalized). #4-#6, #9 remain
+> open (#4 needs a scheduler; #5/#9 need LLM/vision at their core).
 
 ---
 

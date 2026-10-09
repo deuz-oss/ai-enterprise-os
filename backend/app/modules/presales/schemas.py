@@ -1,5 +1,6 @@
 import json
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -20,6 +21,19 @@ class TemplateFieldDef(BaseModel):
     key: str
     label: str
     type: str = "text"  # text | textarea | number | date
+    # Peran harga (template quotation saja) untuk pengaman margin -- lihat
+    # presales/pricing.py. None = field biasa.
+    role: (
+        Literal[
+            "base_salary",
+            "allowance",
+            "management_fee_pct",
+            "management_fee_amount",
+            "price_per_head",
+            "headcount",
+        ]
+        | None
+    ) = None
 
 
 class QuotationTemplateCreate(BaseModel):
@@ -112,6 +126,54 @@ class CompanyOut(BaseModel):
     source: str
     created_at: datetime
     contacts: list[ContactOut] = []
+
+
+class PricingCheckIn(BaseModel):
+    template_id: UUID
+    field_values: dict[str, str | int | float]
+    lead_id: UUID | None = None
+
+
+class PricingFinding(BaseModel):
+    severity: str  # high | medium | info
+    kind: str
+    message: str
+
+
+class PricingPerHead(BaseModel):
+    base_salary: float
+    allowance: float
+    bpjs_employer: float
+    cost: float
+    fee: float | None
+    price: float
+    margin: float
+    margin_pct: float | None
+
+
+class PricingMonthly(BaseModel):
+    headcount: int
+    price: float
+    cost: float
+    margin: float
+
+
+class PricingHistory(BaseModel):
+    count: int
+    last_fee_pct: float
+    median_fee_pct: float
+
+
+class PricingCheckOut(BaseModel):
+    """Pengaman margin quotation -- deterministik, hanya peringatan."""
+
+    applicable: bool  # template punya peran gaji + harga/fee
+    roles: dict[str, str]  # role -> key field
+    per_head: PricingPerHead | None
+    monthly: PricingMonthly | None
+    history: PricingHistory | None
+    min_margin_pct: float
+    findings: list[PricingFinding]
 
 
 class QuotationCreate(BaseModel):

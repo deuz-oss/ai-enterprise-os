@@ -39,6 +39,8 @@ from app.modules.presales.schemas import (
     LeadOut,
     LeadTaskOut,
     LeadUpdate,
+    PricingCheckIn,
+    PricingCheckOut,
     QuotationCreate,
     QuotationEmailIn,
     QuotationOut,
@@ -194,9 +196,35 @@ def create_quotation(
     return service.create_quotation(db, user=user, payload=payload)
 
 
+@quotations_router.post("/pricing-check", response_model=PricingCheckOut)
+def pricing_check(payload: PricingCheckIn, db: Session = Depends(get_db)):
+    """Cek margin isian quotation yang sedang diketik (belum disimpan)."""
+    from app.modules.presales.pricing import check_pricing
+
+    template = service.get_quotation_template(db, str(payload.template_id))
+    return check_pricing(db, template, payload.field_values, lead_id=payload.lead_id)
+
+
 @quotations_router.get("/{quotation_id}", response_model=QuotationOut)
 def get_quotation(quotation_id: str, db: Session = Depends(get_db)):
     return service.get_quotation(db, quotation_id)
+
+
+@quotations_router.get("/{quotation_id}/pricing-check", response_model=PricingCheckOut)
+def quotation_pricing_check(quotation_id: str, db: Session = Depends(get_db)):
+    """Cek margin quotation tersimpan (untuk approver sebelum menyetujui)."""
+    import json
+
+    from app.modules.presales.pricing import check_pricing
+
+    quotation = service.get_quotation(db, quotation_id)
+    return check_pricing(
+        db,
+        quotation.template,
+        json.loads(quotation.field_values or "{}"),
+        lead_id=quotation.lead_id,
+        current=quotation,
+    )
 
 
 @quotations_router.post("/{quotation_id}/submit-approval", response_model=QuotationOut)

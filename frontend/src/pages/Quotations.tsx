@@ -1,3 +1,4 @@
+import { LivePricingCheck, StoredPricingCheck } from "../components/PricingCheck";
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileSignature, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
@@ -29,6 +30,8 @@ interface TemplateField {
   key: string;
   label: string;
   type: string;
+  // Peran harga untuk cek margin (backend presales/pricing.py); null = field biasa.
+  role?: string | null;
 }
 
 interface QuotationTemplateT {
@@ -77,6 +80,8 @@ export default function Quotations() {
   const [showForm, setShowForm] = useState(false);
   const [leadId, setLeadId] = useState("");
   const [templateId, setTemplateId] = useState("");
+  // Isian form saat ini, untuk cek margin langsung (form sendiri tetap uncontrolled).
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [emailFormId, setEmailFormId] = useState<string | null>(null);
 
@@ -224,6 +229,9 @@ export default function Quotations() {
                             Catatan penolakan: {q.rejection_note}
                           </p>
                         )}
+                        <div className="mt-3">
+                          <StoredPricingCheck quotationId={q.id} />
+                        </div>
                       </Card>
         )}
       </div>
@@ -340,7 +348,18 @@ export default function Quotations() {
 
       {showForm && (
         <Card>
-          <form onSubmit={handleCreate} className="space-y-3">
+          <form
+            onSubmit={handleCreate}
+            onChange={(e) => {
+              const form = new FormData(e.currentTarget);
+              setDraftValues(
+                Object.fromEntries(
+                  (selectedTemplate?.field_schema ?? []).map((f) => [f.key, String(form.get(f.key) ?? "")])
+                )
+              );
+            }}
+            className="space-y-3"
+          >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <select
                 value={leadId}
@@ -357,7 +376,10 @@ export default function Quotations() {
               </select>
               <select
                 value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
+                onChange={(e) => {
+                  setTemplateId(e.target.value);
+                  setDraftValues({});
+                }}
                 className="input"
                 required
               >
@@ -382,6 +404,7 @@ export default function Quotations() {
                 ))}
               </div>
             )}
+            {selectedTemplate && <LivePricingCheck templateId={selectedTemplate.id} leadId={leadId} values={draftValues} />}
             {templates?.length === 0 && (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 Belum ada template quotation aktif. Buat template dulu lewat API

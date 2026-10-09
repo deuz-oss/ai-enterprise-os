@@ -6,6 +6,26 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Perubahan besar KPI di Dashboard (peluang AI #10 audit 2026-10-08)
+
+- `GET /overview/anomalies` membandingkan dua bulan PENUH terakhir untuk kas masuk (invoice lunas, per bulan bayar), nilai invoice diterbitkan (per bulan terbit, tanpa draft/batal), dan bruto payroll difinalisasi (per bulan finalisasi, diatribusikan ke klien lewat run proyek atau placement). Bila berubah ≥20% (dan basis bulan sebelumnya ≥ Rp1 juta), kembalikan satu kalimat plus maksimal 3 klien penyumbang selisih terbesar.
+- Dikelompokkan menurut bulan kejadian, bukan bulan periode: saat diuji di browser, pengelompokan per periode menampilkan "penagihan Sep turun 100%" palsu karena invoice periode September memang baru terbit di Oktober.
+- Kartu "Perubahan besar bulan lalu" di Dashboard (hanya tampil bila ada perubahan di atas ambang), dengan tautan ke klien dan halaman sumber. Deterministik tanpa AI: dimuat setiap dashboard dibuka.
+
+### Added — Cek margin quotation (peluang AI #7 audit 2026-10-08)
+
+- Field template quotation kini boleh punya `role`: `base_salary`, `allowance`, `management_fee_pct`, `management_fee_amount`, `price_per_head`, `headcount` (diset lewat API template, sama seperti pembuatan template; field tanpa role tidak berubah). Role tak dikenal ditolak 422.
+- `POST /quotations/pricing-check` (isian yang sedang diketik) dan `GET /quotations/{id}/pricing-check` (quotation tersimpan): biaya per orang = gaji + tunjangan + iuran BPJS perusahaan dari engine BPJS (tarif ber-versi Rates, sama dengan payroll), lalu harga, margin, dan total per bulan. Peringatan: rugi (harga < biaya), margin < 5%, harga per orang tidak sama dengan biaya + fee, nilai tidak terbaca (tidak dianggap 0), dan fee turun ≥25% dibanding quotation sebelumnya ke lead yang sama.
+- Halaman Quotations: panel "Cek margin" di form (dihitung ulang saat mengetik, debounce 400 ms) dan di detail quotation untuk approver. Hanya peringatan -- tidak memblokir simpan atau approval; tidak tampil untuk template tanpa role harga.
+- Asumsi yang ditampilkan di UI: fee % dihitung dari total biaya tenaga kerja; PPN/PPh 23 tidak masuk margin; JKK memakai kelas risiko default Rates. Deterministik, tanpa AI.
+
+### Added — Alasan skor match kandidat (peluang AI #8 audit 2026-10-08)
+
+- Hasil `POST /recruitment/job-orders/{id}/match` dan `GET .../matches` kini membawa `reasons`: rincian skor deterministik yang jumlahnya selalu sama dengan `match_score` -- skor dasar (skill cocok, atau kemiripan profil bila embedding AI aktif), domisili cocok +8, siap segera +5 / dalam beberapa minggu +2, ekspektasi gaji dalam rentang +7 (di luar rentang ditampilkan dengan 0 poin), dan baris "Dibatasi maksimum 100" bila mentahnya lewat 100. Bonus aturan dan penjelasannya kini satu sumber (`_rule_reasons`), jadi tidak bisa berbeda.
+- `explain_source` (`ai` | `rules`): kalimat dari LLM rerank dulu tampil sama persis dengan penjelasan aturan; kini diberi label "Alasan AI".
+- Panel "Cari Kandidat" di Job Orders menampilkan rincian sebagai chip berpoin plus persyaratan yang kurang; tooltip skor di Talent Pool memuat rincian yang sama (`components/MatchReasons.tsx`, 3 unit test).
+- Tidak ditampilkan di Kanban Job Order: tiap tampilan akan menjalankan embedding untuk sampai 500 kandidat (biaya AI per buka halaman) karena hasil match belum disimpan.
+
 ### Security — Token dicabut saat password berubah
 
 - Dulu JWT tetap berlaku sampai 480 menit setelah password diganti/di-reset, jadi pemegang token curian tetap masuk (temuan sejak Fase 57). Kini `users.token_version` (migrasi `c3d4e5f6a7b8`) dibawa token sebagai klaim `tv`; versi naik saat ganti password sendiri, reset via email, dan password diset admin -- semua token lama langsung ditolak (401), termasuk handshake WebSocket chat yang tidak lewat `get_current_user`.

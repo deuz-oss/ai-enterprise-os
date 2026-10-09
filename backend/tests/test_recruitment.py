@@ -1087,3 +1087,100 @@ def test_mark_referral_reward_paid(client):
         f"/api/v1/recruitment/referral-rewards/{reward_id}/mark-paid", headers=headers
     )
     assert again.status_code == 409
+
+
+def _match_fixture(client):
+    headers = _auth_header(client)
+    cid = _client_id(client, headers)
+    jo_id = _create_jo(client, headers, cid, title="Operator Produksi Surabaya")
+    client.patch(
+        f"/api/v1/recruitment/job-orders/{jo_id}",
+        headers=headers,
+        json={"requirements": "operator produksi las"},
+    )
+    in_range = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={
+            "full_name": "Dalam Rentang",
+            "city": "Surabaya",
+            "skills": "operator las",
+            "expected_salary": 5_000_000,
+        },
+    ).json()["id"]
+    too_pricey = client.post(
+        "/api/v1/recruitment/candidates",
+        headers=headers,
+        json={"full_name": "Kemahalan", "city": "Medan", "expected_salary": 9_000_000},
+    ).json()["id"]
+    return headers, jo_id, in_range, too_pricey
+
+
+def test_match_reasons_add_up_to_score_and_explain_each_rule(client):
+    """AI opportunity #8: alasan skor harus deterministik dan jumlahnya = skor,
+    supaya yang dibaca recruiter persis yang dihitung."""
+    headers, jo_id, in_range, too_pricey = _match_fixture(client)
+    results = client.post(
+        f"/api/v1/recruitment/job-orders/{jo_id}/match", headers=headers, json={"top_k": 10}
+    ).json()
+    by_id = {r["candidate_id"]: r for r in results}
+    for r in results:
+        assert sum(x["points"] for x in r["reasons"]) == r["match_score"], r
+        assert r["explain_source"] == "rules"
+
+    labels = {x["label"]: x["points"] for x in by_id[in_range]["reasons"]}
+    assert labels["Skill cocok: las, operator"] == 70
+    assert labels["Domisili cocok (Surabaya)"] == 8
+    assert labels["Ekspektasi gaji dalam rentang"] == 7
+    assert by_id[in_range]["match_score"] == 85
+
+    labels = {x["label"]: x["points"] for x in by_id[too_pricey]["reasons"]}
+    assert labels == {"Skor dasar": 50, "Ekspektasi gaji di luar rentang": 0}
+
+
+def test_match_reasons_with_ai_label_source_and_cap_at_100(client, monkeypatch):
+    from app.modules.recruitment import service as recruitment_service
+
+    headers, jo_id, in_range, too_pricey = _match_fixture(client)
+    monkeypatch.setattr(recruitment_service, "ai_configured", lambda: True)
+    # Vektor identik -> kemiripan 100% -> dasar 80 + bonus 15 -> mentah 95.
+    monkeypatch.setattr(
+        recruitment_service, "embed_texts", lambda texts, **k: [[1.0, 0.0] for _ in texts]
+    )
+    monkeypatch.setattr(
+        recruitment_service,
+        "chat_completion",
+        lambda *a, **k: {"explanations": {in_range: "Pengalaman las relevan."}},
+    )
+    results = client.post(
+        f"/api/v1/recruitment/job-orders/{jo_id}/match", headers=headers, json={"top_k": 10}
+    ).json()
+    by_id = {r["candidate_id"]: r for r in results}
+    for r in results:
+        assert sum(x["points"] for x in r["reasons"]) == r["match_score"], r
+
+    best = by_id[in_range]
+    assert best["explain_source"] == "ai"
+    assert best["explain"] == "Pengalaman las relevan."
+    assert best["reasons"][0] == {
+        "label": "Kemiripan profil dengan job order (100%)",
+        "points": 80,
+    }
+    # Kandidat tanpa kalimat AI jatuh ke penjelasan aturan.
+    assert by_id[too_pricey]["explain_source"] == "rules"
+
+    # Bonus melewati 100: baris pembatas membuat jumlah tetap = skor.
+    monkeypatch.setattr(
+        recruitment_service,
+        "_rule_reasons",
+        lambda jo, profile: [{"label": "Bonus uji", "points": 30}],
+    )
+    capped = {
+        r["candidate_id"]: r
+        for r in client.post(
+            f"/api/v1/recruitment/job-orders/{jo_id}/match", headers=headers, json={"top_k": 10}
+        ).json()
+    }[in_range]
+    assert capped["match_score"] == 100
+    assert capped["reasons"][-1] == {"label": "Dibatasi maksimum 100", "points": -10}
+    assert sum(x["points"] for x in capped["reasons"]) == 100

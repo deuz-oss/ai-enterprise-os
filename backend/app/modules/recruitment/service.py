@@ -1331,23 +1331,28 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def _rule_bonus(jo: JobOrder, profile: dict) -> int:
-    bonus = 0
+def _rule_reasons(jo: JobOrder, profile: dict) -> list[dict]:
+    """Bonus aturan sebagai alasan berpoin -- sumber tunggal untuk skor DAN
+    penjelasannya, supaya yang ditampilkan ke recruiter selalu sama dengan
+    yang dihitung."""
+    reasons: list[dict] = []
     jo_blob = f"{jo.title or ''} {jo.requirements or ''}".lower()
     if profile["domisili"] and profile["domisili"] in jo_blob:
-        bonus += 8
+        reasons.append({"label": f"Domisili cocok ({profile['domisili'].title()})", "points": 8})
     if profile["readiness"] == "segera":
-        bonus += 5
+        reasons.append({"label": "Siap bergabung segera", "points": 5})
     elif profile["readiness"] == "n_minggu":
-        bonus += 2
+        reasons.append({"label": "Siap dalam beberapa minggu", "points": 2})
     salary = profile["expected_salary"]
     if salary and jo.salary_min and jo.salary_max:
         try:
             if float(jo.salary_min) <= float(salary) <= float(jo.salary_max):
-                bonus += 7
+                reasons.append({"label": "Ekspektasi gaji dalam rentang", "points": 7})
+            else:
+                reasons.append({"label": "Ekspektasi gaji di luar rentang", "points": 0})
         except (TypeError, ValueError):
             pass
-    return bonus
+    return reasons
 
 
 def _missing_requirements(jo: JobOrder, profile: dict) -> list[str]:
@@ -1431,28 +1436,37 @@ def match_candidates(
             jo_vec, cand_vecs = None, None
 
     jo_skills = set((jo.requirements or jo.title or "").lower().split())
-    scored: list[tuple[Candidate, int, dict]] = []
+    scored: list[tuple[Candidate, int, dict, list[dict]]] = []
     for idx, cand in enumerate(candidates):
         profile = profiles[idx]
+        matched = sorted(jo_skills & set(profile["skills"]))
         if jo_vec is not None and cand_vecs is not None:
             similarity = max(0.0, _cosine(jo_vec, cand_vecs[idx]))
             base = round(similarity * 80)
+            base_reason = {"label": f"Kemiripan profil dengan job order ({similarity:.0%})"}
         else:
-            overlap = len(jo_skills & set(profile["skills"])) if jo_skills else 0
-            base = min(80, 50 + overlap * 10) if jo_skills else 50
-        score = max(0, min(100, base + _rule_bonus(jo, profile)))
-        scored.append((cand, score, profile))
+            base = min(80, 50 + len(matched) * 10) if jo_skills else 50
+            base_reason = {
+                "label": f"Skill cocok: {', '.join(matched)}" if matched else "Skor dasar"
+            }
+        reasons = [{**base_reason, "points": base}, *_rule_reasons(jo, profile)]
+        raw = sum(r["points"] for r in reasons)
+        score = max(0, min(100, raw))
+        if raw > score:
+            reasons.append({"label": "Dibatasi maksimum 100", "points": score - raw})
+        scored.append((cand, score, profile, reasons))
 
     scored.sort(key=lambda row: row[1], reverse=True)
     top = scored[:top_k]
 
     explains: dict[str, str] = {}
     if jo_vec is not None and top:
-        explains = _llm_rerank_explain(jo, [(cand, profile) for cand, _, profile in top[:10]])
+        explains = _llm_rerank_explain(jo, [(cand, profile) for cand, _, profile, _ in top[:10]])
 
     results: list[dict] = []
-    for cand, score, profile in top:
+    for cand, score, profile, reasons in top:
         explain = explains.get(str(cand.id))
+        source = "ai" if explain else "rules"
         if not explain:
             matched = sorted(jo_skills & set(profile["skills"]))
             explain = f"skill cocok: {', '.join(matched)}" if matched else "kecocokan umum"
@@ -1461,6 +1475,10 @@ def match_candidates(
                 "candidate_id": cand.id,
                 "match_score": score,
                 "explain": explain,
+                # ai = kalimat dari LLM (diberi label di UI); rules = deterministik.
+                "explain_source": source,
+                # Rincian skor deterministik: Σ points == match_score.
+                "reasons": reasons,
                 "missing": _missing_requirements(jo, profile),
             }
         )

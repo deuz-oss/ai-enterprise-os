@@ -1,3 +1,4 @@
+import { matchReasonsText, type MatchExplain } from "../components/MatchReasons";
 import { useMe } from "../api/auth";
 import { Fragment, FormEvent, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -109,11 +110,8 @@ const READINESS_LABELS: Record<string, string> = {
   belum_tentu: "Belum tentu",
 };
 
-interface MatchItem {
+interface MatchItem extends MatchExplain {
   candidate_id: string;
-  match_score: number;
-  explain: string;
-  missing: string[];
 }
 
 function BrandingCard() {
@@ -632,7 +630,7 @@ export default function TalentPool() {
             cell: (r: TpRow) => {
               const match = scoreByCandidate.get(r.candidate_id);
               return match ? (
-                <span title={match.explain}>
+                <span title={matchReasonsText(match)}>
                   <ScoreBadge score={match.match_score} />
                 </span>
               ) : (

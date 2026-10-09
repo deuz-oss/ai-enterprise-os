@@ -392,6 +392,14 @@ def overview(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/anomalies", dependencies=[Depends(_forbid_karyawan)])
+def kpi_anomalies(db: Session = Depends(get_db)):
+    """KPI yang berubah besar antara dua bulan penuh terakhir + sumbernya."""
+    from app.modules.dashboard.anomalies import kpi_anomalies as build
+
+    return build(db)
+
+
 @router.get("/personal")
 def overview_personal(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """PRD v3.0 — ringkas personal untuk karyawan (ESS) — hanya data milik sendiri."""

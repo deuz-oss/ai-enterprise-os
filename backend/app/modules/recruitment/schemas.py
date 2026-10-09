@@ -433,10 +433,18 @@ class MatchRequest(BaseModel):
     top_k: int = 50
 
 
+class MatchReason(BaseModel):
+    label: str
+    points: int
+
+
 class MatchResult(BaseModel):
     candidate_id: UUID
     match_score: int
     explain: str
+    explain_source: str = "rules"  # ai | rules
+    # Rincian skor deterministik (Σ points == match_score).
+    reasons: list[MatchReason] = []
     missing: list[str] = []
 
 

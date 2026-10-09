@@ -1,3 +1,4 @@
+import { MatchReasons, type MatchExplain } from "../components/MatchReasons";
 import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -85,11 +86,8 @@ interface MatchCandidateRow {
   expected_salary: number | null;
 }
 
-interface MatchItem {
+interface MatchItem extends MatchExplain {
   candidate_id: string;
-  match_score: number;
-  explain: string;
-  missing: string[];
 }
 
 const BUSINESS_STATUSES = ["dibuka", "ditahan", "dibatalkan", "terisi"];
@@ -787,16 +785,7 @@ export default function JobOrders() {
                         {cand?.city ?? "-"}
                         {cand?.expected_salary ? ` · ${formatRupiah(cand.expected_salary)}` : ""}
                       </p>
-                      <p className="mt-1 text-sm text-[var(--text)]">{item.explain}</p>
-                      {item.missing.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {item.missing.map((m) => (
-                            <span key={m} className="pill p-red text-[10px]">
-                              {m}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <MatchReasons match={item} />
                     </div>
                   </li>
                 );
