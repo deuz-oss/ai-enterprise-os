@@ -1,10 +1,17 @@
-import { Fragment, FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
 import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, ShoppingCart } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatRupiah } from "../api/client";
 import { toast } from "sonner";
-import { confirmDialog, confirmToast, MONTH_NAMES, PeriodPicker } from "../components/ui";
+import {
+  confirmDialog,
+  confirmToast,
+  DataTable,
+  MONTH_NAMES,
+  PeriodPicker,
+  type Column,
+} from "../components/ui";
 import AccountingAi from "./AccountingAi";
 
 interface AccountRow {
@@ -71,23 +78,26 @@ export default function Accounting() {
     { account_code: "4-1000", debit: 0, credit: 0, client_dim_id: null },
   ]);
 
-  const { data: accounts } = useQuery({
+  const accountsQuery = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api.get<AccountRow[]>("/accounting/accounts"),
   });
+  const accounts = accountsQuery.data;
   const clients = useQuery({
     queryKey: ["clients"],
     queryFn: () => api.get<{ id: string; name: string }[]>("/clients"),
   });
-  const { data: periods } = useQuery({
+  const periodsQuery = useQuery({
     queryKey: ["periods"],
     queryFn: () => api.get<PeriodRow[]>("/accounting/periods"),
   });
-  const { data: trialBalance } = useQuery({
+  const periods = periodsQuery.data;
+  const trialBalanceQuery = useQuery({
     queryKey: ["trial-balance", year],
     queryFn: () =>
       api.get<TrialBalanceRow[]>(`/accounting/trial-balance?year=${year}`),
   });
+  const trialBalance = trialBalanceQuery.data;
   const { data: incomeStatement } = useQuery({
     queryKey: ["income-statement", year],
     queryFn: () =>
@@ -165,6 +175,94 @@ export default function Accounting() {
   function updateLine(index: number, patch: Partial<LineIn>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
+
+  // ---------- Tabel (DataTable) ----------
+  const accountColumns: Column<AccountRow>[] = [
+    { key: "code", header: "Kode", className: "font-mono text-xs", cell: (a) => a.code, sortValue: (a) => a.code },
+    { key: "name", header: "Nama", cell: (a) => a.name, sortValue: (a) => a.name },
+    {
+      key: "group",
+      header: "Kelompok",
+      className: "text-xs",
+      cell: (a) => GROUP_LABELS[a.group_type] ?? a.group_type,
+      sortValue: (a) => GROUP_LABELS[a.group_type] ?? a.group_type,
+    },
+    { key: "normal", header: "Saldo Normal", className: "capitalize", cell: (a) => a.normal_balance },
+    {
+      key: "status",
+      header: "Status",
+      cell: (a) => (a.is_active ? null : <span className="pill p-gray">nonaktif</span>),
+    },
+  ];
+
+  const periodColumns: Column<PeriodRow>[] = [
+    {
+      key: "period",
+      header: "Periode",
+      className: "font-medium",
+      cell: (p) => `${String(p.month).padStart(2, "0")}/${p.year}`,
+      sortValue: (p) => p.year * 100 + p.month,
+    },
+    { key: "closed", header: "Ditutup", className: "text-xs", cell: (p) => formatDate(p.closed_at) },
+    { key: "notes", header: "Catatan", className: "text-xs", cell: (p) => p.notes ?? "-" },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (p) => (
+        <button
+          onClick={() =>
+            // Buka ulang = jurnal backdate ke periode ini diizinkan lagi
+            // (tercatat di audit; bisa ditutup kembali).
+            confirmDialog({
+              title: `Buka ulang periode ${String(p.month).padStart(2, "0")}/${p.year}?`,
+              message:
+                "Jurnal dengan tanggal di periode ini bisa diposting/diubah lagi dan laporan periode tersebut bisa berubah. Tindakan dicatat di audit; periode bisa ditutup kembali.",
+              confirmLabel: "Buka Ulang",
+              tone: "primary",
+              onConfirm: () => reopenPeriod.mutate({ y: p.year, m: p.month }),
+            })
+          }
+          className="text-xs font-medium hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          Buka Ulang
+        </button>
+      ),
+    },
+  ];
+
+  // Neraca saldo: hanya akun bermutasi + total debit/kredit (wajib sama).
+  const trialRows = (trialBalance ?? []).filter((r) => r.total_debit > 0 || r.total_credit > 0);
+  const trialDebit = trialRows.reduce((sum, r) => sum + Number(r.total_debit), 0);
+  const trialCredit = trialRows.reduce((sum, r) => sum + Number(r.total_credit), 0);
+  const trialBalanced = Math.abs(trialDebit - trialCredit) < 0.005;
+  const trialColumns: Column<TrialBalanceRow>[] = [
+    {
+      key: "code",
+      header: "Akun",
+      className: "font-mono text-xs",
+      cell: (r) => r.account_code,
+      sortValue: (r) => r.account_code,
+      footer: "Total",
+    },
+    { key: "name", header: "Nama", cell: (r) => r.account_name, sortValue: (r) => r.account_name },
+    {
+      key: "debit",
+      header: "Total Debit",
+      numeric: true,
+      cell: (r) => formatRupiah(Number(r.total_debit)),
+      sortValue: (r) => Number(r.total_debit),
+      footer: formatRupiah(trialDebit),
+    },
+    {
+      key: "credit",
+      header: "Total Kredit",
+      numeric: true,
+      cell: (r) => formatRupiah(Number(r.total_credit)),
+      sortValue: (r) => Number(r.total_credit),
+      footer: formatRupiah(trialCredit),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -349,34 +447,15 @@ export default function Accounting() {
             </button>
           </form>
 
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)" }}>
-                <tr>
-                  <th className="th">Kode</th>
-                  <th className="th">Nama</th>
-                  <th className="th">Kelompok</th>
-                  <th className="th">Saldo Normal</th>
-                  <th className="th">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(accounts ?? []).map((a) => (
-                  <tr key={a.id}>
-                    <td className="td font-mono text-xs">{a.code}</td>
-                    <td className="td">{a.name}</td>
-                    <td className="td text-xs">{GROUP_LABELS[a.group_type] ?? a.group_type}</td>
-                    <td className="td capitalize">{a.normal_balance}</td>
-                    <td className="td">
-                      {!a.is_active && (
-                        <span className="pill p-gray">nonaktif</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Bagan akun"
+            rows={accounts}
+            columns={accountColumns}
+            rowKey={(a) => a.id}
+            query={accountsQuery}
+            defaultSort={{ key: "code", dir: "asc" }}
+            emptyTitle="Belum ada akun."
+          />
         </>
       )}
 
@@ -421,47 +500,15 @@ export default function Accounting() {
               <p className="text-sm text-red-600 dark:text-red-400">{(closePeriod.error as Error).message}</p>
             )}
           </div>
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)" }}>
-                <tr>
-                  <th className="th">Periode</th>
-                  <th className="th">Ditutup</th>
-                  <th className="th">Catatan</th>
-                  <th className="th">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(periods ?? []).map((p) => (
-                  <tr key={`${p.year}-${p.month}`}>
-                    <td className="td font-medium">
-                      {String(p.month).padStart(2, "0")}/{p.year}
-                    </td>
-                    <td className="td text-xs">
-                      {p.closed_at ? formatDate(p.closed_at) : "-"}
-                    </td>
-                    <td className="td text-xs">{p.notes ?? "-"}</td>
-                    <td className="td">
-                      <button
-                        onClick={() => reopenPeriod.mutate({ y: p.year, m: p.month })}
-                        className="text-xs font-medium hover:opacity-80"
-                        style={{ color: "var(--accent)" }}
-                      >
-                        Buka Ulang
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {periods?.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                      Belum ada periode yang ditutup.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Periode tutup buku"
+            rows={periods}
+            columns={periodColumns}
+            rowKey={(p) => `${p.year}-${p.month}`}
+            query={periodsQuery}
+            defaultSort={{ key: "period", dir: "desc" }}
+            emptyTitle="Belum ada periode yang ditutup."
+          />
         </>
       )}
 
@@ -474,40 +521,27 @@ export default function Accounting() {
 
       {tab === "jurnal" && (
         <>
-          <div className="card overflow-x-auto p-0">
-            <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
-              <h2 className="font-semibold" style={{ color: "var(--text)" }}>Neraca Saldo {year}</h2>
+          <section className="space-y-2" aria-labelledby="trial-balance-title">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="trial-balance-title" className="font-semibold" style={{ color: "var(--text)" }}>
+                Neraca Saldo {year}
+              </h2>
+              {trialRows.length > 0 && (
+                <span className={`pill ${trialBalanced ? "p-green" : "p-red"}`}>
+                  {trialBalanced ? "Seimbang" : `Tidak seimbang: selisih ${formatRupiah(trialDebit - trialCredit)}`}
+                </span>
+              )}
             </div>
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-                <tr>
-                  <th className="th">Akun</th>
-                  <th className="th">Nama</th>
-                  <th className="th text-right">Total Debit</th>
-                  <th className="th text-right">Total Kredit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(trialBalance ?? [])
-                  .filter((r) => r.total_debit > 0 || r.total_credit > 0)
-                  .map((r) => (
-                    <tr key={r.account_code}>
-                      <td className="td font-mono text-xs">{r.account_code}</td>
-                      <td className="td">{r.account_name}</td>
-                      <td className="td text-right tabular-nums">{formatRupiah(Number(r.total_debit))}</td>
-                      <td className="td text-right tabular-nums">{formatRupiah(Number(r.total_credit))}</td>
-                    </tr>
-                  ))}
-                {(trialBalance ?? []).every((r) => r.total_debit === 0 && r.total_credit === 0) && (
-                  <tr>
-                    <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                      Belum ada mutasi jurnal.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+            <DataTable
+              label={`Neraca saldo ${year}`}
+              rows={trialRows}
+              columns={trialColumns}
+              rowKey={(r) => r.account_code}
+              query={trialBalanceQuery}
+              defaultSort={{ key: "code", dir: "asc" }}
+              emptyTitle="Belum ada mutasi jurnal."
+            />
+          </section>
 
           {incomeStatement && (
             <div className="card">
@@ -550,6 +584,16 @@ export default function Accounting() {
   );
 }
 
+interface JournalEntryRow {
+  id: string;
+  entry_date: string;
+  description: string;
+  status: string;
+  event_code: string | null;
+  is_reversed: boolean;
+  lines: { account_code: string; debit: number; credit: number; memo: string | null }[];
+}
+
 function JournalList({
   year,
   onPost,
@@ -562,26 +606,114 @@ function JournalList({
   onDelete: (id: string) => void;
 }) {
   const [filter, setFilter] = useState("");
-  const { data: entries } = useQuery({
+  const entriesQuery = useQuery({
     queryKey: ["journal", year, filter],
     queryFn: () =>
-      api.get<
-        {
-          id: string;
-          entry_date: string;
-          description: string;
-          status: string;
-          event_code: string | null;
-          is_reversed: boolean;
-          lines: { account_code: string; debit: number; credit: number; memo: string | null }[];
-        }[]
-      >(`/accounting/journal?year=${year}${filter ? `&event_code=${filter}` : ""}${filter === "" ? "" : ""}`),
+      api.get<JournalEntryRow[]>(`/accounting/journal?year=${year}${filter ? `&event_code=${filter}` : ""}`),
   });
 
+  const columns: Column<JournalEntryRow>[] = [
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap text-xs",
+      cell: (e) => formatDate(e.entry_date),
+      sortValue: (e) => e.entry_date,
+    },
+    {
+      key: "desc",
+      header: "Keterangan",
+      cell: (e) => (
+        <>
+          {e.description}
+          {e.event_code && <span className="ml-1 pill p-gray">{e.event_code}</span>}
+        </>
+      ),
+      sortValue: (e) => e.description,
+    },
+    {
+      key: "lines",
+      header: "Baris",
+      className: "text-xs",
+      // Satu baris per akun (dulu digabung jadi satu string panjang "kode:D Rp… | …").
+      cell: (e) => (
+        <ul className="space-y-0.5">
+          {e.lines.map((l, i) => (
+            <li key={i} className="whitespace-nowrap tabular-nums">
+              <span className="font-mono">{l.account_code}</span>{" "}
+              {l.debit > 0 ? `D ${formatRupiah(l.debit)}` : `K ${formatRupiah(l.credit)}`}
+            </li>
+          ))}
+        </ul>
+      ),
+    },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      cell: (e) => formatRupiah(e.lines.reduce((sum, l) => sum + Number(l.debit), 0)),
+      sortValue: (e) => e.lines.reduce((sum, l) => sum + Number(l.debit), 0),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (e) => e.status,
+      cell: (e) =>
+        e.status === "memorial" ? (
+          <button onClick={() => onPost(e.id)} className="font-medium hover:opacity-80" style={{ color: "var(--accent)" }}>
+            Posting
+          </button>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            <span className="pill p-green">posted</span>
+            {e.is_reversed && <span className="pill p-gray">dibalik</span>}
+          </span>
+        ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (e) => (
+        <>
+          {e.status === "memorial" && (
+            <button
+              onClick={() => confirmToast(`Hapus jurnal draft "${e.description}"?`, () => onDelete(e.id))}
+              className="text-xs font-medium text-red-600 hover:opacity-80 dark:text-red-400"
+            >
+              Hapus
+            </button>
+          )}
+          {e.status === "posted" && !e.is_reversed && (
+            <button
+              onClick={() =>
+                // Dulu window.prompt(): menekan Batal tetap membalik jurnal
+                // (null ?? "" -> lanjut). Kini dialog; Batal = tidak terjadi apa-apa.
+                confirmDialog({
+                  title: "Balik jurnal ini?",
+                  message: `Jurnal pembalik (debit/kredit ditukar) diposting untuk "${e.description}". Jurnal asli tetap tercatat dan ditandai dibalik.`,
+                  confirmLabel: "Balik Jurnal",
+                  tone: "primary",
+                  input: { label: "Alasan pembalikan (opsional)", placeholder: "mis. salah akun" },
+                  onConfirm: (reason) => onReverse(e.id, reason || null),
+                })
+              }
+              className="text-xs font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+            >
+              Balik Jurnal
+            </button>
+          )}
+        </>
+      ),
+    },
+  ];
+
   return (
-    <div className="card overflow-x-auto p-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}>
-        <h2 className="font-semibold" style={{ color: "var(--text)" }}>Daftar Jurnal {year}</h2>
+    <section className="space-y-2" aria-labelledby="journal-list-title">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="journal-list-title" className="font-semibold" style={{ color: "var(--text)" }}>
+          Daftar Jurnal {year}
+        </h2>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -596,86 +728,17 @@ function JournalList({
           <option value="pr_executed">pr_executed</option>
         </select>
       </div>
-      <table className="w-full">
-        <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-          <tr>
-            <th className="th">Tanggal</th>
-            <th className="th">Keterangan</th>
-            <th className="th">Baris</th>
-            <th className="th">Status</th>
-            <th className="th">Aksi</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-          {(entries ?? []).map((e) => (
-            <tr key={e.id}>
-              <td className="td font-mono text-xs">{e.entry_date}</td>
-              <td className="td">
-                {e.description}
-                {e.event_code && (
-                  <span className="ml-1 pill p-gray">{e.event_code}</span>
-                )}
-              </td>
-              <td className="td text-xs">
-                {e.lines
-                  .map(
-                    (l) =>
-                      `${l.account_code}:${l.debit > 0 ? `D ${formatRupiah(l.debit)}` : `K ${formatRupiah(l.credit)}`}`
-                  )
-                  .join(" | ")}
-              </td>
-              <td className="td">
-                {e.status === "memorial" ? (
-                  <button
-                    onClick={() => onPost(e.id)}
-                    className="font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    Posting
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <span className="pill p-green">posted</span>
-                    {e.is_reversed && <span className="pill p-gray">dibalik</span>}
-                  </span>
-                )}
-              </td>
-              <td className="td">
-                {e.status === "memorial" && (
-                  <button
-                    onClick={() =>
-                      confirmToast(`Hapus jurnal draft "${e.description}"?`, () => onDelete(e.id))
-                    }
-                    className="text-xs font-medium text-red-600 dark:text-red-400 hover:opacity-80"
-                  >
-                    Hapus
-                  </button>
-                )}
-                {e.status === "posted" && !e.is_reversed && (
-                  <button
-                    onClick={() => {
-                      const reason = prompt("Alasan pembalikan (opsional):") ?? "";
-                      onReverse(e.id, reason || null);
-                    }}
-                    className="text-xs font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    Balik Jurnal
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-          {entries?.length === 0 && (
-            <tr>
-              <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                Belum ada jurnal.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+      <DataTable
+        label={`Daftar jurnal ${year}`}
+        rows={entriesQuery.data}
+        columns={columns}
+        rowKey={(e) => e.id}
+        query={entriesQuery}
+        defaultSort={{ key: "date", dir: "desc" }}
+        pageSize={50}
+        emptyTitle={filter ? "Tidak ada jurnal dari sumber ini." : "Belum ada jurnal."}
+      />
+    </section>
   );
 }
 
@@ -697,10 +760,50 @@ const AGING_BUCKET_CLS: Record<string, string> = {
 };
 
 function ApAgingPanel() {
-  const { data: rows } = useQuery({
+  const rowsQuery = useQuery({
     queryKey: ["ap-aging"],
     queryFn: () => api.get<ApAgingRow[]>("/accounting/cashbank/bills/aging"),
   });
+  const rows = rowsQuery.data;
+  const columns: Column<ApAgingRow>[] = [
+    {
+      key: "no",
+      header: "No. Tagihan",
+      className: "font-mono text-xs",
+      cell: (r) => r.bill_number ?? "-",
+      sortValue: (r) => r.bill_number,
+      footer: "Total",
+    },
+    { key: "vendor", header: "Vendor", cell: (r) => r.vendor_name, sortValue: (r) => r.vendor_name },
+    {
+      key: "due",
+      header: "Jatuh Tempo",
+      className: "whitespace-nowrap text-xs",
+      cell: (r) => formatDate(r.due_date),
+      sortValue: (r) => r.due_date,
+    },
+    {
+      key: "days",
+      header: "Hari Terlambat",
+      numeric: true,
+      cell: (r) => r.days_overdue,
+      sortValue: (r) => r.days_overdue,
+    },
+    {
+      key: "bucket",
+      header: "Bucket",
+      cell: (r) => <span className={AGING_BUCKET_CLS[r.bucket] ?? "pill p-gray"}>{r.bucket}</span>,
+    },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      className: "font-medium",
+      cell: (r) => formatRupiah(r.total_due),
+      sortValue: (r) => r.total_due,
+      footer: formatRupiah((rows ?? []).reduce((sum, r) => sum + r.total_due, 0)),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -722,41 +825,15 @@ function ApAgingPanel() {
         })}
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">No. Tagihan</th>
-              <th className="th">Vendor</th>
-              <th className="th">Jatuh Tempo</th>
-              <th className="th text-right">Hari Terlambat</th>
-              <th className="th">Bucket</th>
-              <th className="th text-right">Jumlah</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(rows ?? []).map((r) => (
-              <tr key={r.bill_id}>
-                <td className="td font-mono text-xs">{r.bill_number ?? "-"}</td>
-                <td className="td">{r.vendor_name}</td>
-                <td className="td text-xs">{r.due_date}</td>
-                <td className="td text-right tabular-nums">{r.days_overdue}</td>
-                <td className="td">
-                  <span className={AGING_BUCKET_CLS[r.bucket] ?? "pill p-gray"}>{r.bucket}</span>
-                </td>
-                <td className="td font-medium text-right tabular-nums">{formatRupiah(r.total_due)}</td>
-              </tr>
-            ))}
-            {rows?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Tidak ada utang vendor yang jatuh tempo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Utang vendor jatuh tempo"
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.bill_id}
+        query={rowsQuery}
+        defaultSort={{ key: "days", dir: "desc" }}
+        emptyTitle="Tidak ada utang vendor yang jatuh tempo."
+      />
     </div>
   );
 }
@@ -786,11 +863,12 @@ function FixedAssetsPanel() {
     queryKey: ["accounts"],
     queryFn: () => api.get<AccountRow[]>("/accounting/accounts"),
   });
-  const { data: assets } = useQuery({
+  const assetsQuery = useQuery({
     queryKey: ["fixed-assets", includeDisposed],
     queryFn: () =>
       api.get<FixedAssetRow[]>(`/accounting/assets?include_disposed=${includeDisposed}`),
   });
+  const assets = assetsQuery.data;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["fixed-assets"] });
 
@@ -821,6 +899,98 @@ function FixedAssetsPanel() {
       api.post(`/accounting/assets/${id}/dispose`, { proceeds }),
     onSuccess: invalidate,
   });
+
+  // Pelepasan aset tidak bisa dibatalkan (jurnal laba/rugi pelepasan). Dulu
+  // window.prompt(): input "Rp 1.500.000" -> Number(...) || 0 = 0 diam-diam.
+  function askDispose(a: FixedAssetRow) {
+    confirmDialog({
+      title: `Lepas aset "${a.name}"?`,
+      message: `Nilai buku ${formatRupiah(a.book_value)}. Aset ditandai dilepas dan jurnal laba/rugi pelepasan diposting. Tindakan ini tidak bisa dibatalkan.`,
+      confirmLabel: "Lepas Aset",
+      input: { label: "Hasil pelepasan (Rp) -- kosongkan bila tidak ada", placeholder: "mis. 1.500.000" },
+      onConfirm: (raw) => {
+        const proceeds = Number(raw.replace(/[^\d]/g, "")) || 0;
+        disposeAsset.mutate(
+          { id: a.id, proceeds },
+          {
+            onSuccess: () => toast.success(`Aset dilepas, hasil pelepasan ${formatRupiah(proceeds)}`),
+            onError: (e) => toast.error(`Gagal melepas aset: ${(e as Error).message}`),
+          }
+        );
+      },
+    });
+  }
+
+  const assetColumns: Column<FixedAssetRow>[] = [
+    { key: "name", header: "Nama", className: "font-medium", cell: (a) => a.name, sortValue: (a) => a.name },
+    {
+      key: "acq",
+      header: "Perolehan",
+      className: "whitespace-nowrap text-xs",
+      cell: (a) => formatDate(a.acquisition_date),
+      sortValue: (a) => a.acquisition_date,
+    },
+    {
+      key: "cost",
+      header: "Harga",
+      numeric: true,
+      cell: (a) => formatRupiah(a.cost),
+      sortValue: (a) => a.cost,
+      footer: formatRupiah((assets ?? []).reduce((sum, a) => sum + Number(a.cost), 0)),
+    },
+    {
+      key: "life",
+      header: "Umur",
+      numeric: true,
+      className: "text-xs",
+      cell: (a) => `${a.useful_life_months} bln`,
+      sortValue: (a) => a.useful_life_months,
+    },
+    {
+      key: "acc",
+      header: "Akumulasi Susut",
+      numeric: true,
+      cell: (a) => formatRupiah(a.accumulated_depreciation),
+      sortValue: (a) => a.accumulated_depreciation,
+      footer: formatRupiah((assets ?? []).reduce((sum, a) => sum + Number(a.accumulated_depreciation), 0)),
+    },
+    {
+      key: "book",
+      header: "Nilai Buku",
+      numeric: true,
+      className: "font-medium",
+      cell: (a) => formatRupiah(a.book_value),
+      sortValue: (a) => a.book_value,
+      footer: formatRupiah((assets ?? []).reduce((sum, a) => sum + Number(a.book_value), 0)),
+    },
+    { key: "last", header: "Susut Terakhir", className: "text-xs", cell: (a) => a.last_depreciated_ym ?? "-" },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (a) =>
+        a.disposed_at ? (
+          <span className="pill p-gray">Dilepas {formatDate(a.disposed_at)}</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="text-xs font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+              disabled={depreciateOne.isPending}
+              onClick={() => depreciateOne.mutate({ id: a.id, year: depYear, month: depMonth })}
+            >
+              Susutkan
+            </button>
+            <button
+              className="text-xs font-medium text-red-600 hover:opacity-80 dark:text-red-400"
+              disabled={disposeAsset.isPending}
+              onClick={() => askDispose(a)}
+            >
+              Lepas Aset…
+            </button>
+          </div>
+        ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -924,71 +1094,15 @@ function FixedAssetsPanel() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Nama</th>
-              <th className="th">Perolehan</th>
-              <th className="th text-right">Harga</th>
-              <th className="th text-right">Umur</th>
-              <th className="th text-right">Akumulasi Susut</th>
-              <th className="th text-right">Nilai Buku</th>
-              <th className="th">Susut Terakhir</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(assets ?? []).map((a) => (
-              <tr key={a.id}>
-                <td className="td font-medium">{a.name}</td>
-                <td className="td text-xs">{a.acquisition_date}</td>
-                <td className="td text-right tabular-nums">{formatRupiah(a.cost)}</td>
-                <td className="td text-xs text-right tabular-nums">{a.useful_life_months} bln</td>
-                <td className="td text-right tabular-nums">{formatRupiah(a.accumulated_depreciation)}</td>
-                <td className="td font-medium text-right tabular-nums">{formatRupiah(a.book_value)}</td>
-                <td className="td text-xs">{a.last_depreciated_ym ?? "-"}</td>
-                <td className="td">
-                  {a.disposed_at ? (
-                    <span className="pill p-gray">Dilepas {a.disposed_at}</span>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        className="text-xs font-medium hover:opacity-80"
-                        style={{ color: "var(--accent)" }}
-                        disabled={depreciateOne.isPending}
-                        onClick={() =>
-                          depreciateOne.mutate({ id: a.id, year: depYear, month: depMonth })
-                        }
-                      >
-                        Susutkan
-                      </button>
-                      <button
-                        className="text-xs font-medium text-red-600 dark:text-red-400 hover:opacity-80"
-                        onClick={() => {
-                          const proceeds = prompt("Hasil pelepasan (Rp, 0 kalau tidak ada):", "0");
-                          if (proceeds !== null) {
-                            disposeAsset.mutate({ id: a.id, proceeds: Number(proceeds) || 0 });
-                          }
-                        }}
-                      >
-                        Lepas Aset
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {assets?.length === 0 && (
-              <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada aset tetap.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Aset tetap"
+        rows={assets}
+        columns={assetColumns}
+        rowKey={(a) => a.id}
+        query={assetsQuery}
+        defaultSort={{ key: "acq", dir: "desc" }}
+        emptyTitle="Belum ada aset tetap."
+      />
     </div>
   );
 }
@@ -1021,11 +1135,12 @@ function PurchasesPanel() {
     queryKey: ["accounts"],
     queryFn: () => api.get<AccountRow[]>("/accounting/accounts"),
   });
-  const { data: bills } = useQuery({
+  const billsQuery = useQuery({
     queryKey: ["purchase-bills", statusFilter],
     queryFn: () =>
       api.get<PurchaseBillRow[]>(`/accounting/purchases${statusFilter ? `?status=${statusFilter}` : ""}`),
   });
+  const bills = billsQuery.data;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-bills"] });
 
@@ -1046,6 +1161,103 @@ function PurchasesPanel() {
     },
   });
 
+
+  function renderPayForm(b: PurchaseBillRow) {
+    return (
+      <form
+                                className="flex flex-wrap items-center gap-2 py-2"
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  const form = new FormData(e.currentTarget);
+                                  const bankAccountId = String(form.get("bank_account_id") || "");
+                                  if (bankAccountId) payBill.mutate({ id: b.id, bankAccountId });
+                                }}
+                              >
+                                <select name="bank_account_id" required className="input w-auto" defaultValue="">
+                                  <option value="" disabled>
+                                    Bayar dari akun kas/bank *
+                                  </option>
+                                  {(accounts ?? []).map((a) => (
+                                    <option key={a.id} value={a.id}>
+                                      {a.code} - {a.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button type="submit" disabled={payBill.isPending} className="btn py-1 text-xs">
+                                  Konfirmasi Bayar
+                                </button>
+                                {payBill.error && (
+                                  <p className="text-xs text-red-600 dark:text-red-400">{(payBill.error as Error).message}</p>
+                                )}
+                              </form>
+    );
+  }
+
+  const billColumns: Column<PurchaseBillRow>[] = [
+    {
+      key: "no",
+      header: "No. Tagihan",
+      className: "font-mono text-xs",
+      cell: (b) => b.bill_number ?? "-",
+      sortValue: (b) => b.bill_number,
+      footer: "Total",
+    },
+    { key: "vendor", header: "Vendor", cell: (b) => b.vendor_name, sortValue: (b) => b.vendor_name },
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap text-xs",
+      cell: (b) => formatDate(b.entry_date),
+      sortValue: (b) => b.entry_date,
+    },
+    {
+      key: "due",
+      header: "Jatuh Tempo",
+      className: "whitespace-nowrap text-xs",
+      cell: (b) => formatDate(b.due_date),
+      sortValue: (b) => b.due_date,
+    },
+    {
+      key: "total",
+      header: "Jumlah",
+      numeric: true,
+      className: "font-medium",
+      cell: (b) => formatRupiah(Number(b.amount) + Number(b.ppn_amount)),
+      sortValue: (b) => Number(b.amount) + Number(b.ppn_amount),
+      footer: formatRupiah((bills ?? []).reduce((sum, b) => sum + Number(b.amount) + Number(b.ppn_amount), 0)),
+    },
+    {
+      key: "ppn",
+      header: "PPN",
+      numeric: true,
+      cell: (b) => formatRupiah(b.ppn_amount),
+      sortValue: (b) => Number(b.ppn_amount),
+      footer: formatRupiah((bills ?? []).reduce((sum, b) => sum + Number(b.ppn_amount), 0)),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (b) => b.status,
+      cell: (b) => {
+        const st = BILL_STATUS_LABELS[b.status] ?? BILL_STATUS_LABELS.belum_dibayar;
+        return <span className={st.cls}>{st.label}</span>;
+      },
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (b) =>
+        b.status === "belum_dibayar" ? (
+          <button
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+            onClick={() => setPayingId(payingId === b.id ? null : b.id)}
+          >
+            Bayar
+          </button>
+        ) : null,
+    },
+  ];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1103,92 +1315,16 @@ function PurchasesPanel() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">No. Tagihan</th>
-              <th className="th">Vendor</th>
-              <th className="th">Tanggal</th>
-              <th className="th">Jatuh Tempo</th>
-              <th className="th text-right">Jumlah</th>
-              <th className="th text-right">PPN</th>
-              <th className="th">Status</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(bills ?? []).map((b) => {
-              const st = BILL_STATUS_LABELS[b.status] ?? BILL_STATUS_LABELS.belum_dibayar;
-              return (
-                <Fragment key={b.id}>
-                  <tr>
-                    <td className="td font-mono text-xs">{b.bill_number ?? "-"}</td>
-                    <td className="td">{b.vendor_name}</td>
-                    <td className="td text-xs">{b.entry_date}</td>
-                    <td className="td text-xs">{b.due_date ?? "-"}</td>
-                    <td className="td font-medium text-right tabular-nums">{formatRupiah(b.amount + b.ppn_amount)}</td>
-                    <td className="td text-right tabular-nums">{formatRupiah(b.ppn_amount)}</td>
-                    <td className="td">
-                      <span className={st.cls}>{st.label}</span>
-                    </td>
-                    <td className="td">
-                      {b.status === "belum_dibayar" && (
-                        <button
-                          className="text-xs font-medium hover:opacity-80"
-                          style={{ color: "var(--accent)" }}
-                          onClick={() => setPayingId(payingId === b.id ? null : b.id)}
-                        >
-                          Bayar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {payingId === b.id && (
-                    <tr>
-                      <td colSpan={8} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                        <form
-                          className="flex flex-wrap items-center gap-2 py-2"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const form = new FormData(e.currentTarget);
-                            const bankAccountId = String(form.get("bank_account_id") || "");
-                            if (bankAccountId) payBill.mutate({ id: b.id, bankAccountId });
-                          }}
-                        >
-                          <select name="bank_account_id" required className="input w-auto" defaultValue="">
-                            <option value="" disabled>
-                              Bayar dari akun kas/bank *
-                            </option>
-                            {(accounts ?? []).map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.code} - {a.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button type="submit" disabled={payBill.isPending} className="btn py-1 text-xs">
-                            Konfirmasi Bayar
-                          </button>
-                          {payBill.error && (
-                            <p className="text-xs text-red-600 dark:text-red-400">{(payBill.error as Error).message}</p>
-                          )}
-                        </form>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {bills?.length === 0 && (
-              <tr>
-                <td colSpan={8} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada bill vendor.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Tagihan vendor"
+        rows={bills}
+        columns={billColumns}
+        rowKey={(b) => b.id}
+        query={billsQuery}
+        defaultSort={{ key: "date", dir: "desc" }}
+        renderExpanded={(b) => (payingId === b.id ? renderPayForm(b) : null)}
+        emptyTitle="Belum ada bill vendor."
+      />
     </div>
   );
 }
@@ -1220,7 +1356,7 @@ function CashBankPanel() {
     queryKey: ["accounts"],
     queryFn: () => api.get<AccountRow[]>("/accounting/accounts"),
   });
-  const { data: txs } = useQuery({
+  const txsQuery = useQuery({
     queryKey: ["bank-transactions", year, month, reconciledFilter],
     queryFn: () => {
       const params = new URLSearchParams({ year: String(year) });
@@ -1229,6 +1365,7 @@ function CashBankPanel() {
       return api.get<BankTxRow[]>(`/accounting/cashbank/transactions?${params}`);
     },
   });
+  const txs = txsQuery.data;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["bank-transactions"] });
 
@@ -1245,6 +1382,49 @@ function CashBankPanel() {
     onSuccess: invalidate,
   });
 
+
+  const txColumns: Column<BankTxRow>[] = [
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap text-xs",
+      cell: (t) => formatDate(t.tx_date),
+      sortValue: (t) => t.tx_date,
+    },
+    {
+      key: "type",
+      header: "Tipe",
+      cell: (t) => BANK_TX_LABELS[t.tx_type] ?? t.tx_type,
+      sortValue: (t) => BANK_TX_LABELS[t.tx_type] ?? t.tx_type,
+    },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      className: "font-medium",
+      cell: (t) => formatRupiah(t.amount),
+      sortValue: (t) => Number(t.amount),
+    },
+    { key: "desc", header: "Keterangan", cell: (t) => t.description ?? "-" },
+    {
+      key: "rec",
+      header: "Rekonsiliasi",
+      sortValue: (t) => (t.reconciled ? 1 : 0),
+      cell: (t) =>
+        t.reconciled ? (
+          <span className="pill p-green">rekonsiliasi</span>
+        ) : (
+          <button
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+            disabled={reconcileTx.isPending}
+            onClick={() => reconcileTx.mutate(t.id)}
+          >
+            Tandai rekonsiliasi
+          </button>
+        ),
+    },
+  ];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1332,50 +1512,16 @@ function CashBankPanel() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Tanggal</th>
-              <th className="th">Tipe</th>
-              <th className="th text-right">Jumlah</th>
-              <th className="th">Keterangan</th>
-              <th className="th">Rekonsiliasi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(txs ?? []).map((t) => (
-              <tr key={t.id}>
-                <td className="td text-xs">{t.tx_date}</td>
-                <td className="td">{BANK_TX_LABELS[t.tx_type] ?? t.tx_type}</td>
-                <td className="td font-medium text-right tabular-nums">{formatRupiah(t.amount)}</td>
-                <td className="td">{t.description ?? "-"}</td>
-                <td className="td">
-                  {t.reconciled ? (
-                    <span className="pill p-green">rekonsiliasi</span>
-                  ) : (
-                    <button
-                      className="text-xs font-medium hover:opacity-80"
-                      style={{ color: "var(--accent)" }}
-                      disabled={reconcileTx.isPending}
-                      onClick={() => reconcileTx.mutate(t.id)}
-                    >
-                      Tandai rekonsiliasi
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {txs?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada transaksi kas/bank periode ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Transaksi kas dan bank"
+        rows={txs}
+        columns={txColumns}
+        rowKey={(t) => t.id}
+        query={txsQuery}
+        defaultSort={{ key: "date", dir: "desc" }}
+        pageSize={50}
+        emptyTitle="Belum ada transaksi kas/bank periode ini."
+      />
     </div>
   );
 }

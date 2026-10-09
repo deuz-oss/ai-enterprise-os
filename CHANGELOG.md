@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Migrasi tabel Akuntansi ke DataTable
+
+- 8 tabel Akuntansi (Bagan Akun, Periode, Neraca Saldo, Daftar Jurnal, Utang Jatuh Tempo, Aset Tetap, Pembelian, Kas & Bank) kini memakai `DataTable`: sort, header sticky, angka rata kanan, tanggal terformat, state loading/error/kosong, kartu di HP.
+- **Neraca Saldo** kini punya baris total debit/kredit dan indikator "Seimbang" / "Tidak seimbang: selisih Rp…". Utang jatuh tempo, aset tetap (harga, akumulasi, nilai buku), dan pembelian (jumlah, PPN) juga diberi total.
+- Daftar jurnal: kolom Jumlah, baris akun ditampilkan per baris (dulu satu string panjang), paginasi 50.
+- **Fixed**: "Balik Jurnal" memakai `window.prompt()` -- menekan Batal tetap membalik jurnal yang sudah diposting. Kini dialog dengan kolom alasan; Batal benar-benar membatalkan.
+- **Fixed**: "Lepas Aset" (tidak bisa dibatalkan) memakai `window.prompt()`; input seperti "Rp 1.500.000" diam-diam menjadi hasil pelepasan 0. Kini dialog konfirmasi dengan kolom nominal yang membaca angka berformat.
+- "Buka Ulang" periode tutup buku kini lewat dialog konfirmasi.
+- `ConfirmDialog` mendukung kolom teks opsional (`input`), nilainya diteruskan ke `onConfirm`.
+
 ### Fixed — CI hijau kembali (mypy & versi dependensi)
 
 - CI merah sejak sebelum Fase 67 karena 7 error mypy yang hanya muncul di CI: CI memasang dependensi terbaru (SQLAlchemy 2.1.4, pydantic 2.14, mypy 2.4.0) sementara venv lokal masih SQLAlchemy 2.0 -- type hints SQLAlchemy 2.1 lebih ketat. Akibatnya langkah pytest di CI tidak pernah jalan.

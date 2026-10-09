@@ -26,7 +26,9 @@ export interface ConfirmDialogOptions {
   requireText?: string;
   /** Konten tambahan di bawah pesan (mis. hasil tinjauan sebelum finalisasi). */
   details?: ReactNode;
-  onConfirm: () => void;
+  /** Kolom teks opsional (mis. alasan); nilainya diteruskan ke onConfirm. */
+  input?: { label: string; placeholder?: string };
+  onConfirm: (inputValue: string) => void;
 }
 
 type Listener = (options: ConfirmDialogOptions) => void;
@@ -45,6 +47,7 @@ export function confirmDialog(options: ConfirmDialogOptions) {
 export function ConfirmDialogHost() {
   const [options, setOptions] = useState<ConfirmDialogOptions | null>(null);
   const [typed, setTyped] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<Element | null>(null);
@@ -53,6 +56,7 @@ export function ConfirmDialogHost() {
     listener = (next) => {
       triggerRef.current = document.activeElement;
       setTyped("");
+      setInputValue("");
       setOptions(next);
     };
     return () => {
@@ -82,8 +86,9 @@ export function ConfirmDialogHost() {
     e.preventDefault();
     if (!options || !canConfirm) return;
     const run = options.onConfirm;
+    const value = inputValue.trim();
     close();
-    run();
+    run(value);
   }
 
   const canConfirm = !options?.requireText || typed.trim() === options.requireText;
@@ -130,6 +135,21 @@ export function ConfirmDialogHost() {
           {options.details && (
             <div className="max-h-[50vh] overflow-y-auto rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
               {options.details}
+            </div>
+          )}
+
+          {options.input && (
+            <div className="space-y-1.5">
+              <label htmlFor="confirm-dialog-extra" className="block text-sm">
+                {options.input.label}
+              </label>
+              <textarea
+                id="confirm-dialog-extra"
+                className="input min-h-[72px]"
+                placeholder={options.input.placeholder}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+              />
             </div>
           )}
 
