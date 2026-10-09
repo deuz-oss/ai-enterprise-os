@@ -355,7 +355,7 @@ def _attach_reversal_info(db: Session, entries: list[JournalEntry]) -> None:
                 JournalEntry.source_ref_id.in_(ids),
             )
         ).all()
-        reversal_map = {src: rid for src, rid in rows}
+        reversal_map = {src: rid for src, rid in rows if src is not None}
     for e in entries:
         e.reversal_entry_id = reversal_map.get(e.id)  # type: ignore[attr-defined]
         e.is_reversed = e.id in reversal_map  # type: ignore[attr-defined]

@@ -247,10 +247,10 @@ def overview(db: Session = Depends(get_db)):
 
     # --- Recruitment & Talent (widget 3): JO progress bar + interview minggu ini ---
     job_orders_by_stage = {s.value: 0 for s in JobOrderStatus}
-    for st, cnt in db.execute(
+    for jo_status, cnt in db.execute(
         select(JobOrder.status, func.count(JobOrder.id)).group_by(JobOrder.status)
     ).all():
-        job_orders_by_stage[st.value] = cnt
+        job_orders_by_stage[jo_status.value] = cnt
     interviews_this_week = 0
     try:
         from app.modules.recruitment.models import InterviewSchedule, InterviewStatus
@@ -330,9 +330,11 @@ def overview(db: Session = Depends(get_db)):
         ).all()
         buckets = {(d.year, d.month): 0.0 for d in month_starts}
         for paid_at, total_due in paid_rows:
-            key = (paid_at.year, paid_at.month)
-            if key in buckets:
-                buckets[key] += float(total_due or 0)
+            if paid_at is None:  # sudah difilter di query; penjaga tipe
+                continue
+            month_key = (paid_at.year, paid_at.month)
+            if month_key in buckets:
+                buckets[month_key] += float(total_due or 0)
         revenue_by_month = [
             {"month": d.strftime("%Y-%m"), "revenue": buckets[(d.year, d.month)]}
             for d in month_starts

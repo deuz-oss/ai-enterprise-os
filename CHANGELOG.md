@@ -6,6 +6,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — CI hijau kembali (mypy & versi dependensi)
+
+- CI merah sejak sebelum Fase 67 karena 7 error mypy yang hanya muncul di CI: CI memasang dependensi terbaru (SQLAlchemy 2.1.4, pydantic 2.14, mypy 2.4.0) sementara venv lokal masih SQLAlchemy 2.0 -- type hints SQLAlchemy 2.1 lebih ketat. Akibatnya langkah pytest di CI tidak pernah jalan.
+- Diperbaiki di kode (bukan dibungkam): penjaga `None` untuk `source_ref_id` jurnal balik, `paid_at` di tren revenue Dashboard, dan `end_date` kontrak di daftar kontrak berakhir; variabel loop Dashboard tidak lagi dipakai ulang untuk tipe berbeda.
+- `ruff==0.16.10` dan `mypy==2.4.0` kini dipin persis di dependensi dev supaya rilis baru tidak memerahkan CI tanpa perubahan kode.
+
 ### Added — Fase 73: Audit 2026-10-08 Phase 6 (AI di dalam alur kerja)
 
 Prinsip: angka & temuan dihitung deterministik dari data; AI hanya merangkum/menyusun teks, diberi label, opsional (fitur tetap jalan tanpa `AI_BASE_URL`), dan tidak pernah mengubah data atau mengirim apa pun.

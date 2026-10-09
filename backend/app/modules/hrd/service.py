@@ -1198,6 +1198,8 @@ def expiring_contracts(db: Session, within_days: int) -> list[dict]:
     )
     results: list[dict] = []
     for contract, employee in db.execute(stmt):
+        if contract.end_date is None:  # sudah difilter di query; penjaga tipe
+            continue
         days_left = (contract.end_date - today).days
         results.append(
             {

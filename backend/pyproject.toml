@@ -28,8 +28,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
-  "ruff>=0.6.0",
-  "mypy>=1.11.0",
+  # Dipin persis: versi baru linter/type checker bisa memerahkan CI tanpa
+  # perubahan kode (CI sempat merah karena mypy & SQLAlchemy terbaru). Naikkan
+  # dengan sengaja, bersama perbaikan temuannya.
+  "ruff==0.16.10",
+  "mypy==2.4.0",
 ]
 
 [build-system]
