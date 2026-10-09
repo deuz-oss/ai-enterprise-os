@@ -1,8 +1,8 @@
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
-import { PeriodPicker, PreflightAlert } from "../components/ui";
-import { api, downloadFile, formatTime } from "../api/client";
+import { type Column, DataTable, PeriodPicker, PreflightAlert } from "../components/ui";
+import { api, downloadFile, formatDate, formatTime } from "../api/client";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow } from "../components/workspace";
 
@@ -81,11 +81,12 @@ export default function Attendance() {
   const { data: employees, total: employeesTotal, truncated: employeesTruncated } =
     useEmployeeLookup<EmployeeRow>();
 
-  const { data: records } = useQuery({
+  const recordsQuery = useQuery({
     queryKey: ["attendance-records", period],
     queryFn: () =>
       api.get<DailyRecord[]>(`/attendance/records?year=${period.year}&month=${period.month}`),
   });
+  const records = recordsQuery.data;
 
   async function openSelfie(recordId: string, which: "in" | "out") {
     const { url } = await api.get<{ url: string }>(
@@ -94,11 +95,12 @@ export default function Attendance() {
     window.open(url, "_blank");
   }
 
-  const { data: summaries } = useQuery({
+  const summariesQuery = useQuery({
     queryKey: ["attendance-summaries", period],
     queryFn: () =>
       api.get<SummaryRow[]>(`/payroll/attendance?year=${period.year}&month=${period.month}`),
   });
+  const summaries = summariesQuery.data;
 
   const upsertRecord = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post("/attendance/records", body),
@@ -143,6 +145,134 @@ export default function Attendance() {
   }
 
   const empMap = new Map((employees ?? []).map((e) => [e.id, e]));
+
+  // ---------- Tabel (DataTable) ----------
+  const nameOf = (id: string) => empMap.get(id)?.full_name ?? id;
+  const summaryColumns: Column<SummaryRow>[] = [
+    { key: "name", header: "Karyawan", cell: (s) => nameOf(s.employee_id), sortValue: (s) => nameOf(s.employee_id) },
+    {
+      key: "type",
+      header: "Jenis",
+      className: "text-xs",
+      cell: (s) => empMap.get(s.employee_id)?.employment_type ?? "-",
+      sortValue: (s) => empMap.get(s.employee_id)?.employment_type,
+    },
+    { key: "present", header: "Hadir", numeric: true, cell: (s) => s.present_days, sortValue: (s) => s.present_days },
+    { key: "overtime", header: "Lembur", numeric: true, cell: (s) => s.overtime_hours, sortValue: (s) => s.overtime_hours },
+    {
+      key: "validated",
+      header: "Status Validasi",
+      // Belum tervalidasi di atas = yang perlu diproses.
+      sortValue: (s) => (s.client_approved ? 1 : 0),
+      cell: (s) =>
+        s.client_approved ? (
+          <span className="pill p-green">tervalidasi</span>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => validateSummary.mutate({ id: s.id, lane: "hr" })}
+              disabled={validateSummary.isPending}
+              className="btn-secondary py-1 text-xs"
+            >
+              Validasi HR
+            </button>
+            <button
+              onClick={() => validateSummary.mutate({ id: s.id, lane: "klien" })}
+              disabled={validateSummary.isPending}
+              className="btn-secondary py-1 text-xs"
+            >
+              Approval Klien
+            </button>
+          </div>
+        ),
+    },
+  ];
+
+  const recordColumns: Column<DailyRecord>[] = [
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap text-xs",
+      cell: (r) => formatDate(r.date),
+      sortValue: (r) => r.date,
+    },
+    { key: "name", header: "Karyawan", cell: (r) => nameOf(r.employee_id), sortValue: (r) => nameOf(r.employee_id) },
+    {
+      key: "status",
+      header: "Status",
+      cell: (r) => <span className="pill p-gray">{STATUS_LABELS[r.status] ?? r.status}</span>,
+      sortValue: (r) => r.status,
+    },
+    {
+      key: "clock",
+      header: "Clock-in/out",
+      className: "whitespace-nowrap text-xs",
+      cell: (r) => `${r.clock_in ? formatTime(r.clock_in) : "—"} / ${r.clock_out ? formatTime(r.clock_out) : "—"}`,
+    },
+    { key: "overtime", header: "Lembur", numeric: true, cell: (r) => r.overtime_hours, sortValue: (r) => r.overtime_hours },
+    { key: "source", header: "Sumber", className: "text-xs", cell: (r) => r.source, sortValue: (r) => r.source },
+    {
+      key: "verification",
+      header: "Verifikasi",
+      className: "text-xs",
+      cell: (r) => {
+        const hasVerification =
+          r.clock_in_geo || r.clock_out_geo || r.has_clock_in_selfie || r.has_clock_out_selfie;
+        return (
+        hasVerification ? (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {r.clock_in_geo && (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${r.clock_in_geo}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="hover:underline"
+                                    style={{ color: "var(--accent)" }}
+                                    title={`Lokasi clock-in: ${r.clock_in_geo}`}
+                                  >
+                                    Lokasi masuk
+                                  </a>
+                                )}
+                                {r.clock_out_geo && (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${r.clock_out_geo}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="hover:underline"
+                                    style={{ color: "var(--accent)" }}
+                                    title={`Lokasi clock-out: ${r.clock_out_geo}`}
+                                  >
+                                    Lokasi keluar
+                                  </a>
+                                )}
+                                {r.has_clock_in_selfie && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void openSelfie(r.id, "in")}
+                                    className="hover:underline"
+                                    style={{ color: "var(--accent)" }}
+                                  >
+                                    Selfie masuk
+                                  </button>
+                                )}
+                                {r.has_clock_out_selfie && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void openSelfie(r.id, "out")}
+                                    className="hover:underline"
+                                    style={{ color: "var(--accent)" }}
+                                  >
+                                    Selfie keluar
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--text-muted)" }}>—</span>
+                            )
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -279,57 +409,16 @@ export default function Attendance() {
             Tervalidasi menjadi masukan Saltab. Jalur: internal→HR, eksternal→Ops.
           </p>
         </div>
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Karyawan</th>
-              <th className="th">Jenis</th>
-              <th className="th">Hadir</th>
-              <th className="th">Lembur</th>
-              <th className="th">Status Validasi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(summaries ?? []).map((s) => {
-              const emp = empMap.get(s.employee_id);
-              return (
-                <tr key={s.id}>
-                  <td className="td">{emp?.full_name ?? s.employee_id}</td>
-                  <td className="td text-xs">{emp?.employment_type ?? "-"}</td>
-                  <td className="td">{s.present_days}</td>
-                  <td className="td">{s.overtime_hours}</td>
-                  <td className="td">
-                    {s.client_approved ? (
-                      <span className="pill p-green">tervalidasi</span>
-                    ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => validateSummary.mutate({ id: s.id, lane: "hr" })}
-                          className="btn-secondary py-1 text-xs"
-                        >
-                          Validasi HR
-                        </button>
-                        <button
-                          onClick={() => validateSummary.mutate({ id: s.id, lane: "klien" })}
-                          className="btn-secondary py-1 text-xs"
-                        >
-                          Approval Klien
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {summaries?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada rekap untuk periode ini — buat record harian dulu.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          plain
+          label={`Rekap validasi ${period.month}/${period.year}`}
+          rows={summaries}
+          columns={summaryColumns}
+          rowKey={(r) => r.id}
+          query={summariesQuery}
+          defaultSort={{ key: "validated", dir: "asc" }}
+          emptyTitle="Belum ada rekap untuk periode ini -- buat record harian dulu."
+        />
         {validateSummary.error && (
           <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{(validateSummary.error as Error).message}</p>
         )}
@@ -416,102 +505,16 @@ export default function Attendance() {
       </div>
 
       {view === "tabel" && (
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Tanggal</th>
-              <th className="th">Karyawan</th>
-              <th className="th">Status</th>
-              <th className="th">Clock-in/out</th>
-              <th className="th">Lembur</th>
-              <th className="th">Sumber</th>
-              <th className="th">Verifikasi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(records ?? []).map((r) => {
-              const emp = empMap.get(r.employee_id);
-              const hasVerification =
-                r.clock_in_geo || r.clock_out_geo || r.has_clock_in_selfie || r.has_clock_out_selfie;
-              return (
-                <tr key={r.id}>
-                  <td className="td font-mono text-xs">{r.date}</td>
-                  <td className="td">{emp?.full_name ?? r.employee_id}</td>
-                  <td className="td">
-                    <span className="pill p-gray">{STATUS_LABELS[r.status] ?? r.status}</span>
-                  </td>
-                  <td className="td text-xs">
-                    {r.clock_in ? formatTime(r.clock_in) : "—"} /{" "}
-                    {r.clock_out ? formatTime(r.clock_out) : "—"}
-                  </td>
-                  <td className="td">{r.overtime_hours}</td>
-                  <td className="td text-xs">{r.source}</td>
-                  <td className="td text-xs">
-                    {hasVerification ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {r.clock_in_geo && (
-                          <a
-                            href={`https://www.google.com/maps?q=${r.clock_in_geo}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="hover:underline"
-                            style={{ color: "var(--accent)" }}
-                            title={`Lokasi clock-in: ${r.clock_in_geo}`}
-                          >
-                            Lokasi masuk
-                          </a>
-                        )}
-                        {r.clock_out_geo && (
-                          <a
-                            href={`https://www.google.com/maps?q=${r.clock_out_geo}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="hover:underline"
-                            style={{ color: "var(--accent)" }}
-                            title={`Lokasi clock-out: ${r.clock_out_geo}`}
-                          >
-                            Lokasi keluar
-                          </a>
-                        )}
-                        {r.has_clock_in_selfie && (
-                          <button
-                            type="button"
-                            onClick={() => void openSelfie(r.id, "in")}
-                            className="hover:underline"
-                            style={{ color: "var(--accent)" }}
-                          >
-                            Selfie masuk
-                          </button>
-                        )}
-                        {r.has_clock_out_selfie && (
-                          <button
-                            type="button"
-                            onClick={() => void openSelfie(r.id, "out")}
-                            className="hover:underline"
-                            style={{ color: "var(--accent)" }}
-                          >
-                            Selfie keluar
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)" }}>—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {records?.length === 0 && (
-              <tr>
-                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada record untuk periode ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label={`Record absensi harian ${period.month}/${period.year}`}
+        rows={records}
+        columns={recordColumns}
+        rowKey={(r) => r.id}
+        query={recordsQuery}
+        defaultSort={{ key: "date", dir: "desc" }}
+        pageSize={50}
+        emptyTitle="Belum ada record untuk periode ini."
+      />
       )}
     </div>
   );

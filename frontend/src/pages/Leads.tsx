@@ -24,7 +24,13 @@ import {
   X,
 } from "lucide-react";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
-import { Badge, EmptyState, KpiCard } from "../components/ui";
+import {
+  Badge,
+  type Column,
+  DataTable,
+  EmptyState,
+  KpiCard,
+} from "../components/ui";
 import { confirmToast, promptToast } from "../components/ui/dialogToast";
 import { Pagination } from "../components/Pagination";
 import { CustomFieldsSection } from "../components/CustomFieldsSection";
@@ -273,7 +279,7 @@ export default function Leads() {
   // Filter tahap/owner/pencarian cuma berlaku di tabel -- papan sudah
   // mengelompokkan per tahap secara visual, memfilternya di sana tidak
   // masuk akal.
-  const { data: leadsPage } = useQuery({
+  const leadsPageQuery = useQuery({
     queryKey: ["leads", offset, stageFilter, ownerFilter, searchQuery],
     queryFn: () =>
       api.getPaged<Lead>(
@@ -283,6 +289,7 @@ export default function Leads() {
           (searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : "")
       ),
   });
+  const leadsPage = leadsPageQuery.data;
   const leadsTable = leadsPage?.data;
   const leadsTotal = leadsPage?.total ?? 0;
   const { data: leadsLookup } = useQuery({
@@ -556,6 +563,49 @@ export default function Leads() {
       estimated_value: Number(form.get("estimated_value")) || null,
     });
   }
+
+  const leadColumns: Column<Lead>[] = [
+    { key: "company", header: "Perusahaan", className: "font-medium", cell: (lead) => lead.company_name },
+    {
+      key: "source",
+      header: "Sumber",
+      cell: (lead) => (
+        <Badge tone={lead.company_source === "csv_import" ? "info" : "neutral"}>
+          {SOURCE_LABEL[lead.company_source] ?? lead.company_source}
+        </Badge>
+      ),
+    },
+    { key: "pic", header: "PIC", cell: (lead) => lead.contact_name ?? "-" },
+    { key: "hc", header: "Est. TKI", numeric: true, cell: (lead) => lead.estimated_headcount ?? "-" },
+    {
+      key: "value",
+      header: "Nilai Potensi",
+      numeric: true,
+      cell: (lead) => formatCurrency(lead.estimated_value, lead.currency),
+    },
+    {
+      key: "stage",
+      header: "Tahapan",
+      cell: (lead) => (
+        <select
+                            value={lead.stage}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              changeStage.mutate({ id: lead.id, stage: e.target.value });
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`cursor-pointer border-0 ${STAGE_PILL[lead.stage] ?? "pill p-gray"}`}
+                            aria-label={`Ubah tahap lead ${lead.company_name ?? ""}`}
+                          >
+                            {STAGES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -867,82 +917,18 @@ export default function Leads() {
 
       {/* ===== View Tabel ===== */}
       {view === "tabel" && (
-        <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead
-            style={{
-              borderBottom: "1px solid var(--border)",
-              backgroundColor: "var(--hover)",
-            }}
-          >
-            <tr>
-              <th className="th">Perusahaan</th>
-              <th className="th">Sumber</th>
-              <th className="th">PIC</th>
-              <th className="th">Est. TKI</th>
-              <th className="th">Nilai Potensi</th>
-              <th className="th">Tahapan</th>
-            </tr>
-          </thead>
-          <tbody
-            style={{ borderTop: "1px solid var(--border)" }}
-          >
-            {(leadsTable ?? []).map((lead) => (
-              <tr
-                key={lead.id}
-                onClick={() => setSelectedId(lead.id === selectedId ? null : lead.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setSelectedId(lead.id === selectedId ? null : lead.id);
-                  }
-                }}
-                tabIndex={0}
-                className="cursor-pointer transition-colors"
-                style={{
-                  backgroundColor:
-                    selectedId === lead.id ? "var(--accent-tint)" : undefined,
-                }}
-              >
-                <td className="td font-medium">{lead.company_name}</td>
-                <td className="td">
-                  <Badge tone={lead.company_source === "csv_import" ? "info" : "neutral"}>
-                    {SOURCE_LABEL[lead.company_source] ?? lead.company_source}
-                  </Badge>
-                </td>
-                <td className="td">{lead.contact_name ?? "-"}</td>
-                <td className="td">{lead.estimated_headcount ?? "-"}</td>
-                <td className="td">{formatCurrency(lead.estimated_value, lead.currency)}</td>
-                <td className="td">
-                  <select
-                    value={lead.stage}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      changeStage.mutate({ id: lead.id, stage: e.target.value });
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className={`cursor-pointer border-0 ${STAGE_PILL[lead.stage] ?? "pill p-gray"}`}
-                    aria-label={`Ubah tahap lead ${lead.company_name ?? ""}`}
-                  >
-                    {STAGES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            ))}
-            {leadsTable?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada lead.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>
+        // Paginasi di server (X-Total-Count): sort hanya akan mengurutkan satu
+        // halaman, jadi kolom tidak diberi sortValue.
+        <DataTable
+          label="Daftar lead"
+          rows={leadsTable}
+          columns={leadColumns}
+          rowKey={(lead) => lead.id}
+          query={leadsPageQuery}
+          onRowClick={(lead) => setSelectedId(lead.id === selectedId ? null : lead.id)}
+          isRowSelected={(lead) => lead.id === selectedId}
+          emptyTitle="Belum ada lead."
+        />
       )}
 
       {view === "tabel" && (

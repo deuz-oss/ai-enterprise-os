@@ -54,6 +54,17 @@ requirements.
 > pre-finalize review) and #2 (receivables reminder drafts) shipped with
 > deterministic findings + optional, labelled AI text that never sends or
 > writes data. Opportunities #3-#10 remain open.
+> **Still-open round (2026-10-09)**: opportunity #3 (invoice ↔ attendance
+> reconciliation) shipped -- `GET /finance/invoices/{id}/reconciliation`,
+> deterministic findings + optional labelled AI summary, "Cek absensi" in the
+> Finance invoice table. Runtime deps pinned (`backend/requirements*.lock`,
+> used by Docker & CI). Remaining hand-built tables migrated to `DataTable`
+> (intentional exceptions: Saltab grid, attendance import errors, dashboard
+> & forecast summaries, tenant license/usage panels, review dialog). Browser
+> re-check: skip link, mobile drawer (main now inert while open; menu button
+> toggles), payroll review & reminder dialogs (reminder now returns focus).
+> **Decision 2-1400**: stays a *liability clearing* account (Potongan Gaji
+> Lain-lain) -- accountants reclassify; no code change. #4-#10 remain open.
 
 ---
 

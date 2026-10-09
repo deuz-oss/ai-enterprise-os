@@ -4,8 +4,9 @@ Guidance for AI coding agents working in this repo.
 
 ## Stack
 
-- **Backend** (`backend/`): FastAPI modular monolith, Python 3.12+, SQLAlchemy 2, Alembic. Install with `pip install -e ".[dev]"` into `backend/.venv`.
-- **Frontend** (`frontend/`): React 18 + TypeScript + Vite + Tailwind + TanStack Query. No frontend test runner or ESLint is configured.
+- **Backend** (`backend/`): FastAPI modular monolith, Python 3.12+, SQLAlchemy 2, Alembic. Install the locked versions CI/production use: `pip install -r requirements-dev.lock && pip install --no-deps -e .` into `backend/.venv`.
+- Dependency versions are locked in `backend/requirements.lock` (runtime, used by the Docker image) and `backend/requirements-dev.lock` (CI). `pyproject.toml` only declares lower bounds. After changing dependencies, regenerate both as universal locks (platform markers, so they install on Linux CI/Docker **and** Windows dev): `uv pip compile pyproject.toml --universal --python-version 3.12 -o requirements.lock` and the same with `--extra dev -o requirements-dev.lock`.
+- **Frontend** (`frontend/`): React 18 + TypeScript + Vite + Tailwind + TanStack Query. Unit tests: Vitest (`npm test`, also run in CI); no ESLint is configured.
 - **Mobile** (`mobile/`): Flutter (internal staff app v1). Source ditulis manual tanpa SDK — sebelum build jalankan `flutter create . --org id.aeos --platforms=android,ios` untuk generate folder platform. Default API URL via `--dart-define=AEOS_API_URL`.
 - Tooling config lives in **two** places: root `pyproject.toml` (ruff/mypy/pytest) and `backend/pyproject.toml` (deps, pytest). Ruff line-length is 100.
 

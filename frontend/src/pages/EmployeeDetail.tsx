@@ -7,8 +7,10 @@ import { api, downloadFile, formatDate, formatRupiah, formatTime, previewFile } 
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import {
   Badge,
+  type Column,
   confirmDialog,
   confirmToast,
+  DataTable,
   DetailLoadState,
   PeriodPicker,
   PillTabs,
@@ -383,7 +385,7 @@ export default function EmployeeDetail() {
     queryFn: () => api.get<ContractRow[]>(`/employees/${id}/contracts`),
     enabled: Boolean(id) && !isOpsOnly,
   });
-  const { data: attendanceRecords } = useQuery({
+  const attendanceRecordsQuery = useQuery({
     queryKey: ["employee-attendance-records", id, attPeriod],
     queryFn: () =>
       api.get<AttendanceDailyRow[]>(
@@ -391,6 +393,7 @@ export default function EmployeeDetail() {
       ),
     enabled: Boolean(id) && !isOpsOnly && tab === "absensi",
   });
+  const attendanceRecords = attendanceRecordsQuery.data;
   const { data: attendanceSummaries } = useQuery({
     queryKey: ["employee-attendance-summary", id, attPeriod],
     queryFn: () =>
@@ -462,11 +465,12 @@ export default function EmployeeDetail() {
     queryFn: () => api.get<SalaryHoldRow[]>(`/payroll/employees/${id}/holds`),
     enabled: Boolean(id) && !isOpsOnly,
   });
-  const { data: payslips } = useQuery({
+  const payslipsQuery = useQuery({
     queryKey: ["employee-payslips", id],
     queryFn: () => api.get<EmployeePayslipRow[]>(`/payroll/employees/${id}/payslips`),
     enabled: Boolean(id) && !isOpsOnly,
   });
+  const payslips = payslipsQuery.data;
   const { data: contractTemplates } = useQuery({
     queryKey: ["contract-templates"],
     queryFn: () => api.get<ContractTemplateT[]>("/employees/contract-templates"),
@@ -719,6 +723,88 @@ export default function EmployeeDetail() {
     (contracts ?? []).find(
       (c) => c.start_date && c.start_date <= todayIso && (!c.end_date || c.end_date >= todayIso)
     ) ?? null;
+
+  // ---------- Tabel (DataTable) ----------
+  const payslipColumns: Column<EmployeePayslipRow>[] = [
+    {
+      key: "period",
+      header: "Periode",
+      cell: (p) => `${String(p.month).padStart(2, "0")}/${p.year}`,
+      sortValue: (p) => p.year * 100 + p.month,
+    },
+    {
+      key: "net",
+      header: "Take Home Pay",
+      numeric: true,
+      cell: (p) => formatRupiah(p.net_pay),
+      sortValue: (p) => Number(p.net_pay),
+    },
+    {
+      key: "status",
+      header: "Status Run",
+      sortValue: (p) => p.run_status,
+      cell: (p) => (
+        <span className={`badge ${p.run_status === "final" ? "pill p-green" : "pill p-yellow"}`}>{p.run_status}</span>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      className: "whitespace-nowrap",
+      cell: (p) => (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => previewPayslip.mutate(p.run_id)}
+            disabled={previewPayslip.isPending}
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+          >
+            Preview
+          </button>
+          <button
+            onClick={() =>
+              confirmDialog({
+                title: "Kirim slip gaji via email?",
+                message:
+                  "Slip gaji periode ini akan dikirim ke email karyawan. Email yang sudah terkirim tidak bisa ditarik kembali.",
+                confirmLabel: "Kirim Email",
+                tone: "primary",
+                onConfirm: () => sendPayslipEmail.mutate(p.run_id),
+              })
+            }
+            disabled={sendPayslipEmail.isPending}
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+          >
+            Kirim Email
+          </button>
+        </span>
+      ),
+    },
+  ];
+  const attendanceRecordColumns: Column<AttendanceDailyRow>[] = [
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap text-xs",
+      cell: (r) => formatDate(r.date),
+      sortValue: (r) => r.date,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (r) => r.status,
+      cell: (r) => <span className="pill p-gray">{ATTENDANCE_STATUS_LABELS[r.status] ?? r.status}</span>,
+    },
+    {
+      key: "clock",
+      header: "Clock-in/out",
+      className: "whitespace-nowrap text-xs",
+      cell: (r) => `${r.clock_in ? formatTime(r.clock_in) : "—"} / ${r.clock_out ? formatTime(r.clock_out) : "—"}`,
+    },
+    { key: "overtime", header: "Lembur", numeric: true, cell: (r) => r.overtime_hours, sortValue: (r) => r.overtime_hours },
+    { key: "source", header: "Sumber", className: "text-xs", cell: (r) => r.source, sortValue: (r) => r.source },
+  ];
 
   return (
     <div className="space-y-4">
@@ -1733,64 +1819,18 @@ export default function EmployeeDetail() {
             <div className="space-y-4">
               <div className="card">
                 <h2 className="font-semibold" style={{ color: "var(--text)" }}>Riwayat Slip Gaji</h2>
-                <table className="mt-3 w-full text-sm">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      <th className="th">Periode</th>
-                      <th className="th">Take Home Pay</th>
-                      <th className="th">Status Run</th>
-                      <th className="th">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                    {(payslips ?? []).map((p) => (
-                      <tr key={p.id}>
-                        <td className="td">{String(p.month).padStart(2, "0")}/{p.year}</td>
-                        <td className="td font-mono">{formatRupiah(p.net_pay)}</td>
-                        <td className="td">
-                          <span className={`badge ${p.run_status === "final" ? "pill p-green" : "pill p-yellow"}`}>
-                            {p.run_status}
-                          </span>
-                        </td>
-                        <td className="td whitespace-nowrap">
-                          <button
-                            onClick={() => previewPayslip.mutate(p.run_id)}
-                            disabled={previewPayslip.isPending}
-                            className="text-xs font-medium hover:opacity-80"
-                            style={{ color: "var(--accent)" }}
-                          >
-                            Preview
-                          </button>
-                          {" · "}
-                          <button
-                            onClick={() =>
-                              confirmDialog({
-                                title: "Kirim slip gaji via email?",
-                                message:
-                                  "Slip gaji periode ini akan dikirim ke email karyawan. Email yang sudah terkirim tidak bisa ditarik kembali.",
-                                confirmLabel: "Kirim Email",
-                                tone: "primary",
-                                onConfirm: () => sendPayslipEmail.mutate(p.run_id),
-                              })
-                            }
-                            disabled={sendPayslipEmail.isPending}
-                            className="text-xs font-medium hover:opacity-80"
-                            style={{ color: "var(--accent)" }}
-                          >
-                            Kirim Email
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {payslips?.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="td text-center" style={{ color: "var(--text-muted)" }}>
-                          Belum ada slip gaji.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                <div className="mt-3">
+                  <DataTable
+                    plain
+                    label="Riwayat slip gaji"
+                    rows={payslips}
+                    columns={payslipColumns}
+                    rowKey={(p) => p.id}
+                    query={payslipsQuery}
+                    defaultSort={{ key: "period", dir: "desc" }}
+                    emptyTitle="Belum ada slip gaji."
+                  />
+                </div>
                 {(sendPayslipEmail.error || previewPayslip.error) && (
                   <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                     {((sendPayslipEmail.error ?? previewPayslip.error) as Error).message}
@@ -1886,47 +1926,15 @@ export default function EmployeeDetail() {
                 )}
               </div>
 
-              <div className="card overflow-x-auto p-0">
-                <table className="w-full">
-                  <thead style={{ backgroundColor: "var(--hover)" }}>
-                    <tr>
-                      <th className="th">Tanggal</th>
-                      <th className="th">Status</th>
-                      <th className="th">Clock-in/out</th>
-                      <th className="th">Lembur</th>
-                      <th className="th">Sumber</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                    {(attendanceRecords ?? []).map((r) => (
-                      <tr key={r.id}>
-                        <td className="td font-mono text-xs">{r.date}</td>
-                        <td className="td">
-                          <span className="pill p-gray">{ATTENDANCE_STATUS_LABELS[r.status] ?? r.status}</span>
-                        </td>
-                        <td className="td text-xs">
-                          {r.clock_in
-                            ? formatTime(r.clock_in)
-                            : "—"}{" "}
-                          /{" "}
-                          {r.clock_out
-                            ? formatTime(r.clock_out)
-                            : "—"}
-                        </td>
-                        <td className="td">{r.overtime_hours}</td>
-                        <td className="td text-xs">{r.source}</td>
-                      </tr>
-                    ))}
-                    {attendanceRecords?.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                          Belum ada record absensi untuk periode ini.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                label="Record absensi harian"
+                rows={attendanceRecords}
+                columns={attendanceRecordColumns}
+                rowKey={(r) => r.id}
+                query={attendanceRecordsQuery}
+                defaultSort={{ key: "date", dir: "desc" }}
+                emptyTitle="Belum ada record absensi untuk periode ini."
+              />
             </div>
           )}
 

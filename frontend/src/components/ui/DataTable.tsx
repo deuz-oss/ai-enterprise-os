@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { Pagination } from "../Pagination";
 import { EmptyState, QueryState, TableStateRow, type QueryLike } from "./states";
@@ -106,8 +106,11 @@ export function DataTable<T>({
     return sortRows(list, col.sortValue, sort.dir);
   }, [rows, columns, sort]);
 
-  // Kembali ke halaman pertama kalau jumlah baris berubah (filter/tab).
+  // Kembali ke halaman pertama kalau jumlah baris berubah (filter/tab/pencarian).
   const total = sorted.length;
+  useEffect(() => {
+    setOffset(0);
+  }, [total]);
   const safeOffset = pageSize && offset >= total ? 0 : offset;
   const visible = pageSize ? sorted.slice(safeOffset, safeOffset + pageSize) : sorted;
   const hasFooter = columns.some((c) => c.footer !== undefined);
@@ -236,7 +239,10 @@ export function DataTable<T>({
       {cards}
       <div
         className={`${plain ? "" : "card p-0"} overflow-auto ${mobileCards ? "hidden sm:block" : ""}`}
-        style={{ maxHeight }}
+        // container-type: baris ekspansi memakai lebar area gulir (cqw), bukan lebar
+        // tabel. Hanya bila ada renderExpanded -- containment membuat lebar intrinsik
+        // area ini 0, berisiko di induk shrink-to-fit.
+        style={{ maxHeight, containerType: renderExpanded ? "inline-size" : undefined }}
         // Area gulir (header sticky + tabel lebar) harus bisa difokus agar bisa
         // digulir dengan keyboard (axe scrollable-region-focusable).
         tabIndex={0}
@@ -305,7 +311,11 @@ export function DataTable<T>({
                     {expanded && (
                       <tr>
                         <td colSpan={columns.length} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                          {expanded}
+                          {/* Sticky selebar area yang terlihat: saat tabel lebar digulir ke
+                              kanan, form/panel ekspansi tidak ikut terpotong di kiri. */}
+                          <div className="sticky left-4" style={{ width: "calc(100cqw - 2rem)" }}>
+                            {expanded}
+                          </div>
                         </td>
                       </tr>
                     )}

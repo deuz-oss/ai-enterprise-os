@@ -6,7 +6,14 @@ import { api, downloadFile, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
 import { CheckCircle2, Clock, Dna, FileCheck2, Palette, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { confirmToast, KpiCard, PillTabs, type PillTab } from "../components/ui";
+import {
+  type Column,
+  confirmToast,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+} from "../components/ui";
 import { PLACEMENT_STAGE_META as PLACEMENT_STAGE_LABEL } from "../lib/pipelineStages";
 import type { JobOrder } from "./JobOrders";
 
@@ -518,6 +525,125 @@ export default function TalentPool() {
     });
   }
 
+  // Kolom dinamis: field kandidat yang dipilih tenant (visibleFields) + kolom
+  // skor hanya saat matching ke job order -- dulu hasil matching tidak diurut skor.
+  const talentColumns: Column<TpRow>[] = [
+    {
+      key: "name",
+      header: "Kandidat",
+      className: "font-medium",
+      sortValue: (r) => r.full_name,
+      cell: (r) => (
+        <Link to={`/talent-pool/${r.candidate_id}`} className="hover:underline">
+          {r.full_name}
+        </Link>
+      ),
+    },
+    ...visibleFields.map(
+      (f): Column<TpRow> => ({
+        key: `field-${f.key}`,
+        header: f.label,
+        className: "max-w-[180px] truncate",
+        cell: (r) => formatFieldValue(f.key, r),
+        sortValue: (r) => formatFieldValue(f.key, r),
+      })
+    ),
+    {
+      key: "readiness",
+      header: "Kesiapan",
+      cell: (r) => (r.readiness ? (READINESS_LABELS[r.readiness] ?? r.readiness) : "-"),
+      sortValue: (r) => r.readiness,
+    },
+    {
+      key: "tp_status",
+      header: "Status TP",
+      sortValue: (r) => r.tp_status,
+      cell: (r) => (
+        <>
+          <span className="pill p-gray">{r.tp_status}</span>
+          {r.needs_review_count > 0 && <span className="pill p-yellow ml-1">{r.needs_review_count} perlu cek</span>}
+        </>
+      ),
+    },
+    {
+      key: "proses",
+      header: "Proses",
+      cell: (r) => (
+        <div className="flex flex-wrap gap-1">
+          {(placementsByCandidate.get(r.candidate_id) ?? []).map((p) => {
+            const stage = PLACEMENT_STAGE_LABEL[p.status];
+            return (
+              <Link
+                key={p.id}
+                to={`/job-orders/${p.job_order_id}`}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium hover:underline"
+                style={{ backgroundColor: "var(--hover)", color: "var(--text)" }}
+                title={`${jobOrderTitle(p.job_order_id)} · ${stage?.label ?? p.status}`}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: stage?.dot ?? "#9f9f9f" }}
+                />
+                <span className="max-w-[90px] truncate">{jobOrderTitle(p.job_order_id)}</span>
+                <span style={{ color: "var(--th-color)" }}>{stage?.label ?? p.status}</span>
+              </Link>
+            );
+          })}
+          {(placementsByCandidate.get(r.candidate_id) ?? []).length === 0 && (
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "cv",
+      header: "CV Standar",
+      cell: (r) => (
+        <div className="flex items-center gap-1.5 text-xs">
+          {r.latest_cv_version_id ? (
+            <button
+              onClick={() => void downloadFile(`/talentpool/cv-versions/${r.latest_cv_version_id}/download`)}
+              className="font-medium text-blue-600 hover:text-blue-800"
+            >
+              Unduh v{r.latest_cv_version}
+            </button>
+          ) : (
+            <span style={{ color: "var(--text-muted)" }}>—</span>
+          )}
+          <button
+            onClick={() => generateStandardCv.mutate(r.candidate_id)}
+            disabled={generateStandardCv.isPending}
+            className="inline-flex items-center gap-1 btn-secondary py-0.5 text-[11px] disabled:opacity-40"
+            title="Generate CV Standar dari data kandidat saat ini"
+          >
+            <Sparkles className="h-3 w-3" />
+            {r.latest_cv_version_id ? "Perbarui" : "Generate"}
+          </button>
+        </div>
+      ),
+    },
+    ...(matchJobOrderId
+      ? [
+          {
+            key: "match",
+            header: "Skor Match",
+            numeric: true,
+            sortValue: (r: TpRow) => scoreByCandidate.get(r.candidate_id)?.match_score,
+            cell: (r: TpRow) => {
+              const match = scoreByCandidate.get(r.candidate_id);
+              return match ? (
+                <span title={match.explain}>
+                  <ScoreBadge score={match.match_score} />
+                </span>
+              ) : (
+                "-"
+              );
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -589,120 +715,24 @@ export default function TalentPool() {
         )}
       </form>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Kandidat</th>
-              {visibleFields.map((f) => (
-                <th key={f.key} className="th">
-                  {f.label}
-                </th>
-              ))}
-              <th className="th">Kesiapan</th>
-              <th className="th">Status TP</th>
-              <th className="th">Proses</th>
-              <th className="th">CV Standar</th>
-              {matchJobOrderId && <th className="th">Skor Match</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {visibleRows.map((r) => {
-              const match = scoreByCandidate.get(r.candidate_id);
-              return (
-                <tr key={r.candidate_id}>
-                  <td className="td font-medium">
-                    <Link to={`/talent-pool/${r.candidate_id}`} className="hover:underline">
-                      {r.full_name}
-                    </Link>
-                  </td>
-                  {visibleFields.map((f) => (
-                    <td key={f.key} className="td max-w-[180px] truncate">
-                      {formatFieldValue(f.key, r)}
-                    </td>
-                  ))}
-                  <td className="td">{r.readiness ? READINESS_LABELS[r.readiness] ?? r.readiness : "-"}</td>
-                  <td className="td">
-                    <span className="pill p-gray">{r.tp_status}</span>
-                    {r.needs_review_count > 0 && (
-                      <span className="pill p-yellow ml-1">{r.needs_review_count} perlu cek</span>
-                    )}
-                  </td>
-                  <td className="td">
-                    <div className="flex flex-wrap gap-1">
-                      {(placementsByCandidate.get(r.candidate_id) ?? []).map((p) => {
-                        const stage = PLACEMENT_STAGE_LABEL[p.status];
-                        return (
-                          <Link
-                            key={p.id}
-                            to={`/job-orders/${p.job_order_id}`}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium hover:underline"
-                            style={{ backgroundColor: "var(--hover)", color: "var(--text)" }}
-                            title={`${jobOrderTitle(p.job_order_id)} · ${stage?.label ?? p.status}`}
-                          >
-                            <span
-                              className="inline-block h-1.5 w-1.5 rounded-full"
-                              style={{ backgroundColor: stage?.dot ?? "#9f9f9f" }}
-                            />
-                            <span className="max-w-[90px] truncate">{jobOrderTitle(p.job_order_id)}</span>
-                            <span style={{ color: "var(--th-color)" }}>{stage?.label ?? p.status}</span>
-                          </Link>
-                        );
-                      })}
-                      {(placementsByCandidate.get(r.candidate_id) ?? []).length === 0 && (
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="td">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      {r.latest_cv_version_id ? (
-                        <button
-                          onClick={() => void downloadFile(`/talentpool/cv-versions/${r.latest_cv_version_id}/download`)}
-                          className="font-medium text-blue-600 hover:text-blue-800"
-                        >
-                          Unduh v{r.latest_cv_version}
-                        </button>
-                      ) : (
-                        <span style={{ color: "var(--text-muted)" }}>—</span>
-                      )}
-                      <button
-                        onClick={() => generateStandardCv.mutate(r.candidate_id)}
-                        disabled={generateStandardCv.isPending}
-                        className="inline-flex items-center gap-1 btn-secondary py-0.5 text-[11px] disabled:opacity-40"
-                        title="Generate CV Standar dari data kandidat saat ini"
-                      >
-                        <Sparkles className="h-3 w-3" />
-                        {r.latest_cv_version_id ? "Perbarui" : "Generate"}
-                      </button>
-                    </div>
-                  </td>
-                  {matchJobOrderId && (
-                    <td className="td" title={match?.explain}>
-                      {match ? <ScoreBadge score={match.match_score} /> : "-"}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {visibleRows.length === 0 && (
-              <tr>
-                <td
-                  colSpan={(matchJobOrderId ? 6 : 5) + visibleFields.length}
-                  className="td py-8 text-center"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {matchJobOrderId
-                    ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
-                    : tpStatusTab
-                      ? "Tidak ada talent dengan status ini."
-                      : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* key: saat job order untuk matching berganti, urutan default kembali ke skor. */}
+      <DataTable
+        key={matchJobOrderId || "semua"}
+        label="Talent pool"
+        rows={visibleRows}
+        columns={talentColumns}
+        rowKey={(r) => r.candidate_id}
+        query={pool}
+        defaultSort={matchJobOrderId ? { key: "match", dir: "desc" } : { key: "name", dir: "asc" }}
+        pageSize={50}
+        emptyTitle={
+          matchJobOrderId
+            ? "Tidak ada talent yang memenuhi skor minimum untuk job order ini."
+            : tpStatusTab
+              ? "Tidak ada talent dengan status ini."
+              : "Talent pool kosong pada filter ini. Unggah CV untuk memulai."
+        }
+      />
 
       {/* Dipindah ke bawah daftar/pencarian (DES-012, audit desain
           2026-09-15) -- tugas yang lebih sering (cari kandidat existing,

@@ -4,8 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { CheckCircle2, ClipboardList, Clock, Wallet } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, StatusPill, promptToast, type PillTab } from "../components/ui";
-import { Pagination } from "../components/Pagination";
+import {
+  type Column,
+  confirmDialog,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+  promptToast,
+  StatusPill,
+} from "../components/ui";
 
 interface PrDecision {
   step_no: number;
@@ -197,8 +205,6 @@ export default function PaymentRequests() {
   // sekali (limit besar, endpoint yang sama) lalu difilter+dipaginasi di
   // klien, bukan 5x query terpisah per status.
   const [statusFilter, setStatusFilter] = useState("");
-  const [offset, setOffset] = useState(0);
-  const pageLimit = 50;
 
   const prs = useQuery({
     queryKey: ["payment-requests"],
@@ -209,8 +215,6 @@ export default function PaymentRequests() {
     () => allPrs.filter((p) => !statusFilter || p.status === statusFilter),
     [allPrs, statusFilter]
   );
-  const prRows = filteredPrs.slice(offset, offset + pageLimit);
-  const prTotal = filteredPrs.length;
   const statusTabs: PillTab[] = [
     { key: "", label: "Semua", count: allPrs.length },
     ...STATUS_KEYS.map((s) => {
@@ -239,6 +243,97 @@ export default function PaymentRequests() {
     onSuccess: invalidate,
   });
 
+  // Yang menunggu tindakan (diajukan/menunggu atasan/siap eksekusi) di atas.
+  const prOrder = (st: string) =>
+    ({ disetujui_atasan: 0, menunggu_atasan: 1, diajukan: 2 } as Record<string, number>)[st] ?? 3;
+  const prColumns: Column<PrRow>[] = [
+    { key: "no", header: "Nomor", className: "font-mono text-xs font-medium", cell: (p) => p.pr_number, sortValue: (p) => p.pr_number },
+    { key: "type", header: "Jenis", className: "capitalize", cell: (p) => p.pr_type, sortValue: (p) => p.pr_type },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      className: "font-semibold",
+      cell: (p) => formatRupiah(Number(p.amount)),
+      sortValue: (p) => Number(p.amount),
+    },
+    { key: "desc", header: "Deskripsi", className: "max-w-xs truncate", cell: (p) => p.description ?? "-" },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (p) => prOrder(p.status),
+      cell: (p) => (
+        <>
+          <StatusPill domain="payment_request" status={p.status} />
+          {p.progress?.total_steps > 0 && (p.status === "menunggu_atasan" || p.status === "disetujui_atasan") && (
+            <p className="mt-0.5 text-[11px]" style={{ color: "var(--th-color)" }}>
+              Tahap {Math.min(p.progress.decisions.filter((d) => d.approved).length + 1, p.progress.total_steps)}/
+              {p.progress.total_steps}
+              {p.progress.decisions.some((d) => !d.approved) && " · ditolak di rantai"}
+            </p>
+          )}
+          {p.decision_note && (
+            <p className="mt-0.5 text-[11px]" style={{ color: "var(--th-color)" }}>
+              {p.decision_note}
+            </p>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      className: "whitespace-nowrap text-xs",
+      cell: (p) => (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          {(p.status === "diajukan" || p.status === "menunggu_atasan") && (
+            <>
+              <button
+                onClick={() => act.mutate({ id: p.id, action: "approve" })}
+                disabled={act.isPending}
+                className="font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+              >
+                Setujui
+              </button>
+              <button
+                onClick={() =>
+                  promptToast("Catatan penolakan (wajib):", (note) => {
+                    if (note) act.mutate({ id: p.id, action: "reject", note });
+                  })
+                }
+                disabled={act.isPending}
+                className="font-medium text-rose-700 hover:text-rose-800 dark:text-rose-400"
+              >
+                Tolak
+              </button>
+            </>
+          )}
+          {p.status === "disetujui_atasan" ? (
+            <button
+              onClick={() =>
+                // Eksekusi memposting jurnal pembayaran & menandai PR selesai
+                // (tidak bisa dibatalkan) -- dulu langsung jalan sekali klik.
+                confirmDialog({
+                  title: `Eksekusi pembayaran ${p.pr_number}?`,
+                  message: `Pembayaran ${formatRupiah(Number(p.amount))} dicatat dieksekusi dan jurnal pembayaran diposting. Tindakan ini tidak bisa dibatalkan.`,
+                  confirmLabel: "Eksekusi Pembayaran",
+                  requireText: p.pr_number,
+                  onConfirm: () => act.mutate({ id: p.id, action: "execute" }),
+                })
+              }
+              disabled={act.isPending}
+              className="font-medium text-blue-700 hover:text-blue-800 dark:text-blue-400"
+            >
+              Eksekusi Pembayaran…
+            </button>
+          ) : !(p.status === "diajukan" || p.status === "menunggu_atasan") ? (
+            <span style={{ color: "var(--th-color)" }}>—</span>
+          ) : null}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -265,103 +360,24 @@ export default function PaymentRequests() {
       <PillTabs
         tabs={statusTabs}
         value={statusFilter}
-        onChange={(k) => {
-          setStatusFilter(k);
-          setOffset(0);
-        }}
+        onChange={setStatusFilter}
       />
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Nomor</th>
-              <th className="th">Jenis</th>
-              <th className="th">Jumlah</th>
-              <th className="th">Deskripsi</th>
-              <th className="th">Status</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {prRows.map((p) => (
-              <tr key={p.id}>
-                <td className="td font-mono text-xs font-medium">{p.pr_number}</td>
-                <td className="td capitalize">{p.pr_type}</td>
-                <td className="td font-semibold">{formatRupiah(Number(p.amount))}</td>
-                <td className="td max-w-xs truncate">{p.description ?? "-"}</td>
-                <td className="td">
-                  <StatusPill domain="payment_request" status={p.status} />
-                  {p.progress?.total_steps > 0 &&
-                    (p.status === "menunggu_atasan" || p.status === "disetujui_atasan") && (
-                      <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                        Tahap{" "}
-                        {Math.min(p.progress.decisions.filter((d) => d.approved).length + 1, p.progress.total_steps)}
-                        /{p.progress.total_steps}
-                        {p.progress.decisions.some((d) => !d.approved) && " · ditolak di rantai"}
-                      </p>
-                    )}
-                  {p.decision_note && (
-                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                      {p.decision_note}
-                    </p>
-                  )}
-                </td>
-                <td className="td whitespace-nowrap text-xs">
-                  {(p.status === "diajukan" || p.status === "menunggu_atasan") && (
-                    <>
-                      <button
-                        onClick={() => act.mutate({ id: p.id, action: "approve" })}
-                        disabled={act.isPending}
-                        className="font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
-                      >
-                        Setujui
-                      </button>
-                      {" · "}
-                      <button
-                        onClick={() =>
-                          promptToast("Catatan penolakan (wajib):", (note) => {
-                            if (note) act.mutate({ id: p.id, action: "reject", note });
-                          })
-                        }
-                        disabled={act.isPending}
-                        className="font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                      >
-                        Tolak
-                      </button>
-                      {" · "}
-                    </>
-                  )}
-                  {p.status === "disetujui_atasan" ? (
-                    <button
-                      onClick={() => act.mutate({ id: p.id, action: "execute" })}
-                      disabled={act.isPending}
-                      className="font-medium text-blue-600 hover:text-blue-800"
-                    >
-                      Eksekusi Pembayaran
-                    </button>
-                  ) : (
-                    <span style={{ color: "var(--text-muted)" }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {prRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {allPrs.length === 0
-                    ? "Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi."
-                    : "Tidak ada payment request untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <Pagination offset={offset} limit={pageLimit} total={prTotal} onOffsetChange={setOffset} />
-        {act.error && (
-          <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{(act.error as Error).message}</p>
-        )}
-      </div>
+      <DataTable
+        label="Payment request"
+        rows={filteredPrs}
+        columns={prColumns}
+        rowKey={(p) => p.id}
+        query={prs}
+        defaultSort={{ key: "status", dir: "asc" }}
+        pageSize={50}
+        emptyTitle={
+          allPrs.length === 0
+            ? "Belum ada payment request. Buat dari halaman Payroll setelah run difinalisasi."
+            : "Tidak ada payment request untuk status ini."
+        }
+      />
+      {act.error && <p className="text-sm text-red-700 dark:text-red-400">{(act.error as Error).message}</p>}
     </div>
   );
 }

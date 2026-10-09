@@ -1,8 +1,18 @@
-import { Fragment, FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileCheck2, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, formatDate } from "../api/client";
-import { Badge, Button, Card, KpiCard, PillTabs, promptToast, type PillTab } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  type Column,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+  promptToast,
+} from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
 
@@ -188,6 +198,162 @@ export default function Agreements() {
     window.open(url, "_blank");
   }
 
+  // Detail & form inline tampil sebagai baris ekspansi TEPAT di bawah baris
+  // yang diklik (dulu detail dirender di bawah seluruh tabel, di luar layar).
+  function renderAgreementExpanded(a: Agreement) {
+    if (sendFormId !== a.id && emailFormId !== a.id && a.id !== selectedId) return null;
+    return (
+      <div className="space-y-3">
+        {sendFormId === a.id && (
+          <form
+                                  onSubmit={(e) => handleSend(e, a.id)}
+                                  className="flex flex-wrap items-center gap-2"
+                                >
+                                  <input
+                                    name="signer_name"
+                                    required
+                                    placeholder="Nama penandatangan klien *"
+                                    className="input w-auto py-1 text-xs"
+                                  />
+                                  <input
+                                    name="signer_email"
+                                    type="email"
+                                    required
+                                    placeholder="Email penandatangan *"
+                                    className="input w-auto py-1 text-xs"
+                                  />
+                                  <Button type="submit" size="sm" loading={sendEsign.isPending}>
+                                    Kirim
+                                  </Button>
+                                </form>
+        )}
+        {emailFormId === a.id && (
+          <form
+                                  onSubmit={(e) => handleSendEmail(e, a.id)}
+                                  className="flex flex-wrap items-center gap-2"
+                                >
+                                  <input
+                                    name="to_email"
+                                    type="email"
+                                    required
+                                    defaultValue={leads?.find((l) => l.id === a.lead_id)?.contact_email ?? ""}
+                                    placeholder="Email penerima *"
+                                    className="input w-auto py-1 text-xs"
+                                  />
+                                  <Button type="submit" size="sm" loading={sendEmail.isPending}>
+                                    Kirim
+                                  </Button>
+                                  {sendEmail.error && sendEmail.variables?.id === a.id && (
+                                    <p className="text-xs text-red-600 dark:text-red-400">
+                                      {(sendEmail.error as Error).message}
+                                    </p>
+                                  )}
+                                </form>
+        )}
+        {a.id === selectedId && (
+          <Card title="Detail Agreement" subtitle={leadName(a.lead_id)}>
+                        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                          {Object.entries(a.field_values).map(([k, v]) => (
+                            <div key={k}>
+                              <dt className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                                {k}
+                              </dt>
+                              <dd style={{ color: "var(--text)" }}>{String(v)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {a.review_note && (
+                          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                            Catatan penolakan: {a.review_note}
+                          </p>
+                        )}
+                      </Card>
+        )}
+      </div>
+    );
+  }
+
+  const aColumns: Column<Agreement>[] = [
+    {
+      key: "lead",
+      header: "Lead",
+      className: "font-medium",
+      cell: (a) => leadName(a.lead_id),
+      sortValue: (a) => leadName(a.lead_id),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (a) => STATUS_LABEL[a.status] ?? a.status,
+      cell: (a) => (
+        <Badge tone={STATUS_TONE[a.status] ?? "neutral"}>{STATUS_LABEL[a.status] ?? a.status}</Badge>
+      ),
+    },
+    {
+      key: "created",
+      header: "Dibuat",
+      className: "whitespace-nowrap",
+      cell: (a) => formatDate(a.created_at),
+      sortValue: (a) => a.created_at,
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      // stopPropagation: klik tombol aksi tidak ikut memilih/menutup baris.
+      cell: (a) => (
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {a.status === "draft" && (
+              <Button size="sm" variant="secondary" onClick={() => submitReview.mutate(a.id)}>
+                Ajukan Review
+              </Button>
+            )}
+            {a.status === "internal_review" && (
+              <>
+                <Button size="sm" onClick={() => approve.mutate(a.id)}>
+                  <ThumbsUp className="h-3.5 w-3.5" /> Setuju
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() =>
+                    promptToast("Catatan penolakan (wajib):", (note) => {
+                      if (note) decline.mutate({ id: a.id, note });
+                    })
+                  }
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" /> Tolak
+                </Button>
+              </>
+            )}
+            {a.status === "approved" && (
+              <Button
+                size="sm"
+                onClick={() => setSendFormId(sendFormId === a.id ? null : a.id)}
+              >
+                <Send className="h-3.5 w-3.5" /> Kirim untuk TTD
+              </Button>
+            )}
+            {(a.status === "sent" || a.status === "signed") && (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => openDownload(a.id)}>
+                  <Download className="h-3.5 w-3.5" /> Unduh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEmailFormId(emailFormId === a.id ? null : a.id)}
+                >
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -273,181 +439,18 @@ export default function Agreements() {
 
       <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Lead</th>
-              <th className="th">Status</th>
-              <th className="th">Dibuat</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody style={{ borderTop: "1px solid var(--border)" }}>
-            {filteredAgreements.map((a) => (
-              <Fragment key={a.id}>
-                <tr
-                  onClick={() => setSelectedId(a.id === selectedId ? null : a.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedId(a.id === selectedId ? null : a.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    backgroundColor: selectedId === a.id ? "var(--accent-tint)" : undefined,
-                  }}
-                >
-                  <td className="td font-medium">{leadName(a.lead_id)}</td>
-                  <td className="td">
-                    <Badge tone={STATUS_TONE[a.status] ?? "neutral"}>
-                      {STATUS_LABEL[a.status] ?? a.status}
-                    </Badge>
-                  </td>
-                  <td className="td">{formatDate(a.created_at)}</td>
-                  <td className="td" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {a.status === "draft" && (
-                        <Button size="sm" variant="secondary" onClick={() => submitReview.mutate(a.id)}>
-                          Ajukan Review
-                        </Button>
-                      )}
-                      {a.status === "internal_review" && (
-                        <>
-                          <Button size="sm" onClick={() => approve.mutate(a.id)}>
-                            <ThumbsUp className="h-3.5 w-3.5" /> Setuju
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() =>
-                              promptToast("Catatan penolakan (wajib):", (note) => {
-                                if (note) decline.mutate({ id: a.id, note });
-                              })
-                            }
-                          >
-                            <ThumbsDown className="h-3.5 w-3.5" /> Tolak
-                          </Button>
-                        </>
-                      )}
-                      {a.status === "approved" && (
-                        <Button
-                          size="sm"
-                          onClick={() => setSendFormId(sendFormId === a.id ? null : a.id)}
-                        >
-                          <Send className="h-3.5 w-3.5" /> Kirim untuk TTD
-                        </Button>
-                      )}
-                      {(a.status === "sent" || a.status === "signed") && (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={() => openDownload(a.id)}>
-                            <Download className="h-3.5 w-3.5" /> Unduh
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setEmailFormId(emailFormId === a.id ? null : a.id)}
-                          >
-                            <Mail className="h-3.5 w-3.5" /> Email
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {sendFormId === a.id && (
-                  <tr onClick={(e) => e.stopPropagation()}>
-                    <td colSpan={4} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                      <form
-                        onSubmit={(e) => handleSend(e, a.id)}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <input
-                          name="signer_name"
-                          required
-                          placeholder="Nama penandatangan klien *"
-                          className="input w-auto py-1 text-xs"
-                        />
-                        <input
-                          name="signer_email"
-                          type="email"
-                          required
-                          placeholder="Email penandatangan *"
-                          className="input w-auto py-1 text-xs"
-                        />
-                        <Button type="submit" size="sm" loading={sendEsign.isPending}>
-                          Kirim
-                        </Button>
-                      </form>
-                    </td>
-                  </tr>
-                )}
-                {emailFormId === a.id && (
-                  <tr onClick={(e) => e.stopPropagation()}>
-                    <td colSpan={4} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                      <form
-                        onSubmit={(e) => handleSendEmail(e, a.id)}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <input
-                          name="to_email"
-                          type="email"
-                          required
-                          defaultValue={leads?.find((l) => l.id === a.lead_id)?.contact_email ?? ""}
-                          placeholder="Email penerima *"
-                          className="input w-auto py-1 text-xs"
-                        />
-                        <Button type="submit" size="sm" loading={sendEmail.isPending}>
-                          Kirim
-                        </Button>
-                        {sendEmail.error && sendEmail.variables?.id === a.id && (
-                          <p className="text-xs text-red-600 dark:text-red-400">
-                            {(sendEmail.error as Error).message}
-                          </p>
-                        )}
-                      </form>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-            {filteredAgreements.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {(agreements ?? []).length === 0 ? "Belum ada agreement." : "Tidak ada agreement untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar agreement"
+        rows={filteredAgreements}
+        columns={aColumns}
+        rowKey={(a) => a.id}
+        defaultSort={{ key: "created", dir: "desc" }}
+        onRowClick={(a) => setSelectedId(a.id === selectedId ? null : a.id)}
+        isRowSelected={(a) => a.id === selectedId}
+        renderExpanded={renderAgreementExpanded}
+        emptyTitle={(agreements ?? []).length === 0 ? "Belum ada agreement." : "Tidak ada agreement untuk status ini."}
+      />
 
-      {selectedId &&
-        (() => {
-          const a = agreements?.find((x) => x.id === selectedId);
-          if (!a) return null;
-          return (
-            <Card title="Detail Agreement" subtitle={leadName(a.lead_id)}>
-              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                {Object.entries(a.field_values).map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                      {k}
-                    </dt>
-                    <dd style={{ color: "var(--text)" }}>{String(v)}</dd>
-                  </div>
-                ))}
-              </dl>
-              {a.review_note && (
-                <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                  Catatan penolakan: {a.review_note}
-                </p>
-              )}
-            </Card>
-          );
-        })()}
     </div>
   );
 }

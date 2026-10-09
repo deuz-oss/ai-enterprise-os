@@ -1,4 +1,4 @@
-import { Fragment, FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Download, FileSignature, Mail, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, formatDate } from "../api/client";
@@ -7,11 +7,13 @@ import {
   Badge,
   Button,
   Card,
+  type Column,
   confirmDialog,
+  DataTable,
   KpiCard,
+  type PillTab,
   PillTabs,
   promptToast,
-  type PillTab,
 } from "../components/ui";
 import { PageHeader } from "../components/workspace";
 import type { Lead } from "./Leads";
@@ -176,6 +178,157 @@ export default function Quotations() {
     window.open(url, "_blank");
   }
 
+  // Detail & form inline tampil sebagai baris ekspansi TEPAT di bawah baris
+  // yang diklik (dulu detail dirender di bawah seluruh tabel, di luar layar).
+  function renderQuotationExpanded(q: Quotation) {
+    if (emailFormId !== q.id && q.id !== selectedId) return null;
+    return (
+      <div className="space-y-3">
+        {emailFormId === q.id && (
+          <form
+                                  onSubmit={(e) => handleSendEmail(e, q.id)}
+                                  className="flex flex-wrap items-center gap-2"
+                                >
+                                  <input
+                                    name="to_email"
+                                    type="email"
+                                    required
+                                    defaultValue={leads?.find((l) => l.id === q.lead_id)?.contact_email ?? ""}
+                                    placeholder="Email penerima *"
+                                    className="input w-auto py-1 text-xs"
+                                  />
+                                  <Button type="submit" size="sm" loading={sendEmail.isPending}>
+                                    Kirim
+                                  </Button>
+                                  {sendEmail.error && sendEmail.variables?.id === q.id && (
+                                    <p className="text-xs text-red-600 dark:text-red-400">
+                                      {(sendEmail.error as Error).message}
+                                    </p>
+                                  )}
+                                </form>
+        )}
+        {q.id === selectedId && (
+          <Card title="Detail Quotation" subtitle={leadName(q.lead_id)}>
+                        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                          {Object.entries(q.field_values).map(([k, v]) => (
+                            <div key={k}>
+                              <dt className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                                {k}
+                              </dt>
+                              <dd style={{ color: "var(--text)" }}>{String(v)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {q.rejection_note && (
+                          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                            Catatan penolakan: {q.rejection_note}
+                          </p>
+                        )}
+                      </Card>
+        )}
+      </div>
+    );
+  }
+
+  const qColumns: Column<Quotation>[] = [
+    {
+      key: "lead",
+      header: "Lead",
+      className: "font-medium",
+      cell: (q) => leadName(q.lead_id),
+      sortValue: (q) => leadName(q.lead_id),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (q) => STATUS_LABEL[q.status] ?? q.status,
+      cell: (q) => (
+        <Badge tone={STATUS_TONE[q.status] ?? "neutral"}>{STATUS_LABEL[q.status] ?? q.status}</Badge>
+      ),
+    },
+    {
+      key: "created",
+      header: "Dibuat",
+      className: "whitespace-nowrap",
+      cell: (q) => formatDate(q.created_at),
+      sortValue: (q) => q.created_at,
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      // stopPropagation: klik tombol aksi tidak ikut memilih/menutup baris.
+      cell: (q) => (
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {q.status === "draft" && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => submitApproval.mutate(q.id)}
+              >
+                Ajukan Approval
+              </Button>
+            )}
+            {q.status === "pending_approval" && (
+              <>
+                <Button size="sm" onClick={() => approve.mutate(q.id)}>
+                  <ThumbsUp className="h-3.5 w-3.5" /> Setuju
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() =>
+                    promptToast("Catatan penolakan (wajib):", (note) => {
+                      if (note) reject.mutate({ id: q.id, note });
+                    })
+                  }
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" /> Tolak
+                </Button>
+              </>
+            )}
+            {q.status === "approved" && (
+              <Button
+                size="sm"
+                disabled={send.isPending}
+                onClick={() =>
+                  confirmDialog({
+                    title: "Kirim quotation ke klien?",
+                    message:
+                      "Quotation akan dikirim ke email PIC klien. Email yang sudah terkirim tidak bisa ditarik kembali.",
+                    confirmLabel: "Kirim",
+                    tone: "primary",
+                    onConfirm: () =>
+                      send.mutate(q.id, {
+                        onSuccess: () => toast.success("Quotation terkirim ke klien"),
+                        onError: (e) => toast.error(`Gagal mengirim: ${(e as Error).message}`),
+                      }),
+                  })
+                }
+              >
+                <Send className="h-3.5 w-3.5" /> Kirim
+              </Button>
+            )}
+            {(q.status === "sent" || q.status === "accepted_by_client") && (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => openDownload(q.id)}>
+                  <Download className="h-3.5 w-3.5" /> Unduh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setEmailFormId(emailFormId === q.id ? null : q.id)}
+                >
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -261,172 +414,18 @@ export default function Quotations() {
 
       <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Lead</th>
-              <th className="th">Status</th>
-              <th className="th">Dibuat</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody style={{ borderTop: "1px solid var(--border)" }}>
-            {filteredQuotations.map((q) => (
-              <Fragment key={q.id}>
-                <tr
-                  onClick={() => setSelectedId(q.id === selectedId ? null : q.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedId(q.id === selectedId ? null : q.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    backgroundColor: selectedId === q.id ? "var(--accent-tint)" : undefined,
-                  }}
-                >
-                  <td className="td font-medium">{leadName(q.lead_id)}</td>
-                  <td className="td">
-                    <Badge tone={STATUS_TONE[q.status] ?? "neutral"}>
-                      {STATUS_LABEL[q.status] ?? q.status}
-                    </Badge>
-                  </td>
-                  <td className="td">{formatDate(q.created_at)}</td>
-                  <td className="td" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {q.status === "draft" && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => submitApproval.mutate(q.id)}
-                        >
-                          Ajukan Approval
-                        </Button>
-                      )}
-                      {q.status === "pending_approval" && (
-                        <>
-                          <Button size="sm" onClick={() => approve.mutate(q.id)}>
-                            <ThumbsUp className="h-3.5 w-3.5" /> Setuju
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() =>
-                              promptToast("Catatan penolakan (wajib):", (note) => {
-                                if (note) reject.mutate({ id: q.id, note });
-                              })
-                            }
-                          >
-                            <ThumbsDown className="h-3.5 w-3.5" /> Tolak
-                          </Button>
-                        </>
-                      )}
-                      {q.status === "approved" && (
-                        <Button
-                          size="sm"
-                          disabled={send.isPending}
-                          onClick={() =>
-                            confirmDialog({
-                              title: "Kirim quotation ke klien?",
-                              message:
-                                "Quotation akan dikirim ke email PIC klien. Email yang sudah terkirim tidak bisa ditarik kembali.",
-                              confirmLabel: "Kirim",
-                              tone: "primary",
-                              onConfirm: () =>
-                                send.mutate(q.id, {
-                                  onSuccess: () => toast.success("Quotation terkirim ke klien"),
-                                  onError: (e) => toast.error(`Gagal mengirim: ${(e as Error).message}`),
-                                }),
-                            })
-                          }
-                        >
-                          <Send className="h-3.5 w-3.5" /> Kirim
-                        </Button>
-                      )}
-                      {(q.status === "sent" || q.status === "accepted_by_client") && (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={() => openDownload(q.id)}>
-                            <Download className="h-3.5 w-3.5" /> Unduh
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setEmailFormId(emailFormId === q.id ? null : q.id)}
-                          >
-                            <Mail className="h-3.5 w-3.5" /> Email
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {emailFormId === q.id && (
-                  <tr onClick={(e) => e.stopPropagation()}>
-                    <td colSpan={4} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                      <form
-                        onSubmit={(e) => handleSendEmail(e, q.id)}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <input
-                          name="to_email"
-                          type="email"
-                          required
-                          defaultValue={leads?.find((l) => l.id === q.lead_id)?.contact_email ?? ""}
-                          placeholder="Email penerima *"
-                          className="input w-auto py-1 text-xs"
-                        />
-                        <Button type="submit" size="sm" loading={sendEmail.isPending}>
-                          Kirim
-                        </Button>
-                        {sendEmail.error && sendEmail.variables?.id === q.id && (
-                          <p className="text-xs text-red-600 dark:text-red-400">
-                            {(sendEmail.error as Error).message}
-                          </p>
-                        )}
-                      </form>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-            {filteredQuotations.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {(quotations ?? []).length === 0 ? "Belum ada quotation." : "Tidak ada quotation untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar quotation"
+        rows={filteredQuotations}
+        columns={qColumns}
+        rowKey={(q) => q.id}
+        defaultSort={{ key: "created", dir: "desc" }}
+        onRowClick={(q) => setSelectedId(q.id === selectedId ? null : q.id)}
+        isRowSelected={(q) => q.id === selectedId}
+        renderExpanded={renderQuotationExpanded}
+        emptyTitle={(quotations ?? []).length === 0 ? "Belum ada quotation." : "Tidak ada quotation untuk status ini."}
+      />
 
-      {selectedId &&
-        (() => {
-          const q = quotations?.find((x) => x.id === selectedId);
-          if (!q) return null;
-          return (
-            <Card title="Detail Quotation" subtitle={leadName(q.lead_id)}>
-              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                {Object.entries(q.field_values).map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                      {k}
-                    </dt>
-                    <dd style={{ color: "var(--text)" }}>{String(v)}</dd>
-                  </div>
-                ))}
-              </dl>
-              {q.rejection_note && (
-                <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                  Catatan penolakan: {q.rejection_note}
-                </p>
-              )}
-            </Card>
-          );
-        })()}
     </div>
   );
 }

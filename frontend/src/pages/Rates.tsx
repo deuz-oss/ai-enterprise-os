@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, formatDate } from "../api/client";
 import { Calculator } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { PillTabs, type PillTab } from "../components/ui";
+import { type Column, DataTable, type PillTab, PillTabs } from "../components/ui";
 
 interface Pph21Row {
   id: string;
@@ -323,6 +323,59 @@ export default function Rates() {
   const th = "th";
   const td = "td";
 
+  // ---------- Tabel versi tarif (DataTable) ----------
+  // Versi yang BERLAKU hari ini = effective_from terbaru yang <= hari ini.
+  const todayIso = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD lokal
+  function activeId(rows: { id: string; effective_from: string }[] | undefined) {
+    const eligible = (rows ?? []).filter((r) => r.effective_from <= todayIso);
+    eligible.sort((x, y) => y.effective_from.localeCompare(x.effective_from));
+    return eligible[0]?.id ?? null;
+  }
+  const pct = (v: number) => `${(Number(v) * 100).toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`;
+  function effColumn<T extends { id: string; effective_from: string }>(activeRowId: string | null) {
+    return {
+      key: "eff",
+      header: "Efektif Sejak",
+      className: "whitespace-nowrap font-medium",
+      sortValue: (r: T) => r.effective_from,
+      cell: (r: T) => (
+        <>
+          {formatDate(r.effective_from)}
+          {r.id === activeRowId && <span className="pill p-green ml-2">berlaku</span>}
+          {r.effective_from > todayIso && <span className="pill p-blue ml-2">mendatang</span>}
+        </>
+      ),
+    };
+  }
+  const rupiah = (v: number) => `Rp ${fmt(Number(v))}`;
+
+  const pph21Columns: Column<Pph21Row>[] = [
+    effColumn<Pph21Row>(activeId(pph21.data)),
+    { key: "diri", header: "PTKP Diri", numeric: true, cell: (r) => rupiah(r.ptkp_diri) },
+    { key: "kawin", header: "PTKP Kawin", numeric: true, cell: (r) => rupiah(r.ptkp_kawin) },
+    { key: "tanggungan", header: "PTKP Tanggungan", numeric: true, cell: (r) => rupiah(r.ptkp_tanggungan) },
+  ];
+  const bpjsColumns: Column<BpjsRow>[] = [
+    effColumn<BpjsRow>(activeId(bpjs.data)),
+    {
+      key: "kes",
+      header: "Kes. Psk/Pyd",
+      numeric: true,
+      cell: (r) => `${pct(r.kesehatan_employer)} / ${pct(r.kesehatan_employee)}`,
+    },
+    { key: "kescap", header: "Cap Kes.", numeric: true, cell: (r) => rupiah(r.kesehatan_cap) },
+    { key: "jht", header: "JHT Psk/Pyd", numeric: true, cell: (r) => `${pct(r.jht_employer)} / ${pct(r.jht_employee)}` },
+    { key: "jp", header: "JP Psk/Pyd", numeric: true, cell: (r) => `${pct(r.jp_employer)} / ${pct(r.jp_employee)}` },
+    { key: "jpcap", header: "Cap JP", numeric: true, cell: (r) => rupiah(r.jp_cap) },
+    { key: "jkm", header: "JKM", numeric: true, cell: (r) => pct(r.jkm_rate) },
+  ];
+  const billingColumns: Column<BillingRow>[] = [
+    effColumn<BillingRow>(activeId(billing.data)),
+    { key: "ppn", header: "PPN", numeric: true, cell: (r) => pct(r.ppn_rate) },
+    { key: "pph23", header: "PPh 23", numeric: true, cell: (r) => pct(r.pph23_rate) },
+    { key: "due", header: "Jatuh Tempo (hari)", numeric: true, cell: (r) => r.due_days },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader icon={Calculator} title="Tarif & Rate" subtitle="Rate ber-versi per tanggal efektif — terpisah dari kode; laporan historis memakai snapshot" />
@@ -348,28 +401,15 @@ export default function Rates() {
 
       {tab === "pph21" && (
         <>
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)" }}>
-                <tr>
-                  <th className={th}>Efektif Sejak</th>
-                  <th className={th}>PTKP Diri</th>
-                  <th className={th}>PTKP Kawin</th>
-                  <th className={th}>PTKP Tanggungan</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(pph21.data ?? []).map((r) => (
-                  <tr key={r.id}>
-                    <td className={`${td} font-medium`}>{r.effective_from}</td>
-                    <td className={td}>Rp {fmt(Number(r.ptkp_diri))}</td>
-                    <td className={td}>Rp {fmt(Number(r.ptkp_kawin))}</td>
-                    <td className={td}>Rp {fmt(Number(r.ptkp_tanggungan))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Versi PPh 21"
+            rows={pph21.data}
+            columns={pph21Columns}
+            rowKey={(r) => r.id}
+            query={pph21}
+            defaultSort={{ key: "eff", dir: "desc" }}
+            emptyTitle="Belum ada versi PPh 21."
+          />
           <form onSubmit={handlePph21} className="card space-y-2">
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru PPh 21</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
@@ -393,40 +433,15 @@ export default function Rates() {
 
       {tab === "bpjs" && (
         <>
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)" }}>
-                <tr>
-                  <th className={th}>Efektif</th>
-                  <th className={th}>Kes. Psk/Pyd</th>
-                  <th className={th}>Cap Kes.</th>
-                  <th className={th}>JHT Psk/Pyd</th>
-                  <th className={th}>JP Psk/Pyd</th>
-                  <th className={th}>Cap JP</th>
-                  <th className={th}>JKM</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(bpjs.data ?? []).map((r) => (
-                  <tr key={r.id}>
-                    <td className={`${td} font-medium`}>{r.effective_from}</td>
-                    <td className={`${td} font-mono text-xs`}>
-                      {r.kesehatan_employer}/{r.kesehatan_employee}
-                    </td>
-                    <td className={td}>{fmt(Number(r.kesehatan_cap))}</td>
-                    <td className={`${td} font-mono text-xs`}>
-                      {r.jht_employer}/{r.jht_employee}
-                    </td>
-                    <td className={`${td} font-mono text-xs`}>
-                      {r.jp_employer}/{r.jp_employee}
-                    </td>
-                    <td className={td}>{fmt(Number(r.jp_cap))}</td>
-                    <td className={`${td} font-mono text-xs`}>{r.jkm_rate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Versi tarif BPJS"
+            rows={bpjs.data}
+            columns={bpjsColumns}
+            rowKey={(r) => r.id}
+            query={bpjs}
+            defaultSort={{ key: "eff", dir: "desc" }}
+            emptyTitle="Belum ada versi BPJS."
+          />
           <form onSubmit={handleBpjs} className="card space-y-2">
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru BPJS</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -454,28 +469,15 @@ export default function Rates() {
 
       {tab === "billing" && (
         <>
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full">
-              <thead style={{ backgroundColor: "var(--hover)" }}>
-                <tr>
-                  <th className={th}>Efektif Sejak</th>
-                  <th className={th}>PPN</th>
-                  <th className={th}>PPh 23</th>
-                  <th className={th}>Jatuh Tempo (hari)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {(billing.data ?? []).map((r) => (
-                  <tr key={r.id}>
-                    <td className={`${td} font-medium`}>{r.effective_from}</td>
-                    <td className={`${td} font-mono text-xs`}>{(Number(r.ppn_rate) * 100).toFixed(0)}%</td>
-                    <td className={`${td} font-mono text-xs`}>{(Number(r.pph23_rate) * 100).toFixed(0)}%</td>
-                    <td className={td}>{r.due_days}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Versi tarif billing"
+            rows={billing.data}
+            columns={billingColumns}
+            rowKey={(r) => r.id}
+            query={billing}
+            defaultSort={{ key: "eff", dir: "desc" }}
+            emptyTitle="Belum ada versi billing."
+          />
           <form onSubmit={handleBilling} className="card grid grid-cols-1 gap-2 sm:grid-cols-4">
             <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (Billing)" />
             <input name="ppn_rate" type="number" step="0.0001" required placeholder="PPN (0.12)" className="input" />

@@ -19,6 +19,7 @@ from app.modules.finance.schemas import (
     CashFlowSummary,
     InvoiceGenerateRequest,
     InvoiceOut,
+    InvoiceReconciliationOut,
     InvoiceUpdate,
     ReminderDraftOut,
     TaxInvoiceReplace,
@@ -174,6 +175,14 @@ def reminder_draft(invoice_id: str, db: Session = Depends(get_db)):
     from app.modules.finance.reminder import draft_payment_reminder
 
     return draft_payment_reminder(db, invoice_id)
+
+
+@router.get("/invoices/{invoice_id}/reconciliation", response_model=InvoiceReconciliationOut)
+def invoice_reconciliation(invoice_id: str, db: Session = Depends(get_db)):
+    """Cocokkan headcount/lembur/bruto invoice dengan absensi yang disetujui klien."""
+    from app.modules.finance.reconciliation import reconcile_invoice
+
+    return reconcile_invoice(db, invoice_id)
 
 
 @router.post("/invoices/{invoice_id}/tax-invoice/send", response_model=InvoiceOut)

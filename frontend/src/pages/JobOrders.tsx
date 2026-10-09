@@ -2,8 +2,15 @@ import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
-import { confirmToast, HeaderCanvas, KpiCard, PillTabs, type PillTab } from "../components/ui";
-import { Pagination } from "../components/Pagination";
+import {
+  type Column,
+  confirmToast,
+  DataTable,
+  HeaderCanvas,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+} from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
 import { ScoreBadge } from "../components/Ai";
@@ -188,7 +195,6 @@ export default function JobOrders() {
   const [isPublic, setIsPublic] = useState(false);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const [workingDays, setWorkingDays] = useState<string[]>([]);
-  const [offset, setOffset] = useState(0);
   const [clientFilter, setClientFilter] = useState("");
   // Tab/Pill filter (§1.5) atas business_status -- backend belum expose
   // param filter ini, jadi diambil sekaligus (limit besar, endpoint yang
@@ -203,20 +209,19 @@ export default function JobOrders() {
   // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
   // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
   const { data: me } = useMe();
-  const { data: jobOrdersAll } = useQuery({
+  const jobOrdersAllQuery = useQuery({
     queryKey: ["job-orders", clientFilter],
     queryFn: () =>
       api.getPaged<JobOrder>(
         `/recruitment/job-orders?limit=1000&offset=0${clientFilter ? `&client_id=${clientFilter}` : ""}`
       ),
   });
+  const jobOrdersAll = jobOrdersAllQuery.data;
   const allRows = jobOrdersAll?.data ?? [];
   const businessFiltered = useMemo(
     () => allRows.filter((jo) => !statusTab || jo.business_status === statusTab),
     [allRows, statusTab]
   );
-  const jobOrders = businessFiltered.slice(offset, offset + pageLimit);
-  const jobOrdersTotal = businessFiltered.length;
   const statusTabs: PillTab[] = [
     { key: "", label: "Semua", count: allRows.length },
     ...BUSINESS_STATUSES.map((s) => ({
@@ -318,6 +323,119 @@ export default function JobOrders() {
   const DAY_OPTIONS = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"];
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "-";
+
+  const jobOrderColumns: Column<JobOrder>[] = [
+    {
+      key: "reqid",
+      header: "Request ID",
+      sortValue: (jo) => jo.request_id,
+      cell: (jo) => (
+        <>
+          {jo.has_source_document ? (
+            <a
+              href="#"
+              title={jo.source_document_file_name ?? "Lihat dokumen sumber"}
+              onClick={async (e) => {
+                e.preventDefault();
+                const { url } = await api.get<{ url: string }>(
+                  `/recruitment/job-orders/${jo.id}/document/download-url`
+                );
+                window.open(url, "_blank");
+              }}
+              className="font-medium text-[var(--accent)] hover:opacity-80"
+            >
+              {jo.request_id ?? "-"}
+            </a>
+          ) : (
+            jo.request_id ?? "-"
+          )}
+          {jo.is_stale && (
+            <span
+              className="pill p-red ml-1 text-[10px]"
+              title={`Request Date: ${jo.request_date} — belum filled >=30 hari`}
+            >
+              &gt;30 hari
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "title",
+      header: "Posisi",
+      className: "max-w-[160px] truncate font-medium",
+      sortValue: (jo) => jo.title,
+      cell: (jo) => (
+        <Link to={`/job-orders/${jo.id}`} className="hover:opacity-80" style={{ color: "var(--accent)" }} title={jo.title}>
+          {jo.title}
+        </Link>
+      ),
+    },
+    {
+      key: "client",
+      header: "Klien",
+      className: "max-w-[180px] truncate",
+      // title: nama klien panjang terpotong (truncate) -- tooltip memuat nama utuh.
+      cell: (jo) => <span title={clientName(jo.client_id)}>{clientName(jo.client_id)}</span>,
+      sortValue: (jo) => clientName(jo.client_id),
+    },
+    { key: "area", header: "Area", className: "whitespace-nowrap", cell: (jo) => jo.area ?? "-", sortValue: (jo) => jo.area },
+    { key: "hc", header: "Kebutuhan", numeric: true, cell: (jo) => `${jo.headcount} orang`, sortValue: (jo) => jo.headcount },
+    {
+      key: "salary",
+      header: "Range Gaji",
+      numeric: true,
+      cell: (jo) => `${formatRupiah(jo.salary_min)} – ${formatRupiah(jo.salary_max)}`,
+      sortValue: (jo) => jo.salary_max,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (jo) => jo.business_status,
+      cell: (jo) => (
+        <select
+          value={jo.business_status}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (next === "dibatalkan" && jo.business_status !== "dibatalkan") {
+              confirmToast(
+                `Batalkan job order "${jo.title}" (${jo.request_id ?? "-"})? Kandidat di pipeline tidak otomatis diberi tahu.`,
+                () => changeBusinessStatus.mutate({ id: jo.id, business_status: next }),
+                { confirmLabel: "Batalkan" }
+              );
+              return;
+            }
+            changeBusinessStatus.mutate({ id: jo.id, business_status: next });
+          }}
+          className={`cursor-pointer border-0 ${BUSINESS_STATUS_COLORS[jo.business_status]}`}
+          aria-label={`Ubah status job order ${jo.request_id ?? jo.title}`}
+        >
+          {BUSINESS_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      key: "ai",
+      header: "AI Matching",
+      className: "whitespace-nowrap",
+      cell: (jo) => (
+        <button
+          className="btn-secondary whitespace-nowrap py-1 text-xs"
+          disabled={match.isPending}
+          onClick={() => {
+            setMatchJoId(jo.id);
+            match.mutate(jo.id);
+          }}
+        >
+          {match.isPending && matchJoId === jo.id ? "AI menilai..." : "Cari Kandidat"}
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -596,17 +714,11 @@ export default function JobOrders() {
         <PillTabs
           tabs={statusTabs}
           value={statusTab}
-          onChange={(k) => {
-            setStatusTab(k);
-            setOffset(0);
-          }}
+          onChange={setStatusTab}
         />
         <select
           value={clientFilter}
-          onChange={(e) => {
-            setClientFilter(e.target.value);
-            setOffset(0);
-          }}
+          onChange={(e) => setClientFilter(e.target.value)}
           className="input w-auto"
           aria-label="Filter klien"
         >
@@ -619,115 +731,17 @@ export default function JobOrders() {
         </select>
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead className="border-b border-[var(--border)] bg-[var(--hover)]">
-            <tr>
-              <th className="th">Request ID</th>
-              <th className="th">Posisi</th>
-              <th className="th">Klien</th>
-              <th className="th">Area</th>
-              <th className="th text-right">Kebutuhan</th>
-              <th className="th text-right">Range Gaji</th>
-              <th className="th">Status</th>
-              <th className="th">AI Matching</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--border)]">
-            {jobOrders.map((jo) => (
-              <tr key={jo.id} className="hover:bg-[var(--hover)]">
-                <td className="td py-1.5">
-                  {jo.has_source_document ? (
-                    <a
-                      href="#"
-                      title={jo.source_document_file_name ?? "Lihat dokumen sumber"}
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        const { url } = await api.get<{ url: string }>(
-                          `/recruitment/job-orders/${jo.id}/document/download-url`
-                        );
-                        window.open(url, "_blank");
-                      }}
-                      className="font-medium text-[var(--accent)] hover:opacity-80"
-                    >
-                      {jo.request_id ?? "-"}
-                    </a>
-                  ) : (
-                    jo.request_id ?? "-"
-                  )}
-                  {jo.is_stale && (
-                    <span
-                      className="pill p-red ml-1 text-[10px]"
-                      title={`Request Date: ${jo.request_date} — belum filled >=30 hari`}
-                    >
-                      &gt;30 hari
-                    </span>
-                  )}
-                </td>
-                <td className="td py-1.5 font-medium max-w-[160px] truncate" title={jo.title}>
-                  <Link to={`/job-orders/${jo.id}`} className="hover:opacity-80" style={{ color: "var(--accent)" }}>
-                    {jo.title}
-                  </Link>
-                </td>
-                <td className="td py-1.5 max-w-[180px] truncate" title={clientName(jo.client_id)}>
-                  {clientName(jo.client_id)}
-                </td>
-                <td className="td py-1.5 whitespace-nowrap">{jo.area ?? "-"}</td>
-                <td className="td py-1.5 text-right tabular-nums whitespace-nowrap">{jo.headcount} orang</td>
-                <td className="td py-1.5 text-right tabular-nums whitespace-nowrap">
-                  {formatRupiah(jo.salary_min)} – {formatRupiah(jo.salary_max)}
-                </td>
-                <td className="td py-1.5">
-                  <select
-                    value={jo.business_status}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      if (next === "dibatalkan" && jo.business_status !== "dibatalkan") {
-                        confirmToast(
-                          `Batalkan job order "${jo.title}" (${jo.request_id ?? "-"})? Kandidat di pipeline tidak otomatis diberi tahu.`,
-                          () => changeBusinessStatus.mutate({ id: jo.id, business_status: next }),
-                          { confirmLabel: "Batalkan" }
-                        );
-                        return;
-                      }
-                      changeBusinessStatus.mutate({ id: jo.id, business_status: next });
-                    }}
-                    className={`cursor-pointer border-0 ${BUSINESS_STATUS_COLORS[jo.business_status]}`}
-                    aria-label={`Ubah status job order ${jo.request_id ?? jo.title}`}
-                  >
-                    {BUSINESS_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="td py-1.5 whitespace-nowrap">
-                  <button
-                    className="btn-secondary py-1 text-xs whitespace-nowrap"
-                    disabled={match.isPending}
-                    onClick={() => {
-                      setMatchJoId(jo.id);
-                      match.mutate(jo.id);
-                    }}
-                  >
-                    {match.isPending && matchJoId === jo.id ? "AI menilai..." : "Cari Kandidat"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {jobOrders.length === 0 && (
-              <tr>
-                <td colSpan={8} className="td py-8 text-center text-[var(--text-muted)]">
-                  {allRows.length === 0 ? "Belum ada job order." : "Tidak ada job order untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar job order"
+        rows={businessFiltered}
+        columns={jobOrderColumns}
+        rowKey={(jo) => jo.id}
+        query={jobOrdersAllQuery}
+        defaultSort={{ key: "reqid", dir: "desc" }}
+        pageSize={pageLimit}
+        emptyTitle={allRows.length === 0 ? "Belum ada job order." : "Tidak ada job order untuk status ini."}
+      />
 
-      <Pagination offset={offset} limit={pageLimit} total={jobOrdersTotal} onOffsetChange={setOffset} />
 
       {(match.isPending || match.error || matchResults) && (
         <div className="card space-y-3">

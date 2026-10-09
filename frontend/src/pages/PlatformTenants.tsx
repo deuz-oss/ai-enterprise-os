@@ -2,7 +2,14 @@ import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, Building2, CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, type PillTab } from "../components/ui";
+import {
+  type Column,
+  confirmDialog,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+} from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
@@ -105,11 +112,13 @@ export default function PlatformTenants() {
   const [provisioned, setProvisioned] = useState<Provisioned | null>(null);
 
   const me = useMe();
-  const { data: tenants, isLoading } = useQuery({
+  const tenantsQuery = useQuery({
     queryKey: ["platform-tenants"],
     queryFn: () => api.get<TenantRow[]>("/platform/tenants"),
     enabled: me.data?.role === "platform_admin",
   });
+  const tenants = tenantsQuery.data;
+  const isLoading = tenantsQuery.isPending;
 
   const provision = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -254,6 +263,374 @@ export default function PlatformTenants() {
     });
   }
 
+  // ---------- Tabel tenant (DataTable) ----------
+  // Panel detail dulu dirender SETELAH semua baris (bukan di bawah tenant
+  // yang diklik); kini baris ekspansi tepat di bawah tenantnya.
+  function renderTenantPanels(t: TenantRow) {
+    if (t.id !== expandedId && t.id !== usageExpandedId && t.id !== billingExpandedId) return null;
+    return (
+      <div className="space-y-4">
+        {t.id === expandedId && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
+              status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
+            </p>
+            <p className="mb-2 text-xs" style={{ color: "var(--th-color)" }}>
+              Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
+              supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
+              aktif"), atau atur app satu-satu lewat dropdown bila perlu.
+            </p>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {(bundles ?? []).map((b) => {
+                const rows = (licenses ?? []).filter((lic) => b.apps.includes(lic.app_key));
+                const allActive = rows.length > 0 && rows.every((r) => r.status === "aktif");
+                return (
+                  <div
+                    key={b.key}
+                    className="rounded-lg border p-2.5"
+                    style={{ backgroundColor: "var(--bg-elevated)", borderColor: "var(--border)" }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>
+                        {b.name}
+                      </span>
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          disabled={setBundle.isPending}
+                          onClick={() =>
+                            setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "aktif" })
+                          }
+                          className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                          style={{ color: "var(--accent)", backgroundColor: "var(--accent-tint)" }}
+                        >
+                          Aktifkan Semua
+                        </button>
+                        <button
+                          disabled={setBundle.isPending || !allActive}
+                          onClick={() =>
+                            setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "kedaluwarsa" })
+                          }
+                          className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+                          style={{ backgroundColor: "rgba(225,29,72,.08)" }}
+                        >
+                          Cabut Semua
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {rows.map((lic) => (
+                        <div key={lic.app_key} className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                            {lic.name}
+                          </span>
+                          <select
+                            value={lic.status ?? ""}
+                            onChange={(e) =>
+                              setLicense.mutate({
+                                tenantId: expandedId,
+                                appKey: lic.app_key,
+                                status: e.target.value,
+                              })
+                            }
+                            className="input w-auto py-1 text-xs"
+                          >
+                            <option value="">—</option>
+                            <option value="aktif">aktif</option>
+                            <option value="trial">trial</option>
+                            <option value="kedaluwarsa">kedaluwarsa</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {t.id === usageExpandedId && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--th-color)" }}>
+                Estimasi tagihan — belum menagih, hanya laporan pemakaian
+              </p>
+              <input
+                type="month"
+                value={usagePeriod}
+                onChange={(e) => setUsagePeriod(e.target.value || currentPeriod())}
+                className="input w-auto py-1 text-xs"
+              />
+            </div>
+            {usageLoading && (
+              <p className="mt-2 text-xs" style={{ color: "var(--th-color)" }}>Memuat...</p>
+            )}
+            {usage && (
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ color: "var(--th-color)" }}>
+                      <th className="py-1 text-left">SKU</th>
+                      <th className="py-1 text-right">Jumlah</th>
+                      <th className="py-1 text-right">Estimasi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                    {usage.lines.map((line, idx) => (
+                      <tr key={`${line.sku}-${line.metric}-${idx}`}>
+                        <td className="py-1.5" style={{ color: "var(--text)" }}>
+                          {line.label}
+                        </td>
+                        <td className="py-1.5 text-right" style={{ color: "var(--th-color)" }}>
+                          {line.qty !== undefined
+                            ? line.qty
+                            : line.qty_invoice !== undefined
+                              ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
+                              : "—"}
+                        </td>
+                        <td className="py-1.5 text-right font-medium" style={{ color: "var(--text)" }}>
+                          {line.amount !== null ? formatRupiah(line.amount) : (
+                            <span title={line.note} style={{ color: "var(--th-color)" }}>
+                              belum diketahui
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {usage.lines.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-3 text-center" style={{ color: "var(--th-color)" }}>
+                          Tidak ada SKU berlisensi untuk periode ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  Total diketahui: {formatRupiah(usage.total_known)}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        {t.id === billingExpandedId && (
+          <div>
+            {billingSummary && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <p className="text-xs" style={{ color: "var(--th-color)" }}>
+                      Tier saat ini
+                    </p>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      {billingSummary.tier ?? "foundation-only"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: "var(--th-color)" }}>
+                      Sisa jatah cycle
+                    </p>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      {formatRupiah(billingSummary.cycle_remaining)} /{" "}
+                      {formatRupiah(billingSummary.cycle_included)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: "var(--th-color)" }}>
+                      Saldo top up
+                    </p>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      {formatRupiah(billingSummary.credit_balance)}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <label htmlFor="override_tier" className="text-xs" style={{ color: "var(--th-color)" }}>
+                      Override tier manual:
+                    </label>
+                    <select
+                      id="override_tier"
+                      defaultValue=""
+                      disabled={overrideSubscription.isPending}
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        overrideSubscription.mutate({
+                          tenantId: billingExpandedId,
+                          tier: e.target.value,
+                        });
+                        e.target.value = "";
+                      }}
+                      className="input w-auto py-1 text-xs"
+                    >
+                      <option value="">— pilih tier —</option>
+                      <option value="tier1">tier1</option>
+                      <option value="tier2">tier2</option>
+                      <option value="tier3">tier3</option>
+                    </select>
+                  </div>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ color: "var(--text-muted)" }}>
+                      <th className="py-1 text-left">Waktu</th>
+                      <th className="py-1 text-left">Kejadian</th>
+                      <th className="py-1 text-right">Jumlah</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                    {billingSummary.recent_transactions.map((tx) => (
+                      <tr key={tx.id}>
+                        <td className="py-1.5" style={{ color: "var(--text-muted)" }}>
+                          {formatDateTime(tx.created_at)}
+                        </td>
+                        <td className="py-1.5" style={{ color: "var(--text)" }}>
+                          {tx.ref_event}
+                        </td>
+                        <td className="py-1.5 text-right" style={{ color: "var(--text)" }}>
+                          {tx.amount >= 0 ? "+" : ""}
+                          {formatRupiah(tx.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    {billingSummary.recent_transactions.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
+                          Belum ada transaksi.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const tenantColumns: Column<TenantRow>[] = [
+    { key: "name", header: "Nama", className: "font-medium", cell: (t) => t.name, sortValue: (t) => t.name },
+    { key: "slug", header: "Slug", className: "font-mono text-xs", cell: (t) => t.slug, sortValue: (t) => t.slug },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (t) => t.status,
+      cell: (t) => <span className={`badge border-0 ${STATUS_BADGES[t.status] ?? ""}`}>{t.status}</span>,
+    },
+    {
+      key: "billing_mode",
+      header: "Mode Billing",
+      cell: (t) => {
+        const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
+        return (
+          <select
+            title={bm.hint}
+            aria-label={`Mode billing ${t.name}`}
+            value={t.billing_mode}
+            disabled={setBillingMode.isPending}
+            onChange={(e) => setBillingMode.mutate({ id: t.id, billingMode: e.target.value })}
+            className={`badge cursor-pointer border-0 ${bm.cls}`}
+          >
+            {Object.entries(BILLING_MODE_LABELS).map(([value, meta]) => (
+              <option key={value} value={value}>
+                {meta.label}
+              </option>
+            ))}
+          </select>
+        );
+      },
+    },
+    {
+      key: "tier",
+      header: "Tier & Saldo",
+      sortValue: (t) => {
+        const tb = billingByTenant?.[t.id];
+        return tb ? tb.cycle_remaining + tb.credit_balance : null;
+      },
+      cell: (t) => {
+        const tb = billingByTenant?.[t.id];
+        return tb ? (
+          <span className={`badge border-0 ${BILLING_STATE_CLS[tb.state]}`}>
+            {tb.tier ?? "foundation"} · {formatRupiah(tb.cycle_remaining + tb.credit_balance)}
+          </span>
+        ) : (
+          <span className="text-xs" style={{ color: "var(--th-color)" }}>
+            —
+          </span>
+        );
+      },
+    },
+    {
+      key: "created",
+      header: "Dibuat",
+      className: "whitespace-nowrap text-xs",
+      cell: (t) => formatDate(t.created_at),
+      sortValue: (t) => t.created_at,
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (t) => (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {t.status === "aktif" ? (
+            <button
+              className="btn-secondary py-1 text-xs text-rose-700 dark:text-rose-400"
+              disabled={toggleStatus.isPending}
+              onClick={() =>
+                // Menangguhkan = SEMUA user tenant ini langsung gagal login.
+                confirmDialog({
+                  title: `Tangguhkan tenant ${t.name}?`,
+                  message:
+                    "Semua user tenant ini tidak bisa login sampai tenant diaktifkan kembali. Data tidak dihapus.",
+                  confirmLabel: "Tangguhkan",
+                  requireText: t.slug,
+                  onConfirm: () => toggleStatus.mutate({ id: t.id, status: "ditangguhkan" }),
+                })
+              }
+            >
+              Tangguhkan
+            </button>
+          ) : (
+            <button
+              className="btn-secondary py-1 text-xs text-emerald-700 dark:text-emerald-400"
+              disabled={toggleStatus.isPending}
+              onClick={() => toggleStatus.mutate({ id: t.id, status: "aktif" })}
+            >
+              Aktifkan
+            </button>
+          )}
+          <button
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+            aria-expanded={expandedId === t.id}
+            onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+          >
+            {expandedId === t.id ? "Tutup Lisensi" : "Lisensi"}
+          </button>
+          <button
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+            aria-expanded={usageExpandedId === t.id}
+            onClick={() => setUsageExpandedId(usageExpandedId === t.id ? null : t.id)}
+          >
+            {usageExpandedId === t.id ? "Tutup Tagihan" : "Estimasi Tagihan"}
+          </button>
+          <button
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--accent)" }}
+            aria-expanded={billingExpandedId === t.id}
+            onClick={() => setBillingExpandedId(billingExpandedId === t.id ? null : t.id)}
+          >
+            {billingExpandedId === t.id ? "Tutup Billing" : "Billing Opsi G"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div>
@@ -348,362 +725,16 @@ export default function PlatformTenants() {
 
       <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Nama</th>
-              <th className="th">Slug</th>
-              <th className="th">Status</th>
-              <th className="th">Mode Billing</th>
-              <th className="th">Tier &amp; Saldo</th>
-              <th className="th">Dibuat</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {filteredTenants.map((t) => {
-              const bm = BILLING_MODE_LABELS[t.billing_mode] ?? BILLING_MODE_LABELS.inherit;
-              const tb = billingByTenant?.[t.id];
-              return (
-              <tr key={t.id} className="hover:bg-[var(--hover)]">
-                <td className="td font-medium">{t.name}</td>
-                <td className="td font-mono text-xs">{t.slug}</td>
-                <td className="td">
-                  <span className={`badge border-0 ${STATUS_BADGES[t.status] ?? ""}`}>
-                    {t.status}
-                  </span>
-                </td>
-                <td className="td">
-                  <select
-                    title={bm.hint}
-                    value={t.billing_mode}
-                    disabled={setBillingMode.isPending}
-                    onChange={(e) =>
-                      setBillingMode.mutate({ id: t.id, billingMode: e.target.value })
-                    }
-                    className={`badge cursor-pointer border-0 ${bm.cls}`}
-                  >
-                    {Object.entries(BILLING_MODE_LABELS).map(([value, meta]) => (
-                      <option key={value} value={value}>
-                        {meta.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="td">
-                  {tb ? (
-                    <span className={`badge border-0 ${BILLING_STATE_CLS[tb.state]}`}>
-                      {tb.tier ?? "foundation"} · {formatRupiah(tb.cycle_remaining + tb.credit_balance)}
-                    </span>
-                  ) : (
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      —
-                    </span>
-                  )}
-                </td>
-                <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
-                  {formatDate(t.created_at)}
-                </td>
-                <td className="td">
-                  {t.status === "aktif" ? (
-                    <button
-                      className="btn-secondary py-1 text-xs text-rose-600 dark:text-rose-400"
-                      disabled={toggleStatus.isPending}
-                      onClick={() => toggleStatus.mutate({ id: t.id, status: "ditangguhkan" })}
-                    >
-                      Tangguhkan
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-secondary py-1 text-xs text-emerald-700 dark:text-emerald-400"
-                      disabled={toggleStatus.isPending}
-                      onClick={() => toggleStatus.mutate({ id: t.id, status: "aktif" })}
-                    >
-                      Aktifkan
-                    </button>
-                  )}
-                  {" · "}
-                  <button
-                    className="text-xs font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                    onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
-                  >
-                    {expandedId === t.id ? "Tutup Lisensi" : "Lisensi"}
-                  </button>
-                  {" · "}
-                  <button
-                    className="text-xs font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                    onClick={() => setUsageExpandedId(usageExpandedId === t.id ? null : t.id)}
-                  >
-                    {usageExpandedId === t.id ? "Tutup Tagihan" : "Estimasi Tagihan"}
-                  </button>
-                  {" · "}
-                  <button
-                    className="text-xs font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                    onClick={() => setBillingExpandedId(billingExpandedId === t.id ? null : t.id)}
-                  >
-                    {billingExpandedId === t.id ? "Tutup Billing" : "Billing Opsi G"}
-                  </button>
-                </td>
-              </tr>
-              );
-            })}
-            {(expandedId !== null) && (
-              <tr>
-                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                  <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-                    Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
-                    status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
-                  </p>
-                  <p className="mb-2 text-xs" style={{ color: "var(--th-color)" }}>
-                    Lisensi dikelompokkan per bundel komersial Opsi F — pakai tombol bundel
-                    supaya semua app teknis di dalamnya nyala/mati bersamaan (tidak "setengah
-                    aktif"), atau atur app satu-satu lewat dropdown bila perlu.
-                  </p>
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    {(bundles ?? []).map((b) => {
-                      const rows = (licenses ?? []).filter((lic) => b.apps.includes(lic.app_key));
-                      const allActive = rows.length > 0 && rows.every((r) => r.status === "aktif");
-                      return (
-                        <div
-                          key={b.key}
-                          className="rounded-lg border p-2.5"
-                          style={{ backgroundColor: "var(--bg-elevated)", borderColor: "var(--border)" }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>
-                              {b.name}
-                            </span>
-                            <div className="flex shrink-0 gap-1.5">
-                              <button
-                                disabled={setBundle.isPending}
-                                onClick={() =>
-                                  setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "aktif" })
-                                }
-                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                                style={{ color: "var(--accent)", backgroundColor: "var(--accent-tint)" }}
-                              >
-                                Aktifkan Semua
-                              </button>
-                              <button
-                                disabled={setBundle.isPending || !allActive}
-                                onClick={() =>
-                                  setBundle.mutate({ tenantId: expandedId, bundleKey: b.key, status: "kedaluwarsa" })
-                                }
-                                className="cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
-                                style={{ backgroundColor: "rgba(225,29,72,.08)" }}
-                              >
-                                Cabut Semua
-                              </button>
-                            </div>
-                          </div>
-                          <div className="mt-2 space-y-1.5">
-                            {rows.map((lic) => (
-                              <div key={lic.app_key} className="flex items-center justify-between gap-2">
-                                <span className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                                  {lic.name}
-                                </span>
-                                <select
-                                  value={lic.status ?? ""}
-                                  onChange={(e) =>
-                                    setLicense.mutate({
-                                      tenantId: expandedId,
-                                      appKey: lic.app_key,
-                                      status: e.target.value,
-                                    })
-                                  }
-                                  className="input w-auto py-1 text-xs"
-                                >
-                                  <option value="">—</option>
-                                  <option value="aktif">aktif</option>
-                                  <option value="trial">trial</option>
-                                  <option value="kedaluwarsa">kedaluwarsa</option>
-                                </select>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </td>
-              </tr>
-            )}
-            {usageExpandedId !== null && (
-              <tr>
-                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                  <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-                    Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
-                  </p>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--th-color)" }}>
-                      Estimasi tagihan — belum menagih, hanya laporan pemakaian
-                    </p>
-                    <input
-                      type="month"
-                      value={usagePeriod}
-                      onChange={(e) => setUsagePeriod(e.target.value || currentPeriod())}
-                      className="input w-auto py-1 text-xs"
-                    />
-                  </div>
-                  {usageLoading && (
-                    <p className="mt-2 text-xs" style={{ color: "var(--th-color)" }}>Memuat...</p>
-                  )}
-                  {usage && (
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr style={{ color: "var(--th-color)" }}>
-                            <th className="py-1 text-left">SKU</th>
-                            <th className="py-1 text-right">Jumlah</th>
-                            <th className="py-1 text-right">Estimasi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                          {usage.lines.map((line, idx) => (
-                            <tr key={`${line.sku}-${line.metric}-${idx}`}>
-                              <td className="py-1.5" style={{ color: "var(--text)" }}>
-                                {line.label}
-                              </td>
-                              <td className="py-1.5 text-right" style={{ color: "var(--th-color)" }}>
-                                {line.qty !== undefined
-                                  ? line.qty
-                                  : line.qty_invoice !== undefined
-                                    ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
-                                    : "—"}
-                              </td>
-                              <td className="py-1.5 text-right font-medium" style={{ color: "var(--text)" }}>
-                                {line.amount !== null ? formatRupiah(line.amount) : (
-                                  <span title={line.note} style={{ color: "var(--th-color)" }}>
-                                    belum diketahui
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                          {usage.lines.length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--th-color)" }}>
-                                Tidak ada SKU berlisensi untuk periode ini.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                      <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--text)" }}>
-                        Total diketahui: {formatRupiah(usage.total_known)}
-                      </p>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            )}
-            {billingExpandedId !== null && (
-              <tr>
-                <td colSpan={7} className="td" style={{ backgroundColor: "var(--hover)" }}>
-                  {billingSummary && (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-4">
-                        <div>
-                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
-                            Tier saat ini
-                          </p>
-                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                            {billingSummary.tier ?? "foundation-only"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
-                            Sisa jatah cycle
-                          </p>
-                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                            {formatRupiah(billingSummary.cycle_remaining)} /{" "}
-                            {formatRupiah(billingSummary.cycle_included)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs" style={{ color: "var(--th-color)" }}>
-                            Saldo top up
-                          </p>
-                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                            {formatRupiah(billingSummary.credit_balance)}
-                          </p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-2">
-                          <label htmlFor="override_tier" className="text-xs" style={{ color: "var(--th-color)" }}>
-                            Override tier manual:
-                          </label>
-                          <select
-                            id="override_tier"
-                            defaultValue=""
-                            disabled={overrideSubscription.isPending}
-                            onChange={(e) => {
-                              if (!e.target.value) return;
-                              overrideSubscription.mutate({
-                                tenantId: billingExpandedId,
-                                tier: e.target.value,
-                              });
-                              e.target.value = "";
-                            }}
-                            className="input w-auto py-1 text-xs"
-                          >
-                            <option value="">— pilih tier —</option>
-                            <option value="tier1">tier1</option>
-                            <option value="tier2">tier2</option>
-                            <option value="tier3">tier3</option>
-                          </select>
-                        </div>
-                      </div>
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr style={{ color: "var(--text-muted)" }}>
-                            <th className="py-1 text-left">Waktu</th>
-                            <th className="py-1 text-left">Kejadian</th>
-                            <th className="py-1 text-right">Jumlah</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                          {billingSummary.recent_transactions.map((tx) => (
-                            <tr key={tx.id}>
-                              <td className="py-1.5" style={{ color: "var(--text-muted)" }}>
-                                {formatDateTime(tx.created_at)}
-                              </td>
-                              <td className="py-1.5" style={{ color: "var(--text)" }}>
-                                {tx.ref_event}
-                              </td>
-                              <td className="py-1.5 text-right" style={{ color: "var(--text)" }}>
-                                {tx.amount >= 0 ? "+" : ""}
-                                {formatRupiah(tx.amount)}
-                              </td>
-                            </tr>
-                          ))}
-                          {billingSummary.recent_transactions.length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
-                                Belum ada transaksi.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            )}
-            {isLoading === false && filteredTenants.length === 0 && (
-              <tr>
-                <td colSpan={7} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  {allTenants.length === 0 ? "Belum ada tenant." : "Tidak ada tenant untuk status ini."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar tenant"
+        rows={filteredTenants}
+        columns={tenantColumns}
+        rowKey={(t) => t.id}
+        query={tenantsQuery}
+        defaultSort={{ key: "name", dir: "asc" }}
+        renderExpanded={renderTenantPanels}
+        emptyTitle="Tidak ada tenant untuk status ini."
+      />
 
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         Menangguhkan tenant langsung memblokir seluruh akun di dalamnya saat login.

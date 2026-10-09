@@ -2,7 +2,15 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserCheck, UserCog, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
+import {
+  type Column,
+  confirmDialog,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+  TableStateRow,
+} from "../components/ui";
 import { api } from "../api/client";
 
 interface UserRow {
@@ -54,6 +62,54 @@ export default function Users() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 
+  const userColumns: Column<UserRow>[] = [
+    { key: "name", header: "Nama", className: "font-medium", cell: (u) => u.full_name, sortValue: (u) => u.full_name },
+    { key: "email", header: "Email", cell: (u) => u.email, sortValue: (u) => u.email },
+    {
+      key: "role",
+      header: "Role",
+      sortValue: (u) => u.role,
+      cell: (u) => (
+        <select
+          value={u.role}
+          onChange={(e) => updateUser.mutate({ id: u.id, body: { role: e.target.value } })}
+          className="pill p-gray cursor-pointer border-0"
+          aria-label={`Ubah role ${u.full_name}`}
+        >
+          {ROLES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (u) => (u.is_active ? 0 : 1),
+      cell: (u) => (
+        <button
+          onClick={() =>
+            u.is_active
+              ? // Menonaktifkan = user tidak bisa login lagi; dulu sekali klik.
+                confirmDialog({
+                  title: `Nonaktifkan ${u.full_name}?`,
+                  message: `${u.email} tidak bisa login sampai diaktifkan kembali. Data tidak dihapus.`,
+                  confirmLabel: "Nonaktifkan",
+                  onConfirm: () => updateUser.mutate({ id: u.id, body: { is_active: false } }),
+                })
+              : updateUser.mutate({ id: u.id, body: { is_active: true } })
+          }
+          className={u.is_active ? "pill p-green" : "pill p-red"}
+          title={u.is_active ? "Klik untuk menonaktifkan" : "Klik untuk mengaktifkan"}
+        >
+          {u.is_active ? "aktif" : "nonaktif"}
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div>
@@ -102,56 +158,16 @@ export default function Users() {
 
       <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Nama</th>
-              <th className="th">Email</th>
-              <th className="th">Role</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {filteredUsers.map((u) => (
-              <tr key={u.id} className="hover:bg-[var(--hover)]">
-                <td className="td font-medium">{u.full_name}</td>
-                <td className="td">{u.email}</td>
-                <td className="td">
-                  <select
-                    value={u.role}
-                    onChange={(e) => updateUser.mutate({ id: u.id, body: { role: e.target.value } })}
-                    className="pill p-gray cursor-pointer border-0"
-                    aria-label={`Ubah role ${u.full_name}`}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="td">
-                  <button
-                    onClick={() =>
-                      updateUser.mutate({ id: u.id, body: { is_active: !u.is_active } })
-                    }
-                    className={`${u.is_active ? "pill p-green" : "pill p-red"}`}
-                  >
-                    {u.is_active ? "aktif" : "nonaktif"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            <TableStateRow
-              query={usersQuery}
-              colSpan={4}
-              isEmpty={filteredUsers.length === 0}
-              emptyTitle="Tidak ada pengguna untuk status ini."
-            />
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar pengguna"
+        rows={filteredUsers}
+        columns={userColumns}
+        rowKey={(u) => u.id}
+        query={usersQuery}
+        defaultSort={{ key: "name", dir: "asc" }}
+        pageSize={50}
+        emptyTitle="Tidak ada pengguna untuk status ini."
+      />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Info, Zap } from "lucide-react";
 import { api, formatDateTime, formatRupiah } from "../api/client";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { PillTabs, TableStateRow } from "../components/ui";
+import { DataTable, PillTabs, type Column } from "../components/ui";
 
 interface BalanceSummary {
   cycle_remaining: number;
@@ -85,6 +85,24 @@ export default function Billing() {
     },
     onError: (e) => setAutoReloadError(e instanceof Error ? e.message : "Gagal menyimpan pengaturan"),
   });
+
+  // Tanpa sort: "Sisa Setelah" adalah saldo berjalan, bermakna dalam urutan waktu.
+  const transactionColumns: Column<Transaction>[] = [
+    { key: "time", header: "Waktu", className: "whitespace-nowrap", cell: (t) => formatDateTime(t.created_at) },
+    { key: "event", header: "Kejadian", cell: (t) => t.ref_event },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      cell: (t) => (
+        <span className={t.amount < 0 ? "" : "text-emerald-700 dark:text-emerald-400"}>
+          {t.amount >= 0 ? "+" : ""}
+          {formatRupiah(t.amount)}
+        </span>
+      ),
+    },
+    { key: "after", header: "Sisa Setelah", numeric: true, cell: (t) => formatRupiah(t.balance_after) },
+  ];
 
   return (
     <div className="space-y-4">
@@ -270,40 +288,15 @@ export default function Billing() {
       )}
 
       {tab === "history" && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left" style={{ color: "var(--text-muted)" }}>
-                <th className="th">Waktu</th>
-                <th className="th">Kejadian</th>
-                <th className="th text-right">Jumlah</th>
-                <th className="th text-right">Sisa Setelah</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(transactions.data ?? []).map((t) => (
-                <tr key={t.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <td className="td">{formatDateTime(t.created_at)}</td>
-                  <td className="td">{t.ref_event}</td>
-                  <td
-                    className={`td text-right tabular-nums ${t.amount < 0 ? "" : "text-emerald-700 dark:text-emerald-400"}`}
-                    style={t.amount < 0 ? { color: "var(--text)" } : undefined}
-                  >
-                    {t.amount >= 0 ? "+" : ""}
-                    {formatRupiah(t.amount)}
-                  </td>
-                  <td className="td text-right tabular-nums">{formatRupiah(t.balance_after)}</td>
-                </tr>
-              ))}
-              <TableStateRow
-                query={transactions}
-                colSpan={4}
-                isEmpty={(transactions.data ?? []).length === 0}
-                emptyTitle="Belum ada transaksi."
-              />
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          label="Riwayat transaksi saldo"
+          rows={transactions.data}
+          columns={transactionColumns}
+          rowKey={(t) => t.id}
+          query={transactions}
+          pageSize={50}
+          emptyTitle="Belum ada transaksi."
+        />
       )}
     </div>
   );

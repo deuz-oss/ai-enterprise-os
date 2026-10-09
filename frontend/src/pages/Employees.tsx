@@ -321,6 +321,143 @@ export default function Employees() {
     });
   }
 
+  // ---------- Tabel persetujuan (DataTable) ----------
+  // Default: "menunggu" di atas -- itu yang perlu diproses HR.
+  const employeeName = (id: string) => employeesLookup?.find((e) => e.id === id)?.full_name ?? "-";
+  const statusOrder = (status: string) => (status === "menunggu" ? 0 : 1);
+  function decisionButtons(
+    decide: { mutate: (v: { id: string; approved: boolean }) => void; isPending: boolean },
+    id: string
+  ) {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => decide.mutate({ id, approved: true })}
+          disabled={decide.isPending}
+          className="text-sm font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+        >
+          Setujui
+        </button>
+        <button
+          onClick={() => decide.mutate({ id, approved: false })}
+          disabled={decide.isPending}
+          className="text-sm font-medium text-rose-700 hover:text-rose-800 dark:text-rose-400"
+        >
+          Tolak
+        </button>
+      </span>
+    );
+  }
+  const statusBadge = (status: string) => <span className={`badge ${LEAVE_STATUS_BADGES[status] ?? ""}`}>{status}</span>;
+
+  const correctionColumns: Column<AttendanceCorrectionRow>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      className: "font-medium",
+      cell: (c) => employeeName(c.employee_id),
+      sortValue: (c) => employeeName(c.employee_id),
+    },
+    {
+      key: "period",
+      header: "Periode",
+      cell: (c) => `${String(c.month).padStart(2, "0")}/${c.year}`,
+      sortValue: (c) => c.year * 100 + c.month,
+    },
+    {
+      key: "usulan",
+      header: "Usulan",
+      cell: (c) => `${c.requested_present_days} hari · ${c.requested_overtime_hours} jam lembur`,
+    },
+    { key: "reason", header: "Alasan", cell: (c) => c.reason ?? "-" },
+    { key: "status", header: "Status", cell: (c) => statusBadge(c.status), sortValue: (c) => statusOrder(c.status) },
+    {
+      key: "decision",
+      header: "Keputusan",
+      className: "whitespace-nowrap",
+      cell: (c) => (c.status === "menunggu" ? decisionButtons(decideCorrection, c.id) : (c.decision_note ?? "-")),
+    },
+  ];
+
+  const overtimeColumns: Column<OvertimeRequestRow>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      className: "font-medium",
+      cell: (o) => employeeName(o.employee_id),
+      sortValue: (o) => employeeName(o.employee_id),
+    },
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap",
+      cell: (o) => formatDate(o.date),
+      sortValue: (o) => o.date,
+    },
+    {
+      key: "hours",
+      header: "Jam",
+      numeric: true,
+      cell: (o) => `${o.requested_hours} jam`,
+      sortValue: (o) => o.requested_hours,
+    },
+    { key: "reason", header: "Alasan", cell: (o) => o.reason ?? "-" },
+    { key: "status", header: "Status", cell: (o) => statusBadge(o.status), sortValue: (o) => statusOrder(o.status) },
+    {
+      key: "decision",
+      header: "Keputusan",
+      className: "whitespace-nowrap",
+      cell: (o) => (o.status === "menunggu" ? decisionButtons(decideOvertime, o.id) : (o.decision_note ?? "-")),
+    },
+  ];
+
+  const leaveColumns: Column<LeaveRequestRow>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      className: "font-medium",
+      cell: (lv) => employeeName(lv.employee_id),
+      sortValue: (lv) => employeeName(lv.employee_id),
+    },
+    { key: "type", header: "Jenis", cell: (lv) => LEAVE_TYPE_LABELS[lv.leave_type] ?? lv.leave_type },
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap",
+      cell: (lv) => `${formatDate(lv.start_date)} s.d. ${formatDate(lv.end_date)}`,
+      sortValue: (lv) => lv.start_date,
+    },
+    { key: "reason", header: "Alasan", cell: (lv) => lv.reason ?? "-" },
+    { key: "status", header: "Status", cell: (lv) => statusBadge(lv.status), sortValue: (lv) => statusOrder(lv.status) },
+    {
+      key: "decision",
+      header: "Keputusan",
+      className: "whitespace-nowrap",
+      cell: (lv) => (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          {lv.file_name && (
+            <button
+              onClick={async () => {
+                const { url } = await api.get<{ url: string }>(`/employees/leave-requests/${lv.id}/attachment/download-url`);
+                window.open(url, "_blank");
+              }}
+              className="text-xs font-medium hover:opacity-80"
+              style={{ color: "var(--accent)" }}
+              title={lv.file_name}
+            >
+              Lampiran
+            </button>
+          )}
+          {lv.status === "menunggu"
+            ? decisionButtons(decideLeave, lv.id)
+            : !lv.file_name
+              ? (lv.decision_note ?? "-")
+              : null}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <HeaderCanvas
@@ -435,69 +572,17 @@ export default function Employees() {
           <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Koreksi Absensi (Portal)</h2>
           </div>
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Karyawan</th>
-                <th className="th">Periode</th>
-                <th className="th">Usulan</th>
-                <th className="th">Alasan</th>
-                <th className="th">Status</th>
-                <th className="th">Keputusan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(attendanceCorrections ?? []).map((c) => {
-                const emp = employeesLookup?.find((e) => e.id === c.employee_id);
-                return (
-                  <tr key={c.id}>
-                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
-                    <td className="td">
-                      {String(c.month).padStart(2, "0")}/{c.year}
-                    </td>
-                    <td className="td">
-                      {c.requested_present_days} hari · {c.requested_overtime_hours} jam lembur
-                    </td>
-                    <td className="td">{c.reason ?? "-"}</td>
-                    <td className="td">
-                      <span
-                        className={`badge ${LEAVE_STATUS_BADGES[c.status] ?? ""}`}
-                      >
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="td whitespace-nowrap">
-                      {c.status === "menunggu" ? (
-                        <>
-                          <button
-                            onClick={() =>
-                              decideCorrection.mutate({ id: c.id, approved: true })
-                            }
-                            disabled={decideCorrection.isPending}
-                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
-                          >
-                            Setujui
-                          </button>
-                          {" · "}
-                          <button
-                            onClick={() =>
-                              decideCorrection.mutate({ id: c.id, approved: false })
-                            }
-                            disabled={decideCorrection.isPending}
-                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                          >
-                            Tolak
-                          </button>
-                        </>
-                      ) : (
-                        (c.decision_note ?? "-")
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="px-4 pb-4 sm:p-0">
+            <DataTable
+              plain
+              label="Koreksi absensi dari portal"
+              rows={attendanceCorrections}
+              columns={correctionColumns}
+              rowKey={(r) => r.id}
+              defaultSort={{ key: "status", dir: "asc" }}
+              emptyTitle="Tidak ada pengajuan."
+            />
+          </div>
         </div>
       )}
 
@@ -506,59 +591,17 @@ export default function Employees() {
           <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Pengajuan Lembur</h2>
           </div>
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Karyawan</th>
-                <th className="th">Tanggal</th>
-                <th className="th">Jam Diajukan</th>
-                <th className="th">Alasan</th>
-                <th className="th">Status</th>
-                <th className="th">Keputusan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(overtimeRequests ?? []).map((o) => {
-                const emp = employeesLookup?.find((e) => e.id === o.employee_id);
-                return (
-                  <tr key={o.id}>
-                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
-                    <td className="td">{o.date}</td>
-                    <td className="td">{o.requested_hours} jam</td>
-                    <td className="td">{o.reason ?? "-"}</td>
-                    <td className="td">
-                      <span className={`badge ${LEAVE_STATUS_BADGES[o.status] ?? ""}`}>
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="td whitespace-nowrap">
-                      {o.status === "menunggu" ? (
-                        <>
-                          <button
-                            onClick={() => decideOvertime.mutate({ id: o.id, approved: true })}
-                            disabled={decideOvertime.isPending}
-                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
-                          >
-                            Setujui
-                          </button>
-                          {" · "}
-                          <button
-                            onClick={() => decideOvertime.mutate({ id: o.id, approved: false })}
-                            disabled={decideOvertime.isPending}
-                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                          >
-                            Tolak
-                          </button>
-                        </>
-                      ) : (
-                        (o.decision_note ?? "-")
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="px-4 pb-4 sm:p-0">
+            <DataTable
+              plain
+              label="Pengajuan lembur"
+              rows={overtimeRequests}
+              columns={overtimeColumns}
+              rowKey={(r) => r.id}
+              defaultSort={{ key: "status", dir: "asc" }}
+              emptyTitle="Tidak ada pengajuan."
+            />
+          </div>
         </div>
       )}
 
@@ -588,81 +631,17 @@ export default function Employees() {
               </button>
             </div>
           </div>
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Karyawan</th>
-                <th className="th">Jenis</th>
-                <th className="th">Tanggal</th>
-                <th className="th">Alasan</th>
-                <th className="th">Status</th>
-                <th className="th">Keputusan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(leaveRequests ?? []).map((lv) => {
-                const emp = employeesLookup?.find((e) => e.id === lv.employee_id);
-                return (
-                  <tr key={lv.id}>
-                    <td className="td font-medium">{emp?.full_name ?? "-"}</td>
-                    <td className="td">
-                      {LEAVE_TYPE_LABELS[lv.leave_type] ?? lv.leave_type}
-                    </td>
-                    <td className="td">
-                      {lv.start_date} s.d. {lv.end_date}
-                    </td>
-                    <td className="td">{lv.reason ?? "-"}</td>
-                    <td className="td">
-                      <span
-                        className={`badge ${LEAVE_STATUS_BADGES[lv.status] ?? ""}`}
-                      >
-                        {lv.status}
-                      </span>
-                    </td>
-                    <td className="td whitespace-nowrap">
-                      {lv.file_name && (
-                        <button
-                          onClick={async () => {
-                            const { url } = await api.get<{ url: string }>(
-                              `/employees/leave-requests/${lv.id}/attachment/download-url`
-                            );
-                            window.open(url, "_blank");
-                          }}
-                          className="text-xs font-medium hover:opacity-80"
-                          style={{ color: "var(--accent)" }}
-                          title={lv.file_name}
-                        >
-                          Lampiran
-                        </button>
-                      )}
-                      {lv.status === "menunggu" ? (
-                        <>
-                          {lv.file_name && " · "}
-                          <button
-                            onClick={() => decideLeave.mutate({ id: lv.id, approved: true })}
-                            disabled={decideLeave.isPending}
-                            className="text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
-                          >
-                            Setujui
-                          </button>
-                          {" · "}
-                          <button
-                            onClick={() => decideLeave.mutate({ id: lv.id, approved: false })}
-                            disabled={decideLeave.isPending}
-                            className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-800"
-                          >
-                            Tolak
-                          </button>
-                        </>
-                      ) : !lv.file_name ? (
-                        lv.decision_note ?? "-"
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="px-4 pb-4 sm:p-0">
+            <DataTable
+              plain
+              label="Pengajuan cuti dan izin"
+              rows={leaveRequests}
+              columns={leaveColumns}
+              rowKey={(r) => r.id}
+              defaultSort={{ key: "status", dir: "asc" }}
+              emptyTitle="Tidak ada pengajuan."
+            />
+          </div>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { ReminderDraftDialog, type ReminderDraft } from "../components/ReminderDraftDialog";
+import { InvoiceReconciliationPanel } from "../components/InvoiceReconciliation";
 import type { ClientRow } from "./Clients";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
@@ -113,6 +114,8 @@ export default function Finance() {
   const [cfYear, setCfYear] = useState(() => new Date().getFullYear());
   const [forecast, setForecast] = useState<ForecastResult | null>(null);
   const [fakturOpenId, setFakturOpenId] = useState<string | null>(null);
+  // Rekonsiliasi invoice ↔ absensi disetujui: dihitung on-demand per invoice.
+  const [reconOpenId, setReconOpenId] = useState<string | null>(null);
   const [fakturError, setFakturError] = useState<string | null>(null);
 
   const [clientFilter, setClientFilter] = useState("");
@@ -410,6 +413,20 @@ export default function Finance() {
       },
     },
     { key: "faktur", header: "Faktur Pajak", cell: renderFakturCell },
+    {
+      key: "recon",
+      header: "Absensi",
+      cell: (i) => (
+        <button
+          type="button"
+          className="btn-secondary whitespace-nowrap px-2 py-0.5 text-xs"
+          aria-expanded={reconOpenId === i.id}
+          onClick={() => setReconOpenId(reconOpenId === i.id ? null : i.id)}
+        >
+          Cek absensi
+        </button>
+      ),
+    },
   ];
 
   const statusTabs: PillTab[] = useMemo(() => {
@@ -462,6 +479,9 @@ export default function Finance() {
   });
   // Collection assistant (Phase 6 audit): draf email, tidak dikirim otomatis.
   const [reminderDraft, setReminderDraft] = useState<ReminderDraft | null>(null);
+  // Tombol pemicu disabled selama draf disusun, jadi <dialog> tidak bisa
+  // mengembalikan fokus sendiri -- kembalikan manual saat ditutup.
+  const reminderTrigger = useRef<HTMLButtonElement | null>(null);
   const reminder = useMutation({
     mutationFn: (invoiceId: string) => api.post<ReminderDraft>(`/finance/invoices/${invoiceId}/reminder-draft`),
     onSuccess: setReminderDraft,
@@ -647,11 +667,28 @@ export default function Finance() {
         rowKey={(i) => i.id}
         query={invoicesQuery}
         defaultSort={{ key: "invoice_no", dir: "desc" }}
-        renderExpanded={(i) => (fakturOpenId === i.id ? renderFakturForm(i) : null)}
+        renderExpanded={(i) =>
+          fakturOpenId === i.id || reconOpenId === i.id ? (
+            <div className="space-y-4">
+              {fakturOpenId === i.id && renderFakturForm(i)}
+              {reconOpenId === i.id && (
+                <InvoiceReconciliationPanel invoiceId={i.id} onClose={() => setReconOpenId(null)} />
+              )}
+            </div>
+          ) : null
+        }
         emptyTitle={invoices?.length === 0 ? "Belum ada invoice." : "Tidak ada invoice untuk status ini."}
       />
 
-      {reminderDraft && <ReminderDraftDialog draft={reminderDraft} onClose={() => setReminderDraft(null)} />}
+      {reminderDraft && (
+        <ReminderDraftDialog
+          draft={reminderDraft}
+          onClose={() => {
+            setReminderDraft(null);
+            reminderTrigger.current?.focus();
+          }}
+        />
+      )}
 
       <div className="card">
         <h2 className="font-semibold text-rose-700 dark:text-rose-400">Aging — Tagihan Terlambat</h2>
@@ -678,7 +715,10 @@ export default function Finance() {
                       type="button"
                       className="btn-secondary px-2 py-1 text-xs"
                       disabled={reminder.isPending && reminder.variables === a.invoice_id}
-                      onClick={() => reminder.mutate(a.invoice_id)}
+                      onClick={(e) => {
+                        reminderTrigger.current = e.currentTarget;
+                        reminder.mutate(a.invoice_id);
+                      }}
                     >
                       {reminder.isPending && reminder.variables === a.invoice_id ? "Menyusun…" : "Draf pengingat"}
                     </button>
@@ -781,18 +821,18 @@ export default function Finance() {
                 <thead style={{ backgroundColor: "var(--hover)" }}>
                   <tr>
                     <th className="th">Bulan</th>
-                    <th className="th">Masuk</th>
-                    <th className="th">Keluar</th>
-                    <th className="th">Net</th>
+                    <th className="th num">Masuk</th>
+                    <th className="th num">Keluar</th>
+                    <th className="th num">Net</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
                   {forecast.history.map((h) => (
                     <tr key={`h-${h.year}-${h.month}`} style={{ color: "var(--text-muted)" }}>
                       <td className="td">{`${h.year}-${String(h.month).padStart(2, "0")}`}</td>
-                      <td className="td">{formatRupiah(h.inflow)}</td>
-                      <td className="td">{formatRupiah(h.outflow)}</td>
-                      <td className="td">{formatRupiah(h.net)}</td>
+                      <td className="td num">{formatRupiah(h.inflow)}</td>
+                      <td className="td num">{formatRupiah(h.outflow)}</td>
+                      <td className="td num">{formatRupiah(h.net)}</td>
                     </tr>
                   ))}
                   {forecast.projection.map((p) => (
@@ -800,9 +840,9 @@ export default function Finance() {
                       <td className="td">
                         {`${p.year}-${String(p.month).padStart(2, "0")}`} (proyeksi)
                       </td>
-                      <td className="td">{formatRupiah(p.inflow)}</td>
-                      <td className="td">{formatRupiah(p.outflow)}</td>
-                      <td className={`td ${p.net >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
+                      <td className="td num">{formatRupiah(p.inflow)}</td>
+                      <td className="td num">{formatRupiah(p.outflow)}</td>
+                      <td className={`td num ${p.net >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
                         {formatRupiah(p.net)}
                       </td>
                     </tr>

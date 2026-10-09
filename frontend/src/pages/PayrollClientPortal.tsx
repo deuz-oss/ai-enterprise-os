@@ -1,3 +1,4 @@
+import { DataTable, type Column } from "../components/ui";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -96,6 +97,34 @@ export default function PayrollClientPortal() {
 
   const data = view.data!;
 
+  type Line = PayrollLine & { _row: number };
+  const sumOf = (key: keyof PayrollLine) => data.lines.reduce((sum, l) => sum + Number(l[key]), 0);
+  const money = (key: Exclude<keyof PayrollLine, "employee_name">, header: string, total = true) => ({
+    key,
+    header,
+    numeric: true,
+    cell: (l: Line) => formatRupiah(l[key]),
+    sortValue: (l: Line) => Number(l[key]),
+    footer: total ? formatRupiah(sumOf(key)) : undefined,
+  });
+  const lineColumns: Column<Line>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      className: "font-medium",
+      cell: (l) => l.employee_name,
+      sortValue: (l) => l.employee_name,
+      footer: "Total",
+    },
+    money("base_salary", "Gaji Pokok"),
+    money("allowance", "Tunjangan"),
+    money("overtime_amount", "Lembur"),
+    money("deductions", "Potongan"),
+    money("tax_pph21", "PPh 21"),
+    // Total netto dari backend (data.total_net_pay), bukan dijumlah ulang di klien.
+    { ...money("net_pay", "Netto", false), className: "font-medium", footer: formatRupiah(data.total_net_pay) },
+  ];
+
   return (
     <Shell>
       <div className="card space-y-1">
@@ -107,43 +136,14 @@ export default function PayrollClientPortal() {
         </p>
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Karyawan</th>
-              <th className="th">Gaji Pokok</th>
-              <th className="th">Tunjangan</th>
-              <th className="th">Lembur</th>
-              <th className="th">Potongan</th>
-              <th className="th">PPh 21</th>
-              <th className="th">Netto</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {data.lines.map((l, i) => (
-              <tr key={i}>
-                <td className="td font-medium">{l.employee_name}</td>
-                <td className="td">{formatRupiah(l.base_salary)}</td>
-                <td className="td">{formatRupiah(l.allowance)}</td>
-                <td className="td">{formatRupiah(l.overtime_amount)}</td>
-                <td className="td">{formatRupiah(l.deductions)}</td>
-                <td className="td">{formatRupiah(l.tax_pph21)}</td>
-                <td className="td font-medium">{formatRupiah(l.net_pay)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ borderTop: "1px solid var(--border)" }}>
-              <td className="td font-semibold" colSpan={5}>
-                Total
-              </td>
-              <td className="td" />
-              <td className="td font-semibold">{formatRupiah(data.total_net_pay)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <DataTable
+        label="Rincian payroll per karyawan"
+        rows={data.lines.map((l, i) => ({ ...l, _row: i }))}
+        columns={lineColumns}
+        rowKey={(l) => String(l._row)}
+        defaultSort={{ key: "name", dir: "asc" }}
+        emptyTitle="Belum ada rincian payroll."
+      />
 
       {decide.isSuccess ? (
         <div className="card border-emerald-600">

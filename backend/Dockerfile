@@ -5,12 +5,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv
 
-COPY pyproject.toml ./
+COPY pyproject.toml requirements.lock ./
 COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY scripts ./scripts
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+# Versi persis dari lock (universal, Python 3.12) supaya build produksi sama dengan
+# yang diuji CI -- pyproject hanya batas bawah. Perbarui: lihat AGENTS.md.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.lock \
+    && pip install --no-cache-dir --no-deps .
 
 EXPOSE 8000
 

@@ -3,9 +3,17 @@ import { FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, formatDateTime } from "../api/client";
+import { api, formatDate, formatDateTime } from "../api/client";
 import { initials } from "../components/workspace";
-import { Badge, DetailLoadState, PillTabs, confirmToast } from "../components/ui";
+import {
+  Badge,
+  type Column,
+  confirmToast,
+  DataTable,
+  DetailLoadState,
+  PillTabs,
+  StatusPill,
+} from "../components/ui";
 
 interface ClientDetailData {
   id: string;
@@ -130,17 +138,19 @@ export default function ClientDetail() {
     queryFn: () => api.get<ClientSite[]>(`/clients/${id}/sites`),
     enabled: Boolean(id) && tab === "portal-lokasi",
   });
-  const { data: jobOrders } = useQuery({
+  const jobOrdersQuery = useQuery({
     queryKey: ["client-job-orders", id],
     queryFn: () => api.get<JobOrderRow[]>(`/recruitment/job-orders?client_id=${id}`),
     enabled: Boolean(id),
   });
-  const { data: employees } = useQuery({
+  const jobOrders = jobOrdersQuery.data;
+  const employeesQuery = useQuery({
     queryKey: ["client-employees", id],
     queryFn: () => api.get<ClientEmployeeRow[]>(`/clients/${id}/employees`),
     enabled: Boolean(id),
   });
-  const { data: auditLogs } = useQuery({
+  const employees = employeesQuery.data;
+  const auditLogsQuery = useQuery({
     queryKey: ["client-audit", id],
     queryFn: () =>
       api.get<{ items: AuditLogRow[] }>(
@@ -148,6 +158,7 @@ export default function ClientDetail() {
       ),
     enabled: Boolean(id) && tab === "riwayat" && isManagement,
   });
+  const auditLogs = auditLogsQuery.data;
 
   const invalidateClient = () => qc.invalidateQueries({ queryKey: ["client", id] });
 
@@ -250,6 +261,68 @@ export default function ClientDetail() {
     );
   }
 
+  // ---------- Tabel (DataTable) ----------
+  const jobOrderColumns: Column<JobOrderRow>[] = [
+    {
+      key: "title",
+      header: "Judul",
+      className: "font-medium",
+      sortValue: (jo) => jo.title,
+      cell: (jo) => (
+        <Link to={`/job-orders/${jo.id}`} style={{ color: "var(--accent)" }}>
+          {jo.title}
+        </Link>
+      ),
+    },
+    { key: "hc", header: "Headcount", numeric: true, cell: (jo) => jo.headcount, sortValue: (jo) => jo.headcount },
+    { key: "status", header: "Status", cell: (jo) => jo.status, sortValue: (jo) => jo.status },
+    {
+      key: "due",
+      header: "Jatuh Tempo",
+      className: "whitespace-nowrap",
+      cell: (jo) => formatDate(jo.due_date),
+      sortValue: (jo) => jo.due_date,
+    },
+  ];
+  const employeeColumns: Column<ClientEmployeeRow>[] = [
+    {
+      key: "name",
+      header: "Nama",
+      className: "font-medium",
+      sortValue: (e) => e.full_name,
+      cell: (e) => (
+        <Link to={`/employees/${e.id}`} style={{ color: "var(--accent)" }}>
+          {e.full_name}
+        </Link>
+      ),
+    },
+    { key: "no", header: "No. Induk", className: "font-mono text-xs", cell: (e) => e.employee_no, sortValue: (e) => e.employee_no },
+    { key: "status", header: "Status", cell: (e) => <StatusPill domain="employee" status={e.status} />, sortValue: (e) => e.status },
+    {
+      key: "join",
+      header: "Tanggal Masuk",
+      className: "whitespace-nowrap",
+      cell: (e) => formatDate(e.join_date),
+      sortValue: (e) => e.join_date,
+    },
+  ];
+  const auditColumns: Column<AuditLogRow>[] = [
+    { key: "action", header: "Aksi", className: "font-medium", cell: (l) => l.action, sortValue: (l) => l.action },
+    {
+      key: "user",
+      header: "Oleh",
+      className: "font-mono text-xs",
+      cell: (l) => (l.user_id ? `${l.user_id.slice(0, 8)}…` : "-"),
+    },
+    {
+      key: "time",
+      header: "Waktu",
+      className: "whitespace-nowrap",
+      cell: (l) => formatDateTime(l.created_at),
+      sortValue: (l) => l.created_at,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <Link
@@ -310,75 +383,28 @@ export default function ClientDetail() {
       )}
 
       {tab === "jobs" && (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Judul</th>
-                <th className="th">Headcount</th>
-                <th className="th">Status</th>
-                <th className="th">Jatuh Tempo</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(jobOrders ?? []).map((jo) => (
-                <tr key={jo.id}>
-                  <td className="td font-medium">
-                    <Link to={`/job-orders/${jo.id}`} style={{ color: "var(--accent)" }}>
-                      {jo.title}
-                    </Link>
-                  </td>
-                  <td className="td">{jo.headcount}</td>
-                  <td className="td">{jo.status}</td>
-                  <td className="td">{jo.due_date ?? "-"}</td>
-                </tr>
-              ))}
-              {jobOrders?.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                    Belum ada job order untuk klien ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          label="Job order klien"
+          rows={jobOrders}
+          columns={jobOrderColumns}
+          rowKey={(jo) => jo.id}
+          query={jobOrdersQuery}
+          defaultSort={{ key: "due", dir: "asc" }}
+          emptyTitle="Belum ada job order untuk klien ini."
+        />
       )}
 
       {tab === "karyawan" && (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Nama</th>
-                <th className="th">No. Induk</th>
-                <th className="th">Status</th>
-                <th className="th">Tanggal Masuk</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(employees ?? []).map((e) => (
-                <tr key={e.id}>
-                  <td className="td font-medium">
-                    <Link to={`/employees/${e.id}`} style={{ color: "var(--accent)" }}>
-                      {e.full_name}
-                    </Link>
-                  </td>
-                  <td className="td font-mono text-xs">{e.employee_no}</td>
-                  <td className="td">{e.status}</td>
-                  <td className="td">{e.join_date ?? "-"}</td>
-                </tr>
-              ))}
-              {employees?.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                    Belum ada karyawan yang ditempatkan di klien ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          label="Karyawan di klien ini"
+          rows={employees}
+          columns={employeeColumns}
+          rowKey={(e) => e.id}
+          query={employeesQuery}
+          defaultSort={{ key: "name", dir: "asc" }}
+          pageSize={50}
+          emptyTitle="Belum ada karyawan yang ditempatkan di klien ini."
+        />
       )}
 
       {tab === "dokumen" && (
@@ -623,33 +649,15 @@ export default function ClientDetail() {
       )}
 
       {tab === "riwayat" && isManagement && (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full">
-            <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-              <tr>
-                <th className="th">Aksi</th>
-                <th className="th">Oleh</th>
-                <th className="th">Waktu</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(auditLogs?.items ?? []).map((l) => (
-                <tr key={l.id}>
-                  <td className="td font-medium">{l.action}</td>
-                  <td className="td font-mono text-xs">{l.user_id ? `${l.user_id.slice(0, 8)}…` : "-"}</td>
-                  <td className="td">{formatDateTime(l.created_at)}</td>
-                </tr>
-              ))}
-              {(auditLogs?.items ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                    Belum ada riwayat aktivitas untuk klien ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          label="Riwayat aktivitas klien"
+          rows={auditLogs?.items}
+          columns={auditColumns}
+          rowKey={(l) => l.id}
+          query={auditLogsQuery}
+          defaultSort={{ key: "time", dir: "desc" }}
+          emptyTitle="Belum ada riwayat aktivitas untuk klien ini."
+        />
       )}
     </div>
   );

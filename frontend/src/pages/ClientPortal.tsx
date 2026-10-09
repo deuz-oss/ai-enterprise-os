@@ -1,4 +1,4 @@
-import { PeriodPicker } from "../components/ui";
+import { type Column, DataTable, PeriodPicker } from "../components/ui";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -77,6 +77,23 @@ export default function ClientPortal() {
 
   const data = view.data!;
 
+  const attendanceColumns: Column<AttendanceRow>[] = [
+    { key: "no", header: "Nomor Induk", className: "font-mono text-xs", cell: (r) => r.employee_no, sortValue: (r) => r.employee_no },
+    { key: "name", header: "Karyawan", className: "font-medium", cell: (r) => r.employee_name, sortValue: (r) => r.employee_name },
+    { key: "present", header: "Hari Hadir", numeric: true, cell: (r) => r.present_days, sortValue: (r) => r.present_days },
+    { key: "overtime", header: "Jam Lembur", numeric: true, cell: (r) => `${r.overtime_hours} jam`, sortValue: (r) => r.overtime_hours },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (r) => (r.client_approved ? 1 : 0),
+      cell: (r) => (
+        <span className={`badge pill ${r.client_approved ? "p-green" : "p-yellow"}`}>
+          {r.client_approved ? "disetujui" : "menunggu"}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <Shell>
       <div className="card flex flex-wrap items-center justify-between gap-2">
@@ -88,41 +105,14 @@ export default function ClientPortal() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Nomor Induk</th>
-              <th className="th">Karyawan</th>
-              <th className="th">Hari Hadir</th>
-              <th className="th">Jam Lembur</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {data.rows.map((r) => (
-              <tr key={r.employee_no}>
-                <td className="td">{r.employee_no}</td>
-                <td className="td font-medium">{r.employee_name}</td>
-                <td className="td">{r.present_days}</td>
-                <td className="td">{r.overtime_hours} jam</td>
-                <td className="td">
-                  <span className={`badge pill ${r.client_approved ? "p-green" : "p-yellow"}`}>
-                    {r.client_approved ? "disetujui" : "menunggu"}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {data.rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada rekap kehadiran untuk periode ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Rekap kehadiran karyawan"
+        rows={data.rows}
+        columns={attendanceColumns}
+        rowKey={(r) => r.employee_no}
+        defaultSort={{ key: "name", dir: "asc" }}
+        emptyTitle="Belum ada rekap kehadiran untuk periode ini."
+      />
     </Shell>
   );
 }

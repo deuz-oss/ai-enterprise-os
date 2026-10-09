@@ -14,7 +14,7 @@ Backend:
 cd backend
 python -m venv .venv
 .venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.lock && pip install --no-deps -e .   # versi persis = CI
 copy ..\.env.example .env         # lalu edit SECRET_KEY & ADMIN_PASSWORD
 uvicorn app.main:app --reload     # http://localhost:8000/docs
 ```

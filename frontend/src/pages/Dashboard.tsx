@@ -423,7 +423,9 @@ export default function Dashboard() {
   }
 
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
-  const recentInvoices = [...(invoices ?? [])].reverse().slice(0, 5);
+  // API sudah mengurutkan created_at DESC (finance/service.py list_invoices);
+  // dulu .reverse() di sini membuat "Invoice Terbaru" menampilkan 5 invoice TERLAMA.
+  const recentInvoices = (invoices ?? []).slice(0, 5);
   const urgentItems = (digest?.items ?? []).filter((i) => i.type in URGENT_DIGEST_DOMAIN);
 
   const revenueShare = pct(data.finance.revenue_mtd, data.finance.revenue_mtd + data.finance.outstanding);
@@ -810,7 +812,7 @@ export default function Dashboard() {
                   <tr>
                     <th className="th">Invoice</th>
                     <th className="th">Klien</th>
-                    <th className="th text-right">Jumlah</th>
+                    <th className="th num">Jumlah</th>
                     <th className="th">Status</th>
                     <th className="th">Faktur</th>
                   </tr>
@@ -820,7 +822,7 @@ export default function Dashboard() {
                     <tr key={inv.id}>
                       <td className="td font-mono text-xs">{inv.invoice_no}</td>
                       <td className="td">{clientName(inv.client_id)}</td>
-                      <td className="td text-right tabular-nums">{formatRupiah(inv.total_due)}</td>
+                      <td className="td num">{formatRupiah(inv.total_due)}</td>
                       <td className="td">
                         <StatusPill domain="invoice" status={inv.status} />
                       </td>

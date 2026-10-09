@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Shield } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { TableStateRow } from "../components/ui";
+import { DataTable, type Column } from "../components/ui";
 import { useQuery } from "@tanstack/react-query";
 import { api, formatDateTime } from "../api/client";
 
@@ -49,6 +49,38 @@ export default function Audit() {
   });
   const data = auditQuery.data;
 
+  const auditColumns: Column<AuditItem>[] = [
+    {
+      key: "time",
+      header: "Waktu",
+      className: "whitespace-nowrap text-xs",
+      cell: (item) => formatDateTime(item.created_at),
+    },
+    { key: "action", header: "Aksi", cell: (item) => <span className={`pill ${badgeCls(item.action)}`}>{item.action}</span> },
+    {
+      key: "entity",
+      header: "Entitas",
+      className: "font-mono text-xs",
+      cell: (item) => `${item.entity_type ?? "-"}${item.entity_id ? ` · ${item.entity_id.slice(0, 8)}…` : ""}`,
+    },
+    {
+      key: "detail",
+      header: "Detail",
+      className: "max-w-sm truncate text-xs",
+      cell: (item) => {
+        const detail = item.detail ? JSON.stringify(item.detail) : "-";
+        return <span title={detail}>{detail}</span>;
+      },
+    },
+    { key: "ip", header: "IP", className: "font-mono text-xs", cell: (item) => item.ip ?? "-" },
+    {
+      key: "user",
+      header: "User ID",
+      className: "font-mono text-xs",
+      cell: (item) => (item.user_id ? `${item.user_id.slice(0, 8)}…` : "-"),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -82,53 +114,21 @@ export default function Audit() {
         />
       </div>
 
-      {/* tabIndex: area gulir horizontal harus bisa difokus keyboard
-          (axe scrollable-region-focusable). */}
-      <div className="card overflow-x-auto p-0" tabIndex={0} role="region" aria-label="Tabel event audit">
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Waktu</th>
-              <th className="th">Aksi</th>
-              <th className="th">Entitas</th>
-              <th className="th">Detail</th>
-              <th className="th">IP</th>
-              <th className="th">User ID</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(data?.items ?? []).map((item) => (
-              <tr key={item.id} className="transition-colors hover:bg-[var(--hover)]">
-                <td className="td whitespace-nowrap text-xs" style={{ color: "var(--text-muted)" }}>
-                  {formatDateTime(item.created_at)}
-                </td>
-                <td className="td">
-                  <span className={`pill ${badgeCls(item.action)}`}>
-                    {item.action}
-                  </span>
-                </td>
-                <td className="td font-mono text-xs">
-                  {item.entity_type ?? "-"}
-                  {item.entity_id ? ` · ${item.entity_id.slice(0, 8)}…` : ""}
-                </td>
-                <td className="td max-w-sm truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                  {item.detail ? JSON.stringify(item.detail) : "-"}
-                </td>
-                <td className="td font-mono text-xs">{item.ip ?? "-"}</td>
-                <td className="td font-mono text-xs">
-                  {item.user_id ? `${item.user_id.slice(0, 8)}…` : "-"}
-                </td>
-              </tr>
-            ))}
-            <TableStateRow
-              query={auditQuery}
-              colSpan={6}
-              isEmpty={(data?.items.length ?? 0) === 0}
-              emptyTitle={actionPrefix || entityType ? "Tidak ada event untuk filter ini." : "Belum ada event audit."}
-            />
-          </tbody>
-        </table>
-      </div>
+      {/* Tanpa sort: API hanya mengembalikan 100 event terbaru (urut waktu),
+          sort satu halaman terpotong akan menyesatkan. */}
+      {data && data.total > data.items.length && (
+        <p className="text-sm" style={{ color: "var(--th-color)" }}>
+          Menampilkan {data.items.length} event terbaru dari {data.total}. Persempit dengan filter di atas.
+        </p>
+      )}
+      <DataTable
+        label="Event audit"
+        rows={data?.items}
+        columns={auditColumns}
+        rowKey={(item) => item.id}
+        query={auditQuery}
+        emptyTitle={actionPrefix || entityType ? "Tidak ada event untuk filter ini." : "Belum ada event audit."}
+      />
     </div>
   );
 }

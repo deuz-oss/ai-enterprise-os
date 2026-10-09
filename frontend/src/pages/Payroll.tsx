@@ -667,25 +667,28 @@ export default function Payroll() {
     total: employeesTotal,
     truncated: employeesTruncated,
   } = useEmployeeLookup<EmployeeRow>();
-  const { data: attendance } = useQuery({
+  const attendanceQuery = useQuery({
     queryKey: ["attendance", period],
     queryFn: () =>
       api.get<AttendanceRow[]>(
         `/payroll/attendance?year=${period.year}&month=${period.month}`
       ),
   });
-  const { data: runs } = useQuery({
+  const attendance = attendanceQuery.data;
+  const runsQuery = useQuery({
     queryKey: ["runs"],
     queryFn: () => api.get<RunRow[]>("/payroll/runs"),
   });
+  const runs = runsQuery.data;
   // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
   // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
   const { data: me } = useMe();
-  const { data: slips } = useQuery({
+  const slipsQuery = useQuery({
     queryKey: ["slips", selectedRunId],
     queryFn: () => api.get<SlipRow[]>(`/payroll/runs/${selectedRunId}/slips`),
     enabled: Boolean(selectedRunId),
   });
+  const slips = slipsQuery.data;
   const bpjsQuery = useQuery({
     queryKey: ["bpjs", period],
     queryFn: () =>
@@ -937,6 +940,159 @@ export default function Payroll() {
     });
   }
 
+  // ---------- Tabel (DataTable) ----------
+  const employeeName = (id: string) => employees?.find((e) => e.id === id)?.full_name ?? "-";
+  const attendanceColumns: Column<AttendanceRow>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      cell: (a) => employeeName(a.employee_id),
+      sortValue: (a) => employeeName(a.employee_id),
+    },
+    { key: "present", header: "Hadir", numeric: true, cell: (a) => a.present_days, sortValue: (a) => a.present_days },
+    {
+      key: "overtime",
+      header: "Lembur",
+      numeric: true,
+      cell: (a) => a.overtime_hours,
+      sortValue: (a) => a.overtime_hours,
+    },
+    {
+      key: "approval",
+      header: "Approval Klien",
+      sortValue: (a) => (a.client_approved ? 1 : 0),
+      cell: (a) =>
+        a.client_approved ? (
+          <span className="pill p-green">disetujui</span>
+        ) : (
+          <button
+            onClick={() => approveAttendance.mutate({ id: a.id, approved: true })}
+            disabled={approveAttendance.isPending}
+            className="btn-secondary text-xs"
+          >
+            Setujui
+          </button>
+        ),
+    },
+  ];
+
+  const runColumns: Column<RunRow>[] = [
+    {
+      key: "period",
+      header: "Periode",
+      className: "font-medium",
+      cell: (r) => `${String(r.month).padStart(2, "0")}/${r.year}`,
+      sortValue: (r) => r.year * 100 + r.month,
+    },
+    {
+      key: "type",
+      header: "Jenis / Klien",
+      className: "text-xs",
+      cell: (r) =>
+        r.run_type === "proyek"
+          ? `Proyek · ${clients?.find((c) => c.id === r.client_id)?.name ?? "klien"}`
+          : "Internal",
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (r) => (
+        <>
+          <StatusPill domain="payroll_run" status={r.status} />
+          <RunSteps run={r} />
+        </>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (r) => (
+        <div className="flex flex-wrap items-center gap-2">
+          {renderNextAction(r)}
+          <button
+            onClick={() => setSelectedRunId(r.id)}
+            className="btn-ghost text-xs"
+            title="Lihat slip gaji & grid Saltab run ini"
+          >
+            Lihat Slip
+          </button>
+          {r.slip_count > 0 &&
+            (r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
+              <button
+                onClick={() => generateSlips.mutate(r.id)}
+                disabled={generateSlips.isPending}
+                className="btn-ghost text-xs"
+                title="Hanya menambah slip untuk karyawan aktif yang belum punya slip; slip yang sudah ada tidak diubah."
+              >
+                Generate lagi
+              </button>
+            )}
+        </div>
+      ),
+    },
+  ];
+
+  const slipSum = (key: "base_salary" | "gross" | "tax_pph21" | "net_pay") =>
+    (slips ?? []).reduce((sum, s) => sum + Number(s[key]), 0);
+  const slipColumns: Column<SlipRow>[] = [
+    {
+      key: "name",
+      header: "Karyawan",
+      cell: (s) => employeeName(s.employee_id),
+      sortValue: (s) => employeeName(s.employee_id),
+      footer: "Total",
+    },
+    {
+      key: "base",
+      header: "Gaji Pokok",
+      numeric: true,
+      cell: (s) => formatRupiah(Number(s.base_salary)),
+      sortValue: (s) => Number(s.base_salary),
+      footer: formatRupiah(slipSum("base_salary")),
+    },
+    {
+      key: "overtime",
+      header: "Lembur",
+      numeric: true,
+      cell: (s) => (s.overtime_hours > 0 ? formatRupiah(Number(s.overtime_amount)) : "-"),
+      sortValue: (s) => Number(s.overtime_amount),
+    },
+    {
+      key: "gross",
+      header: "Bruto",
+      numeric: true,
+      cell: (s) => formatRupiah(Number(s.gross)),
+      sortValue: (s) => Number(s.gross),
+      footer: formatRupiah(slipSum("gross")),
+    },
+    {
+      key: "tax",
+      header: "PPh21 (TER)",
+      numeric: true,
+      className: "text-rose-700 dark:text-rose-400",
+      cell: (s) => `-${formatRupiah(Number(s.tax_pph21))}`,
+      sortValue: (s) => Number(s.tax_pph21),
+      footer: `-${formatRupiah(slipSum("tax_pph21"))}`,
+    },
+    {
+      key: "net",
+      header: "Diterima",
+      numeric: true,
+      className: "font-semibold",
+      sortValue: (s) => Number(s.net_pay),
+      footer: formatRupiah(slipSum("net_pay")),
+      cell: (s) =>
+        Number(s.net_pay) < 0 ? (
+          <>
+            <span className="text-amber-700 dark:text-amber-400">{formatRupiah(Number(s.net_pay))}*</span>
+            <div className="text-[11px] font-normal text-amber-700 dark:text-amber-400">(Net Pay Negatif)</div>
+          </>
+        ) : (
+          <span className="text-emerald-700 dark:text-emerald-400">{formatRupiah(Number(s.net_pay))}</span>
+        ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <HeaderCanvas
@@ -1071,51 +1227,22 @@ export default function Payroll() {
                 </option>
               ))}
           </select>
-          <input name="present_days" type="number" placeholder="Hari hadir" className="input w-28" />
-          <input name="overtime_hours" type="number" placeholder="Jam lembur" className="input w-28" />
+          <input name="present_days" type="number" min={0} placeholder="Hari hadir" aria-label="Hari hadir" className="input w-28" />
+          <input name="overtime_hours" type="number" min={0} placeholder="Jam lembur" aria-label="Jam lembur" className="input w-28" />
           <button className="btn-secondary">Simpan Rekap</button>
         </form>
-        <table className="mt-3 w-full">
-          <thead>
-            <tr>
-              <th className="th">Karyawan</th>
-              <th className="th">Hadir</th>
-              <th className="th">Lembur</th>
-              <th className="th">Approval Klien</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(attendance ?? []).map((a) => {
-              const emp = employees?.find((e) => e.id === a.employee_id);
-              return (
-                <tr key={a.id}>
-                  <td className="td">{emp?.full_name ?? "-"}</td>
-                  <td className="td">{a.present_days}</td>
-                  <td className="td">{a.overtime_hours}</td>
-                  <td className="td">
-                    {a.client_approved ? (
-                      <span className="pill p-green">disetujui</span>
-                    ) : (
-                      <button
-                        onClick={() => approveAttendance.mutate({ id: a.id, approved: true })}
-                        className="btn-secondary text-xs"
-                      >
-                        Setujui
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {attendance?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada rekap absensi untuk periode ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="mt-3">
+          <DataTable
+            plain
+            label={`Rekap absensi ${period.month}/${period.year}`}
+            rows={attendance}
+            columns={attendanceColumns}
+            rowKey={(a) => a.id}
+            query={attendanceQuery}
+            defaultSort={{ key: "name", dir: "asc" }}
+            emptyTitle="Belum ada rekap absensi untuk periode ini."
+          />
+        </div>
       </div>
 
       {clientLink && (
@@ -1134,123 +1261,33 @@ export default function Payroll() {
         </CalloutBlock>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Periode</th>
-              <th className="th">Jenis / Klien</th>
-              <th className="th">Status</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {(runs ?? []).map((r) => {
-              return (
-                <tr key={r.id}>
-                  <td className="td py-1.5 font-medium">
-                    {String(r.month).padStart(2, "0")}/{r.year}
-                  </td>
-                  <td className="td py-1.5 text-xs">
-                    {r.run_type === "proyek"
-                      ? `Proyek · ${clients?.find((c) => c.id === r.client_id)?.name ?? "klien"}`
-                      : "Internal"}
-                  </td>
-                  <td className="td py-1.5">
-                    <StatusPill domain="payroll_run" status={r.status} />
-                    <RunSteps run={r} />
-                  </td>
-                  <td className="td py-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {renderNextAction(r)}
-                      <button
-                        onClick={() => setSelectedRunId(r.id)}
-                        className="btn-ghost text-xs"
-                        title="Lihat slip gaji & grid Saltab run ini"
-                      >
-                        Lihat Slip
-                      </button>
-                      {r.slip_count > 0 &&
-                        (r.status === "draft" || (r.run_type === "proyek" && r.status === "client_rejected")) && (
-                          <button
-                            onClick={() => generateSlips.mutate(r.id)}
-                            disabled={generateSlips.isPending}
-                            className="btn-ghost text-xs"
-                            title="Hanya menambah slip untuk karyawan aktif yang belum punya slip; slip yang sudah ada tidak diubah."
-                          >
-                            Generate lagi
-                          </button>
-                        )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {runs?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada payroll run.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Payroll run"
+        rows={runs}
+        columns={runColumns}
+        rowKey={(r) => r.id}
+        query={runsQuery}
+        defaultSort={{ key: "period", dir: "desc" }}
+        isRowSelected={(r) => r.id === selectedRunId}
+        emptyTitle="Belum ada payroll run."
+        emptyDescription="Pilih periode & jenis di atas lalu tekan + Run Payroll."
+      />
 
       {selectedRunId && (
-        <div className="card overflow-x-auto p-0">
-          <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
-            <h2 className="font-semibold" style={{ color: "var(--text)" }}>Slip Gaji</h2>
-          </div>
-          <table className="w-full">
-            <thead className="border-b" style={{ borderColor: "var(--border)", backgroundColor: "var(--hover)" }}>
-              <tr>
-                <th className="th">Karyawan</th>
-                <th className="th text-right">Gaji Pokok</th>
-                <th className="th text-right">Lembur</th>
-                <th className="th text-right">Bruto</th>
-                <th className="th text-right">PPh21 (TER)</th>
-                <th className="th text-right">Diterima</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {(slips ?? []).map((s) => {
-                const emp = employees?.find((e) => e.id === s.employee_id);
-                const isNegative = Number(s.net_pay) < 0;
-                return (
-                  <tr key={s.id}>
-                    <td className="td">{emp?.full_name ?? "-"}</td>
-                    <td className="td text-right tabular-nums">{formatRupiah(Number(s.base_salary))}</td>
-                    <td className="td text-right tabular-nums">
-                      {s.overtime_hours > 0 ? formatRupiah(Number(s.overtime_amount)) : "-"}
-                    </td>
-                    <td className="td text-right tabular-nums">{formatRupiah(Number(s.gross))}</td>
-                    <td className="td text-rose-600 dark:text-rose-400 text-right tabular-nums">-{formatRupiah(Number(s.tax_pph21))}</td>
-                    <td className="td font-semibold text-right tabular-nums">
-                      {isNegative ? (
-                        <>
-                          <span className="text-amber-700 dark:text-amber-400">{formatRupiah(Number(s.net_pay))}*</span>
-                          <div className="text-[11px] font-normal text-amber-700 dark:text-amber-400">
-                            (Net Pay Negatif)
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-emerald-700 dark:text-emerald-400">{formatRupiah(Number(s.net_pay))}</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {slips?.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                    Belum ada slip. Tekan "Generate" pada run ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <section className="space-y-2" aria-labelledby="slips-title">
+          <h2 id="slips-title" className="font-semibold" style={{ color: "var(--text)" }}>
+            Slip Gaji
+          </h2>
+          <DataTable
+            label="Slip gaji run terpilih"
+            rows={slips}
+            columns={slipColumns}
+            rowKey={(s) => s.id}
+            query={slipsQuery}
+            defaultSort={{ key: "name", dir: "asc" }}
+            emptyTitle='Belum ada slip. Tekan "Generate Slip" pada run ini.'
+          />
+        </section>
       )}
 
       <div className="card p-0">

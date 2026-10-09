@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserX } from "lucide-react";
 import { PageHeader, CalloutBlock } from "../components/workspace";
-import { api } from "../api/client";
+import { api, formatDate } from "../api/client";
 import { confirmToast } from "../components/ui/dialogToast";
+import { DataTable, type Column } from "../components/ui";
 
 // Fase 45 -- company/contact yang ditandai "jangan hubungi lagi" (opt-out,
 // sudah jadi klien kompetitor, komplain, dst.). Beda dari fitur "Black
@@ -39,10 +40,11 @@ export default function SuppressedContacts() {
   const [targetType, setTargetType] = useState<"company" | "contact">("company");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
 
-  const { data: entries } = useQuery({
+  const entriesQuery = useQuery({
     queryKey: ["suppressed-contacts"],
     queryFn: () => api.get<SuppressedEntry[]>("/suppressed-contacts"),
   });
+  const entries = entriesQuery.data;
   const { data: companies } = useQuery({
     queryKey: ["companies-lookup"],
     queryFn: () => api.get<Company[]>("/companies?limit=1000"),
@@ -66,6 +68,33 @@ export default function SuppressedContacts() {
     mutationFn: (id: string) => api.delete(`/suppressed-contacts/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["suppressed-contacts"] }),
   });
+
+  const entryColumns: Column<SuppressedEntry>[] = [
+    { key: "label", header: "Target", className: "font-medium", cell: (e) => e.label, sortValue: (e) => e.label },
+    { key: "reason", header: "Alasan", cell: (e) => e.reason },
+    { key: "by", header: "Ditandai Oleh", cell: (e) => e.creator_name, sortValue: (e) => e.creator_name },
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap",
+      cell: (e) => formatDate(e.created_at),
+      sortValue: (e) => e.created_at,
+    },
+    {
+      key: "aksi",
+      header: <span className="sr-only">Aksi</span>,
+      cell: (e) => (
+        <button
+          type="button"
+          onClick={() => confirmToast(`Lepas suppression untuk "${e.label}"?`, () => remove.mutate(e.id))}
+          className="text-xs font-medium hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          Lepas
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -161,58 +190,16 @@ export default function SuppressedContacts() {
         </form>
       )}
 
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead
-            style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--hover)" }}
-          >
-            <tr>
-              <th className="th">Target</th>
-              <th className="th">Alasan</th>
-              <th className="th">Ditandai Oleh</th>
-              <th className="th">Tanggal</th>
-              <th className="th"></th>
-            </tr>
-          </thead>
-          <tbody style={{ borderTop: "1px solid var(--border)" }}>
-            {(entries ?? []).map((entry) => (
-              <tr key={entry.id}>
-                <td className="td font-medium">{entry.label}</td>
-                <td className="td">{entry.reason}</td>
-                <td className="td">{entry.creator_name}</td>
-                <td className="td">
-                  {new Date(entry.created_at).toLocaleDateString("id-ID", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </td>
-                <td className="td">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      confirmToast(`Lepas suppression untuk "${entry.label}"?`, () =>
-                        remove.mutate(entry.id)
-                      )
-                    }
-                    className="text-xs font-medium hover:opacity-80"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    Lepas
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {entries?.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-8 text-center" style={{ color: "var(--text-muted)" }}>
-                  Belum ada entri suppression.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Daftar suppression"
+        rows={entries}
+        columns={entryColumns}
+        rowKey={(e) => e.id}
+        query={entriesQuery}
+        defaultSort={{ key: "date", dir: "desc" }}
+        pageSize={50}
+        emptyTitle="Belum ada entri suppression."
+      />
     </div>
   );
 }

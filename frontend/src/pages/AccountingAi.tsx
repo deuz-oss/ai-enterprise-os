@@ -1,6 +1,7 @@
+import { DataTable, type Column } from "../components/ui";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadFile, formatRupiah } from "../api/client";
+import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
 
 interface OcrDraft {
   draft: {
@@ -150,6 +151,87 @@ function RekonsiliasiCard() {
     onSuccess: invalidate,
   });
 
+  const lineColumns: Column<StatementLine>[] = [
+    {
+      key: "date",
+      header: "Tanggal",
+      className: "whitespace-nowrap",
+      cell: (ln) => formatDate(ln.tx_date),
+      sortValue: (ln) => ln.tx_date,
+    },
+    { key: "desc", header: "Keterangan", className: "max-w-[180px] truncate", cell: (ln) => ln.description ?? "-" },
+    {
+      key: "in",
+      header: "Masuk",
+      numeric: true,
+      className: "text-emerald-700 dark:text-emerald-400",
+      cell: (ln) => (ln.amount_in ? formatRupiah(ln.amount_in) : "—"),
+      sortValue: (ln) => ln.amount_in,
+    },
+    {
+      key: "out",
+      header: "Keluar",
+      numeric: true,
+      className: "text-rose-700 dark:text-rose-400",
+      cell: (ln) => (ln.amount_out ? formatRupiah(ln.amount_out) : "—"),
+      sortValue: (ln) => ln.amount_out,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (ln) => ln.status,
+      cell: (ln) => (
+        <>
+          <span
+            className={`badge ${
+              ln.status === "usulan"
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                : ln.status === "tercocok"
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : ""
+            }`}
+          >
+            {STATUS_LABEL[ln.status] ?? ln.status}
+            {ln.status === "usulan" && ` ${Math.round(ln.match_score * 100)}%`}
+          </span>
+          {ln.match_reason && (
+            <p className="mt-0.5 max-w-[220px]" style={{ color: "var(--th-color)" }}>
+              {ln.match_reason}
+            </p>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      className: "whitespace-nowrap",
+      cell: (ln) => (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          {ln.status === "usulan" && ln.suggested_tx_id && (
+            <button
+              onClick={() => confirm.mutate({ lineId: ln.id, txId: ln.suggested_tx_id! })}
+              disabled={confirm.isPending}
+              className="font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+            >
+              Cocokkan
+            </button>
+          )}
+          {ln.status !== "matched" && ln.status !== "diabaikan" && ln.status !== "tercocok" && (
+            <button
+              onClick={() => ignore.mutate(ln.id)}
+              disabled={ignore.isPending}
+              className="font-medium text-[var(--th-color)] hover:text-[var(--text)]"
+            >
+              Abaikan
+            </button>
+          )}
+          {ln.status === "tercocok" && <span aria-label="sudah dicocokkan">✓</span>}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="card space-y-3 p-4">
       <div className="flex items-start justify-between gap-2">
@@ -192,84 +274,17 @@ function RekonsiliasiCard() {
         </p>
       )}
 
-      <table className="w-full text-xs">
-        <thead style={{ backgroundColor: "var(--hover)" }}>
-          <tr>
-            <th className="th">Tanggal</th>
-            <th className="th">Keterangan</th>
-            <th className="th">Masuk</th>
-            <th className="th">Keluar</th>
-            <th className="th">Status</th>
-            <th className="th">Aksi</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-          {(lines.data ?? []).map((ln) => (
-            <tr key={ln.id}>
-              <td className="td whitespace-nowrap">{ln.tx_date}</td>
-              <td className="td max-w-[180px] truncate">{ln.description ?? "-"}</td>
-              <td className="td text-emerald-700 dark:text-emerald-400">
-                {ln.amount_in ? formatRupiah(ln.amount_in) : "—"}
-              </td>
-              <td className="td text-rose-600 dark:text-rose-400">
-                {ln.amount_out ? formatRupiah(ln.amount_out) : "—"}
-              </td>
-              <td className="td">
-                <span
-                  className={`badge ${
-                    ln.status === "usulan"
-                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-                      : ln.status === "tercocok"
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                        : ""
-                  }`}
-                >
-                  {STATUS_LABEL[ln.status] ?? ln.status}
-                  {ln.status === "usulan" && ` ${Math.round(ln.match_score * 100)}%`}
-                </span>
-                {ln.match_reason && (
-                  <p className="mt-0.5 max-w-[220px]" style={{ color: "var(--text-muted)" }}>
-                    {ln.match_reason}
-                  </p>
-                )}
-              </td>
-              <td className="td whitespace-nowrap">
-                {ln.status === "usulan" && ln.suggested_tx_id && (
-                  <button
-                    onClick={() =>
-                      confirm.mutate({ lineId: ln.id, txId: ln.suggested_tx_id! })
-                    }
-                    disabled={confirm.isPending}
-                    className="font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
-                  >
-                    Cocokkan
-                  </button>
-                )}
-                {ln.status !== "matched" && ln.status !== "diabaikan" && ln.status !== "tercocok" && (
-                  <>
-                    {ln.status === "usulan" && " · "}
-                    <button
-                      onClick={() => ignore.mutate(ln.id)}
-                      disabled={ignore.isPending}
-                      className="font-medium text-[var(--text-muted)] hover:text-[var(--text)]"
-                    >
-                      Abaikan
-                    </button>
-                  </>
-                )}
-                {ln.status === "tercocok" && <span>✓</span>}
-              </td>
-            </tr>
-          ))}
-          {lines.data?.length === 0 && (
-            <tr>
-              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                Belum ada rekening koran diimpor.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        plain
+        label="Baris rekening koran"
+        rows={lines.data}
+        columns={lineColumns}
+        rowKey={(ln) => ln.id}
+        query={lines}
+        defaultSort={{ key: "date", dir: "desc" }}
+        pageSize={50}
+        emptyTitle="Belum ada rekening koran diimpor."
+      />
     </div>
   );
 }
@@ -283,6 +298,43 @@ function PrediksiKlienCard() {
       ),
   });
 
+  const predictionColumns: Column<PredictionRow>[] = [
+    { key: "client", header: "Klien", className: "font-medium", cell: (r) => r.client_name, sortValue: (r) => r.client_name },
+    {
+      key: "risk",
+      header: "Risiko",
+      numeric: true,
+      cell: (r) => <span className={`font-semibold ${riskColor(r.risk_score)}`}>{r.risk_score}/100</span>,
+      sortValue: (r) => r.risk_score,
+    },
+    { key: "basis", header: "Dasar Skor", cell: (r) => <span style={{ color: "var(--th-color)" }}>{r.risk_basis}</span> },
+    {
+      key: "outstanding",
+      header: "Outstanding",
+      numeric: true,
+      cell: (r) => formatRupiah(r.outstanding_total),
+      sortValue: (r) => r.outstanding_total,
+    },
+    {
+      key: "overdue",
+      header: "Overdue",
+      numeric: true,
+      cell: (r) => (
+        <span className={r.overdue_total > 0 ? "font-semibold text-red-700 dark:text-red-400" : ""}>
+          {formatRupiah(r.overdue_total)}
+        </span>
+      ),
+      sortValue: (r) => r.overdue_total,
+    },
+    {
+      key: "priority",
+      header: "Prioritas",
+      numeric: true,
+      cell: (r) => formatRupiah(r.priority_score),
+      sortValue: (r) => r.priority_score,
+    },
+  ];
+
   return (
     <div className="card space-y-3 p-4">
       <div>
@@ -291,43 +343,16 @@ function PrediksiKlienCard() {
           Skor risiko telat bayar dari histori invoice → prioritas collection.
         </p>
       </div>
-      <table className="w-full text-xs">
-        <thead style={{ backgroundColor: "var(--hover)" }}>
-          <tr>
-            <th className="th">Klien</th>
-            <th className="th">Risiko</th>
-            <th className="th">Dasar Skor</th>
-            <th className="th">Outstanding</th>
-            <th className="th">Overdue</th>
-            <th className="th">Prioritas</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-          {(prediksi.data?.clients_ranked ?? []).map((r) => (
-            <tr key={r.client_id}>
-              <td className="td font-medium">{r.client_name}</td>
-              <td className={`td font-semibold ${riskColor(r.risk_score)}`}>
-                {r.risk_score}/100
-              </td>
-              <td className="td" style={{ color: "var(--text-muted)" }}>
-                {r.risk_basis}
-              </td>
-              <td className="td">{formatRupiah(r.outstanding_total)}</td>
-              <td className={`td ${r.overdue_total > 0 ? "font-semibold text-red-600 dark:text-red-400" : ""}`}>
-                {formatRupiah(r.overdue_total)}
-              </td>
-              <td className="td">{formatRupiah(r.priority_score)}</td>
-            </tr>
-          ))}
-          {prediksi.data?.clients_ranked.length === 0 && (
-            <tr>
-              <td colSpan={6} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                Tidak ada invoice berjalan.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        plain
+        label="Prioritas penagihan per klien"
+        rows={prediksi.data?.clients_ranked}
+        columns={predictionColumns}
+        rowKey={(r) => r.client_id}
+        query={prediksi}
+        defaultSort={{ key: "priority", dir: "desc" }}
+        emptyTitle="Tidak ada invoice berjalan."
+      />
       {prediksi.data && (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Total outstanding {formatRupiah(prediksi.data.summary.total_outstanding)} · overdue{" "}
@@ -603,6 +628,15 @@ function LedgerCard() {
     enabled: !!activeCode,
   });
 
+  // Tanpa sortValue: saldo berjalan hanya bermakna dalam urutan tanggal.
+  const ledgerColumns: Column<LedgerLine>[] = [
+    { key: "date", header: "Tanggal", className: "whitespace-nowrap", cell: (l) => formatDate(l.entry_date) },
+    { key: "desc", header: "Keterangan", className: "max-w-[220px] truncate", cell: (l) => l.description },
+    { key: "debit", header: "Debit", numeric: true, cell: (l) => (l.debit > 0 ? formatRupiah(l.debit) : "-") },
+    { key: "credit", header: "Kredit", numeric: true, cell: (l) => (l.credit > 0 ? formatRupiah(l.credit) : "-") },
+    { key: "balance", header: "Saldo", numeric: true, className: "font-medium", cell: (l) => formatRupiah(l.balance) },
+  ];
+
   return (
     <div className="card space-y-3 p-4">
       <div>
@@ -629,35 +663,14 @@ function LedgerCard() {
       </div>
       {ledger.error && <p className="text-xs text-red-600 dark:text-red-400">{(ledger.error as Error).message}</p>}
       {ledger.data && (
-        <table className="w-full text-xs">
-          <thead style={{ backgroundColor: "var(--hover)" }}>
-            <tr>
-              <th className="th">Tanggal</th>
-              <th className="th">Keterangan</th>
-              <th className="th">Debit</th>
-              <th className="th">Kredit</th>
-              <th className="th">Saldo</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {ledger.data.lines.map((l) => (
-              <tr key={l.entry_id}>
-                <td className="td whitespace-nowrap">{l.entry_date}</td>
-                <td className="td max-w-[220px] truncate">{l.description}</td>
-                <td className="td">{l.debit > 0 ? formatRupiah(l.debit) : "-"}</td>
-                <td className="td">{l.credit > 0 ? formatRupiah(l.credit) : "-"}</td>
-                <td className="td font-medium">{formatRupiah(l.balance)}</td>
-              </tr>
-            ))}
-            {ledger.data.lines.length === 0 && (
-              <tr>
-                <td colSpan={5} className="td py-6 text-center" style={{ color: "var(--text-muted)" }}>
-                  Tidak ada mutasi tahun ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+<DataTable
+          plain
+          label={`Buku besar ${ledger.data.account} ${ledger.data.account_name}`}
+          rows={ledger.data.lines}
+          columns={ledgerColumns}
+          rowKey={(l) => l.entry_id}
+          emptyTitle="Tidak ada mutasi tahun ini."
+        />
       )}
     </div>
   );

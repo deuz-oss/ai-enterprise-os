@@ -2,10 +2,18 @@ import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Gift, Wallet } from "lucide-react";
 import { useEmployeeLookup } from "../api/employees";
-import { api, formatRupiah } from "../api/client";
+import { api, formatDate, formatRupiah } from "../api/client";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
-import { confirmDialog, KpiCard, PillTabs, TableStateRow, type PillTab } from "../components/ui";
+import {
+  type Column,
+  confirmDialog,
+  DataTable,
+  KpiCard,
+  type PillTab,
+  PillTabs,
+  TableStateRow,
+} from "../components/ui";
 
 /** Program referral karyawan (Fase 27) — jalur sourcing ketiga di samping
  * Job Portal (Fase 16) dan Talent Pool. Halaman baru berdiri sendiri,
@@ -118,6 +126,71 @@ export default function Referral() {
     });
   }
 
+  // Belum dibayar (pending/eligible) di atas -- itu yang perlu diproses.
+  const rewardOrder = (st: string) => (st === "eligible" ? 0 : st === "pending" ? 1 : 2);
+  const rewardColumns: Column<ReferralReward>[] = [
+    {
+      key: "employee",
+      header: "Karyawan (referrer)",
+      className: "font-medium",
+      cell: (r) => employeeName(r.employee_id),
+      sortValue: (r) => employeeName(r.employee_id),
+    },
+    { key: "candidate", header: "Kandidat", cell: (r) => candidateName(r.candidate_id), sortValue: (r) => candidateName(r.candidate_id) },
+    {
+      key: "amount",
+      header: "Jumlah",
+      numeric: true,
+      cell: (r) => formatRupiah(r.amount),
+      sortValue: (r) => Number(r.amount),
+      footer: formatRupiah(filteredRewards.reduce((sum, r) => sum + Number(r.amount), 0)),
+    },
+    {
+      key: "eligible",
+      header: "Eligible Sejak",
+      className: "whitespace-nowrap",
+      cell: (r) => formatDate(r.eligible_at),
+      sortValue: (r) => r.eligible_at,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (r) => rewardOrder(r.status),
+      cell: (r) => (
+        <>
+          <span className={`badge ${STATUS_BADGE[r.status] ?? "pill p-gray"}`}>{r.status}</span>
+          {r.is_eligible && r.status === "pending" && <span className="badge pill p-yellow ml-1">siap dibayar</span>}
+        </>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (r) =>
+        r.status === "pending" || r.status === "eligible" ? (
+          <button
+            onClick={() =>
+              confirmDialog({
+                title: "Tandai reward referral sudah dibayar?",
+                message: `Reward ${formatRupiah(r.amount)} akan dicatat lunas. Pastikan pembayaran memang sudah ditransfer.`,
+                confirmLabel: "Tandai Dibayar",
+                tone: "primary",
+                onConfirm: () =>
+                  markPaid.mutate(r.id, {
+                    onSuccess: () => toast.success("Reward referral ditandai dibayar"),
+                    onError: (e) => toast.error(`Gagal: ${(e as Error).message}`),
+                  }),
+              })
+            }
+            disabled={markPaid.isPending}
+            className="btn-secondary text-xs"
+          >
+            Tandai Dibayar
+          </button>
+        ) : null,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader icon={Gift} title="Program Referral" />
@@ -185,65 +258,16 @@ export default function Referral() {
         <div className="border-b p-4" style={{ borderColor: "var(--border)" }}>
           <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
         </div>
-        <table className="w-full">
-          <thead style={{ backgroundColor: "var(--hover)", borderBottom: "1px solid var(--border)" }}>
-            <tr>
-              <th className="th">Karyawan (referrer)</th>
-              <th className="th">Kandidat</th>
-              <th className="th">Jumlah</th>
-              <th className="th">Eligible Sejak</th>
-              <th className="th">Status</th>
-              <th className="th">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {filteredRewards.map((r) => (
-              <tr key={r.id}>
-                <td className="td font-medium">{employeeName(r.employee_id)}</td>
-                <td className="td">{candidateName(r.candidate_id)}</td>
-                <td className="td">{formatRupiah(r.amount)}</td>
-                <td className="td">{r.eligible_at ?? "-"}</td>
-                <td className="td">
-                  <span className={`badge ${STATUS_BADGE[r.status] ?? "pill p-gray"}`}>
-                    {r.status}
-                  </span>
-                  {r.is_eligible && r.status === "pending" && (
-                    <span className="badge pill p-yellow ml-1">siap dibayar</span>
-                  )}
-                </td>
-                <td className="td">
-                  {(r.status === "pending" || r.status === "eligible") && (
-                    <button
-                      onClick={() =>
-                        confirmDialog({
-                          title: "Tandai reward referral sudah dibayar?",
-                          message: `Reward ${formatRupiah(r.amount)} akan dicatat lunas. Pastikan pembayaran memang sudah ditransfer.`,
-                          confirmLabel: "Tandai Dibayar",
-                          tone: "primary",
-                          onConfirm: () =>
-                            markPaid.mutate(r.id, {
-                              onSuccess: () => toast.success("Reward referral ditandai dibayar"),
-                              onError: (e) => toast.error(`Gagal: ${(e as Error).message}`),
-                            }),
-                        })
-                      }
-                      disabled={markPaid.isPending}
-                      className="btn-secondary text-xs"
-                    >
-                      Tandai Dibayar
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            <TableStateRow
-              query={rewardsQuery}
-              colSpan={6}
-              isEmpty={filteredRewards.length === 0}
-              emptyTitle={(rewards ?? []).length === 0 ? "Belum ada reward referral." : "Tidak ada reward untuk status ini."}
-            />
-          </tbody>
-        </table>
+        <DataTable
+          plain
+          label="Reward referral"
+          rows={filteredRewards}
+          columns={rewardColumns}
+          rowKey={(r) => r.id}
+          query={rewardsQuery}
+          defaultSort={{ key: "status", dir: "asc" }}
+          emptyTitle={(rewards ?? []).length === 0 ? "Belum ada reward referral." : "Tidak ada reward untuk status ini."}
+        />
       </div>
     </div>
   );

@@ -264,6 +264,10 @@ export default function Layout() {
     if (!aside) return;
     const drawerOpen = !isDesktop && sidebarOpen;
     aside.inert = !isDesktop && !sidebarOpen;
+    // Saat drawer terbuka, konten di balik overlay tidak boleh ikut ter-Tab.
+    // Header tetap aktif: tombol menu di sana dipakai untuk menutup drawer.
+    const main = document.getElementById("main-content");
+    if (main) main.inert = drawerOpen;
     if (drawerOpen && !wasDrawerOpen.current) {
       aside.querySelector<HTMLElement>("a[href], button")?.focus();
     } else if (!drawerOpen && wasDrawerOpen.current && !isDesktop) {
@@ -488,10 +492,12 @@ export default function Layout() {
       >
         <button
           ref={menuButtonRef}
-          onClick={() => setSidebarOpen(true)}
+          // Toggle: saat drawer terbuka konten utama inert, jadi tombol ini (dan
+          // Escape/overlay) adalah jalan menutupnya.
+          onClick={() => setSidebarOpen((v) => !v)}
           className="cursor-pointer rounded-lg p-2 transition-colors hover:bg-[var(--hover)] lg:hidden"
           style={{ color: "var(--text-muted)" }}
-          aria-label="Buka menu navigasi"
+          aria-label={sidebarOpen ? "Tutup menu navigasi" : "Buka menu navigasi"}
           aria-expanded={sidebarOpen}
           aria-controls="app-sidebar"
         >

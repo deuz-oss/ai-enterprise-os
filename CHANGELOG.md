@@ -6,6 +6,26 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Rekonsiliasi invoice ↔ absensi (peluang AI #3 audit 2026-10-08)
+
+- `GET /finance/invoices/{id}/reconciliation` mencocokkan yang DITAGIH (slip payroll karyawan klien pada periode invoice) dengan absensi yang DISETUJUI klien. Temuan deterministik: ditagih tanpa rekap absensi, absensi belum disetujui, 0 hari hadir, jam lembur slip ≠ absensi, absensi disetujui tetapi tidak ditagih, dan payroll di invoice ≠ total slip saat ini. Ringkasan AI 2-3 kalimat (`finance.invoice_attendance_reconciliation`) hanya bila AI aktif, diberi label, tidak mengubah apa pun; tanpa scheduler.
+- Tabel invoice Finance punya kolom "Cek absensi" yang membuka panel rekonsiliasi tepat di bawah barisnya.
+- Batasan: invoice tidak menyimpan `run_id`, jadi run sumber dipilih ulang -- run proyek milik klien bila ada (jalur invoice otomatis), selain itu run umum periode itu; run final didahulukan.
+- **Fixed**: baris ekspansi `DataTable` (form faktur, panel rekonsiliasi, detail quotation/agreement) terpotong di kiri saat tabel lebar digulir ke kanan -- kini selebar area yang terlihat (sticky).
+
+### Changed — Dependensi runtime dipin & migrasi tabel tersisa
+
+- `backend/requirements.lock` (runtime, dipakai Dockerfile) dan `backend/requirements-dev.lock` (CI) dihasilkan `uv pip compile --universal` (Python 3.12; penanda platform sehingga juga bisa dipasang di Windows -- `uvloop` dilewati di sana), sesuai versi yang sudah hijau di CI (SQLAlchemy 2.1.4, pydantic 2.14, FastAPI 0.143). Paket aplikasi dipasang `--no-deps` di atas lock. Cara regenerasi di `AGENTS.md`.
+- Semua tabel buatan tangan yang tersisa kini `DataTable` (Payroll, Rates, Tenant, Employees, Client/Employee detail, Absensi, Akuntansi AI, Users, Audit, Billing, Referral, Suppression, Payment Request, Job Order, Pipeline, Quotation, Agreement, Talent Pool, kedua portal klien). Pengecualian disengaja: grid Saltab, error impor absensi, ringkasan Dashboard/forecast, panel lisensi tenant, dialog tinjauan.
+- Quotation & Agreement: detail dan form email/kirim tampil di bawah baris yang diklik (dulu di bawah seluruh tabel).
+- Talent Pool: saat matching ke job order, urutan default kini skor match tertinggi.
+- "Tangguhkan" tenant, nonaktifkan user, dan "Eksekusi Pembayaran" kini lewat `ConfirmDialog` (tenant & payment request wajib ketik slug/nomor).
+- **Fixed**: Dashboard "invoice terbaru" menampilkan invoice TERLAMA (`.reverse()`).
+- `DataTable` kembali ke halaman 1 saat jumlah baris berubah (filter).
+- Tooltip `title` pada sel terpotong: nama klien di Job Order (sempat hilang saat migrasi) dan Detail di Audit.
+- **Fixed (a11y)**: drawer navigasi mobile -- konten utama kini `inert` selama drawer terbuka (dulu bisa di-Tab di balik overlay) dan tombol menu menjadi toggle buka/tutup. Dialog draf pengingat kini mengembalikan fokus ke tombolnya (tombol disabled saat draf disusun, jadi `<dialog>` kehilangan target fokus).
+- Keputusan: akun 2-1400 tetap liabilitas kliring (direklasifikasi akuntan), tanpa perubahan kode.
+
 ### Changed — Migrasi tabel Akuntansi ke DataTable
 
 - 8 tabel Akuntansi (Bagan Akun, Periode, Neraca Saldo, Daftar Jurnal, Utang Jatuh Tempo, Aset Tetap, Pembelian, Kas & Bank) kini memakai `DataTable`: sort, header sticky, angka rata kanan, tanggal terformat, state loading/error/kosong, kartu di HP.

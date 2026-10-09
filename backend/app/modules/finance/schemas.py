@@ -130,3 +130,36 @@ class ReminderDraftOut(BaseModel):
     body: str
     days_overdue: int
     source: str  # ai | template
+
+
+class ReconFinding(BaseModel):
+    severity: str  # high | medium | info
+    kind: str
+    employee_id: str | None
+    employee_name: str | None
+    message: str
+
+
+class ReconTotals(BaseModel):
+    headcount_billed: int
+    headcount_approved: int
+    overtime_billed: int
+    overtime_approved: int
+    payroll_billed: float
+    payroll_current: float | None
+
+
+class InvoiceReconciliationOut(BaseModel):
+    """Rekonsiliasi invoice vs absensi disetujui -- temuan deterministik."""
+
+    invoice_id: str
+    invoice_no: str
+    period: str
+    run_id: str | None
+    run_status: str | None
+    totals: ReconTotals
+    findings: list[ReconFinding]
+    findings_total: int
+    # Ringkasan AI opsional atas temuan di atas; None bila AI tidak aktif.
+    summary: str | None
+    summary_source: str  # ai | none
