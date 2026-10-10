@@ -597,9 +597,13 @@ ONBOARDING_DOC_MAX_BYTES = 10 * 1024 * 1024
 
 
 def _find_invite_by_token(db: Session, raw_token: str) -> OnboardingInvite:
-    invite = db.execute(
-        select(OnboardingInvite).where(OnboardingInvite.token_hash == _hash_token(raw_token))
-    ).scalar_one_or_none()
+    from app.core.tenancy import tenant_context
+
+    # Lintas tenant: token yang mengautentikasi, bukan JWT di browser.
+    with tenant_context(None):
+        invite = db.execute(
+            select(OnboardingInvite).where(OnboardingInvite.token_hash == _hash_token(raw_token))
+        ).scalar_one_or_none()
     if invite is None:
         raise HTTPException(status_code=404, detail="Link onboarding tidak valid")
     if invite.status == OnboardingInviteStatus.revoked:
@@ -635,6 +639,8 @@ def onboarding_invite_public_view(db: Session, raw_token: str) -> dict:
             "status": invite.status.value,
             "expires_at": invite.expires_at,
             "requested_document_types": invite.requested_document_types,
+            # Opsi "isi otomatis dari foto" hanya ditampilkan bila AI aktif.
+            "ai_extraction_available": get_settings().ai_configured,
             "submitted_data": (
                 json.loads(invite.submitted_data_json) if invite.submitted_data_json else {}
             ),
@@ -677,8 +683,16 @@ def submit_onboarding_data(db: Session, raw_token: str, payload: OnboardingSubmi
 
 
 async def upload_onboarding_document(
-    db: Session, raw_token: str, document_type: HrDocumentType, file: UploadFile
+    db: Session,
+    raw_token: str,
+    document_type: HrDocumentType,
+    file: UploadFile,
+    *,
+    extract: bool = False,
 ) -> dict:
+    """Simpan dokumen; bila `extract` (izin AI dicentang kandidat untuk unggahan
+    ini) dan jenisnya KTP/NPWP, kembalikan juga draf isian hasil baca AI --
+    tidak disimpan, lihat hrd/doc_extract.py."""
     from app.core.tenancy import get_tenant, set_tenant
 
     invite = _find_invite_by_token(db, raw_token)
@@ -723,9 +737,25 @@ async def upload_onboarding_document(
         db.add(document)
         db.commit()
         db.refresh(document)
+        extraction = None
+        if extract:
+            from app.modules.hrd.doc_extract import extract_identity
+
+            placement = db.get(Placement, invite.placement_id)
+            # Di dalam konteks tenant: pemakaian AI tercatat ke tenant ini.
+            extraction = extract_identity(
+                document_type.value,
+                data,
+                mime,
+                candidate_name=placement.candidate.full_name if placement else None,
+            )
     finally:
         set_tenant(prev_tenant)
-    return {"document_type": document.document_type.value, "file_name": document.file_name}
+    return {
+        "document_type": document.document_type.value,
+        "file_name": document.file_name,
+        "extraction": extraction,
+    }
 
 
 # ---------- Contracts ----------

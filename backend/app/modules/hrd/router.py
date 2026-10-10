@@ -672,7 +672,9 @@ async def onboarding_public_upload_document(
     token: str,
     file: UploadFile = File(...),
     document_type: HrDocumentType = Form(...),
+    # Izin eksplisit kandidat untuk membaca foto ini dengan AI (UU PDP).
+    extract: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     _check_onboarding_rate_limit(db)
-    return await service.upload_onboarding_document(db, token, document_type, file)
+    return await service.upload_onboarding_document(db, token, document_type, file, extract=extract)

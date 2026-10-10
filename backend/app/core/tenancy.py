@@ -15,7 +15,8 @@ tetap bisa menulis dengan menyetel tenant_id secara eksplisit.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 from uuid import UUID
@@ -44,6 +45,25 @@ def set_tenant(tenant_id: UUID | None) -> None:
 
 def get_tenant() -> UUID | None:
     return _current_tenant.get()
+
+
+@contextmanager
+def tenant_context(tenant_id: UUID | None) -> Iterator[None]:
+    """Jalankan blok dengan konteks tenant tertentu, lalu pulihkan yang lama.
+
+    `tenant_context(None)` dipakai lookup link publik ber-token (onboarding,
+    portal klien, approval payroll): token-nya sendiri yang mengautentikasi,
+    jadi pencarian harus lintas tenant -- persis jalur tanpa login. Tanpa ini,
+    browser yang menyimpan JWT tenant lain (atau token basi) membuat middleware
+    menyetel tenant itu, filter ORM/RLS menyaring barisnya, dan link valid
+    dijawab 404 "tidak valid".
+    """
+    previous = _current_tenant.get()
+    _current_tenant.set(tenant_id)
+    try:
+        yield
+    finally:
+        _current_tenant.set(previous)
 
 
 def set_requester(

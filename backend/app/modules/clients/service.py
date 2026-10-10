@@ -253,11 +253,15 @@ def revoke_portal_access(db: Session, client_id: str) -> None:
 
 
 def _find_portal_access(db: Session, raw_token: str) -> ClientPortalAccess:
-    access = db.execute(
-        select(ClientPortalAccess).where(
-            ClientPortalAccess.token_hash == _hash_portal_token(raw_token)
-        )
-    ).scalar_one_or_none()
+    from app.core.tenancy import tenant_context
+
+    # Lintas tenant: token yang mengautentikasi, bukan JWT di browser.
+    with tenant_context(None):
+        access = db.execute(
+            select(ClientPortalAccess).where(
+                ClientPortalAccess.token_hash == _hash_portal_token(raw_token)
+            )
+        ).scalar_one_or_none()
     if access is None:
         raise HTTPException(status_code=404, detail="Link portal tidak valid")
     return access

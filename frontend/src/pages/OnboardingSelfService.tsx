@@ -37,11 +37,22 @@ interface DocumentSummary {
   file_name: string;
 }
 
+/** Hasil baca AI atas foto KTP/NPWP -- draf, TIDAK disimpan server (hrd/doc_extract.py). */
+interface Extraction {
+  status: "ok" | "failed" | "unsupported" | "ai_off";
+  fields: { ktp_no?: string; npwp_no?: string; citizen_address?: Address; name_on_document?: string };
+  warnings: string[];
+}
+
+const EXTRACTABLE = new Set(["ktp", "npwp"]);
+
 interface OnboardingViewData {
   candidate_name: string | null;
   status: "invited" | "submitted" | "applied" | "revoked";
   expires_at: string;
   requested_document_types: string[];
+  // Opsi "isi otomatis dari foto" hanya bila AI aktif di server.
+  ai_extraction_available?: boolean;
   submitted_data: SubmittedData;
   documents: DocumentSummary[];
 }
@@ -145,6 +156,9 @@ export default function OnboardingSelfService() {
   const [residentialAddress, setResidentialAddress] = useState<Address>({});
   const [sameAsCitizen, setSameAsCitizen] = useState(false);
   const [consent, setConsent] = useState(false);
+  // Izin eksplisit membaca foto KTP/NPWP dengan AI (UU PDP) -- default mati.
+  const [allowExtract, setAllowExtract] = useState(false);
+  const [extraction, setExtraction] = useState<{ docType: string; result: Extraction } | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
   const view = useQuery({
@@ -196,10 +210,24 @@ export default function OnboardingSelfService() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("document_type", documentType);
-      return api.upload(`/onboarding/${token}/documents`, fd);
+      if (allowExtract && EXTRACTABLE.has(documentType)) fd.append("extract", "true");
+      return api.upload<{ document_type: string; extraction: Extraction | null }>(
+        `/onboarding/${token}/documents`,
+        fd
+      );
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["onboarding-view", token] }),
+    onSuccess: (res) => {
+      if (res.extraction) setExtraction({ docType: res.document_type, result: res.extraction });
+      void qc.invalidateQueries({ queryKey: ["onboarding-view", token] });
+    },
   });
+
+  function applyExtraction(fields: Extraction["fields"]) {
+    if (fields.ktp_no) setKtpNo(fields.ktp_no);
+    if (fields.npwp_no) setNpwpNo(fields.npwp_no);
+    if (fields.citizen_address) setCitizenAddress((prev) => ({ ...prev, ...fields.citizen_address }));
+    setExtraction(null);
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -403,6 +431,19 @@ export default function OnboardingSelfService() {
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           Format PDF, PNG, atau JPEG, maksimal 10 MB. Unggah ulang akan mengganti file sebelumnya.
         </p>
+        {data.ai_extraction_available && data.requested_document_types.some((k) => EXTRACTABLE.has(k)) && (
+          <label className="flex items-start gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <input
+              type="checkbox"
+              checked={allowExtract}
+              onChange={(e) => setAllowExtract(e.target.checked)}
+              className="mt-0.5"
+            />
+            Isi otomatis dari foto KTP/NPWP: saya mengizinkan foto yang saya unggah dibaca oleh layanan AI
+            untuk mengisi NIK, NPWP, dan alamat. Hasilnya tidak disimpan sampai saya periksa dan simpan
+            sendiri. Tanpa centang, foto hanya disimpan.
+          </label>
+        )}
         {data.requested_document_types.map((key) => (
           <div key={key} className="flex flex-wrap items-center gap-2">
             <span className="w-40 text-sm font-medium" style={{ color: "var(--text)" }}>
@@ -428,6 +469,52 @@ export default function OnboardingSelfService() {
         ))}
         {uploadDoc.error && (
           <p className="text-sm text-red-600 dark:text-red-400">{(uploadDoc.error as Error).message}</p>
+        )}
+        {extraction && (
+          <section
+            className="space-y-2 rounded-lg p-3 text-sm"
+            style={{ backgroundColor: "var(--hover)", color: "var(--text)" }}
+            aria-label="Hasil baca dokumen"
+          >
+            <p className="font-medium">
+              Hasil baca {DOC_TYPE_LABEL[extraction.docType] ?? extraction.docType} (AI) -- periksa sebelum dipakai
+            </p>
+            {extraction.result.fields.name_on_document && (
+              <p className="text-xs">Nama di dokumen: {extraction.result.fields.name_on_document}</p>
+            )}
+            {extraction.result.fields.ktp_no && <p>NIK: {extraction.result.fields.ktp_no}</p>}
+            {extraction.result.fields.npwp_no && <p>NPWP: {extraction.result.fields.npwp_no}</p>}
+            {extraction.result.fields.citizen_address && (
+              <p>
+                Alamat KTP:{" "}
+                {[
+                  extraction.result.fields.citizen_address.detail,
+                  extraction.result.fields.citizen_address.district,
+                  extraction.result.fields.citizen_address.city,
+                  extraction.result.fields.citizen_address.province,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
+            {extraction.result.warnings.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-800 dark:text-amber-300" role="alert">
+                {extraction.result.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {extraction.result.status === "ok" && !submit.isSuccess && (
+                <button type="button" className="btn text-xs" onClick={() => applyExtraction(extraction.result.fields)}>
+                  Isi ke form
+                </button>
+              )}
+              <button type="button" className="btn-secondary text-xs" onClick={() => setExtraction(null)}>
+                Tutup
+              </button>
+            </div>
+          </section>
         )}
       </div>
     </Shell>

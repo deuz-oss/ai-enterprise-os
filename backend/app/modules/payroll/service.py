@@ -1491,11 +1491,21 @@ def submit_to_client(db: Session, run_id: str, days: int = 14) -> tuple[PayrollR
 
 
 def _find_token(db: Session, raw_token: str) -> PayrollRunToken:
-    token = db.execute(
-        select(PayrollRunToken).where(PayrollRunToken.token_hash == _hash_token(raw_token))
-    ).scalar_one_or_none()
+    from app.core.tenancy import tenant_context
+
+    # Lintas tenant: token yang mengautentikasi, bukan JWT di browser.
+    with tenant_context(None):
+        token = db.execute(
+            select(PayrollRunToken).where(PayrollRunToken.token_hash == _hash_token(raw_token))
+        ).scalar_one_or_none()
     if token is None:
         raise HTTPException(status_code=404, detail="Link approval tidak valid")
+    # Sisa request publik ini berjalan di tenant pemilik token (konteks dari
+    # JWT di browser, bila ada, tidak relevan). Middleware me-reset konteks
+    # di akhir request.
+    from app.core.tenancy import set_tenant
+
+    set_tenant(token.tenant_id)
     if token.decided_at is not None:
         raise HTTPException(status_code=409, detail="Keputusan untuk link ini sudah direkam")
     expires = token.expires_at
