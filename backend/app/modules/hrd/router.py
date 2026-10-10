@@ -309,6 +309,14 @@ def get_leave_balance(
     return ess_service.get_employee_leave_balance(db, employee_id, year)
 
 
+@router.get("/compliance-digest")
+def compliance_digest(db: Session = Depends(get_db)):
+    """Digest kepatuhan kontrak & BPJS saat ini (sama dengan isi notifikasi mingguan)."""
+    from app.modules.hrd.compliance_digest import build_digest
+
+    return build_digest(db)
+
+
 @router.get("/contracts/expiring", response_model=list[dict])
 def expiring_contracts(within_days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
     return service.expiring_contracts(db, within_days)

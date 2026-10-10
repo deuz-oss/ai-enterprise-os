@@ -25,6 +25,16 @@ def list_notifications(
 
 @router.get("/unread-count", response_model=UnreadCountOut)
 def count_unread(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    # Safety-net digest kepatuhan mingguan (AI #4): badge ini dimuat admin/HR
+    # di setiap halaman, jadi digest minggu berjalan pasti terbuat walau cron
+    # `run-weekly-digest` tidak terpasang. Cek idempotensinya satu query.
+    if getattr(current_user.role, "value", current_user.role) in ("admin", "hr"):
+        try:
+            from app.modules.hrd.compliance_digest import send_weekly_digest
+
+            send_weekly_digest(db)
+        except Exception:  # noqa: BLE001 - badge notifikasi tidak boleh gagal karena digest
+            db.rollback()
     return UnreadCountOut(count=service.unread_count(db, current_user))
 
 

@@ -1,3 +1,4 @@
+import { ComplianceDigestCard } from "../components/ComplianceDigest";
 import { useMe } from "../api/auth";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -6,7 +7,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile, formatDate } from "../api/client";
 import { Clock, Lock, Sparkles, Users as UsersIcon } from "lucide-react";
-import { CalloutBlock } from "../components/workspace";
 import {
   type Column,
   DataTable,
@@ -289,6 +289,7 @@ export default function Employees() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["employees-lookup"] });
     qc.invalidateQueries({ queryKey: ["contracts-expiring"] });
+    qc.invalidateQueries({ queryKey: ["compliance-digest"] });
   };
 
   const createEmployee = useMutation({
@@ -520,18 +521,9 @@ export default function Employees() {
         </form>
       )}
 
-      {(expiring ?? []).length > 0 && (
-        <CalloutBlock tone="warning">
-          <p className="font-medium">Reminder Kontrak ≤30 hari</p>
-          <ul className="mt-1 list-inside list-disc text-xs">
-            {expiring!.map((c) => (
-              <li key={c.contract_id}>
-                {c.employee_name} — kontrak {c.contract_no} berakhir {c.end_date} ({c.days_left} hari lagi)
-              </li>
-            ))}
-          </ul>
-        </CalloutBlock>
-      )}
+      {/* Digest kepatuhan (AI #4) menggantikan callout lama "Reminder Kontrak
+          ≤30 hari": isinya superset (+ kontrak lewat & BPJS belum lengkap). */}
+      <ComplianceDigestCard />
 
       {!isOpsOnly && (
       <div className="card">

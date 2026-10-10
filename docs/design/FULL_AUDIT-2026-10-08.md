@@ -77,8 +77,10 @@ requirements.
 > opt-in KTP/NPWP photo reading in onboarding (draft only, not stored,
 > deterministic NIK/NPWP checks). #5 shipped: ⌘K sentence -> whitelisted
 > page+filters (LLM maps only; client IDs resolved deterministically), with
-> URL filters on Employees/Finance/Job Orders. Only #4 (needs a scheduler)
-> remains open.
+> URL filters on Employees/Finance/Job Orders. #4 shipped as a weekly
+> contract/BPJS compliance digest (external-cron endpoint + in-app
+> safety-net, per the Fase 28 no-scheduler decision). All 10 AI
+> opportunities are now done.
 
 ---
 

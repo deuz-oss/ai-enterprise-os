@@ -1,7 +1,7 @@
 import { useMe } from "../api/auth";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import {
   Ban,
@@ -898,7 +898,7 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
     queryKey: ["notif-list"],
     queryFn: () =>
       api.get<
-        { id: string; title: string; body: string | null; read_at: string | null }[]
+        { id: string; title: string; body: string | null; read_at: string | null; entity_type: string | null }[]
       >("/me/notifications?unread_only=true"),
   });
   const readAll = useMutation({
@@ -924,9 +924,16 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
       </div>
       {(items.data ?? []).slice(0, 5).map((n) => (
         <div key={n.id} className="border-t py-1.5 text-xs first:border-t-0" style={{ borderColor: "var(--border)" }}>
-          <p className="font-medium" style={{ color: "var(--text)" }}>
-            {n.title}
-          </p>
+          {/* Digest kepatuhan mingguan (AI #4) -> kartu Kepatuhan di Karyawan. */}
+          {n.entity_type?.startsWith("compliance_digest:") ? (
+            <Link to="/employees#kepatuhan" onClick={onDone} className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
+              {n.title}
+            </Link>
+          ) : (
+            <p className="font-medium" style={{ color: "var(--text)" }}>
+              {n.title}
+            </p>
+          )}
           {n.body && (
             <p className="truncate" style={{ color: "var(--text-muted)" }}>
               {n.body}

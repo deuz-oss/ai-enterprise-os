@@ -6,6 +6,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Digest kepatuhan kontrak & BPJS mingguan (peluang AI #4 audit 2026-10-08)
+
+- Digest deterministik per tenant (`hrd/compliance_digest.py`, `GET /employees/compliance-digest`): kontrak karyawan aktif yang berakhir ≤ 30 hari (≤ 7 hari: "segera putuskan"), kontrak yang SUDAH lewat padahal karyawan masih aktif dan tidak diperpanjang, dan karyawan aktif tanpa nomor BPJS Kesehatan/Ketenagakerjaan -- tiap butir dengan aksi yang disarankan.
+- Dikirim sebagai notifikasi in-app (dan email bila aktif) ke admin & HR, sekali per tenant per minggu ISO; penanda idempotensi = notifikasi itu sendiri (`entity_type = compliance_digest:<tahun>-W<minggu>`), tanpa tabel baru.
+- Tanpa scheduler in-process (mengikuti keputusan Fase 28): `POST /platform/internal/run-weekly-digest` untuk cron OS, plus safety-net saat admin/HR memuat badge notifikasi -- digest minggu berjalan tetap terbuat walau cron tidak dipasang. Tenant ditangguhkan dilewati. Cara memasang cron (termasuk login per eksekusi karena JWT kedaluwarsa) di `docs/DEPLOYMENT.md` §5c, sekaligus mendokumentasikan `run-cycle-charge` yang sebelumnya belum tertulis.
+- Halaman Karyawan: kartu "Kepatuhan minggu ini" menggantikan callout "Reminder Kontrak ≤30 hari" (subset-nya); notifikasi digest di Kotak Masuk menautkan ke kartu itu.
+- Batasan: dua admin/HR yang membuka aplikasi pada detik yang sama di awal minggu bisa memicu digest ganda (tanpa kunci antar-worker).
+
 ### Added — Kalimat bebas di ⌘K → daftar terfilter (peluang AI #5 audit 2026-10-08)
 
 - Palet ⌘K punya item "Tampilkan daftar: …" untuk kalimat ≥ 2 kata (mis. "karyawan PT Maju kontrak habis bulan depan"). LLM hanya dipanggil saat item dipilih, bukan per ketikan.

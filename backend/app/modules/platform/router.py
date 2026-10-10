@@ -187,6 +187,18 @@ def run_cycle_charge(db: Session = Depends(get_db)):
     return {"closed_count": len(closed), "tenant_ids": [str(t) for t in closed]}
 
 
+@router.post("/internal/run-weekly-digest")
+def run_weekly_digest(db: Session = Depends(get_db)):
+    """Digest kepatuhan kontrak & BPJS (AI #4) untuk semua tenant aktif.
+    Dipicu cron OS eksternal (mis. Senin 07:00) -- pola sama dengan
+    run-cycle-charge. Idempoten per tenant per minggu ISO; tanpa cron pun
+    digest tetap terbuat lewat safety-net saat admin/HR membuka aplikasi."""
+    from app.modules.hrd.compliance_digest import run_weekly_digest_for_all_tenants
+
+    sent = run_weekly_digest_for_all_tenants(db)
+    return {"tenants_sent": len(sent), "recipients": sent}
+
+
 @router.get("/tenants/{tenant_id}/billing-summary")
 def get_tenant_billing_summary(tenant_id: UUID, db: Session = Depends(get_db)):
     """Ringkasan tier + saldo + 5 transaksi terakhir untuk panel "Billing

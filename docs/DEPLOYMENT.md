@@ -180,6 +180,30 @@ kandidat (pelajaran uji 2026-09-26).
 menolak merekam bila `LIVEKIT_URL` mengarah ke LiveKit Cloud; tetap self-host.
 Konfigurasi GPU belum diuji di mesin GPU sungguhan.
 
+## 5c. Tugas terjadwal (cron, opsional)
+
+Backend sengaja tidak punya scheduler di dalam proses (keputusan Fase 28).
+Dua endpoint internal bisa dipicu cron OS; keduanya **idempoten** dan punya
+*safety-net* di dalam aplikasi, jadi cron hanya membuat waktunya lebih tepat
+-- hasilnya tetap benar walau cron tidak dipasang.
+
+| Endpoint | Jadwal saran | Isi | Safety-net bila cron tidak jalan |
+|---|---|---|---|
+| `POST /api/v1/platform/internal/run-cycle-charge` | harian 00:30 | tutup siklus anggaran & debit snapshot | ditutup saat request tenant berikutnya |
+| `POST /api/v1/platform/internal/run-weekly-digest` | Senin 07:00 | digest kepatuhan kontrak & BPJS ke admin/HR | dibuat saat admin/HR pertama membuka aplikasi minggu itu |
+
+Keduanya butuh JWT **platform admin**, yang kedaluwarsa setelah
+`ACCESS_TOKEN_EXPIRE_MINUTES` (default 480) -- jangan simpan token statis di
+crontab; login di setiap eksekusi:
+
+```bash
+#!/bin/sh
+# /etc/cron.d: 0 7 * * 1 root /opt/aeos/run-weekly-digest.sh
+BASE=https://<DOMAIN>/api/v1
+TOKEN=$(curl -fsS -X POST "$BASE/auth/login" -H 'Content-Type: application/json'   -d "{\"email\":\"$PLATFORM_ADMIN_EMAIL\",\"password\":\"$PLATFORM_ADMIN_PASSWORD\"}"   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -fsS -X POST "$BASE/platform/internal/run-weekly-digest" -H "Authorization: Bearer $TOKEN"
+```
+
 ## 6. Catatan operasional
 
 - **Skema**: sumber kebenaran = Alembic. Di production `create_all`
