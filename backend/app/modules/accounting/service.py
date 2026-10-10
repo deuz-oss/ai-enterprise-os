@@ -423,6 +423,7 @@ def reverse_entry(
             )
         )
     db.add(entry)
+    _unmatch_statement_lines_of(db, original.id)
     db.commit()
     db.refresh(entry)
 
@@ -442,6 +443,33 @@ def reverse_entry(
     entry.is_reversed = False  # type: ignore[attr-defined]
     entry.reversal_entry_id = None  # type: ignore[attr-defined]
     return entry
+
+
+def _unmatch_statement_lines_of(db: Session, journal_id: UUID) -> None:
+    """Jurnal yang dibalik bukan lagi mutasi kas nyata: baris rekening koran
+    yang tercocok ke jurnal itu (langsung, atau lewat transaksi kas-bank
+    pemilik jurnal) dikembalikan ke "belum cocok" untuk dicocokkan ulang."""
+    from app.modules.accounting.models import (
+        BankStatementLine,
+        BankTransaction,
+        StatementLineStatus,
+    )
+
+    tx_ids = select(BankTransaction.id).where(BankTransaction.journal_entry_id == journal_id)
+    lines = db.execute(
+        select(BankStatementLine).where(
+            (BankStatementLine.matched_journal_id == journal_id)
+            | (BankStatementLine.matched_tx_id.in_(tx_ids))
+        )
+    ).scalars()
+    for line in lines:
+        line.status = StatementLineStatus.unmatched
+        line.matched_journal_id = None
+        line.matched_tx_id = None
+        line.confirmed_by_id = None
+        line.confirmed_at = None
+        line.match_score = 0
+        line.match_reason = "Jurnal pasangannya dibalik -- cocokkan ulang"
 
 
 def delete_memorial_entry(db: Session, entry_id: str) -> None:

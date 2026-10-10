@@ -14,7 +14,7 @@ import io
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import parse_uuid
@@ -27,6 +27,7 @@ from app.modules.accounting.models import (
     JournalEntryStatus,
     StatementLineStatus,
 )
+from app.modules.accounting.service import REVERSAL_EVENT_CODE
 
 TEMPLATE_HEADER = ["tanggal", "keterangan", "mutasi_masuk", "mutasi_keluar"]
 
@@ -125,6 +126,11 @@ def _suggest_match(db: Session, line: BankStatementLine) -> None:
         db.execute(
             select(BankTransaction).where(
                 BankTransaction.reconciled_at.is_(None),
+                # Transaksi yang jurnalnya sudah dibalik bukan mutasi kas nyata.
+                or_(
+                    BankTransaction.journal_entry_id.is_(None),
+                    BankTransaction.journal_entry_id.not_in(_reversed_journal_ids()),
+                ),
             )
         )
         .scalars()
@@ -195,6 +201,15 @@ def _cash_codes(db: Session) -> set[str]:
     return set(db.execute(select(Account.code).where(Account.is_cash_bank.is_(True))).scalars())
 
 
+def _reversed_journal_ids():
+    """Subquery id jurnal yang sudah dibalik (punya entri `journal_reversed`)."""
+    return select(JournalEntry.source_ref_id).where(
+        JournalEntry.event_code == REVERSAL_EVENT_CODE,
+        JournalEntry.source_ref_type == "journal_entry",
+        JournalEntry.source_ref_id.is_not(None),
+    )
+
+
 def _cash_journal_candidates(
     db: Session, around: date, window_days: int = 14
 ) -> list[tuple[JournalEntry, float]]:
@@ -214,6 +229,7 @@ def _cash_journal_candidates(
     used = select(BankStatementLine.matched_journal_id).where(
         BankStatementLine.matched_journal_id.is_not(None)
     )
+    reversed_ids = _reversed_journal_ids()
     entries = (
         db.execute(
             select(JournalEntry).where(
@@ -222,6 +238,13 @@ def _cash_journal_candidates(
                 JournalEntry.entry_date <= around + timedelta(days=window_days),
                 JournalEntry.id.not_in(tx_journals),
                 JournalEntry.id.not_in(used),
+                # Bukan pergerakan uang: jurnal yang sudah dibalik (efek bersih
+                # nol) dan jurnal pembaliknya sendiri.
+                JournalEntry.id.not_in(reversed_ids),
+                or_(
+                    JournalEntry.event_code.is_(None),
+                    JournalEntry.event_code != REVERSAL_EVENT_CODE,
+                ),
             )
         )
         .scalars()
@@ -350,6 +373,16 @@ def confirm_match(
         entry = db.get(JournalEntry, parse_uuid(journal_entry_id))
         if entry is None or entry.status != JournalEntryStatus.posted:
             raise HTTPException(status_code=404, detail="Jurnal terposting tidak ditemukan")
+        if (
+            entry.event_code == REVERSAL_EVENT_CODE
+            or db.execute(
+                _reversed_journal_ids().where(JournalEntry.source_ref_id == entry.id)
+            ).first()
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Jurnal ini sudah dibalik (atau jurnal pembalik) -- bukan mutasi kas nyata",
+            )
         if db.execute(
             select(BankTransaction.id).where(BankTransaction.journal_entry_id == entry.id)
         ).first():

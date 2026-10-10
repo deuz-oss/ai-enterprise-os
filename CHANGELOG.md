@@ -6,6 +6,11 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Rekonsiliasi bank vs jurnal yang dibalik (cek gap #6)
+
+- Jurnal kas/bank yang sudah DIBALIK (efek bersih nol) dan jurnal pembaliknya (`journal_reversed`) masih ditawarkan sebagai pasangan mutasi rekening koran; mutasi sungguhan bisa "tercocok" ke pembukuan yang sudah dibatalkan. Kini keduanya dikeluarkan dari kandidat dan konfirmasi manual ke jurnal seperti itu ditolak (422).
+- Membalik jurnal yang SUDAH tercocok (langsung, atau lewat transaksi kas-bank pemilik jurnal) kini mengembalikan baris rekening koran ke "belum cocok" dengan alasan "Jurnal pasangannya dibalik -- cocokkan ulang". Transaksi kas-bank yang jurnalnya dibalik tidak lagi menjadi kandidat (celah lama sejenis).
+
 ### Added — Digest kepatuhan kontrak & BPJS mingguan (peluang AI #4 audit 2026-10-08)
 
 - Digest deterministik per tenant (`hrd/compliance_digest.py`, `GET /employees/compliance-digest`): kontrak karyawan aktif yang berakhir ≤ 30 hari (≤ 7 hari: "segera putuskan"), kontrak yang SUDAH lewat padahal karyawan masih aktif dan tidak diperpanjang, dan karyawan aktif tanpa nomor BPJS Kesehatan/Ketenagakerjaan -- tiap butir dengan aksi yang disarankan.

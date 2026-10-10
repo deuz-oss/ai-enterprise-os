@@ -239,3 +239,94 @@ def test_apply_rejects_wrong_direction_and_unknown_action(client):
     assert resp.status_code == 422
     invoice = client.get(f"/api/v1/finance/invoices/{inv['id']}", headers=headers).json()
     assert invoice["status"] == "terkirim"
+
+
+def test_reversed_payment_journal_is_not_a_cash_candidate(client):
+    """Cek gap: jurnal pelunasan yang sudah DIBALIK (dan jurnal pembaliknya)
+    bukan mutasi kas nyata -- tidak boleh diusulkan atau dicocokkan."""
+    headers = _auth_header(client)
+    inv = _sent_invoice(client, headers)
+    client.patch(
+        f"/api/v1/finance/invoices/{inv['id']}", headers=headers, json={"status": "dibayar"}
+    )
+    amount = round(inv["total_due"])
+    journals = client.get(
+        "/api/v1/accounting/journal", headers=headers, params={"year": date.today().year}
+    ).json()
+    paid = next(e for e in journals if e.get("event_code") == "invoice_paid")
+    rev = client.post(
+        f"/api/v1/accounting/journal/{paid['id']}/reverse",
+        headers=headers,
+        json={"reason": "salah input"},
+    )
+    assert rev.status_code in (200, 201), rev.text
+
+    line = _import(client, headers, [(date.today(), "TRF MASUK", amount, 0)])["TRF MASUK"]
+    assert line["status"] == "belum_cocok" and line["suggested_journal_id"] is None
+    for journal_id in (paid["id"], rev.json()["id"]):
+        resp = client.post(
+            f"{BASE}/{line['id']}/match", headers=headers, json={"journal_entry_id": journal_id}
+        )
+        assert resp.status_code == 422, resp.text
+
+
+def _journal_of_tx(client, tx_id):
+    from app.modules.accounting.models import BankTransaction
+
+    db = client.testing_session()
+    try:
+        return db.execute(
+            select(BankTransaction.journal_entry_id)
+            .where(BankTransaction.id == UUID(tx_id))
+            .execution_options(include_with_loader_criteria=False)
+        ).scalar_one()
+    finally:
+        db.close()
+
+
+def test_reversing_a_matched_journal_unmatches_the_statement_line(client):
+    headers = _auth_header(client)
+    acc = _accounts(client, headers)
+
+    # Jalur 1: baris tercocok langsung ke jurnal (pelunasan invoice).
+    inv = _sent_invoice(client, headers)
+    client.patch(
+        f"/api/v1/finance/invoices/{inv['id']}", headers=headers, json={"status": "dibayar"}
+    )
+    line = _import(client, headers, [(date.today(), "TRF A", round(inv["total_due"]), 0)])["TRF A"]
+    client.post(
+        f"{BASE}/{line['id']}/match",
+        headers=headers,
+        json={"journal_entry_id": line["suggested_journal_id"]},
+    )
+    client.post(
+        f"/api/v1/accounting/journal/{line['suggested_journal_id']}/reverse",
+        headers=headers,
+        json={"reason": "salah"},
+    )
+
+    # Jalur 2: baris tercocok ke transaksi kas-bank, lalu jurnal transaksinya dibalik.
+    tx = client.post(
+        "/api/v1/accounting/cashbank/transactions",
+        headers=headers,
+        json={"tx_type": "penerimaan", "bank_account_id": acc["1-1100"], "amount": 2_500_000},
+    ).json()
+    line2 = _import(client, headers, [(date.today(), "SETORAN B", 2_500_000, 0)])["SETORAN B"]
+    client.post(
+        f"{BASE}/{line2['id']}/match", headers=headers, json={"bank_transaction_id": tx["id"]}
+    )
+    client.post(
+        f"/api/v1/accounting/journal/{_journal_of_tx(client, tx['id'])}/reverse",
+        headers=headers,
+        json={"reason": "salah"},
+    )
+
+    lines = {ln["id"]: ln for ln in client.get(BASE, headers=headers).json()}
+    for lid in (line["id"], line2["id"]):
+        assert lines[lid]["status"] == "belum_cocok"
+        assert lines[lid]["match_reason"] == "Jurnal pasangannya dibalik -- cocokkan ulang"
+        assert lines[lid]["matched_journal_id"] is None and lines[lid]["matched_tx_id"] is None
+
+    # Transaksi yang jurnalnya dibalik tidak lagi jadi kandidat.
+    again = _import(client, headers, [(date.today(), "SETORAN C", 2_500_000, 0)])["SETORAN C"]
+    assert again["suggested_tx_id"] is None
