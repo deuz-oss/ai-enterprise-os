@@ -1,7 +1,7 @@
 import { MatchReasons, type MatchExplain } from "../components/MatchReasons";
 import { useMe } from "../api/auth";
-import { FormEvent, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
 import {
   type Column,
@@ -199,6 +199,13 @@ export default function JobOrders() {
   // sama persis dipakai tabel) lalu difilter+dipaginasi di klien supaya
   // count tiap pill akurat lintas-halaman.
   const [statusTab, setStatusTab] = useState("");
+  // Filter dari URL (⌘K "Tampilkan daftar: …", AI opportunity #5) mengisi
+  // kontrol status & klien yang sudah terlihat.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    setStatusTab(searchParams.get("status") ?? "");
+    setClientFilter(searchParams.get("client") ?? "");
+  }, [searchParams]);
   const pageLimit = 50;
   // Sengaja cuma filter client_id -- jo_status (pipeline internal
   // open/screening/interview_klien/dst) sudah dihapus dari UI ini

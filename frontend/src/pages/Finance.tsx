@@ -1,7 +1,9 @@
 import { ReminderDraftDialog, type ReminderDraft } from "../components/ReminderDraftDialog";
 import { InvoiceReconciliationPanel } from "../components/InvoiceReconciliation";
 import type { ClientRow } from "./Clients";
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { UrlFilterBar } from "../components/UrlFilterBar";
 import { AlertTriangle, CheckCircle2, FileWarning, Receipt } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
@@ -124,6 +126,15 @@ export default function Finance() {
   // count di tiap pill selalu mencerminkan keseluruhan data, bukan cuma
   // subset yang kebetulan sedang aktif difilter.
   const [statusTab, setStatusTab] = useState("semua");
+  // Filter dari URL (⌘K "Tampilkan daftar: …", AI opportunity #5): status &
+  // client mengisi kontrol yang sudah terlihat; overdue=1 = terkirim & lewat
+  // jatuh tempo (ditampilkan di baris filter aktif).
+  const [searchParams] = useSearchParams();
+  const urlOverdue = searchParams.get("overdue") === "1";
+  useEffect(() => {
+    setStatusTab(searchParams.get("status") ?? "semua");
+    setClientFilter(searchParams.get("client") ?? "");
+  }, [searchParams]);
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
@@ -148,10 +159,15 @@ export default function Finance() {
     queryFn: () => api.get<CashFlowRow[]>(`/finance/cashflow?year=${cfYear}`),
   });
 
-  const filteredInvoices = useMemo(
-    () => (invoices ?? []).filter((i) => statusTab === "semua" || i.status === statusTab),
-    [invoices, statusTab]
-  );
+  const filteredInvoices = useMemo(() => {
+    // Tanggal LOKAL (sv-SE = YYYY-MM-DD); toISOString memakai UTC.
+    const today = new Date().toLocaleDateString("sv-SE");
+    return (invoices ?? []).filter(
+      (i) =>
+        (statusTab === "semua" || i.status === statusTab) &&
+        (!urlOverdue || (i.status === "terkirim" && !!i.due_date && i.due_date < today))
+    );
+  }, [invoices, statusTab, urlOverdue]);
   // ---------- Tabel invoice (DataTable) ----------
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "-";
   const sumOf = (key: "payroll_total" | "ppn_amount" | "total_due") =>
@@ -647,6 +663,8 @@ export default function Finance() {
           badge={pendingFaktur.length > 0 ? { label: "Perlu Tindakan", tone: "warning" } : undefined}
         />
       </div>
+
+      <UrlFilterBar labels={urlOverdue ? ["Lewat jatuh tempo"] : []} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />

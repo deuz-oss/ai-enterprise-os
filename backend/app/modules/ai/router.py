@@ -10,7 +10,7 @@ from app.core.permissions import (
     AI_PRESALES_ROLES,
     AI_RECRUITMENT_ROLES,
 )
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user, require_roles, require_tenant_user
 from app.modules.ai import forecast as forecast_service
 from app.modules.ai import rag as rag_service
 from app.modules.ai import service as ai_service
@@ -114,3 +114,27 @@ def generate_lead_brief(lead_id: UUID, db: Session = Depends(get_db)):
 @presales_router.get("/leads/{lead_id}/brief", response_model=LeadBriefOut | None)
 def get_lead_brief(lead_id: UUID, db: Session = Depends(get_db)):
     return ai_service.get_latest_lead_brief(db, lead_id)
+
+
+# Palet ⌘K: kalimat bebas -> daftar terfilter (peluang AI #5). Hanya navigasi --
+# halaman tujuan menegakkan RBAC-nya sendiri; akun karyawan (ESS) tidak
+# memakai palet admin.
+def _staff_only(user=Depends(get_current_user)):
+    if getattr(user.role, "value", user.role) == "karyawan":
+        raise HTTPException(status_code=403, detail="Fitur ini untuk staf perusahaan")
+    return user
+
+
+nav_router = APIRouter(
+    prefix="/ai",
+    tags=["ai"],
+    dependencies=[Depends(get_current_user), Depends(require_tenant_user()), Depends(_staff_only)],
+)
+
+
+@nav_router.post("/nav-query")
+def palette_nav_query(payload: dict, db: Session = Depends(get_db)):
+    """Terjemahkan kalimat ke URL daftar terfilter; tidak mengubah data apa pun."""
+    from app.modules.ai.nav_query import nav_query
+
+    return nav_query(db, str((payload or {}).get("text") or ""))

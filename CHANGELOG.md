@@ -6,6 +6,23 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Kalimat bebas di ⌘K → daftar terfilter (peluang AI #5 audit 2026-10-08)
+
+- Palet ⌘K punya item "Tampilkan daftar: …" untuk kalimat ≥ 2 kata (mis. "karyawan PT Maju kontrak habis bulan depan"). LLM hanya dipanggil saat item dipilih, bukan per ketikan.
+- `POST /ai/nav-query` (staf tenant; akun karyawan 403): LLM hanya memetakan kalimat ke skema tetap -- halaman (karyawan / invoice / job order) + filter dari daftar putih. Backend memvalidasi semuanya: status di luar daftar dibuang, nama klien dicocokkan ke ID secara deterministik (persis, lalu sebagian; ambigu → tidak dipilih), tanggal akhir kontrak dikonversi ke hari (1-365), `overdue` hanya untuk invoice. Yang dibuang dilaporkan (`ignored`). Tidak mengubah data apa pun; halaman tujuan menegakkan RBAC-nya sendiri.
+- Halaman Karyawan (`status`, `client`, `contract_days`, `q`), Finance (`status`, `client`, `overdue`), dan Job Order (`status`, `client`) kini membaca filter dari URL. Filter yang tidak punya kontrol terlihat ditampilkan di baris "Filter aktif" dengan tombol "Hapus filter" -- daftar tidak pernah tersaring diam-diam. Toast menyebut filter yang diterapkan dan yang diabaikan.
+- Cek "lewat jatuh tempo" memakai tanggal lokal, bukan UTC.
+
+### Added — Isi otomatis dari foto KTP/NPWP di onboarding (peluang AI #9 audit 2026-10-08)
+
+- Unggahan dokumen onboarding self-service menerima `extract`. Bila kandidat MENCENTANG izin (default mati; foto KTP = data pribadi, UU PDP) dan dokumennya foto PNG/JPEG KTP/NPWP, foto dibaca model vision (`onboarding.extract_ktp|npwp`) menjadi draf: NIK, alamat KTP (provinsi, kota, kecamatan, detail), nomor NPWP, dan nama di dokumen. PDF dan jenis lain tidak dikirim ke AI.
+- Validasi deterministik atas hasil baca: NIK harus 16 digit dan tanggal lahir di NIK (digit 7-12, tanggal +40 untuk perempuan) dicek silang dengan tanggal lahir yang terbaca; NPWP harus 15/16 digit; nama di dokumen dibandingkan dengan nama kandidat. Nomor yang tidak lolos tidak diisikan dan muncul sebagai peringatan.
+- Hasil baca TIDAK disimpan server: tampil di halaman sebagai "Hasil baca … (AI) -- periksa" dengan tombol "Isi ke form"; yang tersimpan tetap isian form yang kandidat submit. Gagal baca tidak menggagalkan unggahan. Opsi hanya tampil bila AI aktif (`ai_extraction_available`).
+
+### Fixed — Link publik ber-token gagal dibuka di browser yang menyimpan JWT lain
+
+- Link onboarding, portal klien, dan approval payroll klien dijawab 404 "tidak valid" bila browser menyimpan JWT tenant lain atau token basi: middleware menyetel konteks tenant dari klaim `tid` JWT, dan lookup token tersaring ke tenant itu (filter ORM; di PostgreSQL juga RLS). Kini lookup token publik berjalan tanpa konteks tenant (`tenant_context(None)`), lalu sisa request berjalan di tenant pemilik token. Ditemukan saat verifikasi #9 di browser; 3 test regresi (gagal tanpa perbaikan).
+
 ### Fixed/Added — Rekonsiliasi bank ke jurnal kas/bank + saran aksi (peluang AI #6 audit 2026-10-08)
 
 - **Fixed**: rekonsiliasi bank hanya mencari pasangan di transaksi kas-bank, padahal pelunasan invoice (`invoice_paid`), pembayaran bill, eksekusi payment request, dan aset memposting jurnal kas/bank tanpa transaksi kas-bank. Baris mutasi untuk pembayaran klien selalu "belum cocok", dan "membereskannya" dengan membuat transaksi bank Dr Bank / Cr Piutang mengkredit piutang dua kali. Kini kandidat mencakup jurnal terposting yang menyentuh akun kas/bank (±14 hari, skor sama), kecuali jurnal milik transaksi kas-bank dan jurnal yang sudah tercocok. Kolom baru `suggested_journal_id` / `matched_journal_id` (migrasi `46effe939a61`); `POST .../match` menerima `journal_entry_id`.

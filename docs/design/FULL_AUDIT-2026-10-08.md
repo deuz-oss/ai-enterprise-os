@@ -73,8 +73,12 @@ requirements.
 > #10 shipped as month-over-month KPI change sentences + top client
 > drivers (grouped by event month: paid/issued/finalized). #6 shipped with a
 > reconciliation fix: statement lines now match cash journals (invoice/bill
-> payments etc.), and unmatched lines get click-to-apply drafts. #4, #5, #9
-> remain open (#4 needs a scheduler; #5/#9 need LLM/vision at their core).
+> payments etc.), and unmatched lines get click-to-apply drafts. #9 shipped as
+> opt-in KTP/NPWP photo reading in onboarding (draft only, not stored,
+> deterministic NIK/NPWP checks). #5 shipped: ⌘K sentence -> whitelisted
+> page+filters (LLM maps only; client IDs resolved deterministically), with
+> URL filters on Employees/Finance/Job Orders. Only #4 (needs a scheduler)
+> remains open.
 
 ---
 

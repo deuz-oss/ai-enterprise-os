@@ -58,6 +58,9 @@ def create_app() -> FastAPI:
         hr_router as ai_hr_router,
     )
     from app.modules.ai.router import (
+        nav_router as ai_nav_router,
+    )
+    from app.modules.ai.router import (
         presales_router as ai_presales_router,
     )
     from app.modules.ai.router import (
@@ -199,6 +202,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         ai_hr_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    app.include_router(
+        ai_nav_router,
         prefix="/api/v1",
         dependencies=[Depends(require_active_subscription())],
     )

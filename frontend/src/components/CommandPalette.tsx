@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { api } from "../api/client";
+
+/** Respons `POST /ai/nav-query` (backend ai/nav_query.py). */
+interface NavQueryResult {
+  page: string | null;
+  path: string | null;
+  applied: string[];
+  ignored: string[];
+  source: "ai" | "none";
+}
 
 export interface PaletteItem {
   id: string;
@@ -117,8 +127,46 @@ export default function CommandPalette({
       !q ||
       i.label.toLowerCase().includes(q) ||
       (i.group ?? "").toLowerCase().includes(q);
-    return [...items.filter(match), ...(q.length >= 2 ? entityHits : [])];
+    // AI opportunity #5: kalimat (>= 2 kata) bisa diterjemahkan ke daftar
+    // terfilter. LLM HANYA dipanggil saat item ini dipilih, bukan per ketikan.
+    const sentence = query.trim();
+    const aiItem: PaletteItem[] =
+      sentence.split(/\s+/).length >= 2
+        ? [
+            {
+              id: "ai-nav-query",
+              label: `Tampilkan daftar: "${sentence}"`,
+              emoji: "✨",
+              group: "Cari dengan AI",
+              action: () => runNavQuery(sentence),
+            },
+          ]
+        : [];
+    return [...items.filter(match), ...(q.length >= 2 ? entityHits : []), ...aiItem];
   }, [items, query, entityHits]);
+
+  function runNavQuery(text: string) {
+    const request = api.post<NavQueryResult>("/ai/nav-query", { text }).then((res) => {
+      if (!res.path) throw new Error("not-understood");
+      navigate(res.path);
+      return res;
+    });
+    toast.promise(request, {
+      loading: "Menerjemahkan permintaan…",
+      success: (res) =>
+        [
+          `${res.page}: ${res.applied.length ? res.applied.join(" · ") : "tanpa filter"}`,
+          res.ignored.length ? `Diabaikan: ${res.ignored.join("; ")}` : "",
+        ]
+          .filter(Boolean)
+          .join(" — "),
+      error: (err) =>
+        err instanceof Error && err.message === "not-understood"
+          ? "Permintaan belum bisa diterjemahkan ke daftar karyawan, invoice, atau job order."
+          : "Gagal menerjemahkan permintaan.",
+    });
+    return request.then(() => undefined);
+  }
 
   useEffect(() => {
     if (active >= results.length) setActive(0);

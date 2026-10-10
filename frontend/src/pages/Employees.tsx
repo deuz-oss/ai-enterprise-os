@@ -1,6 +1,7 @@
 import { useMe } from "../api/auth";
-import { FormEvent, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { UrlFilterBar } from "../components/UrlFilterBar";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile, formatDate } from "../api/client";
@@ -162,6 +163,21 @@ export default function Employees() {
   // yang sama, sudah dipakai widget lain untuk lookup nama lintas-halaman).
   const [statusTab, setStatusTab] = useState("");
   const [search, setSearch] = useState("");
+  // Filter dari URL (⌘K "Tampilkan daftar: …", AI opportunity #5): status, q,
+  // client (id klien placement), contract_days (kontrak berakhir ≤ N hari).
+  const [searchParams] = useSearchParams();
+  const urlClient = searchParams.get("client") ?? "";
+  const urlContractDays = Number(searchParams.get("contract_days")) || 0;
+  useEffect(() => {
+    setStatusTab(searchParams.get("status") ?? "");
+    setSearch(searchParams.get("q") ?? "");
+  }, [searchParams]);
+  const { data: endingContracts } = useQuery({
+    queryKey: ["contracts-expiring", urlContractDays],
+    queryFn: () =>
+      api.get<ExpiringContract[]>(`/employees/contracts/expiring?within_days=${urlContractDays}`),
+    enabled: urlContractDays > 0,
+  });
   const employeesQuery = useEmployeeLookup<EmployeeRow>();
   const {
     data: employeesLookup,
@@ -171,12 +187,20 @@ export default function Employees() {
   const allEmployees = useMemo(() => employeesLookup ?? [], [employeesLookup]);
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const endingIds = urlContractDays ? new Set((endingContracts ?? []).map((c) => c.employee_id)) : null;
     return allEmployees.filter(
       (e) =>
         (!statusTab || e.status === statusTab) &&
+        (!urlClient || e.placement_client_id === urlClient) &&
+        (!endingIds || endingIds.has(e.id)) &&
         (!q || [e.full_name, e.employee_no, e.phone].some((v) => v?.toLowerCase().includes(q)))
     );
-  }, [allEmployees, statusTab, search]);
+  }, [allEmployees, statusTab, search, urlClient, urlContractDays, endingContracts]);
+  const urlFilterLabels = [
+    urlClient &&
+      `Klien: ${allEmployees.find((e) => e.placement_client_id === urlClient)?.placement_client_name ?? "terpilih"}`,
+    urlContractDays && `Kontrak berakhir ≤ ${urlContractDays} hari`,
+  ].filter((l): l is string => Boolean(l));
   const employeeColumns: Column<EmployeeRow>[] = [
     {
       key: "employee_no",
@@ -671,6 +695,8 @@ export default function Employees() {
           summary={`Hanya ${allEmployees.length} dari ${employeesLookupTotal} karyawan yang termuat (batas ${EMPLOYEE_LOOKUP_LIMIT}). Hitungan, tab status, dan daftar di bawah belum mencakup semua karyawan.`}
         />
       )}
+
+      <UrlFilterBar labels={urlFilterLabels} />
 
       <div className="flex flex-wrap items-center gap-3">
         <PillTabs tabs={statusTabs} value={statusTab} onChange={setStatusTab} />
