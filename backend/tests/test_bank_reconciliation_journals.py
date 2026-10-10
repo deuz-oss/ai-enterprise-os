@@ -386,3 +386,64 @@ def test_reversal_clears_tx_reconciled_and_is_audited(client):
     items = logs["items"] if isinstance(logs, dict) else logs
     reversed_log = next(i for i in items if i["action"] == "accounting.journal_reversed")
     assert reversed_log["detail"]["unmatched_statement_lines"] == [line["id"]]
+
+
+def test_apply_refuses_closed_period_before_changing_anything(client):
+    """Cek semua gap: jurnal aksi bertanggal mutasi; di periode tutup buku
+    post_auto_event melewati jurnal diam-diam -> invoice lunas TANPA jurnal.
+    Kini ditolak sebelum ada perubahan."""
+    headers = _auth_header(client)
+    acc = _accounts(client, headers)
+    inv = _sent_invoice(client, headers)
+    first_of_month = date.today().replace(day=1)
+    last_month_day = first_of_month - timedelta(days=5)
+    line = _import(client, headers, [(last_month_day, "TRF LAMA", round(inv["total_due"]), 0)])[
+        "TRF LAMA"
+    ]
+    closed = client.post(
+        f"/api/v1/accounting/periods/{last_month_day.year}/{last_month_day.month}/close",
+        headers=headers,
+    )
+    assert closed.status_code in (200, 201), closed.text
+
+    for payload in (
+        {"kind": "settle_invoice", "invoice_id": inv["id"]},
+        {"kind": "create_transaction", "bank_account_id": acc["1-1100"]},
+    ):
+        resp = client.post(f"{BASE}/{line['id']}/apply", headers=headers, json=payload)
+        assert resp.status_code == 422, resp.text
+        assert "ditutup" in resp.json()["detail"]
+
+    invoice = client.get(f"/api/v1/finance/invoices/{inv['id']}", headers=headers).json()
+    assert invoice["status"] == "terkirim"
+    txs = client.get(
+        "/api/v1/accounting/cashbank/transactions",
+        headers=headers,
+        params={"year": last_month_day.year},
+    ).json()
+    assert txs == []
+
+
+def test_unmatch_undoes_a_wrong_match_without_touching_journals(client):
+    headers = _auth_header(client)
+    acc = _accounts(client, headers)
+    tx = client.post(
+        "/api/v1/accounting/cashbank/transactions",
+        headers=headers,
+        json={"tx_type": "penerimaan", "bank_account_id": acc["1-1100"], "amount": 1_200_000},
+    ).json()
+    line = _import(client, headers, [(date.today(), "SALAH CLICK", 1_200_000, 0)])["SALAH CLICK"]
+    client.post(
+        f"{BASE}/{line['id']}/match", headers=headers, json={"bank_transaction_id": tx["id"]}
+    )
+
+    resp = client.post(f"{BASE}/{line['id']}/unmatch", headers=headers)
+    assert resp.status_code == 200, resp.text
+    after = {ln["id"]: ln for ln in client.get(BASE, headers=headers).json()}[line["id"]]
+    assert after["status"] == "belum_cocok" and after["matched_tx_id"] is None
+    # Transaksi kembali tersedia sebagai kandidat; jurnalnya tidak dibalik.
+    again = _import(client, headers, [(date.today(), "SALAH CLICK 2", 1_200_000, 0)])[
+        "SALAH CLICK 2"
+    ]
+    assert again["suggested_tx_id"] == tx["id"]
+    assert client.post(f"{BASE}/{line['id']}/unmatch", headers=headers).status_code == 409

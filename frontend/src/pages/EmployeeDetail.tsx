@@ -1395,9 +1395,10 @@ export default function EmployeeDetail() {
                   </li>
                 ))}
                 {emergencyContacts?.length === 0 && (
-                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  // <li>, bukan <p>: anak <ul> wajib <li> (axe "list").
+                  <li className="text-sm" style={{ color: "var(--text-muted)" }}>
                     Belum ada kontak darurat.
-                  </p>
+                  </li>
                 )}
               </ul>
             </div>

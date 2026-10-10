@@ -448,6 +448,42 @@ def confirm_match(
     return {"id": str(line.id), "status": line.status.value}
 
 
+def unmatch_line(db: Session, *, user, line_id: str) -> dict:
+    """Batalkan pencocokan yang keliru. Tidak ada jurnal yang diubah: hanya
+    tautan baris rekening koran <-> pasangan dilepas, dan transaksi kas-bank
+    (bila ada) kembali belum terekonsiliasi."""
+    line = db.get(BankStatementLine, parse_uuid(line_id))
+    if line is None:
+        raise HTTPException(status_code=404, detail="Baris statement tidak ditemukan")
+    if line.status != StatementLineStatus.matched:
+        raise HTTPException(status_code=409, detail="Baris belum tercocok")
+    detail = {
+        "bank_transaction": str(line.matched_tx_id) if line.matched_tx_id else None,
+        "journal_entry": str(line.matched_journal_id) if line.matched_journal_id else None,
+        "by": getattr(user, "email", "?"),
+    }
+    if line.matched_tx_id:
+        tx = db.get(BankTransaction, line.matched_tx_id)
+        if tx is not None:
+            tx.reconciled_at = None
+    line.status = StatementLineStatus.unmatched
+    line.matched_tx_id = None
+    line.matched_journal_id = None
+    line.confirmed_by_id = None
+    line.confirmed_at = None
+    line.match_score = 0
+    line.match_reason = "Pencocokan dibatalkan manual"
+    db.commit()
+    audit.log_event(
+        db,
+        action="bank_statement.unmatched",
+        entity_type="bank_statement_line",
+        entity_id=line.id,
+        detail=detail,
+    )
+    return {"id": str(line.id), "status": line.status.value}
+
+
 def ignore_line(db: Session, *, user, line_id: str) -> dict:
     line = db.get(BankStatementLine, parse_uuid(line_id))
     if line is None:
@@ -597,11 +633,17 @@ def apply_action(db: Session, *, user, line_id: str, payload: dict) -> dict:
     """Jalankan satu saran lalu cocokkan baris ke jurnal/transaksi hasilnya."""
     from app.modules.accounting import transactions_service
     from app.modules.accounting.models import PurchaseBill
+    from app.modules.accounting.service import assert_period_open
     from app.modules.finance.service import mark_invoice_paid_from_bank
 
     line = _open_line(db, line_id)
     net = _net(line)
     kind = payload.get("kind")
+    # Jurnal hasil aksi bertanggal mutasi. Bila periodenya sudah ditutup buku,
+    # post_auto_event diam-diam melewati jurnal -- invoice/bill jadi lunas atau
+    # transaksi tercipta TANPA jurnal. Tolak sebelum mengubah apa pun.
+    if kind in ("settle_invoice", "pay_bill", "create_transaction"):
+        assert_period_open(db, line.tx_date)
     if kind == "settle_invoice":
         if net <= 0:
             raise HTTPException(status_code=422, detail="Pelunasan invoice harus mutasi masuk")

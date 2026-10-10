@@ -1,5 +1,5 @@
 import { StatementSuggestions } from "../components/StatementSuggestions";
-import { DataTable, type Column } from "../components/ui";
+import { confirmDialog, DataTable, type Column } from "../components/ui";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
@@ -152,6 +152,11 @@ function RekonsiliasiCard() {
   });
   // Baris "belum cocok" yang panel sarannya sedang dibuka.
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
+  // Batalkan pencocokan yang keliru (jurnal tidak diubah).
+  const unmatch = useMutation({
+    mutationFn: (lineId: string) => api.post(`/accounting/cashbank/statement/${lineId}/unmatch`, {}),
+    onSuccess: invalidate,
+  });
   const ignore = useMutation({
     mutationFn: (lineId: string) =>
       api.post(`/accounting/cashbank/statement/${lineId}/ignore`, {}),
@@ -249,7 +254,27 @@ function RekonsiliasiCard() {
               Abaikan
             </button>
           )}
-          {ln.status === "tercocok" && <span aria-label="sudah dicocokkan">✓</span>}
+          {ln.status === "tercocok" && (
+            <>
+              <span aria-label="sudah dicocokkan">✓</span>
+              <button
+                type="button"
+                disabled={unmatch.isPending}
+                onClick={() =>
+                  confirmDialog({
+                    title: "Lepas pencocokan?",
+                    message:
+                      "Tautan mutasi ini ke jurnal/transaksinya dilepas dan baris kembali belum cocok. Jurnal tidak diubah.",
+                    confirmLabel: "Lepas",
+                    onConfirm: () => unmatch.mutate(ln.id),
+                  })
+                }
+                className="font-medium text-[var(--th-color)] hover:text-[var(--text)]"
+              >
+                Lepas
+              </button>
+            </>
+          )}
         </span>
       ),
     },

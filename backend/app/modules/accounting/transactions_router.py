@@ -158,6 +158,14 @@ def apply_statement_suggestion(
     return bank_statement.apply_action(db, user=user, line_id=line_id, payload=payload or {})
 
 
+@router.post("/cashbank/statement/{line_id}/unmatch")
+def unmatch_statement_line(
+    line_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    """Batalkan pencocokan yang keliru (jurnal tidak diubah)."""
+    return bank_statement.unmatch_line(db, user=user, line_id=line_id)
+
+
 @router.post("/cashbank/statement/{line_id}/ignore")
 def ignore_statement_line(
     line_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)

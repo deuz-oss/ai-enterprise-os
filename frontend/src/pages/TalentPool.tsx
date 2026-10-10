@@ -171,7 +171,7 @@ function BrandingCard() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+        className="inline-flex min-h-6 items-center gap-1.5 text-xs font-medium hover:underline"
         style={{ color: "var(--text-muted)" }}
       >
         <Palette className="h-3.5 w-3.5" /> Pengaturan CV Standar
@@ -291,7 +291,7 @@ function FieldSettingsCard() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+        className="inline-flex min-h-6 items-center gap-1.5 text-xs font-medium hover:underline"
         style={{ color: "var(--text-muted)" }}
       >
         <Palette className="h-3.5 w-3.5" /> Pengaturan Field Kandidat

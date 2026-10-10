@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Cek semua gap siklus audit 2026-10-08
+
+Sapuan seluruh 21 commit siklus dengan lensa: isolasi tenant & RBAC, uang/akuntansi, aksi tak terbatalkan, migrasi, aksesibilitas UI, dan CI.
+- **Rekonsiliasi: periode tutup buku.** Aksi saran ("Tandai lunas", "Bayar bill", "Catat transaksi") memposting jurnal bertanggal MUTASI; bila periodenya sudah ditutup, `post_auto_event` diam-diam melewati jurnal sehingga invoice/bill menjadi lunas atau transaksi tercipta TANPA jurnal (piutang di buku besar tetap ada). Kini ditolak (422) sebelum ada perubahan.
+- **Rekonsiliasi: lepas cocok.** Pencocokan yang keliru dulu tidak bisa dibatalkan (hanya dengan membalik jurnal yang sebenarnya benar). Baru: `POST /accounting/cashbank/statement/{id}/unmatch` + tombol "Lepas" berkonfirmasi; jurnal tidak diubah, transaksi kas-bank kembali belum terekonsiliasi, tercatat di audit.
+- **A11y (axe-core WCAG 2.2 AA, 21 halaman + 8 tab Detail Karyawan + panel interaktif baru)**: tombol pengaturan di Talent Pool di bawah ukuran target 24 px; pesan "Belum ada kontak darurat" berada langsung di dalam `<ul>` (sejak 2026-09-14, lolos sapuan lama karena datanya tidak kosong). Sisanya 0 pelanggaran.
+- **Test isolasi tenant** (`test_cycle_cross_tenant.py`) untuk semua endpoint baru siklus: tenant B tidak bisa membaca maupun MEMAKAI ID milik tenant A lewat URL/payload (rekonsiliasi invoice, draf pengingat, tinjauan payroll, cek margin, saran/aksi rekonsiliasi bank, nav-query), dengan kontrol positif.
+- Diverifikasi tanpa perubahan: role router akuntansi = finance (aksi rekonsiliasi tidak melewati RBAC finance); tiga migrasi tulisan tangan unik & bersih; CI hijau sejak `1928289` termasuk build Docker dari lock.
+
 ### Fixed — Rekonsiliasi bank vs jurnal yang dibalik (cek gap #6)
 
 - Jurnal kas/bank yang sudah DIBALIK (efek bersih nol) dan jurnal pembaliknya (`journal_reversed`) masih ditawarkan sebagai pasangan mutasi rekening koran; mutasi sungguhan bisa "tercocok" ke pembukuan yang sudah dibatalkan. Kini keduanya dikeluarkan dari kandidat dan konfirmasi manual ke jurnal seperti itu ditolak (422).
