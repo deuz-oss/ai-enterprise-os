@@ -237,7 +237,7 @@ class StatementLineStatus(str, enum.Enum):
 class BankStatementLine(TenantMixin, Base):
     """Satu baris rekening koran hasil impor (PRD §8.8 #2 rekonsiliasi cerdas).
 
-    Matching fuzzy terhadap BankTransaction dihitung saat impor; user
+    Matching fuzzy terhadap BankTransaction & jurnal kas/bank dihitung saat impor; user
     mengonfirmasi usulan atau menandai diabaikan. Alasan ketidakcocokan
     dihitung deterministik.
     """
@@ -261,6 +261,16 @@ class BankStatementLine(TenantMixin, Base):
     match_reason: Mapped[str | None] = mapped_column(String(500))
     matched_tx_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("bank_transactions.id"), default=None
+    )
+    # Pasangan berupa jurnal terposting yang menyentuh kas/bank tanpa
+    # BankTransaction (pelunasan invoice/bill, eksekusi payment request, aset).
+    # Dulu baris seperti ini selalu "belum cocok", dan membuat transaksi bank
+    # untuknya mengkredit piutang/utang dua kali.
+    suggested_journal_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("journal_entries.id"), default=None
+    )
+    matched_journal_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("journal_entries.id"), default=None, index=True
     )
     confirmed_by_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

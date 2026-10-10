@@ -254,33 +254,59 @@ def update_invoice(db: Session, invoice_id: str, payload: InvoiceUpdate) -> Invo
             raise HTTPException(
                 status_code=409, detail="Invoice yang sudah dibayar tidak bisa diubah"
             )
-        invoice.status = new_status
         if new_status == InvoiceStatus.paid:
-            invoice.paid_at = datetime.now(UTC)
-            # Fase 10: jurnal otomatis invoice_paid (idempoten).
-            try:
-                from app.modules.accounting.service import post_auto_event
-
-                post_auto_event(
-                    db,
-                    tenant_id=invoice.tenant_id,
-                    event_code="invoice_paid",
-                    source_ref_type="invoice",
-                    source_ref_id=invoice.id,
-                    entry_date=date.today(),
-                    description=f"Pelunasan invoice {invoice.invoice_no}",
-                    lines=[
-                        ("1-1100", to_decimal(invoice.total_due), ZERO),
-                        ("1-1200", ZERO, to_decimal(invoice.total_due)),
-                    ],
-                )
-            except Exception:  # noqa: BLE001
-                import logging
-
-                logging.getLogger(__name__).exception("Auto-journal invoice_paid gagal")
+            _mark_paid(db, invoice, date.today())
+        else:
+            invoice.status = new_status
     db.commit()
     db.refresh(invoice)
     return invoice
+
+
+def _mark_paid(db: Session, invoice: Invoice, paid_on: date):
+    """Status lunas + jurnal otomatis invoice_paid (Fase 10, idempoten).
+
+    Mengembalikan jurnalnya (None bila aturan jurnal nonaktif/gagal) supaya
+    rekonsiliasi bank bisa langsung menautkan mutasi ke jurnal ini.
+    """
+    invoice.status = InvoiceStatus.paid
+    invoice.paid_at = (
+        datetime.now(UTC)
+        if paid_on == date.today()
+        else datetime(paid_on.year, paid_on.month, paid_on.day, tzinfo=UTC)
+    )
+    try:
+        from app.modules.accounting.service import post_auto_event
+
+        return post_auto_event(
+            db,
+            tenant_id=invoice.tenant_id,
+            event_code="invoice_paid",
+            source_ref_type="invoice",
+            source_ref_id=invoice.id,
+            entry_date=paid_on,
+            description=f"Pelunasan invoice {invoice.invoice_no}",
+            lines=[
+                ("1-1100", to_decimal(invoice.total_due), ZERO),
+                ("1-1200", ZERO, to_decimal(invoice.total_due)),
+            ],
+        )
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("Auto-journal invoice_paid gagal")
+        return None
+
+
+def mark_invoice_paid_from_bank(db: Session, invoice_id: str, paid_on: date):
+    """Lunasi invoice dari mutasi rekening koran (tanggal bayar = tanggal mutasi).
+
+    Hanya invoice terkirim (piutang); caller yang commit.
+    """
+    invoice = _get_invoice(db, invoice_id)
+    if invoice.status not in RECEIVABLE_STATUSES:
+        raise HTTPException(status_code=409, detail="Invoice bukan piutang terbuka")
+    return invoice, _mark_paid(db, invoice, paid_on)
 
 
 # Satu-satunya definisi piutang (AR) yang dipakai Dashboard, Finance, aging, dan

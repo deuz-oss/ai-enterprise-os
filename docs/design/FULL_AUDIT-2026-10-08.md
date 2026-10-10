@@ -71,8 +71,10 @@ requirements.
 > view until match results are persisted). #7 shipped as deterministic
 > quotation margin checks from template field roles + BPJS engine cost.
 > #10 shipped as month-over-month KPI change sentences + top client
-> drivers (grouped by event month: paid/issued/finalized). #4-#6, #9 remain
-> open (#4 needs a scheduler; #5/#9 need LLM/vision at their core).
+> drivers (grouped by event month: paid/issued/finalized). #6 shipped with a
+> reconciliation fix: statement lines now match cash journals (invoice/bill
+> payments etc.), and unmatched lines get click-to-apply drafts. #4, #5, #9
+> remain open (#4 needs a scheduler; #5/#9 need LLM/vision at their core).
 
 ---
 

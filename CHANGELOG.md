@@ -6,6 +6,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed/Added — Rekonsiliasi bank ke jurnal kas/bank + saran aksi (peluang AI #6 audit 2026-10-08)
+
+- **Fixed**: rekonsiliasi bank hanya mencari pasangan di transaksi kas-bank, padahal pelunasan invoice (`invoice_paid`), pembayaran bill, eksekusi payment request, dan aset memposting jurnal kas/bank tanpa transaksi kas-bank. Baris mutasi untuk pembayaran klien selalu "belum cocok", dan "membereskannya" dengan membuat transaksi bank Dr Bank / Cr Piutang mengkredit piutang dua kali. Kini kandidat mencakup jurnal terposting yang menyentuh akun kas/bank (±14 hari, skor sama), kecuali jurnal milik transaksi kas-bank dan jurnal yang sudah tercocok. Kolom baru `suggested_journal_id` / `matched_journal_id` (migrasi `46effe939a61`); `POST .../match` menerima `journal_entry_id`.
+- Baris tanpa pasangan punya "Saran…" (`GET /accounting/cashbank/statement/{id}/suggestions`): invoice terkirim bernominal sama → tandai lunas (tanggal bayar = tanggal mutasi), bill belum dibayar bernominal sama → bayar bill, selain itu akun lawan dari baris serupa yang sudah tercocok atau kata kunci keterangan (biaya admin → 5-9000, bunga masuk → 4-9000, bunga keluar → 6-1000). `POST .../apply` menjalankan aksi yang dipilih lewat alur bisnis yang sudah ada lalu langsung mencocokkan baris ke jurnal hasilnya. Tidak ada yang diposting tanpa klik + konfirmasi user; deterministik, tanpa AI.
+- Alasan pada baris yang tercocok kini menyebut pasangannya (dulu tetap "Tidak ada mutasi sistem…").
+- Logika "tandai lunas" invoice dikeluarkan dari `update_invoice` (`_mark_paid`) tanpa mengubah perilakunya.
+
 ### Added — Perubahan besar KPI di Dashboard (peluang AI #10 audit 2026-10-08)
 
 - `GET /overview/anomalies` membandingkan dua bulan PENUH terakhir untuk kas masuk (invoice lunas, per bulan bayar), nilai invoice diterbitkan (per bulan terbit, tanpa draft/batal), dan bruto payroll difinalisasi (per bulan finalisasi, diatribusikan ke klien lewat run proyek atau placement). Bila berubah ≥20% (dan basis bulan sebelumnya ≥ Rp1 juta), kembalikan satu kalimat plus maksimal 3 klien penyumbang selisih terbesar.

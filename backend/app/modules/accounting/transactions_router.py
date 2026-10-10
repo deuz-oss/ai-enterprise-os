@@ -130,8 +130,32 @@ def confirm_statement_match(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    tx_id = str((payload or {}).get("bank_transaction_id") or "")
-    return bank_statement.confirm_match(db, user=user, line_id=line_id, bank_transaction_id=tx_id)
+    """Cocokkan ke `bank_transaction_id` ATAU `journal_entry_id` (jurnal kas/bank)."""
+    body = payload or {}
+    return bank_statement.confirm_match(
+        db,
+        user=user,
+        line_id=line_id,
+        bank_transaction_id=str(body.get("bank_transaction_id") or "") or None,
+        journal_entry_id=str(body.get("journal_entry_id") or "") or None,
+    )
+
+
+@router.get("/cashbank/statement/{line_id}/suggestions")
+def statement_line_suggestions(line_id: str, db: Session = Depends(get_db)):
+    """Saran aksi untuk baris tanpa pasangan -- tidak memposting apa pun."""
+    return bank_statement.suggest_actions(db, line_id)
+
+
+@router.post("/cashbank/statement/{line_id}/apply")
+def apply_statement_suggestion(
+    line_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Jalankan saran yang dipilih user lalu cocokkan baris ke hasilnya."""
+    return bank_statement.apply_action(db, user=user, line_id=line_id, payload=payload or {})
 
 
 @router.post("/cashbank/statement/{line_id}/ignore")

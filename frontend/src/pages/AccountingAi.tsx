@@ -1,3 +1,4 @@
+import { StatementSuggestions } from "../components/StatementSuggestions";
 import { DataTable, type Column } from "../components/ui";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,9 @@ interface StatementLine {
   suggested_tx_id: string | null;
   suggested_tx_description: string | null;
   matched_tx_id: string | null;
+  // Pasangan berupa jurnal kas/bank (pelunasan invoice/bill, payment request, aset).
+  suggested_journal_id: string | null;
+  matched_journal_id: string | null;
 }
 
 interface PredictionRow {
@@ -139,12 +143,15 @@ function RekonsiliasiCard() {
   });
 
   const confirm = useMutation({
-    mutationFn: (p: { lineId: string; txId: string }) =>
-      api.post(`/accounting/cashbank/statement/${p.lineId}/match`, {
-        bank_transaction_id: p.txId,
-      }),
+    mutationFn: (p: { lineId: string; txId?: string; journalId?: string }) =>
+      api.post(
+        `/accounting/cashbank/statement/${p.lineId}/match`,
+        p.journalId ? { journal_entry_id: p.journalId } : { bank_transaction_id: p.txId },
+      ),
     onSuccess: invalidate,
   });
+  // Baris "belum cocok" yang panel sarannya sedang dibuka.
+  const [suggestFor, setSuggestFor] = useState<string | null>(null);
   const ignore = useMutation({
     mutationFn: (lineId: string) =>
       api.post(`/accounting/cashbank/statement/${lineId}/ignore`, {}),
@@ -208,13 +215,29 @@ function RekonsiliasiCard() {
       className: "whitespace-nowrap",
       cell: (ln) => (
         <span className="inline-flex flex-wrap items-center gap-2">
-          {ln.status === "usulan" && ln.suggested_tx_id && (
+          {ln.status === "usulan" && (ln.suggested_tx_id || ln.suggested_journal_id) && (
             <button
-              onClick={() => confirm.mutate({ lineId: ln.id, txId: ln.suggested_tx_id! })}
+              onClick={() =>
+                confirm.mutate({
+                  lineId: ln.id,
+                  txId: ln.suggested_tx_id ?? undefined,
+                  journalId: ln.suggested_journal_id ?? undefined,
+                })
+              }
               disabled={confirm.isPending}
               className="font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
             >
               Cocokkan
+            </button>
+          )}
+          {ln.status === "belum_cocok" && (
+            <button
+              type="button"
+              aria-expanded={suggestFor === ln.id}
+              onClick={() => setSuggestFor(suggestFor === ln.id ? null : ln.id)}
+              className="font-medium text-[var(--accent)] hover:opacity-80"
+            >
+              Saran…
             </button>
           )}
           {ln.status !== "matched" && ln.status !== "diabaikan" && ln.status !== "tercocok" && (
@@ -283,6 +306,11 @@ function RekonsiliasiCard() {
         query={lines}
         defaultSort={{ key: "date", dir: "desc" }}
         pageSize={50}
+        renderExpanded={(ln) =>
+          suggestFor === ln.id && ln.status === "belum_cocok" ? (
+            <StatementSuggestions lineId={ln.id} onClose={() => setSuggestFor(null)} />
+          ) : null
+        }
         emptyTitle="Belum ada rekening koran diimpor."
       />
     </div>
