@@ -126,3 +126,23 @@ def test_cron_endpoint_runs_for_active_tenants_once(client):
     assert first.json()["tenants_sent"] == 1
     again = client.post("/api/v1/platform/internal/run-weekly-digest", headers=platform)
     assert again.json()["tenants_sent"] == 0  # idempoten per minggu
+
+
+def test_lapsed_shows_latest_unlinked_contract(client, tenant_db):
+    h = _auth_header(client)
+    emp = _employee(client, h, bpjs_kes="1", bpjs_tk="2")
+    _contract(client, h, emp["id"], TODAY - timedelta(days=200))
+    _contract(client, h, emp["id"], TODAY - timedelta(days=3))  # tidak ditautkan
+    lapsed = build_digest(tenant_db, TODAY)["contracts_lapsed"]
+    assert len(lapsed) == 1 and lapsed[0]["days_overdue"] == 3
+
+
+def test_cron_skips_suspended_tenant(client, tenant_db):
+    from app.modules.hrd.compliance_digest import run_weekly_digest_for_all_tenants
+    from app.modules.platform.models import Tenant, TenantStatus
+
+    _auth_header(client)
+    tenant = tenant_db.get(Tenant, get_tenant())
+    tenant.status = TenantStatus.suspended
+    tenant_db.commit()
+    assert run_weekly_digest_for_all_tenants(tenant_db, TODAY) == {}

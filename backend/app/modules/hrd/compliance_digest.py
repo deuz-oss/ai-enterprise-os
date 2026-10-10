@@ -78,7 +78,9 @@ def build_digest(db: Session, today: date | None = None) -> dict:
             EmploymentContract.id.not_in(superseded),
             Employee.id.not_in(still_valid),
         )
-        .order_by(EmploymentContract.end_date)
+        # Terbaru dulu: bila ada beberapa kontrak lewat yang tidak saling
+        # terhubung, yang relevan adalah yang paling akhir berakhir.
+        .order_by(EmploymentContract.end_date.desc())
     ).all()
     seen: set[UUID] = set()
     lapsed = []
@@ -188,7 +190,17 @@ def send_weekly_digest(db: Session, today: date | None = None) -> int:
     if not recipients:
         return 0
     title, body = _summary(build_digest(db, today))
+    sent = 0
     for uid in recipients:
+        # Persempit balapan dua request bersamaan di awal minggu: jangan kirim
+        # ulang ke penerima yang sudah mendapatkannya.
+        if db.execute(
+            select(Notification.id)
+            .where(Notification.user_id == uid, Notification.entity_type == marker)
+            .limit(1)
+        ).first():
+            continue
+        sent += 1
         notify(
             db,
             user_id=uid,
@@ -197,7 +209,7 @@ def send_weekly_digest(db: Session, today: date | None = None) -> int:
             category=DIGEST_CATEGORY,
             entity_type=marker,
         )
-    return len(recipients)
+    return sent
 
 
 def run_weekly_digest_for_all_tenants(db: Session, today: date | None = None) -> dict:

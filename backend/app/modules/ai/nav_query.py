@@ -147,8 +147,12 @@ def nav_query(db: Session, text: str) -> dict:
     from app.core.llm import ai_configured, chat_completion
 
     text = text.strip()[:200]
-    if not text or not ai_configured():
-        return {"page": None, "path": None, "applied": [], "ignored": [], "source": "none"}
+    empty: dict = {"page": None, "path": None, "applied": [], "ignored": [], "source": "none"}
+    if not text:
+        return {**empty, "reason": "empty"}
+    if not ai_configured():
+        # Dibedakan dari "tidak dimengerti" supaya palet tidak menyesatkan user.
+        return {**empty, "reason": "ai_off"}
     try:
         parsed = chat_completion(
             _SYSTEM + f" Hari ini {date.today().isoformat()}.",
@@ -157,6 +161,8 @@ def nav_query(db: Session, text: str) -> dict:
             feature="palette.nav_query",
         )
     except Exception:  # noqa: BLE001 - palet tetap jalan tanpa terjemahan
-        return {"page": None, "path": None, "applied": [], "ignored": [], "source": "none"}
+        return {**empty, "reason": "ai_error"}
     result = build_navigation(db, parsed if isinstance(parsed, dict) else {})
-    return {**result, "source": "ai" if result["path"] else "none"}
+    if not result["path"]:
+        return {**result, "source": "none", "reason": "not_understood"}
+    return {**result, "source": "ai", "reason": None}

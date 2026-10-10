@@ -10,6 +10,7 @@ interface NavQueryResult {
   applied: string[];
   ignored: string[];
   source: "ai" | "none";
+  reason?: "empty" | "ai_off" | "ai_error" | "not_understood" | null;
 }
 
 export interface PaletteItem {
@@ -147,7 +148,7 @@ export default function CommandPalette({
 
   function runNavQuery(text: string) {
     const request = api.post<NavQueryResult>("/ai/nav-query", { text }).then((res) => {
-      if (!res.path) throw new Error("not-understood");
+      if (!res.path) throw new Error(res.reason ?? "not_understood");
       navigate(res.path);
       return res;
     });
@@ -160,10 +161,13 @@ export default function CommandPalette({
         ]
           .filter(Boolean)
           .join(" — "),
-      error: (err) =>
-        err instanceof Error && err.message === "not-understood"
-          ? "Permintaan belum bisa diterjemahkan ke daftar karyawan, invoice, atau job order."
-          : "Gagal menerjemahkan permintaan.",
+      error: (err) => {
+        const reason = err instanceof Error ? err.message : "";
+        if (reason === "ai_off") return "Fitur AI belum aktif di server ini (AI_BASE_URL kosong).";
+        if (reason === "not_understood")
+          return "Permintaan belum bisa diterjemahkan ke daftar karyawan, invoice, atau job order.";
+        return "Gagal menerjemahkan permintaan.";
+      },
     });
     return request.then(() => undefined);
   }

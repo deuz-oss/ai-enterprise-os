@@ -12,7 +12,9 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - Dikirim sebagai notifikasi in-app (dan email bila aktif) ke admin & HR, sekali per tenant per minggu ISO; penanda idempotensi = notifikasi itu sendiri (`entity_type = compliance_digest:<tahun>-W<minggu>`), tanpa tabel baru.
 - Tanpa scheduler in-process (mengikuti keputusan Fase 28): `POST /platform/internal/run-weekly-digest` untuk cron OS, plus safety-net saat admin/HR memuat badge notifikasi -- digest minggu berjalan tetap terbuat walau cron tidak dipasang. Tenant ditangguhkan dilewati. Cara memasang cron (termasuk login per eksekusi karena JWT kedaluwarsa) di `docs/DEPLOYMENT.md` §5c, sekaligus mendokumentasikan `run-cycle-charge` yang sebelumnya belum tertulis.
 - Halaman Karyawan: kartu "Kepatuhan minggu ini" menggantikan callout "Reminder Kontrak ≤30 hari" (subset-nya); notifikasi digest di Kotak Masuk menautkan ke kartu itu.
-- Batasan: dua admin/HR yang membuka aplikasi pada detik yang sama di awal minggu bisa memicu digest ganda (tanpa kunci antar-worker).
+- Batasan: dua admin/HR yang membuka aplikasi pada detik yang sama di awal minggu bisa memicu digest ganda (tanpa kunci antar-worker); dipersempit dengan cek per penerima sebelum mengirim. Batas minggu memakai tanggal server (UTC di container).
+- **Fixed (cek gap)**: karyawan dengan beberapa kontrak lewat yang tidak saling ditautkan ditampilkan dengan kontrak TERLAMA; kini yang terakhir berakhir.
+- **Fixed (cek gap, #5)**: saat AI belum aktif, palet ⌘K menampilkan "belum bisa diterjemahkan" (menyesatkan); `nav-query` kini mengembalikan `reason` (`ai_off` / `not_understood` / `ai_error`) dan palet menampilkan pesan yang sesuai.
 
 ### Added — Kalimat bebas di ⌘K → daftar terfilter (peluang AI #5 audit 2026-10-08)
 

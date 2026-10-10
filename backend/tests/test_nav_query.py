@@ -87,7 +87,8 @@ def test_invoices_overdue_and_status(client, llm_reply):
 def test_unknown_page_or_contract_date_out_of_range(client, llm_reply):
     headers = _auth_header(client)
     llm_reply["reply"] = {"page": "payroll"}
-    assert _ask(client, headers)["path"] is None
+    out = _ask(client, headers)
+    assert out["path"] is None and out["reason"] == "not_understood"
     llm_reply["reply"] = {"page": "employees", "contract_ends_by": "2020-01-01"}
     out = _ask(client, headers)
     assert out["path"] == "/employees"
@@ -96,7 +97,9 @@ def test_unknown_page_or_contract_date_out_of_range(client, llm_reply):
 
 def test_ai_off_returns_nothing(client):
     out = _ask(client, _auth_header(client), "karyawan aktif")
-    assert out == {"page": None, "path": None, "applied": [], "ignored": [], "source": "none"}
+    assert out["path"] is None and out["source"] == "none"
+    # Dibedakan dari "tidak dimengerti": palet menampilkan "AI belum aktif".
+    assert out["reason"] == "ai_off"
 
 
 def test_employee_role_cannot_use_palette_query(client, llm_reply):
