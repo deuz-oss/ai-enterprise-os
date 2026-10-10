@@ -330,3 +330,59 @@ def test_reversing_a_matched_journal_unmatches_the_statement_line(client):
     # Transaksi yang jurnalnya dibalik tidak lagi jadi kandidat.
     again = _import(client, headers, [(date.today(), "SETORAN C", 2_500_000, 0)])["SETORAN C"]
     assert again["suggested_tx_id"] is None
+
+
+def _paid_journal(client, headers):
+    inv = _sent_invoice(client, headers)
+    client.patch(
+        f"/api/v1/finance/invoices/{inv['id']}", headers=headers, json={"status": "dibayar"}
+    )
+    journals = client.get(
+        "/api/v1/accounting/journal", headers=headers, params={"year": date.today().year}
+    ).json()
+    return inv, next(e for e in journals if e.get("event_code") == "invoice_paid")
+
+
+def test_reversing_the_reversal_revives_the_original_as_candidate(client):
+    headers = _auth_header(client)
+    inv, paid = _paid_journal(client, headers)
+    r1 = client.post(
+        f"/api/v1/accounting/journal/{paid['id']}/reverse", headers=headers, json={}
+    ).json()
+    r2 = client.post(f"/api/v1/accounting/journal/{r1['id']}/reverse", headers=headers, json={})
+    assert r2.status_code in (200, 201), r2.text  # membatalkan pembalikan yang keliru
+
+    line = _import(client, headers, [(date.today(), "TRF X", round(inv["total_due"]), 0)])["TRF X"]
+    assert line["suggested_journal_id"] == paid["id"]
+
+
+def test_reversal_clears_tx_reconciled_and_is_audited(client):
+    headers = _auth_header(client)
+    acc = _accounts(client, headers)
+    tx = client.post(
+        "/api/v1/accounting/cashbank/transactions",
+        headers=headers,
+        json={"tx_type": "penerimaan", "bank_account_id": acc["1-1100"], "amount": 1_800_000},
+    ).json()
+    line = _import(client, headers, [(date.today(), "SETOR Y", 1_800_000, 0)])["SETOR Y"]
+    client.post(
+        f"{BASE}/{line['id']}/match", headers=headers, json={"bank_transaction_id": tx["id"]}
+    )
+    journal_id = _journal_of_tx(client, tx["id"])
+    client.post(f"/api/v1/accounting/journal/{journal_id}/reverse", headers=headers, json={})
+
+    reconciled = client.get(
+        "/api/v1/accounting/cashbank/transactions",
+        headers=headers,
+        params={"reconciled": "true", "year": date.today().year},
+    ).json()
+    assert all(t["id"] != tx["id"] for t in reconciled)
+
+    logs = client.get(
+        "/api/v1/audit/logs",
+        headers=headers,
+        params={"entity_type": "journal_entry", "entity_id": str(journal_id)},
+    ).json()
+    items = logs["items"] if isinstance(logs, dict) else logs
+    reversed_log = next(i for i in items if i["action"] == "accounting.journal_reversed")
+    assert reversed_log["detail"]["unmatched_statement_lines"] == [line["id"]]

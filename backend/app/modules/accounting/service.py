@@ -423,7 +423,7 @@ def reverse_entry(
             )
         )
     db.add(entry)
-    _unmatch_statement_lines_of(db, original.id)
+    unmatched_lines = _unmatch_statement_lines_of(db, original.id)
     db.commit()
     db.refresh(entry)
 
@@ -437,6 +437,8 @@ def reverse_entry(
         detail={
             "reversal_entry_id": str(entry.id),
             "reason": reason,
+            # Baris rekening koran yang dilepas karena pasangannya dibalik.
+            "unmatched_statement_lines": unmatched_lines,
             "by": getattr(user, "email", "?"),
         },
     )
@@ -445,7 +447,7 @@ def reverse_entry(
     return entry
 
 
-def _unmatch_statement_lines_of(db: Session, journal_id: UUID) -> None:
+def _unmatch_statement_lines_of(db: Session, journal_id: UUID) -> list[str]:
     """Jurnal yang dibalik bukan lagi mutasi kas nyata: baris rekening koran
     yang tercocok ke jurnal itu (langsung, atau lewat transaksi kas-bank
     pemilik jurnal) dikembalikan ke "belum cocok" untuk dicocokkan ulang."""
@@ -455,14 +457,24 @@ def _unmatch_statement_lines_of(db: Session, journal_id: UUID) -> None:
         StatementLineStatus,
     )
 
-    tx_ids = select(BankTransaction.id).where(BankTransaction.journal_entry_id == journal_id)
+    txs = list(
+        db.execute(
+            select(BankTransaction).where(BankTransaction.journal_entry_id == journal_id)
+        ).scalars()
+    )
+    tx_ids = [tx.id for tx in txs]
+    for tx in txs:
+        # Tidak ada lagi mutasi rekening koran yang berpasangan dengan transaksi ini.
+        tx.reconciled_at = None
     lines = db.execute(
         select(BankStatementLine).where(
             (BankStatementLine.matched_journal_id == journal_id)
             | (BankStatementLine.matched_tx_id.in_(tx_ids))
         )
     ).scalars()
+    unmatched: list[str] = []
     for line in lines:
+        unmatched.append(str(line.id))
         line.status = StatementLineStatus.unmatched
         line.matched_journal_id = None
         line.matched_tx_id = None
@@ -470,6 +482,7 @@ def _unmatch_statement_lines_of(db: Session, journal_id: UUID) -> None:
         line.confirmed_at = None
         line.match_score = 0
         line.match_reason = "Jurnal pasangannya dibalik -- cocokkan ulang"
+    return unmatched
 
 
 def delete_memorial_entry(db: Session, entry_id: str) -> None:

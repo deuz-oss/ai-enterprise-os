@@ -10,6 +10,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 - Jurnal kas/bank yang sudah DIBALIK (efek bersih nol) dan jurnal pembaliknya (`journal_reversed`) masih ditawarkan sebagai pasangan mutasi rekening koran; mutasi sungguhan bisa "tercocok" ke pembukuan yang sudah dibatalkan. Kini keduanya dikeluarkan dari kandidat dan konfirmasi manual ke jurnal seperti itu ditolak (422).
 - Membalik jurnal yang SUDAH tercocok (langsung, atau lewat transaksi kas-bank pemilik jurnal) kini mengembalikan baris rekening koran ke "belum cocok" dengan alasan "Jurnal pasangannya dibalik -- cocokkan ulang". Transaksi kas-bank yang jurnalnya dibalik tidak lagi menjadi kandidat (celah lama sejenis).
+- **Cek gap lanjutan**: membalik JURNAL PEMBALIK (membatalkan pembalikan yang keliru, diizinkan UI & backend) kini menghidupkan lagi jurnal aslinya sebagai kandidat (satu tingkat). Transaksi kas-bank yang dilepas karena jurnalnya dibalik tidak lagi tetap berstatus "terekonsiliasi". Alasan "tidak cocok" tidak lagi menghitung transaksi yang jurnalnya dibalik. Audit `accounting.journal_reversed` mencatat baris rekening koran yang dilepas.
 
 ### Added — Digest kepatuhan kontrak & BPJS mingguan (peluang AI #4 audit 2026-10-08)
 

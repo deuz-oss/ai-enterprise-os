@@ -127,10 +127,7 @@ def _suggest_match(db: Session, line: BankStatementLine) -> None:
             select(BankTransaction).where(
                 BankTransaction.reconciled_at.is_(None),
                 # Transaksi yang jurnalnya sudah dibalik bukan mutasi kas nyata.
-                or_(
-                    BankTransaction.journal_entry_id.is_(None),
-                    BankTransaction.journal_entry_id.not_in(_reversed_journal_ids()),
-                ),
+                _live_tx_filter(),
             )
         )
         .scalars()
@@ -202,11 +199,31 @@ def _cash_codes(db: Session) -> set[str]:
 
 
 def _reversed_journal_ids():
-    """Subquery id jurnal yang sudah dibalik (punya entri `journal_reversed`)."""
+    """Subquery id jurnal yang efektif dibalik.
+
+    Jurnal X dibalik oleh R (`journal_reversed`, `source_ref_id = X`) -- KECUALI
+    R sendiri sudah dibalik lagi (membatalkan pembalikan yang keliru), yang
+    membuat X berlaku kembali. Cukup satu tingkat; rantai lebih dalam sangat
+    jarang dan tidak dimodelkan.
+    """
+    reversals_of_reversals = select(JournalEntry.source_ref_id).where(
+        JournalEntry.event_code == REVERSAL_EVENT_CODE,
+        JournalEntry.source_ref_type == "journal_entry",
+        JournalEntry.source_ref_id.is_not(None),
+    )
     return select(JournalEntry.source_ref_id).where(
         JournalEntry.event_code == REVERSAL_EVENT_CODE,
         JournalEntry.source_ref_type == "journal_entry",
         JournalEntry.source_ref_id.is_not(None),
+        JournalEntry.id.not_in(reversals_of_reversals),
+    )
+
+
+def _live_tx_filter():
+    """Transaksi kas-bank yang jurnalnya masih berlaku (tidak dibalik)."""
+    return or_(
+        BankTransaction.journal_entry_id.is_(None),
+        BankTransaction.journal_entry_id.not_in(_reversed_journal_ids()),
     )
 
 
@@ -263,7 +280,11 @@ def _cash_journal_candidates(
 
 def _no_match_reason(db: Session, net: float, around: date) -> str:
     candidates = (
-        db.execute(select(BankTransaction).where(BankTransaction.reconciled_at.is_(None)))
+        db.execute(
+            select(BankTransaction).where(
+                BankTransaction.reconciled_at.is_(None), _live_tx_filter()
+            )
+        )
         .scalars()
         .all()
     )
