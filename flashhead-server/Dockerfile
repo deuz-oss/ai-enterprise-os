@@ -35,8 +35,8 @@ RUN python3 -m pip install --no-cache-dir ninja \
 
 # Server Aeos dijalankan dari dalam checkout resmi (config dibuka relatif).
 COPY server.py license_gate.py entrypoint.sh ./
-# Checkout Windows (core.autocrlf) memberi CRLF -> bash gagal ("pipefail").
-RUN sed -i 's/$//' entrypoint.sh
+# Checkout Windows (core.autocrlf) memberi CRLF -> bash gagal membaca skrip.
+RUN sed -i 's/\r$//' entrypoint.sh
 
 # Bobot TIDAK dibakar ke image: diunduh saat start ke volume /models dengan
 # revisi Hugging Face terkunci (entrypoint.sh).
