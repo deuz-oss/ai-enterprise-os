@@ -143,6 +143,11 @@ services:
       AI_AGENT_MODEL: ${AI_AGENT_MODEL:-}
       AI_TTS_MODEL: ${AI_TTS_MODEL:-gpt-4o-mini-tts}
       AI_TTS_VOICE: ${AI_TTS_VOICE:-ash}
+      # Avatar video PoC: none (default) = voice-only. self = avatar-worker
+      # (nyalakan juga `--profile avatar`). Worker mati/penuh -> voice-only.
+      AVATAR_PROVIDER: ${AVATAR_PROVIDER:-none}
+      AVATAR_WORKER_URL: http://avatar-worker:8090
+      AVATAR_JOIN_TIMEOUT: ${AVATAR_JOIN_TIMEOUT:-15}
     depends_on:
       livekit:
         condition: service_healthy
@@ -150,6 +155,30 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
+
+  # ---- Avatar video PoC: wajah pewawancara AI (avatar-worker/README.md) ----
+  # Opt-in, SELALU bersama profile voice:
+  #   docker compose --profile voice --profile avatar up -d --build
+  # AVATAR_RENDERER=static jalan di CPU (uji wiring). flashhead butuh service
+  # flashhead-server (`--profile avatar-gpu`, server ber-GPU NVIDIA).
+  avatar-worker:
+    build: ./avatar-worker
+    profiles: ["avatar"]
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      AVATAR_RENDERER: ${AVATAR_RENDERER:-static}
+      AVATAR_MAX_SESSIONS: ${AVATAR_MAX_SESSIONS:-2}
+      # Path DI DALAM container; taruh foto di ./deploy/avatar/ (di-gitignore).
+      # Kosong = siluet netral (StaticRenderer saja; FlashHead wajib foto).
+      AVATAR_REFERENCE_IMAGE: ${AVATAR_REFERENCE_IMAGE:-}
+      FLASHHEAD_URL: ws://flashhead-server:8010/stream
+    volumes:
+      - ./deploy/avatar:/srv/avatar:ro
+    depends_on:
+      livekit:
+        condition: service_healthy
 
 volumes:
   pgdata:

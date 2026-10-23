@@ -1,0 +1,24 @@
+[project]
+name = "aeos-avatar-worker"
+version = "0.1.0"
+description = "Avatar video PoC -- worker wajah pewawancara AI (LiveKit AvatarRunner, renderer pluggable)"
+requires-python = ">=3.12"
+dependencies = [
+  # Sama dengan agent/: API avatar (AvatarRunner, DataStreamAudioReceiver,
+  # VideoGenerator) sudah ada di 1.7.x -- diverifikasi di source 1.7.1.
+  "livekit-agents~=1.7.1",
+  "aiohttp>=3.10",
+  "numpy>=1.26",
+  "pillow>=10.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+# Eksplisit: flat layout dengan >1 modul (pola sama dengan agent/).
+[tool.setuptools]
+py-modules = ["server", "renderers", "video_gen", "capacity"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
