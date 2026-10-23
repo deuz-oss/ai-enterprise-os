@@ -953,6 +953,90 @@ bertanya susulan tanpa izin (batas 0) sehingga pertanyaan 2 tidak pernah
 diajukan -- konsisten dengan simulasi Fase 63; `gpt-4.1-mini` tertib di uji
 E2E.
 
+### Fase 67 — AI Interview: PoC Avatar Video Pewawancara Self-Hosted — 🧪 PoC (wiring CPU teruji 2026-10-23, GPU BELUM)
+
+**Keputusan.** Ini membalik sebagian keputusan Fase 2 ("suara saja, TANPA
+video avatar"), tapi **hanya sebagai PoC opt-in**. Defaultnya tetap
+voice-only (`AVATAR_PROVIDER=none`). Wajah video dibangun self-hosted tanpa
+vendor avatar; Tavus tidak dipakai dan tidak ada integrasinya di repo. Otak
+interview tetap milik Aeos: STT/LLM/TTS, alur `interview_flow.py`, rubrik,
+penilaian, dan skema DB **tidak berubah**. Satu-satunya pengecualian adalah
+teks consent.
+
+**Arsitektur:**
+- **Agen** mengalihkan audio TTS ke peserta avatar lewat mekanisme resmi
+  LiveKit Agents (`DataStreamAudioOutput`). Kelas avatar sudah ada di 1.7.1
+  (diverifikasi di source), jadi **tidak perlu upgrade**.
+- **`avatar-worker/`** adalah service terpisah (profile compose `avatar`).
+  Ia join sebagai peserta `kind=agent` dengan atribut `lk.publish_on_behalf`,
+  lalu `DataStreamAudioReceiver` + `AvatarRunner` mempublikasikan video+audio
+  tersinkron.
+- **Renderer pluggable** (`AvatarRenderer`):
+  - `static`: foto + indikator bicara, CPU;
+  - `flashhead`: klien **`flashhead-server/`** (SoulX-FlashHead 1.3B di GPU,
+    profile `avatar-gpu`).
+- **Frontend** menampilkan video avatar dengan label tetap "avatar video
+  buatan AI, bukan orang sungguhan". Kamera kandidat tidak pernah dinyalakan.
+
+**Lisensi model (dicek sebelum implementasi):**
+- Kode, bobot DiT, VAE Wan, dan wav2vec2 berlisensi Apache-2.0.
+- Varian **lite** memuat VAE LTX-Video 0.9 berlisensi **RAIL-M: riset /
+  akademik saja, komersialisasi dilarang**.
+- **Diputuskan:** default `pro`. `lite` hanya dengan
+  `FLASHHEAD_ACK_NONCOMMERCIAL=1`, untuk PoC/riset internal, bukan kandidat
+  sungguhan.
+- **Masalah performa Pro:** menurut README resmi, Pro hanya 10,8 FPS di
+  1× RTX 4090. Jadi target "1× 4090 + boleh komersial" **tidak terpenuhi**
+  oleh model ini.
+
+**Kapasitas & fallback:**
+- `AVATAR_MAX_SESSIONS` penuh → sesi baru voice-only. Tidak ditolak dan
+  tidak antre.
+- Worker mati, penuh, atau avatar tidak join dalam `AVATAR_JOIN_TIMEOUT` →
+  voice-only.
+- Worker mati di tengah sesi → sink audio ditukar ke track agen sendiri.
+- flashhead-server putus atau lambat → turun ke StaticRenderer tanpa
+  kehilangan audio.
+
+**Kepatuhan:**
+- `CONSENT_VERSION` naik menjadi `2026-10-23.1`. Poin baru: pewawancara dapat
+  tampil sebagai avatar video buatan AI, bukan manusia; kamera kandidat tidak
+  dinyalakan, dan video tidak direkam maupun dinilai.
+- Persetujuan versi lama tidak diminta ulang (perilaku lama).
+- Foto referensi hanya lewat env (per tenant ditunda karena butuh kolom DB).
+  Foto wajib milik sendiri atau berizin tertulis.
+
+**Uji E2E kandidat sintetis (pola Fase 66, CPU, StaticRenderer):** dijalankan
+dalam empat skenario.
+- **Avatar normal:** 1707 frame video diterima, transkrip utuh, skor 90.
+- **Worker mati sejak awal:** voice-only, keputusan diambil ≤ 3 dtk.
+- **Worker dimatikan setelah giliran 1:** suara pindah ke agen pada detik
+  yang sama, interview tuntas.
+- **Kandidat masuk terlambat 40 dtk:** sapaan tetap terdengar.
+- **`audio.ogg` terbukti berisi kedua kanal** di semua skenario (energi per
+  kanal file hasil unduhan).
+
+Uji itu menemukan dan memperbaiki tiga bug:
+- **Sapaan terucap ke room kosong** di mode avatar.
+- **Worker mati menunda sapaan 9 dtk**, karena DNS Docker lambat gagal.
+- **Waktu mulai bicara AI tidak akurat**; kini memakai `lk.playback_started`.
+
+Temuan di luar avatar: jeda antar-kalimat TTS OpenAI di tengah sapaan bisa
+lebih dari 6 dtk, **juga di voice-only murni**. Kandidat yang menunggu jeda
+pendek bisa memotong pertanyaan.
+
+**Belum teruji (catatan kejujuran):**
+- flashhead-server belum pernah dibangun/dijalankan (tidak ada GPU NVIDIA).
+- Kualitas lip-sync Bahasa Indonesia.
+- Latensi nyata. Batas bawah bawaan model adalah satu chunk ≈ 1,12 dtk
+  ditambah inferensi, dan suara AI ikut tertunda sebesar itu.
+- Jumlah sesi paralel nyata dan VRAM.
+- Tampilan avatar di browser dengan kandidat manusia.
+- Dampak `resume_false_interruption` yang mati di mode avatar.
+
+Cara menyalakan, env, dan kebutuhan hardware ada di `avatar-worker/README.md`
+dan `flashhead-server/README.md`.
+
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk

@@ -45,6 +45,38 @@ sudah teruji (2026-09-26). Setelah mengubah dependensi, regenerasi:
 uv pip compile pyproject.toml --universal --python-version 3.12 -o requirements.lock
 ```
 
+## Avatar video pewawancara (PoC, opsional — 2026-10-23)
+
+Wajah video self-hosted, tanpa vendor avatar. Detail lengkap ada di
+`avatar-worker/README.md` (wiring & hasil E2E) dan
+`flashhead-server/README.md` (model GPU & lisensi). Ringkasnya untuk agen:
+
+- **Flag `AVATAR_PROVIDER`.** `none` (default) = perilaku di atas, tidak
+  berubah sama sekali. `self` = sebelum `session.start`, `avatar.py` meminta
+  `avatar-worker` menyiapkan avatar. Kalau avatar join tepat waktu, output
+  audio sesi diganti `DataStreamAudioOutput`: audio TTS dikirim ke peserta
+  avatar, yang lalu mempublikasikan video + audio tersinkron.
+- **Mekanisme resmi LiveKit Agents 1.7.1, tanpa upgrade.** `turn_handling`,
+  TurnDetector v1-mini, dan perekam tidak tersentuh. Alur
+  (`interview_flow.py`), rubrik, dan penilaian juga tidak berubah.
+- **Semua kegagalan avatar → voice-only + log warning.** Ini mencakup worker
+  mati, kapasitas penuh, avatar tidak join dalam `AVATAR_JOIN_TIMEOUT`, dan
+  worker mati di tengah sesi (sink audio ditukar ke track audio agen sendiri).
+  Logika keputusannya di `avatar_fallback.py`, modul murni yang punya test.
+- **Mode avatar menunggu kandidat masuk sebelum menyapa.** Di voice-only ini
+  terjadi otomatis lewat langganan track; dengan avatar tidak, dan uji E2E
+  menemukan sapaan terucap ke room kosong.
+- **`audio.ogg` tetap berisi suara kandidat dan suara AI.** Diverifikasi
+  lewat E2E (energi per kanal file hasil unduhan). Suara AI ditulis saat
+  avatar mengirim `lk.playback_finished`.
+- **Mode avatar mematikan `resume_false_interruption`** (library mencatat
+  warning, karena DataStream tidak bisa pause).
+
+```
+# CPU, StaticRenderer (uji wiring):
+AVATAR_PROVIDER=self docker compose --profile voice --profile avatar up -d --build
+```
+
 ## Keterbatasan yang jujur perlu diketahui (per 2026-09-02)
 
 Ditulis di mesin dev **tanpa GPU NVIDIA** — jadi:

@@ -6,6 +6,31 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — PoC avatar video pewawancara AI self-hosted (Fase 67)
+
+- `AVATAR_PROVIDER=none|self` (default `none` = voice-only, tidak berubah).
+  Mode `self`: audio TTS dialihkan ke `avatar-worker/` lewat
+  `DataStreamAudioOutput` LiveKit Agents 1.7.1 (tanpa upgrade). Worker join
+  sebagai peserta avatar (`lk.publish_on_behalf`) dan mempublikasikan video +
+  audio tersinkron lewat `AvatarRunner`.
+- Renderer pluggable `AVATAR_RENDERER=static|flashhead`: foto + indikator
+  bicara di CPU, atau SoulX-FlashHead di `flashhead-server/` (profile
+  `avatar-gpu`).
+- Lisensi FlashHead: varian lite memuat VAE LTX-Video 0.9 (RAIL-M, riset
+  saja). Default `pro`; `lite` wajib `FLASHHEAD_ACK_NONCOMMERCIAL=1`.
+- Fallback voice-only untuk worker mati, kapasitas penuh
+  (`AVATAR_MAX_SESSIONS`), avatar telat join, dan worker mati di tengah sesi
+  (sink audio ditukar ke track agen). Bila flashhead-server putus, renderer
+  turun ke static tanpa kehilangan audio.
+- Halaman panggilan menampilkan video avatar berlabel "bukan orang
+  sungguhan". Consent `2026-10-23.1` menyebut avatar AI dan bahwa video
+  kandidat tidak dipakai.
+- Uji E2E kandidat sintetis (CPU, 4 skenario) dijalankan: `audio.ogg` tetap
+  berisi suara kandidat dan AI. Uji ini memperbaiki tiga bug: sapaan ke room
+  kosong, fallback lambat 9 dtk, dan waktu mulai bicara AI.
+- **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
+  latensi, dan sesi paralel nyata.
+
 ### Fixed — Cek semua gap siklus audit 2026-10-08
 
 Sapuan seluruh 21 commit siklus dengan lensa: isolasi tenant & RBAC, uang/akuntansi, aksi tak terbatalkan, migrasi, aksesibilitas UI, dan CI.
