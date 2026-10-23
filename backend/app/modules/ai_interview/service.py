@@ -112,7 +112,7 @@ _SCORE_SYSTEM_PROMPT = (
 
 # Naikkan versi setiap kali teks di bawah berubah -- bukti persetujuan per
 # respons menyimpan versi yang disetujui kandidat saat itu.
-CONSENT_VERSION = "2026-09-24.3"
+CONSENT_VERSION = "2026-10-23.1"
 DEFAULT_RETENTION_DAYS = 180
 
 _CONSENT_TEXT = (
@@ -124,12 +124,17 @@ _CONSENT_TEXT = (
     "ulang oleh petugas rekrutmen saat meninjau hasil.\n"
     "2. AI hanya menilai ISI jawaban. AI tidak menilai emosi, nada suara, aksen, "
     "ekspresi, atau cara bicara Anda.\n"
-    "3. Hasil penilaian AI bukan keputusan akhir. Setiap hasil ditinjau dan diputuskan "
+    # 2026-10-23.1 (avatar video PoC, avatar-worker/): avatar tidak boleh
+    # tampil seolah manusia, dan video kandidat tidak dipakai sama sekali.
+    "3. Pada interview percakapan langsung, pewawancara dapat tampil sebagai avatar video "
+    "buatan AI. Avatar itu bukan manusia dan tidak mewakili orang sungguhan. Kamera Anda "
+    "tidak dinyalakan: video Anda tidak direkam dan tidak dipakai untuk penilaian.\n"
+    "4. Hasil penilaian AI bukan keputusan akhir. Setiap hasil ditinjau dan diputuskan "
     "oleh petugas rekrutmen.\n"
-    "4. Data interview (termasuk rekaman) disimpan paling lama {retention_days} hari "
+    "5. Data interview (termasuk rekaman) disimpan paling lama {retention_days} hari "
     "sejak interview "
     "dikirim, lalu dihapus otomatis.\n"
-    "5. Anda dapat menarik persetujuan kapan saja lewat halaman ini. Seluruh jawaban, "
+    "6. Anda dapat menarik persetujuan kapan saja lewat halaman ini. Seluruh jawaban, "
     "rekaman, transkrip, dan hasil penilaian AI Anda akan dihapus.\n"
     "Dasar hukum: UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi."
 )

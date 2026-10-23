@@ -782,7 +782,11 @@ def test_consent_text_mentions_recording():
 
     text = consent_text(180)
     assert "direkam" in text and "rekaman" in text
-    assert CONSENT_VERSION == "2026-09-24.3"
+    # Avatar video PoC: kandidat tahu pewawancara bisa berupa avatar AI (bukan
+    # manusia) dan videonya tidak dipakai.
+    assert "avatar video buatan AI" in text and "bukan manusia" in text
+    assert "tidak dipakai untuk penilaian" in text
+    assert CONSENT_VERSION == "2026-10-23.1"
 
 
 # ---------- Fase 3 roadmap: mode rekaman jawaban (async_recording) ----------
