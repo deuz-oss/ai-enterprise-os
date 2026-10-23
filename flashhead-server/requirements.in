@@ -1,0 +1,31 @@
+# Dependensi flashhead-server. Basis: requirements.txt resmi
+# Soul-AILab/SoulX-FlashHead @ 9bc03de (gradio/flask dihapus -- tidak dipakai
+# server ini) + versi torch dari README resmi (2.7.1, CUDA 12.8).
+# flash_attn TIDAK di sini: butuh torch saat build, dipasang terpisah di
+# Dockerfile (versi resmi 2.8.0.post2). Lock: lihat README.md.
+torch==2.7.1
+torchvision==0.22.1
+opencv-python-headless>=4.12.0.88
+diffusers>=0.34.0
+transformers==4.57.3
+tokenizers>=0.20.3
+accelerate>=1.8.1
+tqdm
+imageio
+easydict
+ftfy
+imageio-ffmpeg
+scikit-image
+loguru
+xfuser>=0.4.3
+pyloudnorm
+decord
+xformers==0.0.31
+librosa
+mediapipe==0.10.9
+nvidia-nccl-cu12==2.27.3
+pyyaml
+einops
+# server Aeos + unduh bobot
+aiohttp>=3.10
+huggingface_hub[cli]

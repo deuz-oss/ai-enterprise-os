@@ -21,6 +21,7 @@ from renderers import (
 )
 
 SLICE_FRAMES = 4  # server palsu memakai chunk kecil supaya tes cepat
+RECEIVED: list[dict] = []  # pesan teks klien -> server palsu
 
 
 def jpeg(color) -> bytes:
@@ -41,6 +42,9 @@ def fake_server(mode: str) -> web.Application:
             return ws
         await ws.send_json({"type": "ready", "slice_frames": SLICE_FRAMES, "fps": 25})
         async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                RECEIVED.append(json.loads(msg.data))
+                continue
             if msg.type != WSMsgType.BINARY:
                 continue
             # audio 16 kHz: SLICE_FRAMES * 640 sampel int16
@@ -171,3 +175,24 @@ def test_backlog_degrades(photo):
     r, out = run_with_server("stall", body)
     assert r.degraded
     assert len(spoken_audio(out)) >= n * 3
+
+
+def test_clear_drops_audio_and_resets_server_context(photo):
+    n = SLICE_FRAMES * SAMPLES_PER_FRAME
+    RECEIVED.clear()
+
+    async def body(url):
+        r = FlashHeadRenderer(url)
+        await r.start(photo)
+        await r.push_audio(np.ones(n // 2, np.int16))  # belum cukup satu chunk
+        r.clear()
+        await asyncio.sleep(0.2)
+        await r.end_segment()
+        out = await collect_until(r, segments_done)
+        await r.aclose()
+        return r, out
+
+    r, out = run_with_server("ok", body)
+    assert not r.degraded
+    assert len(spoken_audio(out)) == 0  # audio terpotong tidak diputar
+    assert {"type": "reset"} in RECEIVED

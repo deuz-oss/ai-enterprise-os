@@ -180,7 +180,38 @@ services:
       livekit:
         condition: service_healthy
 
+  # SoulX-FlashHead di GPU NVIDIA (flashhead-server/README.md). TIDAK ikut
+  # profile voice/avatar -- hanya di server GPU:
+  #   docker compose --profile voice --profile avatar --profile avatar-gpu up -d
+  # + AVATAR_RENDERER=flashhead. Belum pernah dibangun/dijalankan (mesin dev
+  # tanpa GPU). Varian lite = lisensi riset saja, lihat license_gate.py.
+  flashhead-server:
+    build: ./flashhead-server
+    profiles: ["avatar-gpu"]
+    environment:
+      FLASHHEAD_MODEL_TYPE: ${FLASHHEAD_MODEL_TYPE:-pro}
+      FLASHHEAD_ACK_NONCOMMERCIAL: ${FLASHHEAD_ACK_NONCOMMERCIAL:-}
+      # Samakan dengan AVATAR_MAX_SESSIONS. Tiap slot = 1 instance pipeline.
+      FLASHHEAD_MAX_SESSIONS: ${FLASHHEAD_MAX_SESSIONS:-1}
+    volumes:
+      - flashhead_models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Start pertama mengunduh bobot (~beberapa GB) + memuat model.
+      start_period: 900s
+
 volumes:
   pgdata:
   minio:
   stt_model_cache:
+  flashhead_models:

@@ -284,6 +284,7 @@ class FlashHeadRenderer(AvatarRenderer):
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._reader: asyncio.Task[None] | None = None
         self._send_lock = asyncio.Lock()
+        self._bg: set[asyncio.Task[None]] = set()
 
     @property
     def degraded(self) -> bool:
@@ -433,6 +434,20 @@ class FlashHeadRenderer(AvatarRenderer):
         # hasilnya dibuang karena generasinya sudah lewat.
         self._inflight = deque(p for p in self._inflight if isinstance(p, _Pending))
         self._fallback.clear()
+        if not self._degraded and self._ws is not None and not self._ws.closed:
+            # Server mengosongkan konteks audio 8 dtk-nya: ucapan berikutnya
+            # tidak dianimasikan dengan sisa ucapan yang dipotong.
+            task = asyncio.create_task(self._send_reset())
+            self._bg.add(task)
+            task.add_done_callback(self._bg.discard)
+
+    async def _send_reset(self) -> None:
+        async with self._send_lock:
+            try:
+                assert self._ws is not None
+                await self._ws.send_json({"type": "reset"})
+            except (aiohttp.ClientError, ConnectionError, RuntimeError):
+                pass  # putus -> _read_loop yang menurunkan ke StaticRenderer
 
     async def frames(self) -> AsyncIterator[RenderedFrame | SegmentEnd]:
         while not self._closed:

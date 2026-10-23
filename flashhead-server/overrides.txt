@@ -1,0 +1,5 @@
+# torch 2.7.1 (cu128) mengunci nvidia-nccl-cu12==2.26.2, requirements.txt resmi
+# FlashHead meminta 2.27.3. Urutan instal resmi (torch dulu, lalu
+# requirements.txt via pip) berakhir di 2.27.3 -- override ini mereproduksi
+# hasil itu secara eksplisit.
+nvidia-nccl-cu12==2.27.3
