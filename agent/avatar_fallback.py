@@ -99,7 +99,10 @@ async def request_avatar(
             f"{settings.worker_url}/sessions",
             json={"room": room, "agent_identity": agent_identity},
             headers={SIGNATURE_HEADER: sign(secret, room)},
-            timeout=settings.request_timeout,
+            # Connect dibatasi ketat: worker yang mati tidak boleh menunda
+            # sapaan ke kandidat (uji E2E: DNS Docker untuk container mati
+            # baru gagal ~9 dtk). Respons boleh lama -- renderer sedang siap.
+            timeout=httpx.Timeout(settings.request_timeout, connect=3.0),
         )
     except httpx.HTTPError as exc:
         return AvatarDecision(False, f"worker avatar tidak terjangkau ({type(exc).__name__})")

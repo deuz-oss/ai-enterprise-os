@@ -358,10 +358,11 @@ async def entrypoint(ctx: JobContext) -> None:
         if role in ("user", "assistant"):
             agent.clock.item_added(ev.item.id, role)
 
+    avatar_link = None
     if AVATAR.enabled:
         # Sebelum session.start: output audio harus sudah final saat RoomIO
         # & perekam membungkusnya. None = voice-only (sudah dicatat di log).
-        await setup_avatar(ctx, session, AVATAR, LIVEKIT_API_SECRET)
+        avatar_link = await setup_avatar(ctx, session, AVATAR, LIVEKIT_API_SECRET)
 
     started_at = time.time()
     await session.start(
@@ -377,6 +378,13 @@ async def entrypoint(ctx: JobContext) -> None:
     # biasanya < 1 dtk; UI memutar sedikit lebih awal).
     recorder = getattr(session, "_recorder_io", None)
     agent.recording_t0 = getattr(recorder, "recording_started_at", None) or started_at
+    if avatar_link is not None:
+        # Voice-only: sapaan otomatis menunggu kandidat berlangganan track
+        # audio agen. Dengan avatar, audio langsung ke peserta avatar --
+        # uji E2E 2026-10-23: kandidat yang masuk 50 dtk setelah avatar tidak
+        # pernah mendengar sapaan & pertanyaan pertama. Tunggu kandidat dulu
+        # (kind default tidak mencakup `agent`, jadi avatar tidak terhitung).
+        await ctx.wait_for_participant()
     # Pertanyaan pertama disisipkan kode (lihat InterviewFlow.opening_instruction).
     await session.generate_reply(
         instructions=agent.flow.opening_instruction(len(session.history.items))

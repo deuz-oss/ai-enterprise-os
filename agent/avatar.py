@@ -168,7 +168,14 @@ async def setup_avatar(
                 return None
 
         session.output.audio = DataStreamAudioOutput(
-            room, destination_identity=decision.identity, sample_rate=AUDIO_SAMPLE_RATE
+            room,
+            destination_identity=decision.identity,
+            sample_rate=AUDIO_SAMPLE_RATE,
+            # Waktu mulai bicara diambil saat avatar BENAR-BENAR mulai memutar
+            # (RPC lk.playback_started dari AvatarRunner), bukan saat audio
+            # dikirim -- renderer menambah jeda (FlashHead >= 1 chunk), dan
+            # waktu ini dipakai offset transkrip & posisi suara AI di rekaman.
+            wait_playback_start=True,
         )
         link = AvatarLink(
             ctx=ctx, session=session, identity=decision.identity, settings=settings, secret=secret
