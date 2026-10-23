@@ -1197,7 +1197,7 @@ def generate_contract_document(
     return contract
 
 
-def expiring_contracts(db: Session, within_days: int) -> list[dict]:
+def expiring_contracts(db: Session, within_days: int, today: date | None = None) -> list[dict]:
     """Kontrak karyawan aktif yang berakhir dalam `within_days` ke depan.
 
     Dua bug ditemukan lewat audit desain 2026-09-15: (1) query ini tidak
@@ -1210,8 +1210,11 @@ def expiring_contracts(db: Session, within_days: int) -> list[dict]:
     HR -- diperbaiki dengan batas bawah `end_date >= today` dan
     exclude kontrak yang direferensikan sebagai `previous_contract_id`
     kontrak lain (bukan link terakhir di rantainya).
+
+    `today` opsional supaya digest kepatuhan memakai SATU tanggal acuan
+    untuk semua bagiannya (dulu bagian ini selalu memakai tanggal sistem).
     """
-    today = date.today()
+    today = today or date.today()
     limit = today + timedelta(days=within_days)
     superseded_ids = select(EmploymentContract.previous_contract_id).where(
         EmploymentContract.previous_contract_id.is_not(None)

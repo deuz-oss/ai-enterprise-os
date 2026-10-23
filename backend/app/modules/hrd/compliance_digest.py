@@ -57,7 +57,7 @@ def build_digest(db: Session, today: date | None = None) -> dict:
                 else "Segera putuskan: perpanjang atau akhiri (≤ 7 hari)"
             ),
         }
-        for c in expiring_contracts(db, ENDING_WITHIN_DAYS)
+        for c in expiring_contracts(db, ENDING_WITHIN_DAYS, today)
     ]
 
     # Kontrak terakhir (bukan yang sudah diperpanjang) yang sudah lewat,
