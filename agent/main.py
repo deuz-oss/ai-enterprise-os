@@ -40,6 +40,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+from avatar import setup_avatar
+from avatar_fallback import AvatarSettings
 from interview_flow import InterviewFlow, TurnClock, build_instructions, format_transcript
 from livekit.agents import (
     Agent,
@@ -109,6 +111,9 @@ LLM_MODEL = os.environ.get("AI_AGENT_MODEL") or os.environ.get("AI_MODEL") or "g
 TTS_MODEL = os.environ.get("AI_TTS_MODEL", "gpt-4o-mini-tts")
 TTS_VOICE = os.environ.get("AI_TTS_VOICE", "ash")
 TTS_INSTRUCTIONS = "Speak natural, professional Bahasa Indonesia with a warm interviewer tone."
+# Avatar video PoC (avatar.py): AVATAR_PROVIDER=none (default, voice-only) |
+# self (avatar-worker/). Gagal apa pun -> voice-only, lihat avatar_fallback.py.
+AVATAR = AvatarSettings.from_env(os.environ)
 
 
 def _agent_headers(token: str) -> dict[str, str]:
@@ -352,6 +357,11 @@ async def entrypoint(ctx: JobContext) -> None:
         role = getattr(ev.item, "role", None)
         if role in ("user", "assistant"):
             agent.clock.item_added(ev.item.id, role)
+
+    if AVATAR.enabled:
+        # Sebelum session.start: output audio harus sudah final saat RoomIO
+        # & perekam membungkusnya. None = voice-only (sudah dicatat di log).
+        await setup_avatar(ctx, session, AVATAR, LIVEKIT_API_SECRET)
 
     started_at = time.time()
     await session.start(

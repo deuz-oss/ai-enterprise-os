@@ -15,7 +15,7 @@ dependencies = [
 # Eksplisit: flat layout dengan >1 modul membuat auto-discovery setuptools
 # gagal ("Multiple top-level modules discovered").
 [tool.setuptools]
-py-modules = ["main", "interview_flow"]
+py-modules = ["main", "interview_flow", "avatar", "avatar_fallback"]
 
 [build-system]
 requires = ["setuptools>=68"]

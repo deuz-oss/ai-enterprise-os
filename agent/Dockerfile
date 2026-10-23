@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv
 
 COPY pyproject.toml requirements.lock ./
-COPY main.py interview_flow.py ./
+COPY main.py interview_flow.py avatar.py avatar_fallback.py ./
 # Versi persis dari lock (universal, Python 3.12), sama dengan image yang
 # sudah teruji -- pyproject hanya rentang. Regenerasi: lihat README.md.
 RUN pip install --no-cache-dir --upgrade pip     && pip install --no-cache-dir -r requirements.lock     && pip install --no-cache-dir --no-deps .
