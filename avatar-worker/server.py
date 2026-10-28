@@ -163,6 +163,11 @@ class AvatarService:
 
             room.on("participant_disconnected", _on_left)
             room.on("disconnected", lambda *_: agent_left.set())
+            # Agen sudah pergi sebelum avatar tersambung (job crash di jendela
+            # POST -> connect): event di atas tidak akan pernah datang, slot
+            # GPU tertahan sampai max_session_sec.
+            if agent_identity not in room.remote_participants:
+                agent_left.set()
 
             runner = AvatarRunner(
                 room,

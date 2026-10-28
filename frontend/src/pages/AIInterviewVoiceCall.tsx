@@ -52,6 +52,10 @@ export function AIInterviewVoiceCall({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [avatarTrack, setAvatarTrack] = useState<RemoteTrack | null>(null);
 
+  // `callState` ikut jadi dependensi: track avatar sering sudah tersubscribe
+  // saat startCall masih menunggu izin mikrofon (state "connecting"), ketika
+  // <video> belum dirender. Tanpa itu effect tidak jalan ulang setelah
+  // <video> muncul -> kotak avatar hitam selamanya.
   useEffect(() => {
     const el = videoRef.current;
     if (!avatarTrack || !el) return;
@@ -59,7 +63,7 @@ export function AIInterviewVoiceCall({
     return () => {
       avatarTrack.detach(el);
     };
-  }, [avatarTrack]);
+  }, [avatarTrack, callState]);
 
   useEffect(() => {
     return () => {
