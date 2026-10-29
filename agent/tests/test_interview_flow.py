@@ -8,11 +8,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from interview_flow import (  # noqa: E402
     CLOSING_LINE,
+    DISOWNED_SPEAKER,
     MARKER_PREFIX,
+    ROLE_DISOWNED,
     InterviewFlow,
     TurnClock,
     build_instructions,
     format_transcript,
+    last_candidate_turn,
 )
 
 QUESTIONS = [
@@ -194,3 +197,61 @@ def test_instructions_order_locked_then_template_then_defaults():
     assert "- JIKA Tanya shift: Shift 3x8 jam." in text
     # Daftar pertanyaan TIDAK dibocorkan ke prompt -- hanya lewat tool.
     assert "prioritas" not in text
+
+
+# ---------- Tombol "Bukan saya" (suara latar terbaca sebagai jawaban) ----------
+
+
+def test_disown_same_question_requires_a_new_answer():
+    flow = InterviewFlow(questions=QUESTIONS)
+    flow.opening_instruction(history_len=0)  # Q1 diajukan, giliran 0
+    # Kandidat "menjawab" (suara TV), lalu menandainya: giliran tidak dihitung.
+    instr = flow.disown(question_index=0, history_len=3, user_turns=0)
+    assert "jawab ulang" in instr and flow.questions[0]["prompt"] in instr
+    assert "Belum" not in instr
+    # Tanpa jawaban baru, alur tidak boleh pindah atau ditutup.
+    assert "belum menjawab" in flow.next_question(history_len=4, user_turns=0)
+    assert flow.end_refusal(False, user_turns=0) is not None
+    # Penanda tidak diduplikasi bila alur belum pindah pertanyaan.
+    assert list(flow.markers) == [0]
+
+
+def test_disown_after_flow_moved_on_rewinds_with_repeat_marker():
+    flow = InterviewFlow(questions=QUESTIONS)
+    flow.opening_instruction(history_len=0)
+    flow.next_question(history_len=4, user_turns=1)  # suara TV dihitung jawaban Q1
+    assert flow.index == 1
+    flow.disown(question_index=0, history_len=6, user_turns=0)
+    assert flow.index == 0
+    q1 = flow.questions[0]["prompt"]
+    assert flow.markers[6] == f"{MARKER_PREFIX}Pertanyaan 1 (diulang): {q1}"
+    # Jawaban ulang -> next_question mengajukan Q2 lagi seperti biasa.
+    assert flow.questions[1]["prompt"] in flow.next_question(history_len=8, user_turns=1)
+    assert flow.index == 1
+
+
+def test_last_candidate_turn_skips_ai_reply_and_never_reaches_older_answers():
+    items = [
+        ("a1", "assistant", "Pertanyaan 1?"),
+        ("u1", "user", "Jawaban asli saya."),
+        ("a2", "assistant", "Pertanyaan 2?"),
+        ("u2", "user", "silahkan disampaikan"),
+        ("u3", "user", "visi-visinya"),
+        ("t1", "", ""),  # pemanggilan tool
+        ("a3", "assistant", "Baik, pertanyaan 3?"),
+    ]
+    assert last_candidate_turn(items) == ["u2", "u3"]
+    # Ditekan dua kali: giliran itu sudah ditandai -> no-op, BUKAN jawaban asli u1.
+    marked = [(i, ROLE_DISOWNED if i in ("u2", "u3") else r, t) for i, r, t in items]
+    assert last_candidate_turn(marked) == []
+    assert last_candidate_turn([("a1", "assistant", "Halo")]) == []
+
+
+def test_disowned_lines_are_labelled_not_quotable():
+    text, _ = format_transcript(
+        [("user", "silahkan disampaikan visi-visinya"), (ROLE_DISOWNED, "suara tv")], {}
+    )
+    lines = text.splitlines()
+    assert lines[1] == f"{DISOWNED_SPEAKER}: suara tv"
+    # Backend hanya mengutip baris berawalan "Kandidat:" sebagai bukti.
+    assert not lines[1].startswith("Kandidat:")

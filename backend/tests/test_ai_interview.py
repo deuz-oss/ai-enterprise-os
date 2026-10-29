@@ -382,6 +382,116 @@ def test_voice_start_mints_token_and_dispatches_agent(client, monkeypatch):
     assert again.json()["url"] == "wss://livekit.contoh.id"
 
 
+def _voice_ready(monkeypatch):
+    """Infra suara terkonfigurasi + dispatch LiveKit palsu (tanpa server)."""
+    from app.core.config import get_settings
+    from app.modules.ai_interview import service as service_module
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "livekit_url", "ws://livekit.test:7880")
+    monkeypatch.setattr(settings, "livekit_api_key", "test-key")
+    monkeypatch.setattr(settings, "livekit_api_secret", "test-secret-32-bytes-minimum-ok")
+    monkeypatch.setattr(settings, "stt_base_url", "http://stt.test")
+    monkeypatch.setattr(settings, "ai_base_url", "https://api.test/v1")
+
+    class _FakeLiveKitAPI:
+        def __init__(self, *a, **kw):
+            class _Dispatch:
+                async def create_dispatch(self, request):
+                    return None
+
+            self.agent_dispatch = _Dispatch()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(service_module.lk_api, "LiveKitAPI", _FakeLiveKitAPI)
+
+
+def test_voice_room_check_and_disowned_answers_reach_reviewer(client, monkeypatch):
+    """Uji browser 2026-10-29: suara latar (TV/orang lain) terbaca sebagai
+    jawaban dan dinilai. Cek ruangan pra-panggilan + "bukan suara saya"
+    dicatat untuk reviewer, dan ikut terhapus saat persetujuan ditarik."""
+    from app.modules.audit.models import AuditLog
+    from sqlalchemy import select
+
+    _voice_ready(monkeypatch)
+    admin = _auth_header(client)
+    template = _create_active_template(client, admin, mode="realtime_voice")
+    cand_id = _create_candidate(client, admin)
+    invited = _invite(client, admin, template["id"], cand_id)
+    token, rid = invited["invite_token"], invited["response_id"]
+    base = f"/api/v1/ai-interview/session/{token}"
+
+    resp = client.post(f"{base}/voice/start", json={"room_check": "noisy", "voiced_sec": 2.4})
+    assert resp.status_code == 200, resp.text
+    assert client.post(f"{base}/voice/disown", json={"text": "silahkan disampaikan visi-visinya"})
+    detail = client.get(f"/api/v1/ai-interview/responses/{rid}", headers=admin).json()
+    flags = detail["audio_flags"]
+    assert flags["room_check"]["result"] == "noisy"
+    assert flags["room_check"]["voiced_sec"] == 2.4
+    assert [d["text"] for d in flags["disowned"]] == ["silahkan disampaikan visi-visinya"]
+    assert flags["disowned"][0]["during_call"] is True
+
+    # Teks ucapan tidak boleh masuk audit log (tidak ikut terhapus retensi).
+    db = client.testing_session()
+    audits = (
+        db.execute(
+            select(AuditLog)
+            .where(AuditLog.action == "ai_interview.voice_answer_disowned")
+            .execution_options(include_with_loader_criteria=False)
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audits) == 1 and "visi-visinya" not in str(audits[0].__dict__)
+    db.close()
+
+    assert client.post(f"{base}/withdraw-consent").status_code == 204
+    detail = client.get(f"/api/v1/ai-interview/responses/{rid}", headers=admin).json()
+    assert detail["audio_flags"] is None
+
+
+def test_voice_disown_limits(client, monkeypatch):
+    import json
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    from app.modules.ai_interview.models import AIInterviewResponse, AIInterviewResponseStatus
+
+    admin = _auth_header(client)
+    text_tpl = _create_active_template(client, admin)  # async_text
+    cand_id = _create_candidate(client, admin)
+    invited = _invite(client, admin, text_tpl["id"], cand_id)
+    wrong_mode = client.post(
+        f"/api/v1/ai-interview/session/{invited['invite_token']}/voice/disown", json={"text": "x"}
+    )
+    assert wrong_mode.status_code == 422
+
+    voice_tpl = _create_active_template(client, admin, mode="realtime_voice")
+    cand2 = _create_candidate(client, admin, name="Rina", email="rina@example.com")
+    invited = _invite(client, admin, voice_tpl["id"], cand2)
+    url = f"/api/v1/ai-interview/session/{invited['invite_token']}/voice/disown"
+    assert client.post(url, json={"text": ""}).status_code == 422
+
+    # Setelah dikirim: jawaban terakhir boleh ditandai dalam 15 menit saja.
+    db = client.testing_session()
+    row = db.get(AIInterviewResponse, UUID(invited["response_id"]))
+    row.status = AIInterviewResponseStatus.scored
+    row.submitted_at = datetime.now(UTC) - timedelta(minutes=5)
+    db.commit()
+    assert client.post(url, json={"text": "a", "during_call": False}).status_code == 204
+    row.submitted_at = datetime.now(UTC) - timedelta(minutes=20)
+    db.commit()
+    assert client.post(url, json={"text": "b", "during_call": False}).status_code == 422
+    db.refresh(row)
+    assert [d["text"] for d in json.loads(row.audio_flags_json)["disowned"]] == ["a"]
+    db.close()
+
+
 _TEST_AGENT_SECRET = "test-livekit-secret-for-agent-signature"
 
 

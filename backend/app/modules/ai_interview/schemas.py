@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from app.modules.ai_interview.models import (
@@ -259,6 +260,9 @@ class AIInterviewResponseOut(BaseModel):
     consent_withdrawn_at: datetime | None = None
     data_purged_at: datetime | None = None
     purge_reason: str | None = None
+    # Mode suara: {"room_check": {...}, "disowned": [...]} -- lihat
+    # models.AIInterviewResponse.audio_flags_json. None = tidak ada sinyal.
+    audio_flags: dict | None = None
     # Fase 5: tahap pipeline kandidat di job order template ini (Placement),
     # diisi service -- None bila template tanpa job order / belum di pipeline.
     placement_id: UUID | None = None
@@ -384,6 +388,23 @@ class VoiceContextOut(BaseModel):
     criteria: list[InterviewCriterionBase]
     # Fase 4: aturan bawaan (terkunci & default) lalu pedoman template.
     guidelines: list[InterviewGuidelineOut] = []
+
+
+class VoiceStartIn(BaseModel):
+    """Hasil cek ruangan pra-panggilan di browser kandidat (opsional --
+    klien lama tidak mengirim body). `noisy` = ada suara mirip bicara saat
+    kandidat diminta diam, kandidat tetap memilih mulai."""
+
+    room_check: Literal["ok", "noisy", "skipped"] | None = None
+    # Detik bersuara selama jendela cek (bukan rekaman; hanya angka).
+    voiced_sec: float | None = Field(default=None, ge=0, le=60)
+
+
+class VoiceDisownIn(BaseModel):
+    """Kandidat menandai teks yang tertangkap sebagai BUKAN suaranya."""
+
+    text: str = Field(min_length=1, max_length=1000)
+    during_call: bool = True
 
 
 class VoiceCompleteIn(BaseModel):

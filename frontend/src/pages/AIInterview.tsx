@@ -90,9 +90,46 @@ interface InterviewResponse {
   consent_withdrawn_at: string | null;
   data_purged_at: string | null;
   purge_reason: "retensi" | "penarikan_persetujuan" | "penghapusan_subjek" | null;
+  /** Mode suara: cek ruangan pra-panggilan & jawaban "bukan suara saya". */
+  audio_flags: AudioFlags | null;
   /** Tahap pipeline kandidat di job order template ini (Fase 5). */
   placement_id: string | null;
   placement_status: string | null;
+}
+
+interface AudioFlags {
+  room_check?: { result: "ok" | "noisy" | "skipped"; voiced_sec: number | null; at: string };
+  disowned?: { text: string; during_call: boolean; at: string }[];
+}
+
+/** Suara latar (TV/orang lain) bisa terbaca sebagai jawaban kandidat (uji
+ * 2026-10-29). Reviewer diberi tahu supaya skor tidak diterima mentah. */
+function AudioFlagsNotice({ flags }: { flags: AudioFlags | null }) {
+  const noisy = flags?.room_check?.result === "noisy";
+  const disowned = flags?.disowned ?? [];
+  if (!noisy && disowned.length === 0) return null;
+  return (
+    <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+      <p className="font-medium">Kemungkinan ada suara latar — dengarkan rekaman sebelum menerima skor.</p>
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        {noisy && (
+          <li>
+            Cek ruangan sebelum panggilan mendeteksi suara lain
+            {flags?.room_check?.voiced_sec != null && ` (${flags.room_check.voiced_sec} dtk dari 5 dtk)`}; kandidat
+            tetap memulai.
+          </li>
+        )}
+        {disowned.map((d, i) => (
+          <li key={i}>
+            Kandidat menandai bukan suaranya: <q>{d.text}</q>{" "}
+            {d.during_call
+              ? "— selama panggilan; pewawancara mengabaikannya dan meminta jawaban ulang."
+              : "— setelah panggilan; bagian ini SUDAH ikut dinilai AI."}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 interface JobOrderLite {
@@ -1308,6 +1345,7 @@ export default function AIInterview() {
                       {formatDate(r.data_purged_at)}.
                     </p>
                   )}
+                  {!r.data_purged_at && <AudioFlagsNotice flags={r.audio_flags} />}
                   {r.ai_narrative && (
                     <p className="mt-2 text-sm text-[var(--text-muted)]">{r.ai_narrative}</p>
                   )}

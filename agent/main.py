@@ -42,7 +42,15 @@ from urllib.parse import urlparse
 import httpx
 from avatar import setup_avatar
 from avatar_fallback import AvatarSettings, wait_ready
-from interview_flow import InterviewFlow, TurnClock, build_instructions, format_transcript
+from interview_flow import (
+    ROLE_DISOWNED,
+    InterviewFlow,
+    TurnClock,
+    build_instructions,
+    format_transcript,
+    last_candidate_turn,
+)
+from livekit import rtc
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -69,6 +77,8 @@ logger = logging.getLogger("ai-interview-agent")
 # `backend/app/modules/ai_interview/service.py` — LiveKit mencocokkan
 # dispatch eksplisit by name, bukan otomatis ke semua room.
 AGENT_NAME = "ai-interview-agent"
+# RPC dari browser kandidat: tombol "Bukan saya" (frontend AIInterviewVoiceCall).
+DISOWN_RPC_METHOD = "aeos.disown_last_answer"
 
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://backend:8000/api/v1").rstrip("/")
 LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "")
@@ -153,14 +163,44 @@ class InterviewAgent(Agent):
         # transkrip, untuk "dengar bukti" di halaman review.
         self.clock = TurnClock()
         self.recording_t0: float | None = None
+        # Tombol "Bukan saya" (suara latar terbaca sebagai jawaban): item
+        # riwayat yang ditandai kandidat, dan pertanyaan aktif saat tiap
+        # giliran kandidat diucapkan (untuk memundurkan alur).
+        self.disowned: set[str] = set()
+        self.turn_question: dict[str, int] = {}
 
     def _user_turns(self) -> int:
-        """Jumlah giliran bicara kandidat (penjagaan "sudah dijawab")."""
+        """Jumlah giliran bicara kandidat (penjagaan "sudah dijawab"). Giliran
+        yang ditandai "Bukan saya" tidak dihitung sebagai jawaban."""
         return sum(
             1
             for item in self.session.history.items
-            if getattr(item, "role", None) == "user" and getattr(item, "text_content", None)
+            if getattr(item, "role", None) == "user"
+            and getattr(item, "text_content", None)
+            and getattr(item, "id", "") not in self.disowned
         )
+
+    def role_of(self, item) -> str:
+        role = getattr(item, "role", None) or ""
+        if role == "user" and getattr(item, "id", "") in self.disowned:
+            return ROLE_DISOWNED
+        return role
+
+    def disown_last_turn(self) -> str | None:
+        """Tandai giliran kandidat terakhir bukan suaranya. Kembalikan
+        instruksi untuk LLM, atau None bila tidak ada yang ditandai."""
+        items = self.session.history.items
+        ids = last_candidate_turn(
+            [
+                (getattr(i, "id", ""), self.role_of(i), getattr(i, "text_content", None) or "")
+                for i in items
+            ]
+        )
+        if not ids:
+            return None
+        self.disowned.update(ids)
+        question = self.turn_question.get(ids[0], self.flow.index)
+        return self.flow.disown(question, len(items), self._user_turns())
 
     @function_tool
     async def next_question(self) -> str:
@@ -276,7 +316,7 @@ def _format_transcript(
 ) -> tuple[str, list[float | None]]:
     items = [
         (
-            getattr(item, "role", None) or "",
+            agent.role_of(item),
             getattr(item, "text_content", None) or "",
             agent.clock.starts.get(getattr(item, "id", "")),
         )
@@ -380,6 +420,8 @@ async def entrypoint(ctx: JobContext) -> None:
         role = getattr(ev.item, "role", None)
         if role in ("user", "assistant"):
             agent.clock.item_added(ev.item.id, role)
+        if role == "user":
+            agent.turn_question[ev.item.id] = agent.flow.index
 
     avatar_link = None
     if AVATAR.enabled:
@@ -417,6 +459,21 @@ async def entrypoint(ctx: JobContext) -> None:
             )
             ctx.shutdown(reason="kandidat_tidak_hadir")
             return
+
+    @ctx.room.local_participant.register_rpc_method(DISOWN_RPC_METHOD)
+    async def _on_disown(data: rtc.RpcInvocationData) -> str:
+        # Hanya kandidat (peserta biasa) -- bukan avatar/agen lain di room.
+        caller = ctx.room.remote_participants.get(data.caller_identity)
+        if caller is None or caller.kind != rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
+            raise rtc.RpcError(rtc.RpcError.ErrorCode.APPLICATION_ERROR, "bukan kandidat")
+        instruction = agent.disown_last_turn()
+        if instruction is None:
+            return "noop"
+        logger.info("Kandidat menandai jawaban terakhir bukan suaranya")
+        session.interrupt()
+        session.generate_reply(instructions=instruction)
+        return "ok"
+
     # Pertanyaan pertama disisipkan kode (lihat InterviewFlow.opening_instruction).
     await session.generate_reply(
         instructions=agent.flow.opening_instruction(len(session.history.items))

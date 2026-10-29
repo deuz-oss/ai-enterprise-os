@@ -25,6 +25,13 @@ from dataclasses import dataclass, field
 # review menampilkannya sebagai judul bagian.
 MARKER_PREFIX = "## "
 
+# Peran riwayat untuk giliran kandidat yang ditandai kandidat sendiri sebagai
+# BUKAN suaranya (tombol "Bukan saya"), dan labelnya di transkrip. Label ini
+# disebut persis di prompt penilaian backend (diabaikan) dan tidak diawali
+# "Kandidat:" sehingga tidak pernah dipakai sebagai kutipan bukti.
+ROLE_DISOWNED = "user_disowned"
+DISOWNED_SPEAKER = "Kandidat (bukan suara kandidat)"
+
 # Penutup baku, diucapkan SETELAH tool end_interview (pola EndCallTool
 # LiveKit: balasan tool diputar dulu, baru sesi dimatikan). Uji dengan model
 # sungguhan (2026-09-25): kalau penutup diserahkan ke LLM sebelum tool, LLM
@@ -140,6 +147,36 @@ class InterviewFlow:
             "jawaban. Setelah kandidat menjawab, lanjut dengan next_question."
         )
 
+    def disown(self, question_index: int, history_len: int, user_turns: int) -> str:
+        """Kandidat menandai giliran terakhirnya bukan suaranya (suara latar
+        terbaca sebagai jawaban, uji browser 2026-10-29). `question_index` =
+        pertanyaan yang aktif saat giliran itu diucapkan; `user_turns` SUDAH
+        tidak menghitung giliran yang ditandai. Alur mundur ke pertanyaan itu
+        dan menuntut jawaban baru. Bila alur sudah pindah ke pertanyaan
+        berikutnya, penanda "(diulang)" dipasang supaya jawaban ulang tercatat
+        di bawah pertanyaan yang benar; pertanyaan yang terlewat diajukan
+        lagi lewat next_question seperti biasa."""
+        if not 0 <= question_index < self.total:
+            return (
+                "Kandidat menandai ucapan terakhirnya bukan suaranya. Katakan singkat "
+                "bahwa bagian itu diabaikan, lalu lanjutkan interview."
+            )
+        moved_on = question_index != self.index
+        self.index = question_index
+        self._asked_at_turn = user_turns
+        q = self.questions[question_index]
+        prompt = q.get("prompt", "")
+        if moved_on:
+            self.markers[history_len] = (
+                f"{MARKER_PREFIX}Pertanyaan {question_index + 1} (diulang): {prompt}"
+            )
+        return (
+            "Kandidat menandai jawaban terakhirnya BUKAN suaranya (ada suara lain yang "
+            "tertangkap mikrofon). Katakan singkat bahwa bagian itu diabaikan -- jangan "
+            "mengomentari isinya -- lalu minta kandidat menjawab ulang pertanyaan "
+            f'{question_index + 1}: "{prompt}". Tunggu jawabannya.'
+        )
+
     def closing_instruction(self, candidate_requested_stop: bool) -> str:
         """Balasan tool end_interview: yang harus diucapkan sebelum sesi mati."""
         if candidate_requested_stop:
@@ -163,6 +200,30 @@ class InterviewFlow:
             "Panggil next_question. (Hanya bila kandidat sendiri minta berhenti, panggil "
             "end_interview dengan candidate_requested_stop=true.)"
         )
+
+
+def last_candidate_turn(items: list[tuple[str, str, str]]) -> list[str]:
+    """ID item riwayat giliran kandidat TERAKHIR -- yang ditampilkan di
+    halaman sebagai "yang kami dengar" saat tombol "Bukan saya" ditekan.
+    `items` = (id, role, teks) urut riwayat. Pewawancara biasanya sudah
+    mulai menanggapi saat kandidat menekan tombol, jadi balasan AI di
+    belakang dilewati dulu; satu giliran bisa terdiri dari beberapa item
+    kandidat berurutan (VAD memotong jeda). Item tanpa teks (pemanggilan
+    tool) diabaikan. Giliran yang sudah ditandai (ROLE_DISOWNED) tidak
+    diambil lagi: tombol ganda = no-op."""
+    run: list[str] = []
+    for item_id, role, text in reversed(items):
+        if not text.strip():
+            continue
+        if role == "user":
+            run.append(item_id)
+        elif run:
+            break
+        elif role == ROLE_DISOWNED:
+            # Giliran terakhir sudah ditandai: JANGAN mundur ke jawaban
+            # sebelumnya (yang asli) -- itu yang akan terjadi tanpa cek ini.
+            return []
+    return list(reversed(run))
 
 
 def _guideline_lines(items: list[dict]) -> str:
@@ -245,7 +306,9 @@ def format_transcript(
             lines.append(markers[i])
             offsets.append(None)
         if role and text:
-            speaker = "Kandidat" if role == "user" else "Pewawancara AI"
+            speaker = {"user": "Kandidat", ROLE_DISOWNED: DISOWNED_SPEAKER}.get(
+                role, "Pewawancara AI"
+            )
             lines.append(f"{speaker}: {text}")
             offsets.append(
                 round(max(0.0, start - t0), 2) if start is not None and t0 is not None else None

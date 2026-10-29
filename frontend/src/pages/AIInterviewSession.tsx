@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { api, ApiError, formatDateTime } from "../api/client";
 import { AIInterviewRecording } from "./AIInterviewRecording";
-import { AIInterviewVoiceCall } from "./AIInterviewVoiceCall";
+import { AIInterviewVoiceCall, VoiceLastAnswerCheck } from "./AIInterviewVoiceCall";
 
 /** Sesi kandidat AI Interview (PRD v3.1 Patch 4) — publik, TANPA Layout/login,
  * diakses via {token} di URL. Mirror pola CareerPortal.tsx. Mode `async_text`
@@ -195,6 +195,9 @@ export default function AIInterviewSession() {
   const qc = useQueryClient();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // Mode suara: teks terakhir yang tertangkap, untuk tombol "Bukan suara saya"
+  // setelah panggilan (agen bisa menutup interview tepat setelah giliran itu).
+  const [lastHeard, setLastHeard] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["ai-interview-session", token],
@@ -293,6 +296,7 @@ export default function AIInterviewSession() {
             Terima kasih, jawaban Anda sudah kami terima. Tim rekrutmen akan meninjau hasilnya dan
             menghubungi Anda untuk langkah berikutnya.
           </p>
+          {submitted && lastHeard && <VoiceLastAnswerCheck token={token!} text={lastHeard} />}
         </div>
       ) : data.mode === "async_recording" ? (
         <AIInterviewRecording
@@ -309,7 +313,8 @@ export default function AIInterviewSession() {
       ) : data.mode === "realtime_voice" ? (
         <AIInterviewVoiceCall
           token={token!}
-          onEnded={() => {
+          onEnded={(heard) => {
+            setLastHeard(heard);
             setSubmitted(true);
             qc.invalidateQueries({ queryKey: ["ai-interview-session", token] });
           }}

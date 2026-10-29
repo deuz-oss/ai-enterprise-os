@@ -31,6 +31,34 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Added — Suara latar di interview suara: cek ruangan, "Bukan suara saya", penanda reviewer
+
+Uji browser 2026-10-29: semenit siaran/orang lain berbicara di dekat
+mikrofon kandidat ditranskripsi sebagai jawaban dan dinilai. Ini bukan
+halusinasi (Whisper yakin itu ucapan), jadi ditangani di sisi produk:
+
+- **Cek ruangan pra-panggilan.** "Mulai Panggilan" kini mengukur suara 5 dtk
+  sementara kandidat diam (Web Audio, tanpa rekaman). Ada suara mirip bicara
+  → peringatan + "Cek Ulang" / "Tetap Mulai". Hasilnya dikirim bersama
+  `voice/start`. Ambang belum dikalibrasi dengan banyak ruangan sungguhan.
+- **"Yang kami dengar" + tombol "Bukan suara saya".** Halaman panggilan
+  menampilkan transkrip giliran kandidat (stream `lk.transcription` yang sudah
+  ada). Tombol memberi tahu agen lewat RPC: giliran itu tidak dihitung
+  sebagai jawaban, alur mundur ke pertanyaan yang dijawabnya (penanda
+  "(diulang)" bila agen sudah pindah pertanyaan), dan kandidat diminta
+  menjawab ulang. Di transkrip barisnya berlabel `Kandidat (bukan suara
+  kandidat):` — diabaikan penilaian AI dan tidak bisa jadi kutipan bukti.
+  Jawaban terakhir bisa ditandai di layar "terima kasih" (≤ 15 menit; skor
+  sudah dihitung, jadi hanya sebagai catatan reviewer).
+- **Penanda reviewer.** Kolom baru `ai_interview_responses.audio_flags_json`
+  (migrasi `46ebfc27d235`) menyimpan hasil cek ruangan & penandaan kandidat;
+  halaman review menampilkan "Kemungkinan ada suara latar — dengarkan
+  rekaman sebelum menerima skor". Ikut dihapus saat retensi/penarikan
+  persetujuan; teksnya tidak masuk audit log.
+- Diverifikasi di Chrome dengan ruangan sungguhan: cek ruangan menandai
+  ruangan bising, tombol menandai giliran saat agen sudah di pertanyaan 2,
+  agen mengulang pertanyaan 1 lalu melanjutkan, dan panel reviewer tampil.
+
 ### Fixed — Halusinasi Whisper menjadi jawaban kandidat
 
 - **Hening/derau → "Terima kasih (kerana menonton)."** faster-whisper-small

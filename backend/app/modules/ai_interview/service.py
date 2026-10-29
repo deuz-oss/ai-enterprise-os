@@ -54,7 +54,9 @@ from app.modules.ai_interview.schemas import (
     RecordedAnswerOut,
     VoiceContextOut,
     VoiceContextQuestionOut,
+    VoiceDisownIn,
     VoiceSessionOut,
+    VoiceStartIn,
 )
 from app.modules.notifications.service import send_raw_email
 from app.modules.recruitment.models import (
@@ -98,6 +100,8 @@ _SCORE_SYSTEM_PROMPT = (
     "disebut kandidat sendiri (agama, suku, status pernikahan, kehamilan, usia, "
     "kesehatan, pandangan politik) WAJIB diabaikan: jangan dikutip, jangan "
     "mempengaruhi skor. Baris berawalan '## ' hanyalah penanda pertanyaan. "
+    "Baris berawalan 'Kandidat (bukan suara kandidat):' adalah suara lain yang "
+    "tertangkap mikrofon dan ditandai kandidat sendiri -- abaikan sepenuhnya. "
     "Beri juga narasi ringkas 2-3 kalimat Bahasa Indonesia. "
     "Balas HANYA JSON sesuai skema:\n"
     "{\n"
@@ -289,6 +293,7 @@ def _purge_content(response: AIInterviewResponse, reason: str) -> None:
     response.transcript_text = None
     response.transcript_clean = None
     response.transcript_offsets_json = None
+    response.audio_flags_json = None
     response.ai_score_overall = None
     response.ai_score_original = None
     response.ai_score_breakdown_json = None
@@ -1524,7 +1529,9 @@ def submit_session(db: Session, token: str) -> AIInterviewResponse:
 # perlu akses DB/tenant-context langsung (lihat catatan desain di plan file).
 
 
-async def start_voice_session(db: Session, token: str) -> VoiceSessionOut:
+async def start_voice_session(
+    db: Session, token: str, check: VoiceStartIn | None = None
+) -> VoiceSessionOut:
     prev_tenant = get_tenant()
     try:
         response = _resolve_response_by_token(db, token)
@@ -1579,10 +1586,80 @@ async def start_voice_session(db: Session, token: str) -> VoiceSessionOut:
         if response.status == AIInterviewResponseStatus.invited:
             response.status = AIInterviewResponseStatus.in_progress
             response.started_at = response.started_at or datetime.now(UTC)
-            db.commit()
+        if check is not None and check.room_check is not None:
+            # Panggilan ulang menimpa hasil cek sebelumnya: yang relevan bagi
+            # reviewer adalah kondisi ruangan saat sesi terakhir dimulai.
+            flags = response.audio_flags or {}
+            flags["room_check"] = {
+                "result": check.room_check,
+                "voiced_sec": check.voiced_sec,
+                "at": datetime.now(UTC).isoformat(),
+            }
+            response.audio_flags_json = json.dumps(flags, ensure_ascii=False)
+        db.commit()
 
         public_url = settings.livekit_public_url or settings.livekit_url or ""
         return VoiceSessionOut(url=public_url, token=access_token)
+    finally:
+        set_tenant(prev_tenant)
+
+
+# Batas penandaan "bukan suara saya" per interview, dan jendela setelah
+# interview terkirim (jawaban terakhir bisa saja langsung ditutup agen).
+MAX_DISOWNED = 20
+DISOWN_GRACE = timedelta(minutes=15)
+
+
+def disown_voice_answer(db: Session, token: str, payload: VoiceDisownIn) -> None:
+    """Kandidat menandai teks yang tertangkap sebagai BUKAN suaranya (suara
+    latar/TV/orang lain -- uji browser 2026-10-29). Hanya dicatat sebagai
+    sinyal untuk reviewer; tidak mengubah transkrip maupun skor (di tengah
+    panggilan, agen sendiri yang mengabaikan giliran itu -- lihat
+    agent/main.py). Setelah interview terkirim hanya boleh dalam
+    DISOWN_GRACE: setelah itu kandidat tidak lagi tahu apa yang tertangkap."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token)
+        _require_consent(response)
+        template = db.get(AIInterviewTemplate, response.template_id)
+        if template is None or template.mode != AIInterviewMode.realtime_voice:
+            raise HTTPException(status_code=422, detail="Template ini bukan mode percakapan suara")
+        if response.status not in (
+            AIInterviewResponseStatus.invited,
+            AIInterviewResponseStatus.in_progress,
+        ):
+            submitted = response.submitted_at
+            if submitted is not None and submitted.tzinfo is None:
+                submitted = submitted.replace(tzinfo=UTC)
+            if submitted is None or datetime.now(UTC) - submitted > DISOWN_GRACE:
+                raise HTTPException(
+                    status_code=422, detail="Interview ini sudah lama selesai dan dikirim"
+                )
+        flags = response.audio_flags or {}
+        disowned = flags.get("disowned")
+        if not isinstance(disowned, list):
+            disowned = []
+        if len(disowned) >= MAX_DISOWNED:
+            raise HTTPException(status_code=429, detail="Terlalu banyak penandaan")
+        disowned.append(
+            {
+                "text": payload.text.strip()[:1000],
+                "during_call": payload.during_call,
+                "at": datetime.now(UTC).isoformat(),
+            }
+        )
+        flags["disowned"] = disowned
+        response.audio_flags_json = json.dumps(flags, ensure_ascii=False)
+        db.commit()
+        audit.log_event(
+            db,
+            action="ai_interview.voice_answer_disowned",
+            entity_type="ai_interview_response",
+            entity_id=response.id,
+            # Teksnya TIDAK masuk audit log (data pribadi; audit tidak ikut
+            # terhapus saat retensi/penarikan persetujuan).
+            detail={"during_call": payload.during_call, "count": len(disowned)},
+        )
     finally:
         set_tenant(prev_tenant)
 

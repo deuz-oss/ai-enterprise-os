@@ -140,6 +140,12 @@ class AIInterviewResponse(TenantMixin, Base):
     # Offset detik per baris `transcript_text` (JSON list, None = tanpa
     # waktu) relatif awal rekaman sesi -- "dengar bukti" mode suara.
     transcript_offsets_json: Mapped[str | None] = mapped_column(Text)
+    # Sinyal kualitas audio mode suara untuk reviewer (2026-10-29): hasil cek
+    # ruangan pra-panggilan dan jawaban yang ditandai kandidat "bukan suara
+    # saya" (suara latar/TV terbaca sebagai jawaban). JSON
+    # {"room_check": {...}, "disowned": [...]}; ikut dihapus saat retensi/
+    # penarikan persetujuan karena memuat teks ucapan.
+    audio_flags_json: Mapped[str | None] = mapped_column(Text)
     # Rekaman sesi suara (ogg/opus 2 kanal: 0 = kandidat, 1 = pewawancara AI),
     # direkam di agent lalu disimpan di object storage. Dihapus bersama isi
     # lain saat retensi/penarikan persetujuan (`_purge_content`).
@@ -189,6 +195,14 @@ class AIInterviewResponse(TenantMixin, Base):
         except (TypeError, ValueError):
             return []
         return data if isinstance(data, list) else []
+
+    @property
+    def audio_flags(self) -> dict | None:
+        try:
+            data = json.loads(self.audio_flags_json) if self.audio_flags_json else None
+        except (TypeError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
 
     @property
     def has_recording(self) -> bool:

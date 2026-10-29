@@ -32,7 +32,9 @@ from app.modules.ai_interview.schemas import (
     RetentionRunOut,
     VoiceCompleteIn,
     VoiceContextOut,
+    VoiceDisownIn,
     VoiceSessionOut,
+    VoiceStartIn,
 )
 from fastapi import (
     APIRouter,
@@ -302,9 +304,19 @@ def submit_session(token: str, db: Session = Depends(get_db)):
 
 
 @public_router.post("/{token}/voice/start", response_model=VoiceSessionOut)
-async def start_voice_session(token: str, db: Session = Depends(get_db)):
+async def start_voice_session(
+    token: str, payload: VoiceStartIn | None = None, db: Session = Depends(get_db)
+):
     _check_rate_limit(db, token)
-    return await service.start_voice_session(db, token)
+    return await service.start_voice_session(db, token, payload)
+
+
+@public_router.post("/{token}/voice/disown", status_code=status.HTTP_204_NO_CONTENT)
+def disown_voice_answer(token: str, payload: VoiceDisownIn, db: Session = Depends(get_db)):
+    """Kandidat: "teks yang tertangkap itu bukan suara saya" (suara latar).
+    Sinyal untuk reviewer, bukan pengubah transkrip/skor."""
+    _check_rate_limit(db, token)
+    service.disown_voice_answer(db, token, payload)
 
 
 @public_router.get("/{token}/voice/context", response_model=VoiceContextOut)
