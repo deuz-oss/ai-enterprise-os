@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     # Model yang diminta ke faster-whisper-server untuk transkripsi jawaban
     # mode rekaman (samakan dgn STT_MODEL di docker-compose).
     stt_model: str = "Systran/faster-whisper-small"
+    # Segmen dengan no_speech_prob >= ambang ini = halusinasi Whisper dari
+    # hening/derau ("Terima kasih kerana menonton."), dibuang. Kalibrasi
+    # faster-whisper-small 2026-10-29: ucapan 0.01-0.47, non-ucapan 0.78-0.92.
+    # Samakan dengan STT_NO_SPEECH_THRESHOLD agen; kalibrasi ulang bila model
+    # diganti. >= 1 = filter mati. Kosong = 0.6 (service._NO_SPEECH_DEFAULT).
+    stt_no_speech_threshold: float | None = None
 
     # Integrasi tanda tangan elektronik. Nilai ESIGN_PROVIDER:
     # "" (nonaktif) | "sandbox" (simulasi lokal) | "privy" (PrivyID produksi)
@@ -156,6 +162,7 @@ class Settings(BaseSettings):
         "livekit_api_key",
         "livekit_api_secret",
         "stt_base_url",
+        "stt_no_speech_threshold",
         "privy_api_url",
         "privy_merchant_key",
         "privy_username",

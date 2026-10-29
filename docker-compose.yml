@@ -137,6 +137,8 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       STT_BASE_URL: http://stt-server:8000/v1
       STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
+      # Buang halusinasi Whisper dari hening/derau (agent/whisper_filter.py).
+      STT_NO_SPEECH_THRESHOLD: ${STT_NO_SPEECH_THRESHOLD:-}
       AI_BASE_URL: ${AI_BASE_URL}
       AI_API_KEY: ${AI_API_KEY}
       AI_MODEL: ${AI_MODEL:-gpt-4o-mini}

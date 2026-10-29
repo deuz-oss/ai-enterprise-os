@@ -1895,6 +1895,13 @@ def upload_answer_audio(
 MAX_ANSWER_WORDS = 3000
 
 
+# Lihat config.stt_no_speech_threshold (kalibrasi) & agent/whisper_filter.py.
+_NO_SPEECH_DEFAULT = 0.6
+# Decoding berulang ("saya akan melakukannya" x26, compression_ratio 14.18 di
+# uji 2026-10-29). 2.4 = compression_ratio_threshold bawaan Whisper.
+_MAX_COMPRESSION_RATIO = 2.4
+
+
 def _stt_transcribe(data: bytes, mime: str) -> tuple[str, list[list]]:
     """faster-whisper-server (API kompatibel OpenAI /audio/transcriptions).
     Roadmap Fase 5: minta timestamp per kata (`verbose_json`) -- dipakai untuk
@@ -1917,7 +1924,18 @@ def _stt_transcribe(data: bytes, mime: str) -> tuple[str, list[list]]:
         timeout=300,
     )
     resp.raise_for_status()
-    body = resp.json()
+    threshold = settings.stt_no_speech_threshold
+    return _speech_only(resp.json(), _NO_SPEECH_DEFAULT if threshold is None else threshold)
+
+
+def _speech_only(body: dict, threshold: float) -> tuple[str, list[list]]:
+    """Buang segmen halusinasi Whisper beserta kata-katanya: hening/derau
+    (no_speech_prob >= threshold) dan decoding berulang (compression_ratio >
+    2.4). Rekaman hening/berderau dulu menjadi "Terima kasih kerana
+    menonton." berstatus siap dinilai; kini transkripnya kosong sehingga
+    masuk jalur `failure = "silent"` (kandidat diminta rekam ulang). Lihat
+    config.stt_no_speech_threshold untuk kalibrasinya. Respons tanpa
+    `segments` dipakai apa adanya."""
     words: list[list] = []
     for w in body.get("words") or []:
         try:
@@ -1926,7 +1944,27 @@ def _stt_transcribe(data: bytes, mime: str) -> tuple[str, list[list]]:
             )
         except (KeyError, TypeError, ValueError):
             continue
-    return str(body.get("text") or "").strip(), words[:MAX_ANSWER_WORDS]
+    segments = body.get("segments")
+    if not isinstance(segments, list):
+        return str(body.get("text") or "").strip(), words[:MAX_ANSWER_WORDS]
+
+    kept_text: list[str] = []
+    dropped: list[tuple[float, float]] = []
+    for seg in segments:
+        try:
+            no_speech = float(seg.get("no_speech_prob", 0.0))
+            compression = float(seg.get("compression_ratio", 0.0))
+            span = (float(seg.get("start", 0.0)), float(seg.get("end", 0.0)))
+        except (TypeError, ValueError):
+            no_speech, compression, span = 0.0, 0.0, (0.0, 0.0)
+        if no_speech >= threshold or compression > _MAX_COMPRESSION_RATIO:
+            dropped.append(span)
+        elif text := str(seg.get("text") or "").strip():
+            kept_text.append(text)
+    if dropped:
+        # Kata ikut dibuang bila titik tengahnya jatuh di segmen yang dibuang.
+        words = [w for w in words if not any(s <= (w[0] + w[1]) / 2 <= e for s, e in dropped)]
+    return " ".join(kept_text), words[:MAX_ANSWER_WORDS]
 
 
 def transcribe_answer_audio(

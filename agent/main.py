@@ -59,6 +59,8 @@ from livekit.agents import (
 from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
+from whisper_filter import parse_threshold
+from whisper_stt import WhisperSTT
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai-interview-agent")
@@ -88,6 +90,10 @@ STT_MODEL = os.environ.get("STT_MODEL") or "Systran/faster-whisper-small"
 # CPU butuh >10 dtk untuk jawaban ~12 dtk, jadi tiap jawaban ditranskripsi
 # ULANG sampai 4x (uji E2E: jeda 78 dtk sebelum pertanyaan berikutnya).
 STT_TIMEOUT_SEC = float(os.environ.get("STT_TIMEOUT_SEC") or 60)
+# Segmen dengan no_speech_prob >= ambang ini dibuang sebagai halusinasi
+# Whisper ("Terima kasih kerana menonton." dari hening/derau), lihat
+# whisper_filter.py. Kalibrasi ulang bila STT_MODEL diganti.
+STT_NO_SPEECH_THRESHOLD = parse_threshold(os.environ.get("STT_NO_SPEECH_THRESHOLD"))
 # Hening (dtk) yang mengakhiri satu segmen ucapan untuk STT. Default silero
 # 0.55: jeda antarkalimat memecah jawaban jadi beberapa segmen yang
 # ditranskripsi terpisah; dengan STT CPU, transkrip segmen terakhir baru tiba
@@ -292,11 +298,11 @@ async def entrypoint(ctx: JobContext) -> None:
     context = await _fetch_context(token)
 
     session = AgentSession(
-        stt=lk_openai.STT(
+        stt=WhisperSTT(
             base_url=STT_BASE_URL,
-            api_key="not-needed",
             model=STT_MODEL,
             language=STT_LANGUAGE,
+            no_speech_threshold=STT_NO_SPEECH_THRESHOLD,
         ),
         llm=lk_openai.LLM(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, model=LLM_MODEL),
         tts=lk_openai.TTS(

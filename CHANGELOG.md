@@ -31,6 +31,30 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Fixed — Halusinasi Whisper menjadi jawaban kandidat
+
+- **Hening/derau → "Terima kasih (kerana menonton)."** faster-whisper-small
+  mengisi segmen tanpa ucapan (hening, derau, dengung, napas, klik) dengan teks
+  subtitle YouTube; reproduksi 100% di 6 jenis non-ucapan. Interview suara
+  menerimanya sebagai jawaban (template satu pertanyaan langsung ditutup), dan
+  mode rekaman menyimpannya sebagai jawaban siap dinilai. Segmen dengan
+  `no_speech_prob >= 0.6` kini dibuang (kalibrasi: ucapan 0.01-0.47, termasuk
+  "Terima kasih." sungguhan; non-ucapan 0.78-0.92). Aturan bawaan Whisper
+  tidak menangkapnya karena `avg_logprob`-nya normal. Mode rekaman: rekaman
+  hening kini masuk jalur `silent` (kandidat diminta rekam ulang).
+- **Decoding berulang** ("saya akan melakukannya" ×26, `compression_ratio`
+  14.18) ikut dibuang: batas `compression_ratio > 2.4` bawaan Whisper (ucapan
+  sungguhan maks 1.73).
+- Agen kini memakai `whisper_stt.WhisperSTT` (bukan plugin openai LiveKit):
+  plugin meminta `response_format=json` untuk model selain `whisper-1`, jadi
+  sinyal per segmen tidak pernah sampai, dan batas baca 30 dtk-nya membuat
+  `STT_TIMEOUT_SEC` tidak berlaku.
+- Env baru `STT_NO_SPEECH_THRESHOLD` (agen & backend; kosong = 0.6).
+  Kalibrasi ulang bila `STT_MODEL` diganti (mis. large-v3 di server GPU).
+- **Belum tertangani:** suara latar sungguhan (TV/orang lain di dekat
+  mikrofon) tetap terbaca sebagai ucapan -- bukan halusinasi, butuh keputusan
+  produk terpisah.
+
 ### Fixed — Cek gap PoC avatar video (Fase 67)
 
 - **Video avatar hitam.** Track video avatar biasanya sudah diterima selagi

@@ -1375,6 +1375,78 @@ def test_stt_error_refunds_attempt_but_silence_does_not(client, monkeypatch):
     assert (rec["failure"], rec["attempts_used"]) == ("silent", 1)
 
 
+def _whisper_body(*segments):
+    """Respons verbose_json faster-whisper: (mulai, selesai, teks, no_speech_prob)."""
+    words = []
+    for start, end, text, _ in segments:
+        parts = text.split()
+        step = (end - start) / max(len(parts), 1)
+        words += [
+            {"start": start + i * step, "end": start + (i + 1) * step, "word": w}
+            for i, w in enumerate(parts)
+        ]
+    return {
+        "text": " ".join(s[2] for s in segments),
+        "segments": [
+            {"start": s, "end": e, "text": t, "no_speech_prob": p, "avg_logprob": -0.6}
+            for s, e, t, p in segments
+        ],
+        "words": words,
+    }
+
+
+def test_whisper_silence_hallucination_becomes_silent_answer(client, monkeypatch):
+    """Uji 2026-10-29: rekaman hening/berderau ditranskripsi Whisper menjadi
+    "Terima kasih kerana menonton." (no_speech_prob 0.78-0.92) dan dulu
+    tersimpan sebagai jawaban siap dinilai. Kini masuk jalur `silent`."""
+    import httpx
+    from app.modules.ai_interview import service as svc
+
+    real_stt = svc._stt_transcribe
+    _, token, _ = _recording_setup(client, monkeypatch, [])
+    monkeypatch.setattr(svc, "_stt_transcribe", real_stt)
+    body = _whisper_body((0.0, 1.5, "Terima kasih kerana menonton.", 0.9))
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("POST", a[0])),
+    )
+
+    _upload(client, token, "q1")
+    rec = client.get(f"/api/v1/ai-interview/session/{token}").json()["recorded_answers"][0]
+    assert (rec["status"], rec["failure"], rec["transcript"]) == ("failed", "silent", None)
+
+
+def test_speech_only_keeps_real_speech_and_its_words():
+    from app.modules.ai_interview.service import _speech_only
+
+    body = _whisper_body(
+        (0.0, 3.0, "Saya menenangkan pelanggan dulu.", 0.01),
+        (3.0, 4.5, "Terima kasih kerana menonton.", 0.88),
+    )
+    text, words = _speech_only(body, 0.6)
+    assert text == "Saya menenangkan pelanggan dulu."
+    assert [w[2] for w in words] == ["Saya", "menenangkan", "pelanggan", "dulu."]
+    # Kandidat yang sungguh bilang terima kasih (no_speech_prob ~0.27) tetap utuh.
+    assert _speech_only(_whisper_body((0.0, 1.0, "Terima kasih.", 0.27)), 0.6)[0] == (
+        "Terima kasih."
+    )
+    # Server tanpa `segments`: tidak ada sinyal, teks dipakai apa adanya.
+    assert _speech_only({"text": " Halo. "}, 0.6) == ("Halo.", [])
+
+    # Decoding berulang (uji mikrofon 2026-10-29: cr 14.18) ikut dibuang,
+    # termasuk kata-katanya; ucapan sungguhan maks cr 1.73.
+    looped = _whisper_body(
+        (0.0, 2.0, "Saya tenang.", 0.02), (2.0, 6.0, "saya akan melakukannya", 0.07)
+    )
+    looped["segments"][0]["compression_ratio"] = 1.39
+    looped["segments"][1]["compression_ratio"] = 14.18
+    assert _speech_only(looped, 0.6) == (
+        "Saya tenang.",
+        [[0.0, 1.0, "Saya"], [1.0, 2.0, "tenang."]],
+    )
+
+
 def test_exhausted_silent_answer_can_still_be_submitted(client, monkeypatch):
     """Dulu 3x suara tidak tertangkap = interview tidak pernah bisa dikirim."""
     _, token, _ = _recording_setup(
