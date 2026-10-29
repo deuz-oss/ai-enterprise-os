@@ -41,7 +41,7 @@ from urllib.parse import urlparse
 
 import httpx
 from avatar import setup_avatar
-from avatar_fallback import AvatarSettings
+from avatar_fallback import AvatarSettings, wait_ready
 from interview_flow import InterviewFlow, TurnClock, build_instructions, format_transcript
 from livekit.agents import (
     Agent,
@@ -384,7 +384,16 @@ async def entrypoint(ctx: JobContext) -> None:
         # uji E2E 2026-10-23: kandidat yang masuk 50 dtk setelah avatar tidak
         # pernah mendengar sapaan & pertanyaan pertama. Tunggu kandidat dulu
         # (kind default tidak mencakup `agent`, jadi avatar tidak terhitung).
-        await ctx.wait_for_participant()
+        # Dibatasi waktu: kandidat yang sudah pergi tidak boleh menahan job
+        # & slot avatar. Aman diakhiri -- _finalize tidak mengirim transkrip
+        # tanpa ucapan kandidat, dan rekaman lokal dihapus.
+        if not await wait_ready(ctx.wait_for_participant(), AVATAR.candidate_timeout):
+            logger.warning(
+                "Kandidat tidak masuk dalam %.0f dtk -- sesi diakhiri",
+                AVATAR.candidate_timeout,
+            )
+            ctx.shutdown(reason="kandidat_tidak_hadir")
+            return
     # Pertanyaan pertama disisipkan kode (lihat InterviewFlow.opening_instruction).
     await session.generate_reply(
         instructions=agent.flow.opening_instruction(len(session.history.items))

@@ -50,6 +50,8 @@ def test_settings_from_env():
     assert s.worker_url == "http://avatar-worker:8090"
     assert s.join_timeout == 15.0  # nilai rusak -> default, bukan crash
     assert not AvatarSettings.from_env({}).enabled
+    assert AvatarSettings.from_env({}).candidate_timeout == 120.0
+    assert AvatarSettings.from_env({"AVATAR_CANDIDATE_TIMEOUT": "30"}).candidate_timeout == 30.0
 
 
 def test_request_signed_and_accepted():

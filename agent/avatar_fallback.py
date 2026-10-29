@@ -59,6 +59,9 @@ class AvatarSettings:
     # Batas waktu permintaan HTTP ke worker. Worker baru menjawab setelah
     # renderer siap (FlashHead: koneksi ke server GPU), jadi lebih longgar.
     request_timeout: float = 20.0
+    # Batas tunggu kandidat masuk room sebelum sapaan (mode avatar saja).
+    # Kandidat yang keburu pergi tidak boleh menahan job & slot avatar.
+    candidate_timeout: float = 120.0
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> AvatarSettings:
@@ -67,6 +70,7 @@ class AvatarSettings:
             worker_url=(env.get("AVATAR_WORKER_URL") or "http://avatar-worker:8090").rstrip("/"),
             join_timeout=_float(env, "AVATAR_JOIN_TIMEOUT", 15.0),
             request_timeout=_float(env, "AVATAR_REQUEST_TIMEOUT", 20.0),
+            candidate_timeout=_float(env, "AVATAR_CANDIDATE_TIMEOUT", 120.0),
         )
 
     @property

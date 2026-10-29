@@ -101,8 +101,29 @@ class AvatarService:
             lambda: make_renderer({**os.environ, "AVATAR_RENDERER": settings.renderer})
         )
         self.tasks: dict[str, asyncio.Task[None]] = {}
+        # Satu start per room pada satu waktu. Tanpa ini dua POST bersamaan
+        # untuk room yang sama sama-sama lolos (task baru tercatat setelah
+        # renderer siap, slot room yang sama dianggap sudah dipegang) ->
+        # dua avatar beridentitas sama, dan sesi pertama yang selesai
+        # melepas slot milik sesi kedua.
+        # Nilai: (lock, jumlah permintaan yang memegang/menunggu). Dihapus
+        # saat hitungan 0 -- nama room unik per interview, jangan menumpuk.
+        self._start_locks: dict[str, tuple[asyncio.Lock, int]] = {}
 
     async def start_session(self, room: str, agent_identity: str) -> tuple[int, dict]:
+        lock, users = self._start_locks.get(room, (asyncio.Lock(), 0))
+        self._start_locks[room] = (lock, users + 1)
+        try:
+            async with lock:
+                return await self._start_session_locked(room, agent_identity)
+        finally:
+            lock, users = self._start_locks[room]
+            if users <= 1:
+                del self._start_locks[room]
+            else:
+                self._start_locks[room] = (lock, users - 1)
+
+    async def _start_session_locked(self, room: str, agent_identity: str) -> tuple[int, dict]:
         if room in self.tasks:
             # Job agen diulang untuk room yang sama: avatar lama diganti.
             await self.stop_session(room)

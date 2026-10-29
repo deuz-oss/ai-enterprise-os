@@ -61,6 +61,35 @@ def test_service_full_returns_503_and_frees_slot_after_session():
     asyncio.run(run())
 
 
+class SlowRenderer(StaticRenderer):
+    starts = 0
+
+    async def start(self, reference_image):
+        SlowRenderer.starts += 1
+        await asyncio.sleep(0.02)  # jendela race: task belum tercatat
+        await super().start(reference_image)
+
+
+def test_concurrent_start_same_room_replaces_instead_of_duplicating():
+    async def run():
+        service, ended = make_service(SlowRenderer)
+        SlowRenderer.starts = 0
+        a, b = await asyncio.gather(
+            service.start_session("r1", "agent"), service.start_session("r1", "agent")
+        )
+        assert a[0] == b[0] == 201
+        assert SlowRenderer.starts == 2
+        # Permintaan kedua menunggu yang pertama lalu MENGGANTI-nya: hanya
+        # satu sesi hidup, slot tetap terhitung satu.
+        await asyncio.sleep(0)
+        assert list(service.tasks) == ["r1"] and service.slots.active == 1
+        assert service._start_locks == {}
+        await service.stop_session("r1")
+        assert service.slots.active == 0
+
+    asyncio.run(run())
+
+
 def test_renderer_failure_returns_503_without_leaking_slot():
     async def run():
         service, _ = make_service(FailingRenderer)
