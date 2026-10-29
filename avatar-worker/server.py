@@ -15,11 +15,12 @@ dengan X-Agent-Signature agen -> backend). Port tidak dibuka ke host.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,18 +111,32 @@ class AvatarService:
         # saat hitungan 0 -- nama room unik per interview, jangan menumpuk.
         self._start_locks: dict[str, tuple[asyncio.Lock, int]] = {}
 
-    async def start_session(self, room: str, agent_identity: str) -> tuple[int, dict]:
+    @contextlib.asynccontextmanager
+    async def _room_lock(self, room: str) -> AsyncIterator[None]:
         lock, users = self._start_locks.get(room, (asyncio.Lock(), 0))
         self._start_locks[room] = (lock, users + 1)
         try:
             async with lock:
-                return await self._start_session_locked(room, agent_identity)
+                yield
         finally:
             lock, users = self._start_locks[room]
             if users <= 1:
                 del self._start_locks[room]
             else:
                 self._start_locks[room] = (lock, users - 1)
+
+    async def start_session(self, room: str, agent_identity: str) -> tuple[int, dict]:
+        async with self._room_lock(room):
+            return await self._start_session_locked(room, agent_identity)
+
+    async def release_session(self, room: str) -> None:
+        """DELETE dari agen. Lewat lock yang sama dengan start: agen yang
+        menyerah menunggu POST (timeout -> voice-only) bisa mengirim DELETE
+        saat start masih berjalan -- aiohttp tidak membatalkan handler saat
+        klien putus, jadi tanpa lock avatar tetap join sebagai wajah bisu
+        di sesi voice-only dan menahan slot sampai interview selesai."""
+        async with self._room_lock(room):
+            await self.stop_session(room)
 
     async def _start_session_locked(self, room: str, agent_identity: str) -> tuple[int, dict]:
         if room in self.tasks:
@@ -242,7 +257,7 @@ def create_app(service: AvatarService) -> web.Application:
         room = request.match_info["room"]
         if not _verified(request, room, service.settings.api_secret):
             return web.json_response({"detail": "tanda tangan salah"}, status=401)
-        await service.stop_session(room)
+        await service.release_session(room)
         return web.Response(status=204)
 
     async def health(_request: web.Request) -> web.Response:

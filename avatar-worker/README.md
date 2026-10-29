@@ -95,6 +95,7 @@ menyalakan worker ini.
 |---|---|---|
 | `AVATAR_PROVIDER` (agen) | `none` | `none` = voice-only, `self` = worker ini. Nilai lain (mis. `tavus`) diperlakukan sebagai `none` + warning; integrasi Tavus tidak ada di repo |
 | `AVATAR_JOIN_TIMEOUT` (agen) | `15` | batas tunggu avatar join + video sebelum sesi jatuh ke voice-only |
+| `AVATAR_CANDIDATE_TIMEOUT` (agen) | `120` | batas tunggu kandidat masuk room sebelum sapaan (mode avatar); lewat → job diakhiri, slot avatar dilepas |
 | `AVATAR_RENDERER` | `static` | `static` \| `flashhead` |
 | `AVATAR_MAX_SESSIONS` | `2` | sesi avatar paralel. Penuh → sesi baru **voice-only** (tidak ditolak, tidak antre) |
 | `AVATAR_REFERENCE_IMAGE` | kosong | path **di dalam container**, mis. `/srv/avatar/reference.jpg` (file ditaruh di `./deploy/avatar/`, isinya di-gitignore) |

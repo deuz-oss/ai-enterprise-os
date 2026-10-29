@@ -129,6 +129,21 @@ class AvatarLink:
             )
 
 
+_background: set[asyncio.Task[None]] = set()
+
+
+def _release_in_background(settings: AvatarSettings, room: str, secret: str) -> None:
+    async def _release() -> None:
+        # Worker bisa memegang lock room sampai start selesai (renderer
+        # start_timeout 15 dtk), jadi batasnya lebih longgar dari 5 dtk.
+        async with httpx.AsyncClient() as http:
+            await release_avatar(http, settings, room=room, secret=secret, timeout=30)
+
+    task = asyncio.create_task(_release())
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
 async def _avatar_published_video(room: rtc.Room, identity: str) -> None:
     await utils.wait_for_participant(room=room, identity=identity)
     await utils.wait_for_track_publication(
@@ -156,6 +171,12 @@ async def setup_avatar(
             )
             if not decision.enabled:
                 logger.warning("Avatar tidak dipakai, sesi voice-only: %s", decision.reason)
+                # Timeout POST != worker batal: worker tetap menyelesaikan
+                # start lalu join sebagai wajah bisu. DELETE (diserialkan
+                # dengan start di worker) membatalkannya; no-op bila worker
+                # memang tidak memegang room ini. Di latar belakang supaya
+                # sapaan tidak ikut tertunda.
+                _release_in_background(settings, room.name, secret)
                 return None
             joined = await wait_ready(
                 _avatar_published_video(room, decision.identity), settings.join_timeout

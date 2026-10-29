@@ -90,6 +90,22 @@ def test_concurrent_start_same_room_replaces_instead_of_duplicating():
     asyncio.run(run())
 
 
+def test_release_during_start_stops_the_session_being_started():
+    # Agen menyerah menunggu POST (timeout -> voice-only) lalu DELETE saat
+    # worker masih menyiapkan renderer. Tanpa lock bersama, DELETE no-op dan
+    # avatar tetap join sebagai wajah bisu yang menahan slot.
+    async def run():
+        service, _ = make_service(SlowRenderer)
+        start = asyncio.create_task(service.start_session("r1", "agent"))
+        await asyncio.sleep(0)  # start sudah memegang lock, renderer belum siap
+        await service.release_session("r1")
+        assert (await start)[0] == 201
+        assert service.tasks == {} and service.slots.active == 0
+        assert service._start_locks == {}
+
+    asyncio.run(run())
+
+
 def test_renderer_failure_returns_503_without_leaking_slot():
     async def run():
         service, _ = make_service(FailingRenderer)

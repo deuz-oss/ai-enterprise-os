@@ -124,7 +124,12 @@ async def request_avatar(
 
 
 async def release_avatar(
-    client: httpx.AsyncClient, settings: AvatarSettings, *, room: str, secret: str
+    client: httpx.AsyncClient,
+    settings: AvatarSettings,
+    *,
+    room: str,
+    secret: str,
+    timeout: float = 5,
 ) -> None:
     """Lepas slot avatar di worker. Kegagalan hanya dicatat -- worker juga
     melepas slot sendiri saat agent keluar dari room."""
@@ -132,7 +137,7 @@ async def release_avatar(
         await client.delete(
             f"{settings.worker_url}/sessions/{room}",
             headers={SIGNATURE_HEADER: sign(secret, room)},
-            timeout=5,
+            timeout=timeout,
         )
     except httpx.HTTPError:
         logger.warning("Gagal melepas slot avatar untuk room %s", room, exc_info=True)

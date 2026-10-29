@@ -148,6 +148,7 @@ services:
       AVATAR_PROVIDER: ${AVATAR_PROVIDER:-none}
       AVATAR_WORKER_URL: http://avatar-worker:8090
       AVATAR_JOIN_TIMEOUT: ${AVATAR_JOIN_TIMEOUT:-15}
+      AVATAR_CANDIDATE_TIMEOUT: ${AVATAR_CANDIDATE_TIMEOUT:-120}
     depends_on:
       livekit:
         condition: service_healthy
