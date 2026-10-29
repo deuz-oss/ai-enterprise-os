@@ -232,6 +232,14 @@ async def main(args: argparse.Namespace) -> int:
         ):
             agent_left.set()
 
+    # Sejak c10bd05 agen menghapus room saat interview selesai: kandidat
+    # diputus server dan sering tidak sempat menerima participant_disconnected
+    # milik agen.
+    @room.on("disconnected")
+    def _on_disconnected(reason):
+        log(f"room terputus: {reason}")
+        agent_left.set()
+
     answer_pcm = await tts_pcm(env, ANSWER)
     log(f"jawaban TTS siap ({len(answer_pcm) / 24000:.1f} dtk)")
     if args.join_delay:
