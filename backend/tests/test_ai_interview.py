@@ -586,7 +586,10 @@ def test_voice_complete_scores_transcript_and_reaches_review_gate(client, monkey
         },
     )
     assert complete.status_code == 200, complete.text
-    assert complete.json()["status"] == "dinilai"
+    # Penilaian di latar belakang (agen tidak menunggu LLM -- uji 2026-10-29:
+    # proses agen dibunuh sebelum rekaman terunggah); TestClient menjalankan
+    # background task sebelum kembali, jadi hasilnya terlihat di GET berikut.
+    assert complete.json()["status"] == "terkirim"
 
     detail = client.get(f"/api/v1/ai-interview/responses/{response_id}", headers=admin)
     body = detail.json()

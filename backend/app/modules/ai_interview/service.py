@@ -1732,11 +1732,33 @@ def complete_voice_session(
             detail={"candidate_id": str(response.candidate_id), "mode": "realtime_voice"},
         )
 
+        # Penilaian & versi baca TIDAK di sini lagi (lihat score_voice_session):
+        # agen menunggu balasan endpoint ini, dan untuk kandidat yang menutup
+        # panggilan sendiri agen sedang dalam jendela shutdown LiveKit (10
+        # dtk) -- uji browser 2026-10-29: dua penilaian LLM menghabiskan
+        # jendela itu, proses agen dibunuh sebelum rekaman terunggah.
+        return response
+    finally:
+        set_tenant(prev_tenant)
+
+
+def score_voice_session(db: Session, response_id: str) -> None:
+    """Background task setelah voice/complete (sesi DB milik task, dibuat
+    router): nilai transkrip lalu buat versi baca untuk reviewer."""
+    prev_tenant = get_tenant()
+    try:
+        response = db.execute(
+            select(AIInterviewResponse)
+            .where(AIInterviewResponse.id == parse_uuid(response_id))
+            .execution_options(include_with_loader_criteria=False)
+        ).scalar_one_or_none()
+        if response is None or response.data_purged_at is not None:
+            return
+        set_tenant(response.tenant_id)
         template = db.get(AIInterviewTemplate, response.template_id)
         if template is not None and response.transcript_text:
             _score_transcript(db, response, template, response.transcript_text)
         _clean_transcript(db, response)
-        return response
     finally:
         set_tenant(prev_tenant)
 

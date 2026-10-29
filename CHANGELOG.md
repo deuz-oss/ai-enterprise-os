@@ -31,6 +31,24 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Fixed — Rekaman hilang saat kandidat menutup panggilan sendiri
+
+- Kandidat yang menekan "Akhiri Panggilan" di tengah interview: transkrip
+  parsial dikirim agen saat shutdown, dan backend menilainya SINKRON (dua run
+  LLM + versi baca) di dalam `voice/complete`. Jendela shutdown proses
+  LiveKit hanya 10 dtk → proses agen dibunuh sebelum rekaman terunggah (uji
+  browser 2026-10-29). Jalur normal (AI menutup interview) tidak terdampak
+  karena transkrip terkirim sebelum shutdown.
+- Agen kini mengunggah rekaman DULU, baru transkrip; `voice/complete`
+  langsung membalas dan penilaian berjalan di background task
+  (`service.score_voice_session`, pola sama dengan transkripsi mode rekaman);
+  jendela shutdown dinaikkan ke 450 dtk (`AGENT_SHUTDOWN_TIMEOUT`) -- harus
+  melebihi kasus terburuk unggah, karena proses yang dibunuh di tengah
+  percobaan meninggalkan rekaman suara kandidat di disk worker.
+- Diverifikasi: kandidat sintetis menutup panggilan saat agen mengajukan
+  pertanyaan 2 → rekaman tersimpan, transkrip parsial dinilai, tanpa proses
+  dibunuh; jalur normal tetap lengkap.
+
 ### Added — Suara latar di interview suara: cek ruangan, "Bukan suara saya", penanda reviewer
 
 Uji browser 2026-10-29: semenit siaran/orang lain berbicara di dekat

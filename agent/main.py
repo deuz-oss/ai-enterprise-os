@@ -325,7 +325,14 @@ def _format_transcript(
     return format_transcript(items, agent.flow.markers, agent.recording_t0)
 
 
-server = AgentServer()
+# Batas waktu _finalize setelah sesi selesai (default LiveKit 10 dtk).
+# Harus melebihi kasus terburuk unggah rekaman (3 percobaan x 120 dtk + jeda)
+# + kirim transkrip: proses yang dibunuh di tengah percobaan tidak sempat
+# menjalankan `finally` di _upload_recording, jadi rekaman suara kandidat
+# tertinggal di disk worker.
+SHUTDOWN_PROCESS_TIMEOUT = float(os.environ.get("AGENT_SHUTDOWN_TIMEOUT") or 450)
+
+server = AgentServer(shutdown_process_timeout=SHUTDOWN_PROCESS_TIMEOUT)
 
 
 @server.rtc_session(agent_name=AGENT_NAME)
@@ -389,19 +396,30 @@ async def entrypoint(ctx: JobContext) -> None:
         ditulis, kirim transkrip kalau belum terkirim (dulu interview yang
         diputus kandidat tidak pernah sampai ke backend), lalu unggah rekaman."""
         await session.aclose()
+        # Transkrip parsial hanya dikirim bila kandidat sempat bicara; rekaman
+        # disimpan dengan syarat yang sama (tanpa jawaban = tanpa rekaman).
+        pending: tuple[str, list[float | None]] | None = None
         if not agent.submitted:
             transcript, offsets = _format_transcript(session, agent)
             if "Kandidat:" in transcript:
-                try:
-                    await _submit_transcript(token, transcript, offsets)
-                    agent.submitted = True
-                except Exception:  # noqa: BLE001
-                    logger.exception("Gagal mengirim transkrip parsial saat sesi berakhir")
+                pending = (transcript, offsets)
+        keep = agent.submitted or pending is not None
+        # Rekaman DULU, transkrip sesudahnya. Uji browser 2026-10-29: kandidat
+        # menutup panggilan -> transkrip dikirim di sini, backend menilai
+        # (dulu sinkron) lebih lama dari jendela shutdown, proses dibunuh
+        # sebelum rekaman terunggah. Backend menerima rekaman selama status
+        # bukan "diundang", jadi urutan ini aman.
         audio = Path(ctx.session_directory) / "audio.ogg"
-        if record and audio.exists() and agent.submitted:
+        if record and audio.exists() and keep:
             await _upload_recording(token, audio)
         else:
             audio.unlink(missing_ok=True)
+        if pending is not None:
+            try:
+                await _submit_transcript(token, *pending)
+                agent.submitted = True
+            except Exception:  # noqa: BLE001
+                logger.exception("Gagal mengirim transkrip parsial saat sesi berakhir")
 
     ctx.add_shutdown_callback(_finalize)
 

@@ -336,14 +336,28 @@ def get_voice_context(
 def complete_voice_session(
     token: str,
     payload: VoiceCompleteIn,
+    request: Request,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     x_agent_signature: str | None = Header(default=None),
 ):
     """Khusus agent: dulu kandidat bisa mengirim transkrip karangan sendiri
-    lewat endpoint ini lalu dinilai."""
+    lewat endpoint ini lalu dinilai. Penilaian berjalan di latar belakang
+    supaya agen tidak menunggu LLM (lihat service.score_voice_session)."""
     service.verify_agent_signature(token, x_agent_signature)
-    service.complete_voice_session(db, token, payload.transcript, payload.line_offsets)
+    response = service.complete_voice_session(db, token, payload.transcript, payload.line_offsets)
+    db_dep = request.app.dependency_overrides.get(get_db, get_db)
+    background.add_task(_run_voice_scoring, db_dep, str(response.id))
     return service.get_session(db, token)
+
+
+def _run_voice_scoring(db_dep, response_id: str) -> None:
+    gen = db_dep()
+    db = next(gen)
+    try:
+        service.score_voice_session(db, response_id)
+    finally:
+        gen.close()
 
 
 @public_router.post("/{token}/voice/recording", status_code=status.HTTP_204_NO_CONTENT)
