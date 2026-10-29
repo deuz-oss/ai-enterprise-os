@@ -44,3 +44,12 @@ tmp/
 
 # OS
 Thumbs.db
+# Claude Code: setelan pribadi & state lokal (bukan untuk repo publik).
+# .claude/skills berisi link absolut ke .agents/skills milik mesin ini --
+# dibuat ulang oleh `npx skills add` (lihat skills-lock.json).
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/skills/
+
+# Screenshot audit UI: tetap lokal (berisi tampilan data aplikasi).
+docs/design/ui-audit-2026-09-12/screenshots/
