@@ -31,6 +31,31 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Fixed — Cek gap PoC avatar video (Fase 67)
+
+- **Video avatar hitam.** Track video avatar biasanya sudah diterima selagi
+  kandidat masih memberi izin mikrofon, sebelum `<video>` dirender; effect
+  attach tidak jalan ulang, jadi kotak avatar hitam sepanjang panggilan.
+- **Avatar yatim.** Agen yang menyerah menunggu worker (timeout) jatuh ke
+  voice-only tanpa melepas slot, sementara worker tetap join sebagai wajah
+  bisu yang ditampilkan ke kandidat. Kini agen selalu mengirim DELETE, dan
+  worker menserialkan start/DELETE per room. Dua start bersamaan untuk room
+  yang sama juga tidak lagi menghasilkan dua avatar.
+- **Slot tertahan.** Worker menunggu sampai 1 jam bila agen sudah pergi
+  sebelum avatar tersambung; agen menunggu kandidat tanpa batas di mode avatar
+  (kini `AVATAR_CANDIDATE_TIMEOUT`, default 120 dtk).
+- **`<audio>` mati menumpuk** di halaman tiap avatar keluar (livekit-client
+  tidak mencabut elemen saat track berhenti).
+- **CI** kini menjalankan tes `agent/`, `avatar-worker/`, gerbang lisensi
+  FlashHead, dan build image agent & avatar-worker (image flashhead-server
+  tetap di luar CI).
+- Keputusan sadar: persetujuan versi lama tetap sah (tidak diminta setuju
+  ulang untuk teks avatar `2026-10-23.1`); dicatat di `_require_consent`.
+- Skill agen tingkat proyek (`.agents/skills`) kini disertai teks lisensi MIT
+  sumbernya (repo publik).
+- Digest kepatuhan memakai satu tanggal acuan untuk semua bagian (dulu bagian
+  kontrak berakhir selalu memakai tanggal sistem).
+
 ### Fixed — Cek semua gap siklus audit 2026-10-08
 
 Sapuan seluruh 21 commit siklus dengan lensa: isolasi tenant & RBAC, uang/akuntansi, aksi tak terbatalkan, migrasi, aksesibilitas UI, dan CI.

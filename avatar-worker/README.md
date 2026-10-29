@@ -127,6 +127,10 @@ crash atau sesi kandidat menggantung.
 | kapasitas penuh (`AVATAR_MAX_SESSIONS`) | worker 503 → voice-only | unit test |
 | renderer gagal start (mis. flashhead-server mati) | worker 503 → voice-only | unit test |
 | avatar tidak join dalam `AVATAR_JOIN_TIMEOUT` | slot dilepas → voice-only | unit (logika tunggu) |
+| worker lambat menjawab (`AVATAR_REQUEST_TIMEOUT`) | voice-only + DELETE di latar belakang; DELETE diserialkan dengan start per room, jadi avatar yang sedang disiapkan dihentikan (bukan join sebagai wajah bisu) | unit (worker); sisi agen belum |
+| dua `POST /sessions` bersamaan untuk room yang sama | diserialkan; yang kedua mengganti yang pertama, slot tetap satu | unit test |
+| agen sudah pergi sebelum avatar tersambung | avatar langsung keluar, slot dilepas | belum (butuh LiveKit) |
+| kandidat tidak masuk dalam `AVATAR_CANDIDATE_TIMEOUT` | job diakhiri tanpa submit transkrip, slot dilepas | belum (butuh LiveKit) |
 | **worker mati di tengah sesi** | sink audio di dasar rantai output ditukar ke track audio agen sendiri (`_AudioSinkProxy.set_next_in_chain`); cadangan: sesi diakhiri rapi + transkrip parsial terkirim | unit + **E2E** |
 | flashhead-server putus/lambat di tengah sesi | turun ke StaticRenderer, audio utuh | unit (server palsu) |
 
