@@ -90,6 +90,13 @@ export function AIInterviewVoiceCall({
       // Avatar keluar (worker mati): agen melanjutkan dengan suara saja,
       // jadi UI kembali ke tampilan panggilan suara.
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        // livekit-client tidak mencabut <audio> hasil attach() saat track
+        // berhenti (stop() hanya disable). Tanpa ini, tiap avatar keluar
+        // (fallback di tengah sesi / avatar yatim dihentikan) meninggalkan
+        // elemen audio mati di DOM. Video dicabut oleh effect avatarTrack.
+        if (track.kind === Track.Kind.Audio) {
+          track.detach().forEach((el) => el.remove());
+        }
         setAvatarTrack((cur) => (cur === track ? null : cur));
       });
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
