@@ -362,6 +362,12 @@ def verify_agent_signature(token: str, signature: str | None) -> None:
 
 
 def _require_consent(response: AIInterviewResponse) -> None:
+    # Sengaja hanya mengecek ADA persetujuan, bukan versinya: kenaikan
+    # CONSENT_VERSION tidak memaksa kandidat yang sedang berjalan setuju
+    # ulang. Diputuskan ulang 2026-10-29 untuk 2026-10-23.1 (avatar video):
+    # avatar tidak memproses data kandidat (kamera mati) dan UI panggilan
+    # sudah menyatakan avatar buatan AI. Perubahan teks yang menambah
+    # pemrosesan data kandidat WAJIB mengevaluasi ulang keputusan ini.
     if response.consent_given_at is None:
         raise HTTPException(
             status_code=403,
