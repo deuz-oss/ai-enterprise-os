@@ -191,7 +191,24 @@ class InterviewAgent(Agent):
         # handle itu selesai. Dulu `room.disconnect()` langsung di sini --
         # apa pun yang diucapkan setelah tool terpotong.
         def _shutdown(_handle) -> None:
-            get_job_context().shutdown(reason="interview_selesai")
+            job_ctx = get_job_context()
+
+            # Juga dari EndCallTool (delete_room=True): hapus room supaya
+            # kandidat ikut terputus. Tanpa ini halaman kandidat tetap
+            # "Panggilan berlangsung -- AI sedang mendengarkan" selamanya
+            # (room tidak pernah kosong selama kandidat di dalamnya); UI baru
+            # pindah ke "selesai" saat menerima Disconnected. Ditemukan saat
+            # uji di browser 2026-10-29. Callback shutdown jalan paralel
+            # SETELAH agen keluar room -- _finalize hanya memakai riwayat di
+            # memori & file lokal, jadi aman.
+            async def _delete_room(_reason: str) -> None:
+                try:
+                    await job_ctx.delete_room()
+                except Exception:  # noqa: BLE001
+                    logger.warning("Gagal menghapus room setelah interview selesai", exc_info=True)
+
+            job_ctx.add_shutdown_callback(_delete_room)
+            job_ctx.shutdown(reason="interview_selesai")
 
         context.speech_handle.add_done_callback(_shutdown)
         return self.flow.closing_instruction(candidate_requested_stop)

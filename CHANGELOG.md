@@ -44,8 +44,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Slot tertahan.** Worker menunggu sampai 1 jam bila agen sudah pergi
   sebelum avatar tersambung; agen menunggu kandidat tanpa batas di mode avatar
   (kini `AVATAR_CANDIDATE_TIMEOUT`, default 120 dtk).
-- **`<audio>` mati menumpuk** di halaman tiap avatar keluar (livekit-client
-  tidak mencabut elemen saat track berhenti).
+- **`<audio>` kosong menumpuk** di halaman tiap avatar keluar. livekit-client
+  men-detach elemen sebelum event `TrackUnsubscribed` tapi tidak mencabutnya
+  dari DOM; perbaikan pertama (`track.detach()` di handler) tidak berefek dan
+  baru ketahuan saat uji di browser -- kini elemen dilacak per track.
+- **Halaman kandidat macet "Panggilan berlangsung"** setelah AI menutup
+  interview (juga mode voice-only, sejak Fase 2): room tidak pernah dihapus,
+  jadi browser tidak pernah menerima `Disconnected`. Agen kini menghapus room
+  saat interview selesai (pola `EndCallTool` LiveKit).
+- Uji di Chrome 2026-10-29 (renderer static): video avatar tampil & berjalan,
+  fallback saat worker dimatikan di tengah sesi, dan halaman pindah ke
+  "jawaban sudah diterima" setelah interview selesai.
 - **CI** kini menjalankan tes `agent/`, `avatar-worker/`, gerbang lisensi
   FlashHead, dan build image agent & avatar-worker (image flashhead-server
   tetap di luar CI).

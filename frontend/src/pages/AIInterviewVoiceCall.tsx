@@ -79,9 +79,13 @@ export function AIInterviewVoiceCall({
       const room = new Room();
       roomRef.current = room;
 
+      // Elemen <audio> per track, untuk dicabut saat track berhenti.
+      const audioEls = new Map<RemoteTrack, HTMLMediaElement>();
+
       room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
+          audioEls.set(track, el);
           audioContainerRef.current?.appendChild(el);
         } else if (track.kind === Track.Kind.Video && isAvatar(participant)) {
           setAvatarTrack(track);
@@ -90,13 +94,13 @@ export function AIInterviewVoiceCall({
       // Avatar keluar (worker mati): agen melanjutkan dengan suara saja,
       // jadi UI kembali ke tampilan panggilan suara.
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
-        // livekit-client tidak mencabut <audio> hasil attach() saat track
-        // berhenti (stop() hanya disable). Tanpa ini, tiap avatar keluar
-        // (fallback di tengah sesi / avatar yatim dihentikan) meninggalkan
-        // elemen audio mati di DOM. Video dicabut oleh effect avatarTrack.
-        if (track.kind === Track.Kind.Audio) {
-          track.detach().forEach((el) => el.remove());
-        }
+        // livekit-client 2.22 men-detach elemen SEBELUM event ini (jadi
+        // track.detach() di sini selalu kosong) tapi tidak mencabutnya dari
+        // DOM. Tanpa ini, tiap avatar keluar (fallback di tengah sesi /
+        // avatar yatim dihentikan) meninggalkan <audio> kosong -- terlihat
+        // saat uji di browser 2026-10-29. Video dicabut oleh effect avatarTrack.
+        audioEls.get(track)?.remove();
+        audioEls.delete(track);
         setAvatarTrack((cur) => (cur === track ? null : cur));
       });
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
