@@ -17,6 +17,7 @@ dependencies = [
 [tool.setuptools]
 py-modules = [
   "main", "interview_flow", "avatar", "avatar_fallback", "whisper_filter", "whisper_stt",
+  "session_limits",
 ]
 
 [build-system]

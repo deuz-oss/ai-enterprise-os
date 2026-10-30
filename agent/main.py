@@ -67,6 +67,7 @@ from livekit.agents import (
 from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
+from session_limits import TIME_UP_LINE, parse_max_minutes, retryable_status
 from whisper_filter import parse_min_rms, parse_threshold
 from whisper_stt import WhisperSTT
 
@@ -172,6 +173,8 @@ class InterviewAgent(Agent):
         # riwayat yang ditandai kandidat, dan pertanyaan aktif saat tiap
         # giliran kandidat diucapkan (untuk memundurkan alur).
         self.disowned: set[str] = set()
+        # end_interview diterima / batas waktu: penutup sedang diucapkan.
+        self.ended = False
         self.turn_question: dict[str, int] = {}
 
     def _user_turns(self) -> int:
@@ -241,28 +244,29 @@ class InterviewAgent(Agent):
         # diputar di speech handle yang SAMA, jadi job baru dimatikan setelah
         # handle itu selesai. Dulu `room.disconnect()` langsung di sini --
         # apa pun yang diucapkan setelah tool terpotong.
-        def _shutdown(_handle) -> None:
-            job_ctx = get_job_context()
-
-            # Juga dari EndCallTool (delete_room=True): hapus room supaya
-            # kandidat ikut terputus. Tanpa ini halaman kandidat tetap
-            # "Panggilan berlangsung -- AI sedang mendengarkan" selamanya
-            # (room tidak pernah kosong selama kandidat di dalamnya); UI baru
-            # pindah ke "selesai" saat menerima Disconnected. Ditemukan saat
-            # uji di browser 2026-10-29. Callback shutdown jalan paralel
-            # SETELAH agen keluar room -- _finalize hanya memakai riwayat di
-            # memori & file lokal, jadi aman.
-            async def _delete_room(_reason: str) -> None:
-                try:
-                    await job_ctx.delete_room()
-                except Exception:  # noqa: BLE001
-                    logger.warning("Gagal menghapus room setelah interview selesai", exc_info=True)
-
-            job_ctx.add_shutdown_callback(_delete_room)
-            job_ctx.shutdown(reason="interview_selesai")
-
-        context.speech_handle.add_done_callback(_shutdown)
+        self.ended = True
+        context.speech_handle.add_done_callback(lambda _h: _close_job("interview_selesai"))
         return self.flow.closing_instruction(candidate_requested_stop)
+
+
+def _close_job(reason: str) -> None:
+    """Akhiri job DAN hapus room (pola EndCallTool LiveKit, delete_room=True)
+    supaya kandidat ikut terputus. Tanpa hapus room halaman kandidat tetap
+    "Panggilan berlangsung -- AI sedang mendengarkan" selamanya (room tidak
+    pernah kosong selama kandidat di dalamnya); UI baru pindah ke "selesai"
+    saat menerima Disconnected. Ditemukan saat uji di browser 2026-10-29.
+    Callback shutdown jalan paralel SETELAH agen keluar room -- _finalize
+    hanya memakai riwayat di memori & file lokal, jadi aman."""
+    job_ctx = get_job_context()
+
+    async def _delete_room(_reason: str) -> None:
+        try:
+            await job_ctx.delete_room()
+        except Exception:  # noqa: BLE001
+            logger.warning("Gagal menghapus room setelah interview selesai", exc_info=True)
+
+    job_ctx.add_shutdown_callback(_delete_room)
+    job_ctx.shutdown(reason=reason)
 
 
 async def _fetch_context(token: str) -> dict:
@@ -304,13 +308,25 @@ async def _upload_recording(token: str, path: Path) -> None:
                         content=data,
                         headers={**_agent_headers(token), "Content-Type": "audio/ogg"},
                     )
-                    if resp.status_code == 409:
-                        return  # sudah tersimpan sebelumnya
-                    resp.raise_for_status()
+                if resp.status_code == 409:
+                    return  # sudah tersimpan sebelumnya
+                if resp.status_code < 400:
                     return
-            except Exception:  # noqa: BLE001
+                if not retryable_status(resp.status_code):
+                    # 413/422/401 dst.: percobaan ulang pasti gagal sama.
+                    logger.error(
+                        "Rekaman sesi ditolak backend (HTTP %d, %d byte) -- tidak dicoba "
+                        "ulang, salinan lokal dihapus",
+                        resp.status_code,
+                        len(data),
+                    )
+                    return
+                logger.warning(
+                    "Upload rekaman percobaan %d gagal: HTTP %d", attempt + 1, resp.status_code
+                )
+            except Exception:  # noqa: BLE001 - jaringan/timeout: layak dicoba ulang
                 logger.warning("Upload rekaman percobaan %d gagal", attempt + 1, exc_info=True)
-                await asyncio.sleep(2 * (attempt + 1))
+            await asyncio.sleep(2 * (attempt + 1))
         logger.error("Rekaman sesi tidak terunggah setelah 3 percobaan -- salinan lokal dihapus")
     finally:
         path.unlink(missing_ok=True)
@@ -329,6 +345,9 @@ def _format_transcript(
     ]
     return format_transcript(items, agent.flow.markers, agent.recording_t0)
 
+
+# Durasi maksimum satu sesi suara (menit), lihat session_limits.py.
+MAX_INTERVIEW_MINUTES = parse_max_minutes(os.environ.get("AI_INTERVIEW_MAX_MINUTES"))
 
 # Batas waktu _finalize setelah sesi selesai (default LiveKit 10 dtk).
 # Harus melebihi kasus terburuk unggah rekaman (3 percobaan x 120 dtk + jeda)
@@ -484,6 +503,33 @@ async def entrypoint(ctx: JobContext) -> None:
             )
             ctx.shutdown(reason="kandidat_tidak_hadir")
             return
+
+    if MAX_INTERVIEW_MINUTES > 0:
+
+        async def _time_limit() -> None:
+            await asyncio.sleep(MAX_INTERVIEW_MINUTES * 60)
+            if agent.ended:
+                return
+            logger.warning(
+                "Batas waktu interview %.0f menit tercapai -- sesi diakhiri",
+                MAX_INTERVIEW_MINUTES,
+            )
+            agent.ended = True
+            session.interrupt()
+            try:
+                await session.say(TIME_UP_LINE, allow_interruptions=False)
+            finally:
+                # Transkrip & rekaman dikirim _finalize seperti kandidat
+                # menutup panggilan; room dihapus supaya halaman kandidat
+                # pindah ke "selesai".
+                _close_job("batas_waktu")
+
+        timer = asyncio.create_task(_time_limit())
+
+        async def _stop_timer(_reason: str) -> None:
+            timer.cancel()
+
+        ctx.add_shutdown_callback(_stop_timer)
 
     @ctx.room.local_participant.register_rpc_method(DISOWN_RPC_METHOD)
     async def _on_disown(data: rtc.RpcInvocationData) -> str:

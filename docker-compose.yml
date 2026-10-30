@@ -155,6 +155,8 @@ services:
       AVATAR_WORKER_URL: http://avatar-worker:8090
       AVATAR_JOIN_TIMEOUT: ${AVATAR_JOIN_TIMEOUT:-15}
       AVATAR_CANDIDATE_TIMEOUT: ${AVATAR_CANDIDATE_TIMEOUT:-120}
+      # Durasi maksimum sesi suara (menit); kosong = 45 (agent/session_limits.py).
+      AI_INTERVIEW_MAX_MINUTES: ${AI_INTERVIEW_MAX_MINUTES:-}
     depends_on:
       livekit:
         condition: service_healthy

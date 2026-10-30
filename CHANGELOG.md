@@ -31,6 +31,24 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Fixed — Batas durasi interview suara & unggah rekaman yang ditolak tidak dicoba ulang
+
+- Sesi suara yang ditinggal dengan panggilan terbuka berjalan 2 jam (uji
+  2026-10-29); rekamannya melebihi batas backend 60 MB (~60 menit) dan hilang.
+  Agen kini menutup sesi sendiri setelah `AI_INTERVIEW_MAX_MINUTES` (default
+  45, di bawah batas rekaman): mengucapkan kalimat penutup baku lewat TTS
+  (tanpa LLM), lalu jalur yang sama dengan kandidat menutup panggilan --
+  rekaman diunggah, transkrip parsial dinilai, room dihapus sehingga halaman
+  kandidat pindah ke "selesai".
+- Unggah rekaman yang ditolak permanen (4xx selain 408/429, mis. 413/422)
+  tidak lagi dicoba ulang tiga kali; 5xx/jaringan tetap dicoba ulang.
+  Salinan lokal tetap dihapus di semua jalur.
+- Diverifikasi: kandidat sintetis menjawab pertanyaan 1 lalu diam, batas 2
+  menit → penutup terucap (ada di transkrip), room dihapus, rekaman 1,27 MB
+  tersimpan, dinilai. Server uji: 413/422 → 1 percobaan, 503 → 3 percobaan.
+- Catatan: ucapan kandidat yang sedang berlangsung saat batas tercapai tidak
+  ikut tercatat (penutup tidak bisa disela).
+
 ### Fixed — Kalibrasi halusinasi STT dengan mikrofon sungguhan: gerbang energi
 
 - Uji mikrofon sungguhan 2026-10-29 (Chrome, satu ruangan): derau non-ucapan
