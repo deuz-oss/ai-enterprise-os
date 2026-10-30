@@ -3,8 +3,8 @@
 **Produk:** AI Enterprise OS — operating system untuk perusahaan outsourcing &
 workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 **Pemilik Produk:** Brian — Head of Business & Operations
-**Versi:** 3.1 · **Status:** Approved — 4-Cloud Metered SaaS, Talent-Centric
-**Terakhir diperbarui:** 2026-09-08
+**Versi:** 3.2 · **Status:** Approved — Opsi G (subscription + saldo credit), Talent-Centric
+**Terakhir diperbarui:** 2026-10-30
 
 > **Dokumen ini adalah gabungan (reconciled) dari PRD v1.4 + patch v2.0/v2.1/
 > v3.0/v3.1** yang sebelumnya tersimpan sebagai file terpisah
@@ -14,6 +14,26 @@ workforce umum (portofolio aplikasi modular, model bisnis ala Mekari)
 > yang jadi rujukan status implementasi terkini.
 
 > **Changelog**
+> - **v3.2 (2026-10-30)** — **Sinkronisasi status dengan kode**, tanpa
+>   perubahan kebutuhan produk. Sumber: `CHANGELOG.md` s/d Fase 73 dan
+>   git s/d commit `96b5374`. Changelog ini sebelumnya berhenti di
+>   2026-09-08 (Fase 34-35). Yang belum tercatat di sini: **Fase 36-48**
+>   (ESS shift & geocoding, audit UI/UX & a11y, pola dashboard, CRM
+>   gap-fill) — ✅ selesai, detail sudah ada di §5. **Fase 49-58** (RBAC
+>   absensi, profil karyawan & perpanjangan kontrak, validasi rekening
+>   bank, Sprint 1-4 audit desain 2026-09-15 + DES-015, audit backend &
+>   uang `Decimal`, redesign Chat) — ✅ selesai, ringkasan baru di §5.
+>   **Fase 59-66 AI Interview** — ✅ selesai, detail di §5, plus perbaikan
+>   interview suara 2026-10-29/30 (halusinasi Whisper, suara latar,
+>   rekaman saat kandidat menutup panggilan, gerbang energi STT, batas
+>   durasi). **Fase 67 PoC avatar video** — 🧪 PoC, wiring CPU teruji,
+>   GPU belum. **Fase 67-73 audit 2026-10-08 Phase 0-6** + putaran
+>   lanjutan (10 peluang AI, cabut token saat ganti password, lock
+>   dependensi) — ✅ selesai, ringkasan baru di §5. Koreksi status usang:
+>   catatan "Opsi G belum diimplementasikan" di §4, header Fase 11 tanpa
+>   status, header Fase 28 & 30, dan stack suara "Kokoro" di §14 (TTS OpenAI
+>   sejak 2026-09-02). Heading §6 Saltab yang hilang sejak commit
+>   `95cdfb7` dipulihkan. **Bagian baru §15 Backlog Terbuka.**
 > - **2026-09-08** — **Fase 34-35** (lihat §5): **Geofencing absensi**
 >   — radius per lokasi klien (`ClientSite`, 1 klien bisa banyak
 >   cabang), `Employee.site_id` kosong = bebas/terisi = wajib dalam
@@ -189,12 +209,15 @@ HR tidak otomatis melihat payrol proyek, dan sebaliknya (RBAC per jenis run).
 
 ## 4. Portofolio Aplikasi & Packaging — 4 Cloud Metered *(v3.0, menggantikan bundle 6-aplikasi v1.4/v2.0/v2.1)* ✅
 
-> **⚠️ DIGANTIKAN OLEH OPSI G (§4.4), keputusan 2026-09-04 — belum
-> diimplementasikan.** Isi §4.1-4.3 di bawah ini masih ✅ **berjalan di
-> production sekarang** (jangan dihapus/dianggap tidak berlaku sampai
-> migrasi Fase 28 selesai) — tapi ini status TRANSISI, bukan arah
-> jangka panjang. Baca §4.4 dulu untuk memahami ke mana arahnya,
-> §4.1-4.3 di bawah ini untuk memahami kondisi saat ini.
+> **⚠️ DIGANTIKAN OLEH OPSI G (§4.4), keputusan 2026-09-04 —
+> diimplementasikan lewat Fase 28 (2026-09-05, ADR-0007); sebagian item
+> pembayaran masih terbuka (§15).** Guard lisensi per-SKU sudah diganti
+> `require_active_subscription()` (`core/security.py`). Mode operasi
+> §4.1 (`billing_mode`) tetap dipakai: tenant `internal` melewati guard
+> langganan. Gate & tarif per-Cloud di §4.3 tidak berlaku lagi dan
+> dipertahankan sebagai catatan model sebelumnya (Opsi F). *(Status
+> diperbarui 2026-10-30; teks lama menyebut Opsi G "belum
+> diimplementasikan" dan §4.1-4.3 "berjalan di production sekarang".)*
 
 Sejak v3.0 (2026-08-30), packaging direstrukturisasi dari 7 aplikasi berlisensi
 independen menjadi **Foundation gratis + 4 SKU metered ("Cloud") + AI Add-on**
@@ -247,7 +270,7 @@ baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
 
 Trial 14 hari per SKU (base Rp 1jt untuk Revenue Cloud tetap berlaku saat trial). Upsell in-product: nav menyembunyikan Cloud nonaktif, halaman menampilkan ajakan install/trial.
 
-### 4.4 Opsi G — Model Komersial Baru *(keputusan 2026-09-04, direncanakan — lihat Fase 28)*
+### 4.4 Opsi G — Model Komersial Baru *(keputusan 2026-09-04, diimplementasikan Fase 28 — sebagian, lihat §15)*
 
 **Masalah dengan Opsi F (§4.1-4.3) yang memicu perubahan ini:** (1)
 bundle-gating menghambat UX — tenant harus commit beli dulu sebelum
@@ -437,7 +460,7 @@ ringkas:
   asisten tutup buku, tanya-laporan natural language, narasi eksekutif otomatis,
   prediksi pembayaran klien, deteksi anomali/kepatuhan (§8.8). ✅
 
-### Fase 11 — Chat Workspace ala Slack *(gratis)*
+### Fase 11 — Chat Workspace ala Slack *(gratis)* — ✅ Selesai (2026-08-25), kecuali presence/typing indicator (§15) dan scale-out Redis pub/sub (opsional)
 
 Real-time chat untuk seluruh pengguna — pendorong kolaborasi sekaligus engagement.
 Spesifikasi penuh di §9; ringkas:
@@ -1039,6 +1062,10 @@ dan `flashhead-server/README.md`.
 
 ### Berikutnya — AI Interview Fase 2: Percakapan Suara Real-Time *(wiring diverifikasi via Docker 2026-09-02, PERFORMA BELUM DIVALIDASI)*
 
+> *Status 2026-10-30: bagian ini catatan historis implementasi Fase 30
+> (sudah selesai, lanjutannya Fase 59-66). Yang masih terbuka dari bagian
+> ini hanya validasi performa di server GPU — lihat §15.*
+
 **Ini membalik rekomendasi Fase 19 di atas** ("beli, jangan bangun" untuk
 voice real-time) — setelah didiskusikan ulang (termasuk pertanyaan
 eksplisit "suara saja atau harus ada wajah AI?" — dijawab **suara saja,
@@ -1513,7 +1540,7 @@ dihapus), tapi kandidat baru yang masuk lewat kode itu selama
 program nonaktif TIDAK menghasilkan `ReferralReward` baru — riwayat
 reward lama tetap utuh.
 
-### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) — ✅ Selesai (2026-09-05), kecuali sebagian item 5
+### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) — ✅ Selesai (2026-09-05), kecuali item 5 (sebagian) dan item 6 (kwitansi & kelola metode bayar belum) — lihat §15
 
 Implementasi penuh dari keputusan Opsi G (§4.4). Ini migrasi
 infrastruktur billing yang SUDAH BERJALAN production (§4.1-4.3 ✅),
@@ -1580,7 +1607,7 @@ sourcing/matching. Model `BlacklistEntry`+`BlacklistStatus`
 Ditutup sebagai riset murni tanpa tindak lanjut — bukan backlog yang
 "nanti dikerjakan".
 
-### Fase 30 — AI Interview Fase 2: Percakapan Suara Real-Time, Self-Hosted — Kode selesai, performa belum divalidasi (2026-09-02)
+### Fase 30 — AI Interview Fase 2: Percakapan Suara Real-Time, Self-Hosted — Kode selesai (2026-09-02); uji E2E di CPU ✅ (Fase 66, mikrofon sungguhan 2026-09-26 & 2026-10-29), performa di GPU belum divalidasi
 
 Live voice conversation (bukan async teks seperti Fase 19), reuse
 `_score_transcript()` yang sama untuk skoring. Stack: **LiveKit**
@@ -2151,6 +2178,34 @@ di luar cakupan Aeos. Setelah ditanya kenapa tidak dibangun, fitur ini
   pipeline), bukan karangan.
 
 
+### Fase 49-58 & Fase 67-73 (audit 2026-10-08) — Ringkasan Status *(sinkronisasi 2026-10-30)*
+
+Fase-fase ini sudah ada di kode dan `CHANGELOG.md` tetapi belum punya bagian
+di §5. Bagian ini hanya mencatat status; rinciannya ada di `CHANGELOG.md`
+(dan `docs/design/FULL_AUDIT-2026-10-08.md` untuk Fase 67-73).
+
+| Fase | Isi | Status | Commit |
+|---|---|---|---|
+| 49 | Absensi: RBAC endpoint tulis/baca (`ATTENDANCE_ROLES`) + filter role di ⌘K | ✅ Selesai (2026-09-14) | `2249a8d` |
+| 50 | HRD: gap-fill profil karyawan (identitas, kontak darurat one-to-many, perpanjangan kontrak + batas PKWT 5 tahun, tab Absensi) | ✅ Selesai (2026-09-14) | `d06af5f` |
+| 51 | HRD: validasi otomatis rekening bank karyawan (api.co.id, best-effort) | ✅ Selesai (2026-09-15) | `94b373c` |
+| 52-56 | Sprint 1-4 audit desain 2026-09-15 + DES-015 (reminder kontrak, konfirmasi hapus, editor bracket PPh21, Kanban, badge dark mode) | ✅ Selesai (2026-09-15) | `957cb2d` |
+| 57 | Audit backend keamanan & logika (eskalasi `platform_admin` ditutup, traversal `/files`, RBAC billing) + uang payroll/pajak/invoice `Decimal` | ✅ Selesai (2026-09-24) | `3a77db0` |
+| 58 | Redesign Chat (nama pengirim, sidebar berkelompok, toolbar hover, composer) | ✅ Selesai (2026-09-24) | `49e4431` |
+| 67 *(audit)* | Phase 0: definisi piutang tunggal, `ConfirmDialog` untuk aksi tak terbatalkan, redirect sesi kedaluwarsa | ✅ Selesai (2026-10-08) | `478ad8a` |
+| 68 | Phase 1: code splitting per route, primitive state, format tanggal tunggal | ✅ Selesai (2026-10-08) | `5f290c7` |
+| 69 | Phase 2: panel detail lead, stepper payroll, header tablet | ✅ Selesai (2026-10-08) | `604f21e` |
+| 70 | Phase 3 gelombang 1: `DataTable` (tabel tersisa dimigrasi di putaran lanjutan) | ✅ Selesai (2026-10-08) | `d69a0d9`, `892e62b` |
+| 71 | Phase 4: kartu tabel di HP, navigasi keyboard, label form, kontras | ✅ Selesai (2026-10-09) | `74a770f` |
+| 72 | Phase 5: jurnal payroll `Decimal` (akun 2-1400), `useMe`, Vitest di CI | ✅ Selesai (2026-10-09) | `7c65f22` |
+| 73 | Phase 6: tinjauan sebelum finalisasi payroll, draf pengingat penagihan | ✅ Selesai (2026-10-09) | `b3af559` |
+| — | Putaran lanjutan audit: peluang AI #3-#10 (melengkapi #1-#2 di Fase 73), token dicabut saat password berubah, lock dependensi, cek gap siklus | ✅ Selesai (2026-10-09 s/d 2026-10-10) | `892e62b` … `c992002` |
+
+Catatan penomoran: "Fase 67" dipakai dua kali, untuk PoC avatar video (bagian
+Fase 67 di atas) dan untuk audit Phase 0 (`478ad8a`).
+
+## 6. Spesifikasi Inti: Saltab Digital *(baru)*
+
 Pengganti dokumen Excel "Saltab". Satu `Payslip` = satu baris; komponen berupa
 line-item `PayslipComponent`.
 
@@ -2578,7 +2633,9 @@ Publik (tanpa login, per-tenant white-label):
   eksekusi untuk fitur teks.
 - **Pengecualian khusus voice real-time (2026-09-02)**: AI Interview Fase 2
   (percakapan suara, lihat penutup §5) **dibangun self-hosted**
-  (LiveKit+Whisper+Kokoro), BUKAN beli dari vendor voice-AI pihak ketiga —
+  (LiveKit + faster-whisper; TTS akhirnya OpenAI `gpt-4o-mini-tts` karena
+  kualitas TTS self-hosted ditolak, lihat Fase 30), BUKAN beli dari vendor
+  voice-AI pihak ketiga —
   kebalikan dari prinsip di atas, sengaja, khusus kapabilitas ini saja
   (alasan bisnis: hindari biaya per-menit + lock-in vendor untuk kapasitas
   yang berpotensi dipakai volume tinggi). Jangan generalisasi keputusan ini
@@ -2592,8 +2649,9 @@ Publik (tanpa login, per-tenant white-label):
   jejaknya tetap ada.)
 - **AI Interview Fase 2 (voice real-time) — ✅ Selesai, kode ada** (lihat
   penutup §5, 2026-09-02) — jangan lagi diasumsikan belum tersedia. Mode
-  teks (Fase 19) dan mode voice sama-sama live; validasi latensi/uji
-  manusia dengan server ber-GPU yang masih tertunda (lihat detail di §5).
+  teks (Fase 19) dan mode voice sama-sama live; uji mikrofon sungguhan
+  sudah dilakukan di CPU (2026-09-26, 2026-10-29), validasi latensi di
+  server ber-GPU masih tertunda (lihat §5 dan §15).
 - **Lead sourcing via scraping LinkedIn (Fase 20, keputusan sadar
   2026-09-03)**: risiko diketahui dan diterima secara eksplisit, bukan
   luput dari perhatian — (1) teknis: LinkedIn aktif mendeteksi/memblokir
@@ -2609,3 +2667,20 @@ Publik (tanpa login, per-tenant white-label):
   yang sudah ada). **Begitu nama final diputuskan, seluruh dokumen ini
   — termasuk judul, referensi kode `apps.py`, dan nama tenant demo —
   perlu di-pass ulang untuk konsistensi penamaan.**
+
+## 15. Backlog Terbuka
+
+Item yang sudah diputuskan atau dispesifikasikan tetapi belum ada, atau baru
+sebagian ada, di kode per 2026-10-30. Status diambil dari kode dan
+`CHANGELOG.md`, bukan dari rencana. Bagian ini sengaja hanya memuat tujuh
+item berikut; sisa opsional lain tetap dicatat di bagian fase masing-masing.
+
+| # | Item | Status | Kondisi sebenarnya & bukti | Rujukan |
+|---|---|---|---|---|
+| 1 | Auto-reload & metode bayar tersimpan (Xendit) | 🟡 Sebagian | Yang ada: preferensi auto-reload (on/off, ambang, nominal) lewat `GET·PUT /billing/auto-reload-settings` (`billing/router.py`, `billing/service.py::get_auto_reload_settings`), kolom `auto_reload_*` di `TenantCreditAccount`, tipe ledger `topup_auto_reload`; halaman Billing menjelaskan bahwa ini baru pengaturan. Yang belum: penyimpanan token kartu/GoPay dan charge otomatis saat saldo menipis — adapter `core/payment/xendit.py` hanya memanggil Invoice API (`/v2/invoices`, buat & cek status), bukan Subscriptions/tokenisasi | §4.4.1, §4.4.5, Fase 28 item 5; CHANGELOG Fase 28 |
+| 2 | Kwitansi resmi | ⏳ Belum | Tidak ada pembuatan kwitansi di modul `billing` maupun frontend. Yang sudah ada baru riwayat transaksi saldo (`GET /billing/transactions`, tab Riwayat di Billing) | §4.4.5, Fase 28 item 6 |
+| 3 | Langganan tahunan | ⏳ Belum | `TenantSubscription` hanya punya `monthly_fee` tanpa periode tagihan; pilihan tier di Billing semuanya bulanan. Besaran diskon tahunan juga belum diputuskan | §4.4.5, Fase 28 item 5 |
+| 4 | Blacklist sebagai blocking check | ⏳ Belum | `BlacklistEntry` hanya dipakai modul `blacklist/` sendiri; tidak dirujuk `recruitment/`, `talentpool/`, `ai/`, atau `job_portal/`, dan di frontend hanya ada di halaman `Blacklist.tsx`. Kandidat yang di-blacklist tetap bisa muncul di sourcing/matching tanpa peringatan | Fase 29; CHANGELOG Fase 29 ("belum jadi blocking check") |
+| 5 | Validasi GPU | 🟡 Sebagian | **Suara (Fase 30):** wiring, uji E2E kandidat sintetis (Fase 66), dan uji mikrofon sungguhan (2026-09-26, 2026-10-29) sudah dijalankan di CPU; latensi & turn-taking di server GPU belum, dan `docker-compose.prod.gpu.yml` belum diuji di mesin GPU. **Avatar (Fase 67):** wiring CPU (renderer static) terverifikasi E2E dan di Chrome; flashhead-server belum pernah dibangun/dijalankan, jadi lip-sync Bahasa Indonesia, latensi, dan kapasitas/VRAM belum terukur | Fase 30, Fase 66, Fase 67; CHANGELOG "deploy produksi interview suara" & Fase 67 |
+| 6 | Foto avatar per tenant | ⏳ Belum | Satu foto per deployment lewat env `AVATAR_REFERENCE_IMAGE` (`avatar-worker/server.py`); `avatar-worker/README.md`: "per tenant belum ada" karena butuh kolom DB baru, sedangkan PoC sengaja tidak mengubah skema | Fase 67 (Kepatuhan) |
+| 7 | Chat presence/typing indicator | ⏳ Belum | Dispesifikasikan di §9.4, tetapi WebSocket chat mengabaikan pesan dari klien (`chat/router.py`: "heartbeat / typing — abaikan v1") dan frontend tidak punya event presence/typing | §9.4, Fase 11 |
