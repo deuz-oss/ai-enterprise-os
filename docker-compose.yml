@@ -139,6 +139,10 @@ services:
       STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
       # Buang halusinasi Whisper dari hening/derau (agent/whisper_filter.py).
       STT_NO_SPEECH_THRESHOLD: ${STT_NO_SPEECH_THRESHOLD:-}
+      # Kalibrasi: statistik per segmen STT ke log agen (angka saja, tanpa teks).
+      # Gerbang energi: potongan VAD lebih pelan tidak dikirim ke Whisper.
+      STT_MIN_RMS: ${STT_MIN_RMS:-}
+      STT_LOG_STATS: ${STT_LOG_STATS:-}
       AI_BASE_URL: ${AI_BASE_URL}
       AI_API_KEY: ${AI_API_KEY}
       AI_MODEL: ${AI_MODEL:-gpt-4o-mini}

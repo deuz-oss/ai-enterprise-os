@@ -31,6 +31,31 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Belum teruji:** flashhead-server (tanpa GPU), lip-sync Bahasa Indonesia,
   latensi, dan sesi paralel nyata.
 
+### Fixed — Kalibrasi halusinasi STT dengan mikrofon sungguhan: gerbang energi
+
+- Uji mikrofon sungguhan 2026-10-29 (Chrome, satu ruangan): derau non-ucapan
+  yang memicu VAD (ketukan, napas, batuk, kursi) tetap menghasilkan teks
+  karangan yang LOLOS filter `no_speech_prob` ("Tunggu" 0.589, "Selamat
+  tinggal" 0.353 -- di dalam rentang ucapan), dan agen menutup interview tiga
+  pertanyaan dengan "jawaban" itu. Pembeda yang bersih: RMS audio. Derau
+  0.0036-0.015, ucapan sungguhan (termasuk "Ya." pelan, berkat AGC browser)
+  0.047-0.052.
+- Agen tidak lagi mengirim potongan VAD ber-RMS < 0.02 ke Whisper
+  (`STT_MIN_RMS`, 0 = mati); filter `no_speech_prob`/`compression_ratio` tetap
+  sebagai lapis kedua. Terverifikasi: 5/5 potongan derau di bawah ambang
+  dilewati, ucapan sungguhan tetap tertranskripsi.
+- `STT_LOG_STATS=1`: satu baris statistik per potongan VAD di log agen (durasi,
+  RMS, `no_speech_prob`, `compression_ratio`, `avg_logprob`, panjang teks,
+  apakah frasa halusinasi yang dikenal) -- **tanpa teks** -- untuk kalibrasi di
+  ruangan/perangkat lain.
+- **Belum tertangani:** bunyi non-kata yang lebih keras (dengung/"mmm", RMS
+  ~0.035) masih lolos sebagai "Uuhhh..."/"MMMMMMMM"; data kalibrasi masih
+  sedikit (satu ruangan, satu pembicara). Akurasi Whisper `small` pada suara
+  sungguhan rendah (mis. "Kajinya ketiga."), terpisah dari halusinasi.
+- Temuan samping, belum diperbaiki: interview suara tidak punya batas durasi
+  (sesi yang ditinggal 2 jam -> rekaman > 60 MB ditolak 413), dan agen tetap
+  mencoba ulang unggahan yang ditolak 4xx.
+
 ### Fixed — Rekaman hilang saat kandidat menutup panggilan sendiri
 
 - Kandidat yang menekan "Akhiri Panggilan" di tengah interview: transkrip

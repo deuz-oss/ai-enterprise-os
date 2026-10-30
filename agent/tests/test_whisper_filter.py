@@ -68,3 +68,68 @@ def test_threshold_parsing():
     assert parse_threshold("abc") == DEFAULT_NO_SPEECH_THRESHOLD
     assert parse_threshold("0.7") == 0.7
     assert parse_threshold("5") == 1.0  # >= 1 = filter mati
+
+
+def test_segment_stats_has_numbers_but_never_text():
+    from whisper_filter import segment_stats
+
+    body = {
+        "segments": [
+            {
+                "start": 0.0,
+                "end": 1.5,
+                "text": " Terima kasih.",
+                "no_speech_prob": 0.62,
+                "compression_ratio": 0.62,
+                "avg_logprob": -0.6,
+            },
+            {
+                "start": 1.5,
+                "end": 4.0,
+                "text": "Saya menangani keluhan rahasia pribadi.",
+                "no_speech_prob": 0.05,
+                "compression_ratio": 1.3,
+                "avg_logprob": -0.3,
+            },
+        ]
+    }
+    stats = segment_stats(body, 0.6)
+    assert [(s["known"], s["kept"]) for s in stats] == [(True, False), (False, True)]
+    assert stats[0]["dur"] == 1.5 and stats[1]["chars"] == len(
+        "Saya menangani keluhan rahasia pribadi."
+    )
+    assert "rahasia" not in repr(stats) and "Terima" not in repr(stats)
+
+
+def test_energy_gate_skips_whisper_for_quiet_noise():
+    """Derau mikrofon sungguhan (RMS 0.0036-0.0098) tidak dikirim ke Whisper;
+    ucapan (RMS ~0.05) dikirim. Server sengaja di port tertutup: panggilan
+    yang benar-benar terjadi = error koneksi."""
+    import asyncio
+
+    import numpy as np
+    import pytest
+    from livekit import rtc
+    from livekit.agents import APIConnectionError, APIConnectOptions
+    from whisper_filter import DEFAULT_MIN_RMS, parse_min_rms
+    from whisper_stt import WhisperSTT
+
+    stt = WhisperSTT(
+        base_url="http://127.0.0.1:9/v1",
+        model="m",
+        language="id",
+        no_speech_threshold=0.6,
+        min_rms=DEFAULT_MIN_RMS,
+    )
+    opts = APIConnectOptions(max_retry=0, timeout=2)
+
+    def frame(rms: float) -> rtc.AudioFrame:
+        x = (np.random.default_rng(0).normal(0, rms, 16000) * 32768).astype(np.int16)
+        return rtc.AudioFrame(x.tobytes(), 16000, 1, len(x))
+
+    quiet = asyncio.run(stt.recognize([frame(0.0098)], conn_options=opts))
+    assert quiet.alternatives[0].text == ""
+    with pytest.raises(APIConnectionError):
+        asyncio.run(stt.recognize([frame(0.047)], conn_options=opts))
+    assert parse_min_rms(None) == DEFAULT_MIN_RMS and parse_min_rms("0") == 0.0
+    assert parse_min_rms("x") == DEFAULT_MIN_RMS

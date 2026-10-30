@@ -22,6 +22,7 @@ avg_logprob halusinasi ini -0.56 s.d. -0.74. Ganti model STT = kalibrasi ulang.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -35,6 +36,27 @@ DEFAULT_NO_SPEECH_THRESHOLD = 0.6
 # untuk menandai decoding gagal. Tidak bisa diatur lewat env: ini batas
 # baku Whisper, bukan hasil kalibrasi per model.
 MAX_COMPRESSION_RATIO = 2.4
+
+
+# Gerbang energi: potongan VAD yang lebih pelan dari ini tidak dikirim ke
+# Whisper sama sekali. Kalibrasi mikrofon sungguhan 2026-10-29 (Chrome,
+# peredam derau + AGC bawaan browser, satu ruangan, satu pembicara):
+# derau non-ucapan (ketukan, napas, batuk, kursi) RMS 0.0036-0.0098 --
+# dua di antaranya lolos filter no_speech_prob ("Tunggu" 0.589, "Selamat
+# tinggal" 0.353, rentang ucapan); ucapan sungguhan termasuk "Ya." pelan
+# RMS 0.047-0.052. 0.02 = jarak ~2x ke kedua sisi. Data masih sedikit --
+# kalibrasi ulang dengan STT_LOG_STATS=1 di ruangan/perangkat lain.
+DEFAULT_MIN_RMS = 0.02
+
+
+def parse_min_rms(raw: str | None) -> float:
+    """STT_MIN_RMS; 0 mematikan gerbang."""
+    try:
+        value = float(raw) if raw else DEFAULT_MIN_RMS
+    except ValueError:
+        logger.warning("STT_MIN_RMS=%r bukan angka -- dipakai default", raw)
+        return DEFAULT_MIN_RMS
+    return max(value, 0.0)
 
 
 def parse_threshold(raw: str | None) -> float:
@@ -76,3 +98,41 @@ def speech_text(body: Mapping[str, Any], threshold: float) -> str:
         if text:
             kept.append(text)
     return " ".join(kept)
+
+
+# Frasa halusinasi Whisper yang sudah terlihat (subtitle YouTube). HANYA
+# dipakai untuk kalibrasi (boolean di log), bukan untuk membuang teks:
+# kandidat sungguhan boleh bilang "terima kasih".
+_KNOWN_HALLUCINATION = re.compile(
+    r"^(terima kasih( (kerana|karena|telah|sudah) menonton)?|sampai jumpa)[.!]?$",
+    re.IGNORECASE,
+)
+
+
+def segment_stats(body: Mapping[str, Any], threshold: float) -> list[dict[str, Any]]:
+    """Statistik per segmen untuk kalibrasi ambang dengan mikrofon sungguhan
+    (2026-10-29: "Terima kasih." lolos filter setelah pertanyaan diulang).
+    SENGAJA tanpa teks -- yang dicatat hanya angka, panjang teks, dan apakah
+    teksnya frasa halusinasi yang dikenal."""
+    stats: list[dict[str, Any]] = []
+    for seg in body.get("segments") or []:
+        text = str(seg.get("text") or "").strip()
+        try:
+            no_speech = float(seg.get("no_speech_prob", 0.0))
+            compression = float(seg.get("compression_ratio", 0.0))
+            logprob = float(seg.get("avg_logprob", 0.0))
+            duration = float(seg.get("end", 0.0)) - float(seg.get("start", 0.0))
+        except (TypeError, ValueError):
+            continue
+        stats.append(
+            {
+                "nsp": round(no_speech, 3),
+                "cr": round(compression, 2),
+                "lp": round(logprob, 2),
+                "dur": round(duration, 2),
+                "chars": len(text),
+                "known": bool(_KNOWN_HALLUCINATION.match(text)),
+                "kept": no_speech < threshold and compression <= MAX_COMPRESSION_RATIO,
+            }
+        )
+    return stats

@@ -67,7 +67,7 @@ from livekit.agents import (
 from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
-from whisper_filter import parse_threshold
+from whisper_filter import parse_min_rms, parse_threshold
 from whisper_stt import WhisperSTT
 
 logging.basicConfig(level=logging.INFO)
@@ -104,6 +104,11 @@ STT_TIMEOUT_SEC = float(os.environ.get("STT_TIMEOUT_SEC") or 60)
 # Whisper ("Terima kasih kerana menonton." dari hening/derau), lihat
 # whisper_filter.py. Kalibrasi ulang bila STT_MODEL diganti.
 STT_NO_SPEECH_THRESHOLD = parse_threshold(os.environ.get("STT_NO_SPEECH_THRESHOLD"))
+# Potongan VAD lebih pelan dari ini tidak dikirim ke Whisper (derau yang
+# memicu VAD -> halusinasi), lihat whisper_filter.DEFAULT_MIN_RMS. 0 = mati.
+STT_MIN_RMS = parse_min_rms(os.environ.get("STT_MIN_RMS"))
+# Kalibrasi: catat statistik per segmen STT (angka saja, tanpa teks) ke log.
+STT_LOG_STATS = (os.environ.get("STT_LOG_STATS") or "").lower() in ("1", "true", "yes")
 # Hening (dtk) yang mengakhiri satu segmen ucapan untuk STT. Default silero
 # 0.55: jeda antarkalimat memecah jawaban jadi beberapa segmen yang
 # ditranskripsi terpisah; dengan STT CPU, transkrip segmen terakhir baru tiba
@@ -350,6 +355,8 @@ async def entrypoint(ctx: JobContext) -> None:
             model=STT_MODEL,
             language=STT_LANGUAGE,
             no_speech_threshold=STT_NO_SPEECH_THRESHOLD,
+            min_rms=STT_MIN_RMS,
+            log_stats=STT_LOG_STATS,
         ),
         llm=lk_openai.LLM(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, model=LLM_MODEL),
         tts=lk_openai.TTS(
