@@ -6,6 +6,7 @@ import { api, formatDate, formatRupiah } from "../api/client";
 import { PageHeader } from "../components/workspace";
 import { toast } from "sonner";
 import {
+  BlacklistBadge,
   type Column,
   confirmDialog,
   DataTable,
@@ -47,6 +48,7 @@ interface EmployeeRow {
 interface CandidateRow {
   id: string;
   full_name: string;
+  is_blacklisted?: boolean;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -136,7 +138,19 @@ export default function Referral() {
       cell: (r) => employeeName(r.employee_id),
       sortValue: (r) => employeeName(r.employee_id),
     },
-    { key: "candidate", header: "Kandidat", cell: (r) => candidateName(r.candidate_id), sortValue: (r) => candidateName(r.candidate_id) },
+    {
+      key: "candidate",
+      header: "Kandidat",
+      cell: (r) => (
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          {candidateName(r.candidate_id)}
+          {candidates?.find((c) => c.id === r.candidate_id)?.is_blacklisted && (
+            <BlacklistBadge size="sm" />
+          )}
+        </span>
+      ),
+      sortValue: (r) => candidateName(r.candidate_id),
+    },
     {
       key: "amount",
       header: "Jumlah",

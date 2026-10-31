@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permissions import RECRUITMENT_ROLES
 from app.core.security import get_current_user, require_roles
 from app.modules.audit.schemas import AuditLogOut
+from app.modules.blacklist import matching as blacklist_matching
 from app.modules.recruitment import service
 from app.modules.recruitment.models import (
+    Candidate,
     CandidateStatus,
     JobOrderStatus,
+    Placement,
     PlacementStatus,
 )
 from app.modules.recruitment.schemas import (
@@ -47,6 +51,40 @@ router = APIRouter(
     tags=["recruitment"],
     dependencies=[Depends(get_current_user), Depends(require_roles(*RECRUITMENT_ROLES))],
 )
+
+
+# Fase 29 lanjutan: flag `is_blacklisted` / `candidate_is_blacklisted` di
+# response internal. Satu query index blacklist per request, bukan per baris.
+def _candidates_out(db: Session, candidates: list[Candidate]) -> list[CandidateOut]:
+    flagged = blacklist_matching.blacklisted_ids(db, candidates)
+    return [
+        CandidateOut.model_validate(c).model_copy(update={"is_blacklisted": c.id in flagged})
+        for c in candidates
+    ]
+
+
+def _candidate_out(db: Session, candidate: Candidate) -> CandidateOut:
+    return _candidates_out(db, [candidate])[0]
+
+
+def _placements_out(db: Session, placements: list[Placement]) -> list[PlacementOut]:
+    if not placements:
+        return []
+    index = blacklist_matching.load_index(db)
+    candidate_ids = {p.candidate_id for p in placements}
+    candidates = db.execute(select(Candidate).where(Candidate.id.in_(candidate_ids))).scalars()
+    flagged = {c.id for c in candidates if index.matches(c)}
+    return [
+        PlacementOut.model_validate(p).model_copy(
+            update={"candidate_is_blacklisted": p.candidate_id in flagged}
+        )
+        for p in placements
+    ]
+
+
+def _placement_out(db: Session, placement: Placement) -> PlacementOut:
+    return _placements_out(db, [placement])[0]
+
 
 # ---------- Job orders ----------
 
@@ -161,17 +199,17 @@ def list_candidates(
         db, status=candidate_status, q=q, limit=limit, offset=offset
     )
     response.headers["X-Total-Count"] = str(total)
-    return rows
+    return _candidates_out(db, list(rows))
 
 
 @router.post("/candidates", response_model=CandidateOut, status_code=status.HTTP_201_CREATED)
 def create_candidate(payload: CandidateCreate, db: Session = Depends(get_db)):
-    return service.create_candidate(db, payload)
+    return _candidate_out(db, service.create_candidate(db, payload))
 
 
 @router.post("/candidates/{candidate_id}/cv", response_model=CandidateOut)
 async def upload_cv(candidate_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    return await service.upload_cv(db, candidate_id, file)
+    return _candidate_out(db, await service.upload_cv(db, candidate_id, file))
 
 
 @router.get("/candidates/{candidate_id}/cv-download-url")
@@ -181,12 +219,12 @@ def cv_download_url(candidate_id: str, db: Session = Depends(get_db)):
 
 @router.get("/candidates/{candidate_id}", response_model=CandidateOut)
 def get_candidate(candidate_id: str, db: Session = Depends(get_db)):
-    return service.get_candidate(db, candidate_id)
+    return _candidate_out(db, service.get_candidate(db, candidate_id))
 
 
 @router.patch("/candidates/{candidate_id}", response_model=CandidateOut)
 def update_candidate(candidate_id: str, payload: CandidateUpdate, db: Session = Depends(get_db)):
-    return service.update_candidate(db, candidate_id, payload)
+    return _candidate_out(db, service.update_candidate(db, candidate_id, payload))
 
 
 @router.delete("/candidates/{candidate_id}", status_code=204)
@@ -233,14 +271,15 @@ def list_placements(
     candidate_id: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return service.list_placements(
+    placements = service.list_placements(
         db, job_order_id=job_order_id, status=placement_status, candidate_id=candidate_id
     )
+    return _placements_out(db, list(placements))
 
 
 @router.post("/placements", response_model=PlacementOut, status_code=status.HTTP_201_CREATED)
 def create_placement(payload: PlacementCreate, db: Session = Depends(get_db)):
-    return service.create_placement(db, payload)
+    return _placement_out(db, service.create_placement(db, payload))
 
 
 @router.get("/placements/offering-summary", response_model=OfferingSummaryOut)
@@ -251,7 +290,7 @@ def get_offering_summary(db: Session = Depends(get_db)):
 
 @router.patch("/placements/{placement_id}", response_model=PlacementOut)
 def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = Depends(get_db)):
-    return service.update_placement_status(
+    placement = service.update_placement_status(
         db,
         placement_id,
         payload.status,
@@ -259,6 +298,7 @@ def update_placement(placement_id: str, payload: PlacementUpdate, db: Session = 
         ojt_end_date=payload.ojt_end_date,
         note=payload.note,
     )
+    return _placement_out(db, placement)
 
 
 @router.post("/placements/{placement_id}/offering")
@@ -273,7 +313,7 @@ def send_offering(placement_id: str, payload: OfferingSendIn, db: Session = Depe
 @router.post("/placements/{placement_id}/offering-call", response_model=PlacementOut)
 def record_offering_call(placement_id: str, db: Session = Depends(get_db)):
     """Fase 21 item 2 — catat offering call, independen dari offering letter."""
-    return service.record_offering_call(db, placement_id)
+    return _placement_out(db, service.record_offering_call(db, placement_id))
 
 
 # ---------- Interviews — PRD v3.0 Recruitment ----------
@@ -304,14 +344,31 @@ def update_interview(
 
 
 @router.post("/job-orders/{jo_id}/match", response_model=list[MatchResult])
-def match_for_jo(jo_id: str, payload: MatchRequest | None = None, db: Session = Depends(get_db)):
+def match_for_jo(
+    jo_id: str,
+    payload: MatchRequest | None = None,
+    include_blacklisted: bool = False,
+    db: Session = Depends(get_db),
+):
+    """`include_blacklisted=true` memunculkan lagi kandidat ter-blacklist
+    (ditandai `is_blacklisted`); default-nya dikeluarkan dari hasil."""
     top_k = payload.top_k if payload else 50
-    return service.match_candidates(db, jo_id, top_k=top_k, billable=True)
+    return service.match_candidates(
+        db, jo_id, top_k=top_k, billable=True, include_blacklisted=include_blacklisted
+    )
 
 
 @router.get("/job-orders/{jo_id}/matches", response_model=list[MatchResult])
-def get_matches(jo_id: str, top_k: int = 50, min_score: int = 0, db: Session = Depends(get_db)):
-    results = service.match_candidates(db, jo_id, top_k=top_k)
+def get_matches(
+    jo_id: str,
+    top_k: int = 50,
+    min_score: int = 0,
+    include_blacklisted: bool = False,
+    db: Session = Depends(get_db),
+):
+    results = service.match_candidates(
+        db, jo_id, top_k=top_k, include_blacklisted=include_blacklisted
+    )
     return [r for r in results if r["match_score"] >= min_score]
 
 

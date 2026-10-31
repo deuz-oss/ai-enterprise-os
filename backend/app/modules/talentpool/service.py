@@ -20,6 +20,7 @@ from app.core import storage
 from app.core.database import parse_uuid
 from app.core.llm import chat_completion, vision_completion
 from app.modules import audit
+from app.modules.blacklist import matching as blacklist_matching
 from app.modules.recruitment.models import FORGOTTEN_CANDIDATE_NAME, Candidate
 from app.modules.talentpool.field_catalog import (
     CANDIDATE_FIELD_CATALOG,
@@ -804,7 +805,11 @@ def list_talentpool(
     readiness: str | None = None,
     tp_status: str | None = None,
     has_standard_cv: bool | None = None,
+    include_blacklisted: bool = False,
 ) -> list[dict]:
+    """`include_blacklisted=False` (default): kandidat ter-blacklist (approved,
+    termasuk kecocokan identitas) tidak ditampilkan -- Fase 29 lanjutan.
+    Pembatasan role untuk `True` ada di router."""
     stmt = select(Candidate).order_by(Candidate.created_at.desc())
     if q:
         stmt = stmt.where(Candidate.full_name.ilike(f"%{q}%"))
@@ -813,6 +818,9 @@ def list_talentpool(
     if skill:
         stmt = stmt.where(Candidate.skills.ilike(f"%{skill}%"))
     candidates = list(db.execute(stmt).scalars())
+    blacklisted = blacklist_matching.blacklisted_ids(db, candidates)
+    if not include_blacklisted:
+        candidates = [c for c in candidates if c.id not in blacklisted]
 
     intakes = {
         i.candidate_id: i
@@ -834,9 +842,9 @@ def list_talentpool(
             continue
         if has_standard_cv and c.id not in locked_counts:
             continue
-        rows.append(
-            _build_talentpool_row(c, intake, locked_counts.get(c.id), latest_version_id.get(c.id))
-        )
+        row = _build_talentpool_row(c, intake, locked_counts.get(c.id), latest_version_id.get(c.id))
+        row["is_blacklisted"] = c.id in blacklisted
+        rows.append(row)
     return rows
 
 
@@ -871,6 +879,9 @@ def get_talentpool_detail(db: Session, candidate_id: str) -> dict:
         latest_version.id if latest_version else None,
     )
     row["has_photo"] = candidate.photo_object_key is not None
+    # Detail tetap bisa dibuka walau ter-blacklist (mis. dari tautan audit),
+    # cukup diberi flag supaya UI menampilkan badge.
+    row["is_blacklisted"] = blacklist_matching.is_blacklisted(db, candidate)
     return row
 
 

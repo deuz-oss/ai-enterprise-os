@@ -4,6 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Magnet, Mail } from "lucide-react";
 import {
+  BlacklistBadge,
+  BlacklistToggle,
+  canIncludeBlacklisted,
   type Column,
   confirmToast,
   DataTable,
@@ -84,10 +87,13 @@ interface MatchCandidateRow {
   full_name: string;
   city: string | null;
   expected_salary: number | null;
+  is_blacklisted?: boolean;
 }
 
 interface MatchItem extends MatchExplain {
   candidate_id: string;
+  /** Fase 29 -- hanya muncul `true` bila diminta `include_blacklisted=true`. */
+  is_blacklisted?: boolean;
 }
 
 const BUSINESS_STATUSES = ["dibuka", "ditahan", "dibatalkan", "terisi"];
@@ -214,6 +220,10 @@ export default function JobOrders() {
   // Query key "me" sama dengan Layout.tsx/Dashboard.tsx -- react-query
   // dedupe otomatis, cuma baca cache yang sama untuk sapaan nama (DES-004).
   const { data: me } = useMe();
+  // Fase 29: default kandidat ter-blacklist dikeluarkan dari hasil matching;
+  // recruiter/management (dan admin) boleh menampilkannya kembali.
+  const canShowBlacklisted = canIncludeBlacklisted(me?.role);
+  const [includeBlacklisted, setIncludeBlacklisted] = useState(false);
   const jobOrdersAllQuery = useQuery({
     queryKey: ["job-orders", clientFilter],
     queryFn: () =>
@@ -281,7 +291,12 @@ export default function JobOrders() {
 
   const match = useMutation({
     mutationFn: (id: string) =>
-      api.post<MatchItem[]>(`/recruitment/job-orders/${id}/match`, { top_k: 20 }),
+      api.post<MatchItem[]>(
+        `/recruitment/job-orders/${id}/match${
+          canShowBlacklisted && includeBlacklisted ? "?include_blacklisted=true" : ""
+        }`,
+        { top_k: 20 }
+      ),
     onSuccess: (data) => setMatchResults(data),
   });
 
@@ -734,6 +749,9 @@ export default function JobOrders() {
             </option>
           ))}
         </select>
+        {canShowBlacklisted && (
+          <BlacklistToggle checked={includeBlacklisted} onChange={setIncludeBlacklisted} />
+        )}
       </div>
 
       <DataTable
@@ -787,6 +805,11 @@ export default function JobOrders() {
                         <span className="ml-1 text-xs">
                           (skor <ScoreBadge score={item.match_score} />/100)
                         </span>
+                        {(item.is_blacklisted || cand?.is_blacklisted) && (
+                          <span className="ml-1.5 align-middle">
+                            <BlacklistBadge size="sm" />
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-[var(--text-muted)]">
                         {cand?.city ?? "-"}

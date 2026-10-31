@@ -13,6 +13,10 @@ type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger" | "accent
 interface BadgeProps {
   tone?: BadgeTone;
   children: ReactNode;
+  /** Tooltip penjelas (atribut `title`), opsional. */
+  title?: string;
+  /** Kelas tambahan, mis. ukuran teks lebih kecil di kartu Kanban. */
+  className?: string;
 }
 
 // Pemetaan tone->kelas warna existing (.p-gray, .p-blue, dst di index.css).
@@ -28,6 +32,10 @@ const TONE_CLASS: Record<BadgeTone, string> = {
   accent: "p-violet",
 };
 
-export function Badge({ tone = "neutral", children }: BadgeProps) {
-  return <span className={`pill ${TONE_CLASS[tone]}`}>{children}</span>;
+export function Badge({ tone = "neutral", children, title, className }: BadgeProps) {
+  return (
+    <span className={`pill ${TONE_CLASS[tone]}${className ? ` ${className}` : ""}`} title={title}>
+      {children}
+    </span>
+  );
 }

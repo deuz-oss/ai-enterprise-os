@@ -23,6 +23,7 @@ from uuid import UUID
 from app.core.database import parse_uuid
 from app.core.tenancy import get_tenant, set_tenant
 from app.modules import audit
+from app.modules.blacklist import matching as blacklist_matching
 from app.modules.job_portal.schemas import (
     ApplicationStatusOut,
     ApplyIn,
@@ -140,6 +141,17 @@ async def apply_to_job_order(
         db.add(candidate)
         db.flush()
 
+    # Fase 29 lanjutan -- Blacklist DITANDAI, BUKAN ditolak. Endpoint ini
+    # publik: menolak pelamar ter-blacklist akan membocorkan status blacklist
+    # lewat respons/status code, waktu respons (intake CV + LLM terlewati),
+    # maupun cek status token. Jadi alurnya dijalankan 100% sama dengan
+    # lamaran normal (intake, Placement `sourced`, pesan & token identik) --
+    # placement juga TIDAK di-set `rejected` otomatis, karena halaman cek
+    # status akan langsung menampilkan "Tidak lolos". Satu-satunya efek
+    # tambahan: audit event internal; recruiter melihat badge dan blok
+    # kemajuan pipeline (`recruitment.service.update_placement_status`).
+    blacklist_reasons = blacklist_matching.load_index(db).match_reasons(candidate)
+
     # `Placement` punya UniqueConstraint(candidate_id, job_order_id) — kandidat
     # yang sama TIDAK BOLEH dapat baris kedua utk JO yang sama, baik itu
     # lamaran portal berulang MAUPUN kandidat yang sudah lebih dulu disourcing
@@ -184,6 +196,19 @@ async def apply_to_job_order(
         tenant_id=tenant.id,
         detail={"job_order_id": str(jo.id), "candidate_email": email},
     )
+    if blacklist_reasons:
+        audit.log_event(
+            db,
+            action="blacklist.portal_apply_flagged",
+            entity_type="candidate",
+            entity_id=candidate.id,
+            tenant_id=tenant.id,
+            detail={
+                "placement_id": str(placement.id),
+                "job_order_id": str(jo.id),
+                "matched_by": blacklist_reasons,
+            },
+        )
     return JobApplicationOut(
         application_token=placement.application_token,  # type: ignore[arg-type]
         message="Lamaran Anda berhasil dikirim. Simpan token ini untuk cek status lamaran Anda.",

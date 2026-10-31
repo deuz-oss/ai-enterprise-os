@@ -19,7 +19,9 @@ from app.core.storage import get_object
 from app.modules.ai.models import AIScreening, LeadBrief, ScreeningVerdict
 from app.modules.ai.schemas import MatchItemOut, MatchResultOut, ScreeningOut
 from app.modules.ai.textutils import extract_document_text
+from app.modules.blacklist import matching as blacklist_matching
 from app.modules.recruitment.models import Candidate, CandidateStatus, JobOrder
+from app.modules.recruitment.schemas import CandidateOut
 
 # Batas karakter CV yang dikirim ke LLM agar prompt tetap wajar.
 _MAX_CV_CHARS = 12_000
@@ -177,21 +179,36 @@ def list_screenings(db: Session, candidate_id: UUID) -> list[AIScreening]:
     return list(db.scalars(stmt).all())
 
 
-def match_job_order(db: Session, job_order_id: UUID) -> MatchResultOut:
+def match_job_order(
+    db: Session, job_order_id: UUID, *, include_blacklisted: bool = False
+) -> MatchResultOut:
     """Ranking kandidat aktif untuk sebuah job order.
 
     Pasangan (kandidat, job order) yang sudah pernah dinilai dipakai ulang,
     jadi menjalankan match berulang tidak memicu panggilan LLM tambahan.
+
+    Fase 29 lanjutan: kandidat ter-blacklist (approved, termasuk kecocokan
+    identitas) dikeluarkan SEBELUM dinilai LLM, kecuali `include_blacklisted`.
+    Batas `_MAX_MATCH_CANDIDATES` dihitung setelah penyaringan supaya kuota
+    penilaian tidak termakan kandidat yang toh dibuang.
     """
     job_order = _get_job_order(db, job_order_id)
-    candidates = list(
-        db.scalars(
-            select(Candidate)
-            .where(Candidate.status.in_(_ACTIVE_CANDIDATE_STATUSES))
-            .order_by(Candidate.created_at.desc())
-            .limit(_MAX_MATCH_CANDIDATES)
-        ).all()
+    index = blacklist_matching.load_index(db)
+    pool = db.scalars(
+        select(Candidate)
+        .where(Candidate.status.in_(_ACTIVE_CANDIDATE_STATUSES))
+        .order_by(Candidate.created_at.desc())
     )
+    candidates: list[Candidate] = []
+    blacklisted: set[UUID] = set()
+    for cand in pool:
+        if index.matches(cand):
+            if not include_blacklisted:
+                continue
+            blacklisted.add(cand.id)
+        candidates.append(cand)
+        if len(candidates) >= _MAX_MATCH_CANDIDATES:
+            break
 
     items: list[MatchItemOut] = []
     reused = 0
@@ -208,10 +225,11 @@ def match_job_order(db: Session, job_order_id: UUID) -> MatchResultOut:
             reused += 1
         else:
             screening = screen_candidate(db, candidate.id, job_order.id)
+        candidate_out = CandidateOut.model_validate(candidate).model_copy(
+            update={"is_blacklisted": candidate.id in blacklisted}
+        )
         items.append(
-            MatchItemOut.model_validate(
-                {"candidate": candidate, "screening": ScreeningOut.model_validate(screening)}
-            )
+            MatchItemOut(candidate=candidate_out, screening=ScreeningOut.model_validate(screening))
         )
 
     items.sort(key=lambda item: item.screening.score, reverse=True)

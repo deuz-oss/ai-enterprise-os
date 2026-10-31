@@ -51,8 +51,10 @@ def list_screenings(candidate_id: UUID, db: Session = Depends(get_db)):
 
 
 @recruitment_router.post("/job-orders/{job_order_id}/match", response_model=MatchResultOut)
-def match_job_order(job_order_id: UUID, db: Session = Depends(get_db)):
-    result = ai_service.match_job_order(db, job_order_id)
+def match_job_order(
+    job_order_id: UUID, include_blacklisted: bool = False, db: Session = Depends(get_db)
+):
+    result = ai_service.match_job_order(db, job_order_id, include_blacklisted=include_blacklisted)
     if result.evaluated == 0:
         raise HTTPException(
             status_code=422,

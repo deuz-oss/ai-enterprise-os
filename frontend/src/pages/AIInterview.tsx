@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Archive, CheckCircle2, FileEdit, MessagesSquare, ShieldCheck } from "lucide-react";
 import { PageHeader } from "../components/workspace";
-import { KpiCard } from "../components/ui";
+import { BlacklistBadge, KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate } from "../api/client";
 import { RecordingPlayer, type SeekRequest } from "../components/RecordingPlayer";
@@ -166,6 +166,7 @@ interface Candidate {
   id: string;
   full_name: string;
   email: string | null;
+  is_blacklisted?: boolean;
 }
 
 /** Item breakdown hasil penilaian. Field rubrik (label, evidence,
@@ -1221,6 +1222,7 @@ export default function AIInterview() {
                             }
                           />
                           {c.full_name} {c.email ? `(${c.email})` : "(tanpa email)"}
+                          {c.is_blacklisted && <BlacklistBadge size="sm" />}
                         </label>
                       ))}
                   </div>

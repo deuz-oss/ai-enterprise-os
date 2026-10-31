@@ -1,5 +1,11 @@
 export { Button } from "./Button";
 export { Badge } from "./Badge";
+export {
+  BlacklistBadge,
+  BlacklistToggle,
+  BLACKLIST_BADGE_DESCRIPTION,
+  canIncludeBlacklisted,
+} from "./BlacklistBadge";
 export { Card } from "./Card";
 export { ProgressStep } from "./ProgressStep";
 export { KpiCard } from "./KpiCard";

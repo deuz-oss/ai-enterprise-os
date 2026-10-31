@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   PIPELINE_STAGES as PIPELINE_STEPS_BASE,
   TERMINAL_STAGE_DOT as TERMINAL_DOT,
@@ -29,7 +30,15 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
-import { Badge, Button, Card, confirmToast, DetailLoadState, PillTabs } from "../components/ui";
+import {
+  Badge,
+  BlacklistBadge,
+  Button,
+  Card,
+  confirmToast,
+  DetailLoadState,
+  PillTabs,
+} from "../components/ui";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
 import type { ClientRow } from "./Clients";
@@ -52,6 +61,9 @@ interface Placement {
   offering_letter_object_key: string | null;
   offering_signed_at: string | null;
   rejection_note: string | null;
+  /** Fase 29: kandidat masuk daftar Blacklist (disetujui). Opsional supaya
+   * aman terhadap backend lama yang belum mengirim field ini. */
+  candidate_is_blacklisted?: boolean;
 }
 
 interface OnboardingInvite {
@@ -105,6 +117,8 @@ const DEFAULT_ONBOARDING_DOC_TYPES = ["ktp", "npwp", "skck"];
 interface Candidate {
   id: string;
   full_name: string;
+  /** Fase 29 -- kandidat ter-blacklist tidak bisa diusulkan ke job order. */
+  is_blacklisted?: boolean;
 }
 
 interface Interview {
@@ -348,11 +362,18 @@ export default function JobOrderDetail() {
       setShowAddCandidate(false);
       invalidate();
     },
+    // Detail 422 dari server (mis. kandidat masuk daftar Blacklist) tampil
+    // sebagai toast + tetap tertulis di bawah form.
+    onError: (err) => toast.error((err as Error).message),
   });
   const changePlacementStatus = useMutation({
     mutationFn: ({ placementId, status, note }: { placementId: string; status: string; note?: string }) =>
       api.patch(`/recruitment/placements/${placementId}`, { status, note }),
     onSuccess: invalidate,
+    // Sebelumnya gagal diam-diam. Pindah tahap kandidat ter-blacklist ditolak
+    // backend (422) -- pesan detail server ditampilkan apa adanya; dropdown
+    // tahap otomatis kembali ke status lama karena nilainya terkontrol.
+    onError: (err) => toast.error(`Gagal mengubah tahap: ${(err as Error).message}`),
   });
   const TERMINAL_KEYS = ["gagal", "dibatalkan"];
   /** Rute semua perubahan status placement lewat sini -- kalau tujuannya
@@ -552,7 +573,12 @@ export default function JobOrderDetail() {
               }
             }}
           >
-            <select name="candidate_id" required className="input w-64 py-1 text-xs">
+            <select
+              name="candidate_id"
+              required
+              className="input w-64 py-1 text-xs"
+              aria-label="Pilih kandidat untuk diusulkan"
+            >
               <option value="">-- Pilih kandidat dari Talent Pool --</option>
               {(candidates ?? [])
                 .filter((c) => {
@@ -561,10 +587,13 @@ export default function JobOrderDetail() {
                 })
                 .map((c) => {
                   const existing = (placements ?? []).find((p) => p.candidate_id === c.id);
+                  // Kandidat ter-blacklist tetap terlihat (supaya recruiter
+                  // tahu kenapa tidak bisa dipilih) tapi tidak bisa dipilih.
                   return (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} disabled={c.is_blacklisted}>
                       {c.full_name}
                       {existing ? ` (sebelumnya: ${TERMINAL_STATUS_LABEL[existing.status]})` : ""}
+                      {c.is_blacklisted ? " — Blacklist (tidak bisa diusulkan)" : ""}
                     </option>
                   );
                 })}
@@ -578,7 +607,7 @@ export default function JobOrderDetail() {
             </Button>
           </form>
           {createPlacement.error && (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
               {(createPlacement.error as Error).message}
             </p>
           )}
@@ -642,6 +671,7 @@ export default function JobOrderDetail() {
                         </p>
                       </div>
                       <div className="mt-1.5 flex flex-wrap gap-1">
+                        {p.candidate_is_blacklisted && <BlacklistBadge size="sm" />}
                         {p.offering_call_done && (
                           <span className="pill p-green text-[10px]">Offering call ✓</span>
                         )}

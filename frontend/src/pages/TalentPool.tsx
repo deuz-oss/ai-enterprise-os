@@ -8,6 +8,9 @@ import { ScoreBadge } from "../components/Ai";
 import { CheckCircle2, Clock, Dna, FileCheck2, Palette, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import {
+  BlacklistBadge,
+  BlacklistToggle,
+  canIncludeBlacklisted,
   type Column,
   confirmToast,
   DataTable,
@@ -59,6 +62,8 @@ interface TpRow {
   reference: string | null;
   source: string | null;
   description: string | null;
+  /** Fase 29 -- baris ter-blacklist hanya ikut bila `include_blacklisted=true`. */
+  is_blacklisted?: boolean;
 }
 
 interface CandidateFieldConfig {
@@ -112,6 +117,7 @@ const READINESS_LABELS: Record<string, string> = {
 
 interface MatchItem extends MatchExplain {
   candidate_id: string;
+  is_blacklisted?: boolean;
 }
 
 function BrandingCard() {
@@ -368,15 +374,22 @@ export default function TalentPool() {
   // CV, AI screening per-kandidat, dan riwayat pengalaman/aktivitas.
   const [showCreateForm, setShowCreateForm] = useState(false);
   const cvRef = useRef<HTMLInputElement>(null);
+  // Fase 29: kandidat ter-blacklist disembunyikan secara default; hanya
+  // recruiter/management (dan admin) yang boleh menampilkannya (role lain 403).
+  const me = useMe();
+  const canShowBlacklisted = canIncludeBlacklisted(me.data?.role);
+  const [includeBlacklistedRaw, setIncludeBlacklisted] = useState(false);
+  const includeBlacklisted = canShowBlacklisted && includeBlacklistedRaw;
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (domisili) params.set("domisili", domisili);
   if (skill) params.set("skill", skill);
   if (readiness) params.set("readiness", readiness);
+  if (includeBlacklisted) params.set("include_blacklisted", "true");
 
   const pool = useQuery({
-    queryKey: ["talentpool", q, domisili, skill, readiness],
+    queryKey: ["talentpool", q, domisili, skill, readiness, includeBlacklisted],
     queryFn: () => api.get<TpRow[]>(`/talentpool?${params.toString()}`),
   });
 
@@ -393,10 +406,12 @@ export default function TalentPool() {
 
   // Skor matching native (PRD v3.0 §4) — hanya diambil saat JO dipilih.
   const { data: matchScores } = useQuery({
-    queryKey: ["talentpool-match-scores", matchJobOrderId, minMatchScore],
+    queryKey: ["talentpool-match-scores", matchJobOrderId, minMatchScore, includeBlacklisted],
     queryFn: () =>
       api.get<MatchItem[]>(
-        `/recruitment/job-orders/${matchJobOrderId}/matches?top_k=500&min_score=${minMatchScore || 0}`
+        `/recruitment/job-orders/${matchJobOrderId}/matches?top_k=500&min_score=${minMatchScore || 0}${
+          includeBlacklisted ? "&include_blacklisted=true" : ""
+        }`
       ),
     enabled: Boolean(matchJobOrderId),
   });
@@ -532,9 +547,12 @@ export default function TalentPool() {
       className: "font-medium",
       sortValue: (r) => r.full_name,
       cell: (r) => (
-        <Link to={`/talent-pool/${r.candidate_id}`} className="hover:underline">
-          {r.full_name}
-        </Link>
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <Link to={`/talent-pool/${r.candidate_id}`} className="hover:underline">
+            {r.full_name}
+          </Link>
+          {r.is_blacklisted && <BlacklistBadge size="sm" />}
+        </span>
       ),
     },
     ...visibleFields.map(
@@ -710,6 +728,12 @@ export default function TalentPool() {
             onChange={(e) => setMinMatchScore(e.target.value)}
             className="input w-24"
           />
+        )}
+        {canShowBlacklisted && (
+          <>
+            <span className="mx-1" style={{ color: "var(--border)" }}>|</span>
+            <BlacklistToggle checked={includeBlacklistedRaw} onChange={setIncludeBlacklisted} />
+          </>
         )}
       </form>
 

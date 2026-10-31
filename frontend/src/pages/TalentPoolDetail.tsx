@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
-import { Badge, Card, DetailLoadState, PillTabs } from "../components/ui";
+import { Badge, BlacklistBadge, Card, DetailLoadState, PillTabs } from "../components/ui";
 import { initials } from "../components/workspace";
 import { IntakeReviewPanel, ScreeningPanel, HistoryPanel } from "./TalentPoolPanels";
 import type { JobOrder } from "./JobOrders";
@@ -53,6 +53,8 @@ interface CandidateDetail {
   source: string | null;
   description: string | null;
   has_photo: boolean;
+  /** Fase 29 -- masuk daftar Blacklist (disetujui). Alasan tidak dikirim. */
+  is_blacklisted?: boolean;
 }
 
 interface CandidateFieldConfig {
@@ -158,6 +160,7 @@ export default function TalentPoolDetail() {
             {data.expected_salary ? formatRupiah(data.expected_salary) : "Ekspektasi gaji belum diisi"}
           </p>
           <div className="flex flex-wrap gap-1.5">
+            {data.is_blacklisted && <BlacklistBadge />}
             <Badge tone="info">{data.tp_status}</Badge>
             <Badge tone="neutral">{data.status}</Badge>
             {data.needs_review_count > 0 && (

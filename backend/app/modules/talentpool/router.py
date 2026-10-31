@@ -1,10 +1,14 @@
 """Router Talent Pool & CV Standardization (Fase 13, PRD §10)."""
 
 from app.core.database import get_db, parse_uuid
-from app.core.permissions import TALENTPOOL_BRANDING_ROLES, TALENTPOOL_ROLES
+from app.core.permissions import (
+    RECRUITMENT_ROLES,
+    TALENTPOOL_BRANDING_ROLES,
+    TALENTPOOL_ROLES,
+)
 from app.core.security import get_current_user, require_roles
 from app.modules.talentpool import service
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -26,9 +30,21 @@ def list_talentpool(
     readiness: str | None = Query(None),
     tp_status: str | None = Query(None),
     has_standard_cv: bool | None = Query(None),
+    include_blacklisted: bool = Query(False),
     db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    """Facet pencarian talent pool (PRD §10.5)."""
+    """Facet pencarian talent pool (PRD §10.5).
+
+    `include_blacklisted=true` (Fase 29 lanjutan) hanya untuk role yang
+    mengelola Blacklist (`RECRUITMENT_ROLES`, admin tenant selalu boleh --
+    sama seperti `require_roles`); role talent pool lain (operations/hr)
+    hanya melihat daftar yang sudah disaring."""
+    if include_blacklisted and not (user.role == "admin" or user.role.value in RECRUITMENT_ROLES):
+        raise HTTPException(
+            status_code=403,
+            detail="Role Anda tidak memiliki akses untuk menampilkan kandidat Blacklist",
+        )
     return service.list_talentpool(
         db,
         q=q,
@@ -37,6 +53,7 @@ def list_talentpool(
         readiness=readiness,
         tp_status=tp_status,
         has_standard_cv=has_standard_cv,
+        include_blacklisted=include_blacklisted,
     )
 
 

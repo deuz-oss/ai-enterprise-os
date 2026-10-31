@@ -6,6 +6,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Fase 29: Blacklist kini menjadi blocking check
+
+- Entri blacklist yang `disetujui` kini berpengaruh ke alur rekrutmen. Kandidat cocok lewat `candidate_id` atau identitas yang sama dengan kandidat ter-blacklist: email (trim + lowercase), telepon (`+62`/`62`/`8…` → `0…`), atau NIK 16 digit. Entri `menunggu_review`/`ditolak` tidak dihitung. Tidak ada migrasi. Helper ada di `backend/app/modules/blacklist/matching.py`.
+- **Job portal:** lamaran publik dari kandidat ter-blacklist **ditandai, bukan ditolak**. Respons, status code, pesan, token, proses intake CV, dan status lamaran sama persis dengan lamaran normal, supaya status blacklist tidak bocor ke pelamar. Recruiter melihat flag-nya, dan audit internal `blacklist.portal_apply_flagged` mencatat dasar kecocokannya.
+- **Pipeline:** mengusulkan kandidat ter-blacklist ke job order (`POST /recruitment/placements`) atau memajukan/mengaktifkan ulang placement-nya (`PATCH /recruitment/placements/{id}`) mengembalikan 422: "Kandidat ini masuk daftar Blacklist (disetujui) dan tidak bisa diusulkan ke job order." Memindahkan ke `gagal`/`dibatalkan` tetap bisa.
+- **Matching & talent pool:** kandidat ter-blacklist tidak lagi muncul di hasil match (`/recruitment/job-orders/{id}/match(es)`, `/ai/job-orders/{id}/match`). Kandidat ini dibuang sebelum embedding/LLM sehingga tidak menambah biaya. Mereka juga tidak muncul di daftar talent pool. Query `include_blacklisted=true` menampilkannya kembali; di talent pool, opsi ini hanya untuk recruiter/management/admin (role lain mendapat 403).
+- Response internal mendapat flag boolean `is_blacklisted` (kandidat, hasil match, baris talent pool) dan `candidate_is_blacklisted` (placement) untuk badge "Blacklist". Alasan blacklist tetap hanya bisa dilihat di halaman Blacklist.
+- Catatan terbuka (PRD §15 #8): fitur "lupakan kandidat" belum menghapus NIK, dan keputusan ini berkaitan dengan pencocokan identitas blacklist.
+
 ### Added — PoC avatar video pewawancara AI self-hosted (Fase 67)
 
 - `AVATAR_PROVIDER=none|self` (default `none` = voice-only, tidak berubah).

@@ -279,6 +279,9 @@ class CandidateOut(BaseModel):
     education_level: str | None
     referred_by_employee_id: UUID | None = None
     created_at: datetime
+    # Fase 29 lanjutan: flag blacklist approved (identitas ikut dicocokkan).
+    # Hanya boolean -- alasan blacklist tetap cuma di `/blacklist`.
+    is_blacklisted: bool = False
 
 
 class CandidateExperienceCreate(BaseModel):
@@ -336,6 +339,7 @@ class PlacementOut(BaseModel):
     offering_signed_at: datetime | None
     rejection_note: str | None
     created_at: datetime
+    candidate_is_blacklisted: bool = False
 
 
 class ReferralProgramSettingIn(BaseModel):
@@ -446,6 +450,7 @@ class MatchResult(BaseModel):
     # Rincian skor deterministik (Σ points == match_score).
     reasons: list[MatchReason] = []
     missing: list[str] = []
+    is_blacklisted: bool = False
 
 
 class HrDocumentSettingsOut(BaseModel):

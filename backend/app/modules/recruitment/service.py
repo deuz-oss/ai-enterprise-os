@@ -13,6 +13,7 @@ from app.core import storage
 from app.core.database import assert_not_referenced, parse_uuid
 from app.core.llm import ai_configured, chat_completion, embed_texts, vision_completion
 from app.modules import audit
+from app.modules.blacklist import matching as blacklist_matching
 from app.modules.clients.models import Client
 from app.modules.recruitment.models import (
     Candidate,
@@ -641,6 +642,10 @@ def cv_download_url(db: Session, candidate_id: str) -> str:
 def create_placement(db: Session, payload: PlacementCreate) -> Placement:
     candidate = _get_candidate(db, str(payload.candidate_id))
     jo = _get_job_order(db, str(payload.job_order_id))
+    # Fase 29 lanjutan: blacklist approved = blocking check sebelum masuk
+    # pipeline (dicek sebelum duplikat supaya pesannya jelas untuk recruiter).
+    if blacklist_matching.is_blacklisted(db, candidate):
+        raise HTTPException(status_code=422, detail=blacklist_matching.BLACKLIST_BLOCK_DETAIL)
     duplicate = db.execute(
         select(Placement).where(
             Placement.candidate_id == candidate.id,
@@ -744,6 +749,13 @@ def update_placement_status(
     placement = db.get(Placement, parse_uuid(placement_id))
     if placement is None:
         raise HTTPException(status_code=404, detail="Placement tidak ditemukan")
+    # Fase 29 lanjutan: kandidat ter-blacklist hanya boleh dikeluarkan dari
+    # pipeline (gagal/batal). Menutup reaktivasi placement lama ke Sourcing
+    # dan kemajuan placement yang sudah berjalan / masuk lewat job portal.
+    if new_status not in (PlacementStatus.rejected, PlacementStatus.cancelled):
+        blocked = db.get(Candidate, placement.candidate_id)
+        if blocked is not None and blacklist_matching.is_blacklisted(db, blocked):
+            raise HTTPException(status_code=422, detail=blacklist_matching.BLACKLIST_BLOCK_DETAIL)
     placement.status = new_status
     if ojt_start_date is not None:
         placement.ojt_start_date = ojt_start_date
@@ -1399,7 +1411,12 @@ def _llm_rerank_explain(jo: JobOrder, entries: list[tuple[Candidate, dict]]) -> 
 
 
 def match_candidates(
-    db: Session, job_order_id: str, top_k: int = 50, *, billable: bool = False
+    db: Session,
+    job_order_id: str,
+    top_k: int = 50,
+    *,
+    billable: bool = False,
+    include_blacklisted: bool = False,
 ) -> list[dict]:
     """Matching native 0-100: embedding cosine (bila AI aktif) + rules
     (domisili, readiness, expected_salary) + LLM rerank explain untuk top hasil.
@@ -1419,6 +1436,11 @@ def match_candidates(
             select(Candidate).where(Candidate.status != CandidateStatus.archived).limit(500)
         ).scalars()
     )
+    # Fase 29 lanjutan: kandidat ter-blacklist dibuang SEBELUM embedding/LLM
+    # (hemat biaya), kecuali diminta eksplisit lewat `include_blacklisted`.
+    blacklisted = blacklist_matching.blacklisted_ids(db, candidates)
+    if not include_blacklisted:
+        candidates = [c for c in candidates if c.id not in blacklisted]
     profiles = [_candidate_profile(db, cand) for cand in candidates]
 
     jo_text = "\n".join(filter(None, [jo.title, jo.description, jo.requirements])) or (
@@ -1477,6 +1499,7 @@ def match_candidates(
                 "explain": explain,
                 # ai = kalimat dari LLM (diberi label di UI); rules = deterministik.
                 "explain_source": source,
+                "is_blacklisted": cand.id in blacklisted,
                 # Rincian skor deterministik: Σ points == match_score.
                 "reasons": reasons,
                 "missing": _missing_requirements(jo, profile),

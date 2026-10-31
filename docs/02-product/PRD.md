@@ -1588,10 +1588,42 @@ terpisah), request aktif duplikat diblokir, request yang ditolak bisa
 diajukan ulang. Reuse pola `review_status` yang sama dengan skor AI
 Interview, bukan mekanisme governance baru. **Diperkecil sengaja** dari
 versi MyOHRIS: satu tabel (bukan pasangan request-batch + entry), tanpa
-whitelist, dan belum disambungkan sebagai blocking check ke
+whitelist, dan awalnya belum disambungkan sebagai blocking check ke
 sourcing/matching. Model `BlacklistEntry`+`BlacklistStatus`
 (`backend/app/modules/blacklist/`), migrasi `f7g8h9i0j1k2`. Halaman
 `Blacklist.tsx` + item sidebar Recruitment (§13).
+
+**Lanjutan 2026-10-31: blacklist jadi blocking check** (§15 Backlog #4).
+Helper `blacklist/matching.py` dipakai recruitment, talent pool, AI, dan
+job portal. Tanpa migrasi atau kolom baru.
+- **Aturan pencocokan:** hanya entri `disetujui` yang dihitung (`menunggu_review`
+  dan `ditolak` tidak). Tidak ada kedaluwarsa karena model tidak punya kolomnya;
+  fitur cabut blacklist di luar scope. Kandidat cocok bila `candidate_id`-nya
+  punya entri, atau identitasnya sama dengan kandidat ter-blacklist: email
+  (trim + lowercase), telepon (digit saja, `+62`/`62`/`8…` → `0…`, minimal
+  9 digit), atau NIK `ktp_no` (digit saja, wajib 16 digit). Scoping tenant
+  lewat filter `TenantMixin` biasa.
+- **Job portal (guest apply): DITANDAI, bukan ditolak.** Alur, respons,
+  status code, pesan, dan token sama persis dengan lamaran normal. Placement
+  tetap `disourcing`, tidak di-set gagal otomatis. Dengan begitu status
+  blacklist tidak bocor lewat respons, waktu proses (intake CV tetap
+  dijalankan), maupun cek status token. Efek tambahannya hanya audit internal
+  `blacklist.portal_apply_flagged` (berisi `matched_by`), tanpa notifikasi.
+- **Pipeline:** `POST /recruitment/placements` mengembalikan 422 "Kandidat ini
+  masuk daftar Blacklist (disetujui) dan tidak bisa diusulkan ke job order."
+  `PATCH /recruitment/placements/{id}` juga 422 untuk status tujuan apa pun
+  selain `gagal`/`dibatalkan`. Ini berlaku juga untuk placement yang sudah
+  berjalan sebelum blacklist disetujui dan untuk reaktivasi ke Sourcing.
+- **Matching & talent pool:** kandidat ter-blacklist dikeluarkan dari
+  `POST·GET /recruitment/job-orders/{id}/match(es)`,
+  `POST /ai/job-orders/{id}/match` (sebelum embedding/LLM, jadi tidak memakan
+  biaya), dan `GET /talentpool`. Query `include_blacklisted=true` memunculkannya
+  kembali; di talent pool hanya untuk `RECRUITMENT_ROLES` + admin (role lain
+  dapat 403). Detail `GET /talentpool/{id}` tetap bisa dibuka.
+- **Flag di response internal:** `is_blacklisted` (`CandidateOut`,
+  `MatchResult`, baris talent pool list/detail) dan `candidate_is_blacklisted`
+  (`PlacementOut`). Isinya hanya boolean; alasan blacklist tetap hanya di
+  `/blacklist`. Skema publik job portal tidak berubah.
 
 **Item shortlist lain DI-DROP (keputusan eksplisit Brian, 2026-09-07)
 — tidak jadi dieksekusi:**
@@ -2672,15 +2704,18 @@ Publik (tanpa login, per-tenant white-label):
 
 Item yang sudah diputuskan atau dispesifikasikan tetapi belum ada, atau baru
 sebagian ada, di kode per 2026-10-30. Status diambil dari kode dan
-`CHANGELOG.md`, bukan dari rencana. Bagian ini sengaja hanya memuat tujuh
-item berikut; sisa opsional lain tetap dicatat di bagian fase masing-masing.
+`CHANGELOG.md`, bukan dari rencana. Bagian ini sengaja hanya memuat item
+di tabel berikut; sisa opsional lain tetap dicatat di bagian fase masing-masing.
+Item yang sudah selesai tetap dicantumkan dengan status ✅ supaya nomor
+rujukannya tidak bergeser.
 
 | # | Item | Status | Kondisi sebenarnya & bukti | Rujukan |
 |---|---|---|---|---|
 | 1 | Auto-reload & metode bayar tersimpan (Xendit) | 🟡 Sebagian | Yang ada: preferensi auto-reload (on/off, ambang, nominal) lewat `GET·PUT /billing/auto-reload-settings` (`billing/router.py`, `billing/service.py::get_auto_reload_settings`), kolom `auto_reload_*` di `TenantCreditAccount`, tipe ledger `topup_auto_reload`; halaman Billing menjelaskan bahwa ini baru pengaturan. Yang belum: penyimpanan token kartu/GoPay dan charge otomatis saat saldo menipis — adapter `core/payment/xendit.py` hanya memanggil Invoice API (`/v2/invoices`, buat & cek status), bukan Subscriptions/tokenisasi | §4.4.1, §4.4.5, Fase 28 item 5; CHANGELOG Fase 28 |
 | 2 | Kwitansi resmi | ⏳ Belum | Tidak ada pembuatan kwitansi di modul `billing` maupun frontend. Yang sudah ada baru riwayat transaksi saldo (`GET /billing/transactions`, tab Riwayat di Billing) | §4.4.5, Fase 28 item 6 |
 | 3 | Langganan tahunan | ⏳ Belum | `TenantSubscription` hanya punya `monthly_fee` tanpa periode tagihan; pilihan tier di Billing semuanya bulanan. Besaran diskon tahunan juga belum diputuskan | §4.4.5, Fase 28 item 5 |
-| 4 | Blacklist sebagai blocking check | ⏳ Belum | `BlacklistEntry` hanya dipakai modul `blacklist/` sendiri; tidak dirujuk `recruitment/`, `talentpool/`, `ai/`, atau `job_portal/`, dan di frontend hanya ada di halaman `Blacklist.tsx`. Kandidat yang di-blacklist tetap bisa muncul di sourcing/matching tanpa peringatan | Fase 29; CHANGELOG Fase 29 ("belum jadi blocking check") |
+| 4 | Blacklist sebagai blocking check | ✅ Selesai (2026-10-31) | `blacklist/matching.py` (cocokkan `candidate_id` + email/telepon/NIK ternormalisasi, hanya `disetujui`) dipakai `recruitment/service.py` (422 di `create_placement`/`update_placement_status`, filter `match_candidates`), `ai/service.py::match_job_order`, `talentpool/service.py::list_talentpool` (`include_blacklisted`), dan `job_portal/service.py` (ditandai lewat audit, respons publik identik). Flag `is_blacklisted`/`candidate_is_blacklisted` di response internal; test `tests/test_blacklist_enforcement.py` | Fase 29 (lanjutan 2026-10-31); CHANGELOG [Unreleased] |
 | 5 | Validasi GPU | 🟡 Sebagian | **Suara (Fase 30):** wiring, uji E2E kandidat sintetis (Fase 66), dan uji mikrofon sungguhan (2026-09-26, 2026-10-29) sudah dijalankan di CPU; latensi & turn-taking di server GPU belum, dan `docker-compose.prod.gpu.yml` belum diuji di mesin GPU. **Avatar (Fase 67):** wiring CPU (renderer static) terverifikasi E2E dan di Chrome; flashhead-server belum pernah dibangun/dijalankan, jadi lip-sync Bahasa Indonesia, latensi, dan kapasitas/VRAM belum terukur | Fase 30, Fase 66, Fase 67; CHANGELOG "deploy produksi interview suara" & Fase 67 |
 | 6 | Foto avatar per tenant | ⏳ Belum | Satu foto per deployment lewat env `AVATAR_REFERENCE_IMAGE` (`avatar-worker/server.py`); `avatar-worker/README.md`: "per tenant belum ada" karena butuh kolom DB baru, sedangkan PoC sengaja tidak mengubah skema | Fase 67 (Kepatuhan) |
 | 7 | Chat presence/typing indicator | ⏳ Belum | Dispesifikasikan di §9.4, tetapi WebSocket chat mengabaikan pesan dari klien (`chat/router.py`: "heartbeat / typing — abaikan v1") dan frontend tidak punya event presence/typing | §9.4, Fase 11 |
+| 8 | "Lupakan kandidat" (UU PDP) belum menghapus NIK; interaksi dengan blacklist | ⏳ Belum (catatan terbuka, 2026-10-31) | `talentpool/service.py::forget_candidate` mengosongkan nama, email, telepon, kota, dan skill, tetapi `ktp_no` (NIK), `address`, `birthdate`, dan `birthplace` tetap tersimpan. Ini potensi celah hak hapus subjek data. Sebaliknya, kalau NIK ikut dihapus, kandidat ter-blacklist yang di-"lupakan" tidak lagi bisa dicocokkan lewat identitas (email/telepon sudah hilang sekarang, jadi tinggal NIK). Perlu keputusan: hapus semua PII, atau simpan identitas minimal (mis. hash NIK) khusus untuk entri blacklist `disetujui` dengan dasar hukum yang jelas | Fase 13 (§10.5), Fase 29 (lanjutan 2026-10-31) |
