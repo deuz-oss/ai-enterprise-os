@@ -202,12 +202,22 @@ def require_active_subscription():
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Akun platform tidak memiliki akses ke data tenant",
             )
-        from app.modules.billing.service import has_active_subscription
+        from app.modules.billing.service import SUBSCRIPTION_PAST_DUE_CODE, subscription_access
 
-        if not has_active_subscription(db, user.tenant_id):
+        # Murni DB (tanpa panggilan gateway). Masa bayar yang lewat toleransi
+        # ditandai `menunggak` di sini bila cron renewal belum memprosesnya.
+        access = subscription_access(db, user.tenant_id)
+        if access == "past_due":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Langganan menunggak. Selesaikan pembayaran di halaman Pembayaran.",
+                headers={"X-Error-Code": SUBSCRIPTION_PAST_DUE_CODE},
+            )
+        if access != "active":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Tenant belum berlangganan. Pilih paket di halaman Pembayaran.",
+                headers={"X-Error-Code": "subscription_required"},
             )
 
         # Safety-net: tutup cycle yang sudah lewat waktunya kalau scheduler

@@ -67,11 +67,23 @@ def close_cycle_for_tenant(db: Session, tenant_id: UUID) -> TenantBudgetCycle | 
     if cycle.period_end >= date.today():
         return None
 
+    period_start = cycle.period_end + timedelta(days=1)
+    # Penegakan renewal aktif: jatah baru hanya dibuka di dalam masa yang
+    # SUDAH dibayar -- siklus setelah `current_period_end` dibuka oleh
+    # renewal sukses (`renewal.apply_renewal_success`), bukan di sini.
+    from app.core.config import get_settings
+
+    if (
+        get_settings().billing_renewal_enforcement
+        and subscription.current_period_end is not None
+        and period_start > subscription.current_period_end
+    ):
+        return None
+
     previous_tenant = get_tenant()
     set_tenant(tenant_id)
     try:
         cycle.closed_at = datetime.now(UTC)
-        period_start = cycle.period_end + timedelta(days=1)
         period_end = _add_months(period_start, 1) - timedelta(days=1)
 
         new_cycle = TenantBudgetCycle(

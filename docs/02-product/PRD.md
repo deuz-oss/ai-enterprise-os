@@ -270,7 +270,7 @@ baru `billing_mode=commercial` → baru fallback `APP_MODE` global. Tenant
 
 Trial 14 hari per SKU (base Rp 1jt untuk Revenue Cloud tetap berlaku saat trial). Upsell in-product: nav menyembunyikan Cloud nonaktif, halaman menampilkan ajakan install/trial.
 
-### 4.4 Opsi G — Model Komersial Baru *(keputusan 2026-09-04, diimplementasikan Fase 28 — sebagian, lihat §15)*
+### 4.4 Opsi G — Model Komersial Baru *(keputusan 2026-09-04, diimplementasikan Fase 28; lanjutan 2026-10-31 — backend + UI tenant, lihat §15)*
 
 **Masalah dengan Opsi F (§4.1-4.3) yang memicu perubahan ini:** (1)
 bundle-gating menghambat UX — tenant harus commit beli dulu sebelum
@@ -1556,7 +1556,7 @@ dihapus), tapi kandidat baru yang masuk lewat kode itu selama
 program nonaktif TIDAK menghasilkan `ReferralReward` baru — riwayat
 reward lama tetap utuh.
 
-### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) — ✅ Selesai (2026-09-05), kecuali item 5 (sebagian) dan item 6 (kwitansi & kelola metode bayar belum) — lihat §15
+### Fase 28 — Migrasi Opsi F ke Opsi G (Model Komersial Baru) — ✅ Selesai (2026-09-05); lanjutan item 5–7 backend ✅ (2026-10-31), UI item 6–7 & verifikasi akun Xendit belum — lihat §15
 
 Implementasi penuh dari keputusan Opsi G (§4.4). Ini migrasi
 infrastruktur billing yang SUDAH BERJALAN production (§4.1-4.3 ✅),
@@ -1574,17 +1574,31 @@ menyentuh tenant yang sudah aktif berbayar.
    detail billing (breakdown per-fitur).
 5. **Integrasi Xendit** — Subscriptions API untuk tagihan
    bulanan/tahunan, tokenisasi kartu/GoPay untuk auto-reload.
-   **Status: SEBAGIAN.** Checkout invoice manual (subscribe/topup)
-   sudah jalan penuh via Xendit. Auto-reload SEBATAS preferensi
-   tersimpan (toggle on/off + threshold + nominal) di
-   `Billing.tsx`/`GET·PUT /billing/auto-reload-settings` — belum ada
-   penyimpanan token kartu/GoPay maupun eksekusi charge otomatis
-   sungguhan saat saldo menipis. UI-nya sudah eksplisit menjelaskan
-   batasan ini ke tenant, bukan berpura-pura fitur penuh aktif.
+   **Status (2026-10-31): backend ✅, verifikasi akun Xendit belum.**
+   Checkout invoice (subscribe/topup/renewal) via Invoice API. Metode
+   bayar tersimpan (token kartu Xendit.js / GoPay linked) dan
+   auto-reload sungguhan Rp100rb tanpa cap (outbox + kunci
+   compare-and-set, cron `run-auto-reload` + jalur reaktif). Renewal
+   dikendalikan cron Aeos (`run-renewals`), **bukan** Xendit
+   Subscriptions/Recurring (keputusan K10). Paket tahunan memakai diskon
+   env `BILLING_ANNUAL_DISCOUNT_PERCENT` (kosong = tidak ditawarkan).
+   Endpoint Payment Methods/Payment Requests ditulis berdasarkan
+   dokumentasi publik dan ditandai `TODO verifikasi Xendit`; semua test
+   memakai adapter sandbox. Rencana:
+   `docs/03-architecture/billing-opsi-g-completion.md`.
 6. **Halaman pembayaran self-service** (§4.4.5) — kelola metode
    bayar, kwitansi resmi, pilih/upgrade tier, riwayat transaksi.
+   **Status: API ✅** (`/billing/payment-methods`, `/billing/receipts`
+   + unduh PDF, `/billing/plans`, `/billing/status`, `/billing/profile`).
+   Kwitansi PDF bernomor `AEOS/KW/{tahun}/{urut}` dan immutable.
+   **UI ✅ (2026-10-31):** `Billing.tsx` — banner gagal bayar, toggle
+   bulanan/tahunan, metode bayar + profil penagihan, auto-reload,
+   riwayat transaksi & unduh kwitansi; route simulasi sandbox.
 7. **Perluas `PlatformTenants.tsx`** — visibilitas status pembayaran
-   semua tenant untuk platform admin.
+   semua tenant untuk platform admin. **Status: API ✅** (billing-summary
+   kini memuat periode, jatuh tempo, menunggak, blokir metered, metode
+   bayar default, dan kegagalan terakhir; `unblock-metered`,
+   `billing/webhook-events`). UI belum.
 
 **Strategi migrasi untuk tenant existing** yang sudah aktif di Opsi F
 (§4.1-4.3) — diputuskan terpisah (didokumentasikan commit "Decide Fase
@@ -2727,9 +2741,9 @@ rujukannya tidak bergeser.
 
 | # | Item | Status | Kondisi sebenarnya & bukti | Rujukan |
 |---|---|---|---|---|
-| 1 | Auto-reload & metode bayar tersimpan (Xendit) | 🟡 Sebagian | Yang ada: preferensi auto-reload (on/off, ambang, nominal) lewat `GET·PUT /billing/auto-reload-settings` (`billing/router.py`, `billing/service.py::get_auto_reload_settings`), kolom `auto_reload_*` di `TenantCreditAccount`, tipe ledger `topup_auto_reload`; halaman Billing menjelaskan bahwa ini baru pengaturan. Yang belum: penyimpanan token kartu/GoPay dan charge otomatis saat saldo menipis — adapter `core/payment/xendit.py` hanya memanggil Invoice API (`/v2/invoices`, buat & cek status), bukan Subscriptions/tokenisasi | §4.4.1, §4.4.5, Fase 28 item 5; CHANGELOG Fase 28 |
-| 2 | Kwitansi resmi | ⏳ Belum | Tidak ada pembuatan kwitansi di modul `billing` maupun frontend. Yang sudah ada baru riwayat transaksi saldo (`GET /billing/transactions`, tab Riwayat di Billing) | §4.4.5, Fase 28 item 6 |
-| 3 | Langganan tahunan | ⏳ Belum | `TenantSubscription` hanya punya `monthly_fee` tanpa periode tagihan; pilihan tier di Billing semuanya bulanan. Besaran diskon tahunan juga belum diputuskan | §4.4.5, Fase 28 item 5 |
+| 1 | Auto-reload & metode bayar tersimpan (Xendit) | 🟡 Backend selesai (2026-10-31) | Backend: `billing/payment_methods.py` (token kartu Xendit.js/GoPay, tanpa PAN/CVV), `billing/auto_reload.py` + `billing/charges.py` (outbox + kunci compare-and-set, rekonsiliasi `unknown` dengan key sama, retry +15m/+1j/+6j), blokir metered (`service.assert_metered_allowed`, pre-check `core/llm.py`), renewal + gagal bayar (`billing/renewal.py`, flag `BILLING_RENEWAL_ENFORCEMENT` default mati). Test sandbox `tests/test_billing_{payment_methods,auto_reload,renewal,webhook_idempotency}.py`. Belum: UI `Billing.tsx` (tab metode bayar, banner gagal bayar), verifikasi endpoint Payment Methods/Payment Requests di akun Xendit (`TODO verifikasi Xendit` di `core/payment/xendit.py`), cron produksi `run-auto-reload`/`run-renewals` | §4.4.1, §4.4.5, Fase 28 item 5; `docs/03-architecture/billing-opsi-g-completion.md`; CHANGELOG [Unreleased] |
+| 2 | Kwitansi resmi | 🟡 Backend selesai (2026-10-31) | `billing/receipts.py`: satu kwitansi per pembayaran berhasil, nomor `AEOS/KW/{tahun}/{urut}` urut lintas tenant, snapshot penjual (`AEOS_SELLER_*`) & pembeli (`/billing/profile`), PDF reportlab immutable (`GET /billing/receipts/{id}/pdf`), `receipt_id` di riwayat transaksi. Default non-PKP (tanpa PPN). Belum: kolom unduh di UI, e-meterai untuk kwitansi > Rp5 jt (v1 manual) | §4.4.5, Fase 28 item 6 |
+| 3 | Langganan tahunan | 🟡 Backend selesai (2026-10-31) | `TenantSubscription.billing_period`/`period_fee`/`discount_percent`/`current_period_end`; `POST /billing/subscribe {billing_period}`, `GET /billing/plans`. Diskon dari env `BILLING_ANNUAL_DISCOUNT_PERCENT`; **besaran belum diputuskan, default kosong = paket tahunan tidak ditawarkan**. Jatah saldo tetap reset bulanan. Belum: toggle bulanan/tahunan di UI | §4.4.5, Fase 28 item 5 |
 | 4 | Blacklist sebagai blocking check | ✅ Selesai (2026-10-31) | `blacklist/matching.py` (cocokkan `candidate_id` + email/telepon/NIK ternormalisasi, hanya `disetujui`) dipakai `recruitment/service.py` (422 di `create_placement`/`update_placement_status`, filter `match_candidates`), `ai/service.py::match_job_order`, `talentpool/service.py::list_talentpool` (`include_blacklisted`), dan `job_portal/service.py` (ditandai lewat audit, respons publik identik). Flag `is_blacklisted`/`candidate_is_blacklisted` di response internal; test `tests/test_blacklist_enforcement.py` | Fase 29 (lanjutan 2026-10-31); CHANGELOG [Unreleased] |
 | 5 | Validasi GPU | 🟡 Sebagian | **Suara (Fase 30):** wiring, uji E2E kandidat sintetis (Fase 66), dan uji mikrofon sungguhan (2026-09-26, 2026-10-29) sudah dijalankan di CPU; latensi & turn-taking di server GPU belum, dan `docker-compose.prod.gpu.yml` belum diuji di mesin GPU. **Avatar (Fase 67):** wiring CPU (renderer static) terverifikasi E2E dan di Chrome; flashhead-server belum pernah dibangun/dijalankan, jadi lip-sync Bahasa Indonesia, latensi, dan kapasitas/VRAM belum terukur | Fase 30, Fase 66, Fase 67; CHANGELOG "deploy produksi interview suara" & Fase 67 |
 | 6 | Foto avatar per tenant | ✅ Selesai (2026-10-31) | Kolom `ai_interview_settings.avatar_image_key`/`avatar_image_updated_at` (migrasi `57b5ffb1923e`); `PUT·DELETE·GET /ai-interview/settings/avatar-image` (validasi + normalisasi di `ai_interview/service.py::normalize_avatar_image`, consent wajib, audit `ai_interview.avatar_image_changed/removed`); endpoint agen `voice/avatar-image` → `agent/avatar_fallback.py::fetch_reference_image` → `reference_image_b64` di `avatar-worker/server.py`; kartu `frontend/src/components/AvatarImageCard.tsx`. Fallback env `AVATAR_REFERENCE_IMAGE` tetap. Test `tests/test_ai_interview_avatar.py`, `avatar-worker/tests/test_reference_image.py`. Belum: E2E dengan LiveKit/renderer sungguhan, storage S3/MinIO, cek wajah tunggal (tidak ada util) | Fase 67 (lanjutan 2026-10-31); CHANGELOG [Unreleased] |

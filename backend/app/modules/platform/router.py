@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -187,6 +188,83 @@ def run_cycle_charge(db: Session = Depends(get_db)):
     return {"closed_count": len(closed), "tenant_ids": [str(t) for t in closed]}
 
 
+@router.post("/internal/run-auto-reload")
+def run_auto_reload(db: Session = Depends(get_db)):
+    """Eksekusi & rekonsiliasi charge auto-reload semua tenant + pemicu
+    proaktif (saldo di bawah ambang). Dipicu cron eksternal tiap ~2 menit
+    (K11). Aman dipanggil berulang/paralel (compare-and-set per charge)."""
+    from app.modules.billing.auto_reload import run_auto_reload_for_all_tenants
+
+    return run_auto_reload_for_all_tenants(db)
+
+
+@router.post("/internal/run-renewals")
+def run_renewals(db: Session = Depends(get_db)):
+    """Perpanjangan langganan harian (mis. 01:00 WIB): invoice H-7, charge
+    metode bayar tersimpan, retry menunggak, pembatalan otomatis."""
+    from app.modules.billing.renewal import run_renewals_for_all_tenants
+
+    return run_renewals_for_all_tenants(db)
+
+
+@router.post("/tenants/{tenant_id}/billing/unblock-metered")
+def unblock_metered(tenant_id: UUID, db: Session = Depends(get_db)):
+    """Cabut penanda blokir metered + reset hitungan gagal auto-reload
+    (intervensi support). Blokir efektif tetap mengikuti sisa saldo."""
+    from app.modules.billing.service import _get_or_create_credit_account, audit_add
+
+    service._get_tenant(db, tenant_id)
+    previous_tenant = get_tenant()
+    set_tenant(tenant_id)
+    try:
+        account = _get_or_create_credit_account(db, tenant_id)
+        account.metered_blocked_at = None
+        account.metered_block_reason = None
+        account.auto_reload_failure_count = 0
+        account.auto_reload_next_attempt_at = None
+        audit_add(
+            db,
+            action="platform.metered_unblocked",
+            entity_type="tenant_credit_account",
+            entity_id=account.id,
+            tenant_id=tenant_id,
+        )
+        db.commit()
+    finally:
+        set_tenant(previous_tenant)
+    return {"status": "ok"}
+
+
+@router.get("/billing/webhook-events")
+def list_webhook_events(status: str | None = None, limit: int = 50, db: Session = Depends(get_db)):
+    """Investigasi event webhook gateway (tabel platform tanpa tenant)."""
+    from app.modules.billing.models import PaymentWebhookEvent, WebhookEventStatus
+
+    if not 1 <= limit <= 200:
+        raise HTTPException(status_code=422, detail="limit harus 1-200")
+    stmt = select(PaymentWebhookEvent).order_by(PaymentWebhookEvent.received_at.desc())
+    if status is not None:
+        try:
+            stmt = stmt.where(PaymentWebhookEvent.status == WebhookEventStatus(status))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="status tidak valid") from None
+    rows = db.execute(stmt.limit(limit)).scalars()
+    return [
+        {
+            "id": str(r.id),
+            "provider": r.provider,
+            "event_type": r.event_type,
+            "object_id": r.object_id,
+            "tenant_id": str(r.tenant_id) if r.tenant_id else None,
+            "status": r.status.value,
+            "error": r.error,
+            "received_at": r.received_at,
+            "processed_at": r.processed_at,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/internal/run-weekly-digest")
 def run_weekly_digest(db: Session = Depends(get_db)):
     """Digest kepatuhan kontrak & BPJS (AI #4) untuk semua tenant aktif.
@@ -206,25 +284,59 @@ def get_tenant_billing_summary(tenant_id: UUID, db: Session = Depends(get_db)):
     manual sebelum query tabel ber-RLS -- endpoint ini berjalan di bawah
     platform_admin, tanpa konteks tenant aktif secara default (lihat
     catatan RLS di `billing/cycle_close.py`)."""
-    from app.modules.billing.models import SubscriptionStatus, TenantSubscription
-    from app.modules.billing.service import get_balance_summary, list_transactions
+    from app.modules.billing.models import ChargeStatus, PaymentCharge
+    from app.modules.billing.payment_methods import payment_method_label
+    from app.modules.billing.service import (
+        _get_or_create_credit_account,
+        current_subscription,
+        default_payment_method,
+        get_balance_summary,
+        list_transactions,
+    )
 
     service._get_tenant(db, tenant_id)
     previous_tenant = get_tenant()
     set_tenant(tenant_id)
     try:
-        subscription = db.execute(
-            select(TenantSubscription)
-            .where(TenantSubscription.tenant_id == tenant_id)
-            .where(TenantSubscription.status == SubscriptionStatus.active)
-        ).scalar_one_or_none()
+        subscription = current_subscription(db, tenant_id)
         summary = get_balance_summary(db, tenant_id)
         recent = list_transactions(db, tenant_id, limit=5, offset=0)
+        account = _get_or_create_credit_account(db, tenant_id)
+        pm = default_payment_method(db, account)
+        last_failure = (
+            db.execute(
+                select(PaymentCharge)
+                .where(PaymentCharge.tenant_id == tenant_id)
+                .where(PaymentCharge.status == ChargeStatus.failed)
+                .order_by(PaymentCharge.completed_at.desc())
+            )
+            .scalars()
+            .first()
+        )
+        billing_extra = {
+            "billing_period": subscription.billing_period.value if subscription else None,
+            "current_period_end": subscription.current_period_end if subscription else None,
+            "past_due_since": subscription.past_due_since if subscription else None,
+            "metered_blocked": summary["state"] == "empty"
+            or account.metered_blocked_at is not None,
+            "block_reason": account.metered_block_reason,
+            "default_payment_method": payment_method_label(pm) if pm else None,
+            "auto_reload_enabled": account.auto_reload_enabled,
+            "last_payment_failure": {
+                "purpose": last_failure.purpose.value,
+                "failure_code": last_failure.failure_code,
+                "at": last_failure.completed_at,
+            }
+            if last_failure
+            else None,
+        }
+        db.commit()
     finally:
         set_tenant(previous_tenant)
     return {
         "tier": subscription.tier.value if subscription else None,
         "subscription_status": subscription.status.value if subscription else None,
+        **billing_extra,
         **summary,
         "recent_transactions": [
             {
@@ -241,6 +353,10 @@ def get_tenant_billing_summary(tenant_id: UUID, db: Session = Depends(get_db)):
 
 class SubscriptionOverrideIn(BaseModel):
     tier: str
+    billing_period: str = "monthly"
+    # Kosong = baris legacy (pembayaran di luar sistem) yang TIDAK dikunci
+    # penegakan renewal; diisi = masa bayar yang diakui support.
+    current_period_end: date | None = None
 
 
 @router.patch("/tenants/{tenant_id}/subscription")
@@ -250,11 +366,13 @@ def override_subscription(
     """Set tier langganan tenant langsung, bypass Xendit -- dipakai script
     migrasi one-shot (Milestone 9) dan intervensi support/manual platform
     admin (mis. tenant yang bayar di luar sistem)."""
-    from app.modules.billing.models import TIER_MONTHLY_FEE_IDR, SubscriptionTier
+    from app.modules.billing.models import TIER_MONTHLY_FEE_IDR, BillingPeriod, SubscriptionTier
     from app.modules.billing.payment_service import _activate_subscription
+    from app.modules.billing.service import audit_add
 
     try:
         tier = SubscriptionTier(payload.tier)
+        period = BillingPeriod(payload.billing_period)
     except ValueError:
         raise HTTPException(
             status_code=422,
@@ -265,8 +383,31 @@ def override_subscription(
     previous_tenant = get_tenant()
     set_tenant(tenant_id)
     try:
-        _activate_subscription(db, tenant_id, tier, TIER_MONTHLY_FEE_IDR[tier])
+        # Override = pembayaran di luar sistem: tanpa kwitansi (K15).
+        sub = _activate_subscription(
+            db,
+            tenant_id,
+            tier,
+            TIER_MONTHLY_FEE_IDR[tier],
+            billing_period=period,
+            set_period_end=False,
+            current_period_end=payload.current_period_end,
+        )
+        audit_add(
+            db,
+            action="platform.subscription_overridden",
+            entity_type="tenant_subscription",
+            entity_id=sub.id,
+            detail={
+                "tier": tier.value,
+                "billing_period": period.value,
+                "current_period_end": str(payload.current_period_end)
+                if payload.current_period_end
+                else None,
+            },
+            tenant_id=tenant_id,
+        )
         db.commit()
     finally:
         set_tenant(previous_tenant)
-    return {"status": "ok", "tier": tier.value}
+    return {"status": "ok", "tier": tier.value, "billing_period": period.value}

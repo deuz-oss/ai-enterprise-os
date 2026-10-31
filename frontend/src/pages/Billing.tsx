@@ -1,302 +1,204 @@
-import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CreditCard, Info, Zap } from "lucide-react";
-import { api, formatDateTime, formatRupiah } from "../api/client";
+import { CreditCard, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { api, formatRupiah } from "../api/client";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { DataTable, PillTabs, type Column } from "../components/ui";
+import { Button, PillTabs } from "../components/ui";
+import { AutoReloadSettingsCard } from "../components/billing/AutoReloadSettingsCard";
+import { BillingProfileForm } from "../components/billing/BillingProfileForm";
+import { ReceiptsTable, TransactionsTable } from "../components/billing/BillingHistory";
+import { BillingStatusBanner, type BillingTab } from "../components/billing/BillingStatusBanner";
+import { PaymentMethodsSection } from "../components/billing/PaymentMethodsSection";
+import { PlanPicker } from "../components/billing/PlanPicker";
+import { useBillingStatus, useInvalidateBilling } from "../components/billing/hooks";
+import type { BalanceSummary } from "../lib/billing";
 
-interface BalanceSummary {
-  cycle_remaining: number;
-  cycle_included: number;
-  credit_balance: number;
-  state: "normal" | "warning" | "empty";
+const TABS: BillingTab[] = ["tier", "topup", "methods", "history"];
+
+function initialTab(state: unknown, search: URLSearchParams): BillingTab {
+  // Kembali dari aktivasi metode bayar -> langsung ke tab Metode Bayar.
+  if (search.get("pm") || search.get("pm_ref")) return "methods";
+  const fromQuery = search.get("tab");
+  if (fromQuery && (TABS as string[]).includes(fromQuery)) return fromQuery as BillingTab;
+  // Widget saldo di topbar mengarahkan ke sini dengan state.tab="topup".
+  const fromState = (state as { tab?: string } | null)?.tab;
+  if (fromState && (TABS as string[]).includes(fromState)) return fromState as BillingTab;
+  return "tier";
 }
 
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  ref_event: string;
-  balance_after: number;
-  created_at: string;
+function BalanceCard({ balance }: { balance: BalanceSummary }) {
+  const totalRemaining = balance.cycle_remaining + balance.credit_balance;
+  const pct =
+    balance.cycle_included > 0 ? Math.max(0, Math.round((totalRemaining / balance.cycle_included) * 100)) : null;
+  // Kartu berwarna sesuai state, sama seperti indikator topbar (Layout.tsx).
+  const colorClass = balance.state === "empty" ? "p-red" : balance.state === "warning" ? "p-orange" : "p-green";
+  return (
+    <div className={`card flex flex-wrap items-center gap-6 border ${colorClass}`}>
+      <div className="flex items-center gap-3">
+        <Zap className="h-8 w-8 shrink-0" aria-hidden="true" />
+        <div>
+          <p className="text-xs font-medium">Saldo Tersedia</p>
+          <p className="text-2xl font-bold tabular-nums">{formatRupiah(totalRemaining)}</p>
+          {pct !== null && <p className="text-xs font-medium">{pct}% dari kuota bulanan</p>}
+        </div>
+      </div>
+      <div className="ml-auto flex flex-wrap gap-6 border-l pl-6" style={{ borderColor: "currentColor" }}>
+        <div>
+          <p className="text-xs font-medium">Sisa jatah bulan ini</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {formatRupiah(balance.cycle_remaining)}
+            <span className="font-normal"> / {formatRupiah(balance.cycle_included)}</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-medium">Saldo top up</p>
+          <p className="text-sm font-semibold tabular-nums">{formatRupiah(balance.credit_balance)}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-interface AutoReloadSettings {
-  enabled: boolean;
-  threshold: number | null;
-  amount: number;
+function TopupCard() {
+  const [amount, setAmount] = useState("100000");
+  const topup = useMutation({
+    mutationFn: (value: number) => api.post<{ checkout_url: string | null }>("/billing/topup", { amount: value }),
+    onSuccess: (res) => {
+      if (res.checkout_url) window.location.href = res.checkout_url;
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Gagal membuat top up"),
+  });
+  return (
+    <div className="card max-w-md space-y-3">
+      <label htmlFor="topup_amount" className="block text-sm font-medium" style={{ color: "var(--text)" }}>
+        Jumlah top up (Rp)
+      </label>
+      <input
+        id="topup_amount"
+        className="input w-full"
+        type="number"
+        min={10000}
+        step={10000}
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+      <Button
+        className="w-full"
+        loading={topup.isPending}
+        disabled={Number(amount) <= 0}
+        onClick={() => topup.mutate(Number(amount))}
+      >
+        Top Up Sekarang
+      </Button>
+    </div>
+  );
 }
-
-const TIERS: { key: string; label: string; fee: number; blurb: string }[] = [
-  { key: "tier1", label: "Tier 1", fee: 500_000, blurb: "Untuk tenant baru — pemakaian ringan." },
-  { key: "tier2", label: "Tier 2", fee: 2_000_000, blurb: "Jatah bulanan lebih besar untuk tim aktif." },
-  { key: "tier3", label: "Tier 3", fee: 5_000_000, blurb: "Untuk operasi skala penuh, semua fitur." },
-];
 
 export default function Billing() {
-  // Widget saldo di topbar mengarahkan ke sini dengan state.tab="topup"
-  // supaya klik "Top Up" langsung buka tab yang relevan, bukan tab default.
   const location = useLocation();
-  const initialTab = (location.state as { tab?: "tier" | "topup" | "history" } | null)?.tab ?? "tier";
-  const [tab, setTab] = useState<"tier" | "topup" | "history">(initialTab);
-  const [topupAmount, setTopupAmount] = useState("100000");
-  const [error, setError] = useState<string | null>(null);
-  const [autoReloadError, setAutoReloadError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<BillingTab>(() => initialTab(location.state, searchParams));
+  const [historyView, setHistoryView] = useState<"transactions" | "receipts">("transactions");
+  const invalidate = useInvalidateBilling();
 
+  const status = useBillingStatus();
+  // Endpoint saldo/top up/riwayat/auto-reload ber-guard langganan aktif: saat
+  // menunggak atau belum berlangganan jangan dipanggil (pasti 403).
+  const locked = status.data?.access === "none";
   const balance = useQuery({
     queryKey: ["billing-balance"],
     queryFn: () => api.get<BalanceSummary>("/billing/balance-summary"),
+    enabled: status.isSuccess && !locked,
     retry: false,
   });
-  const transactions = useQuery({
-    queryKey: ["billing-transactions"],
-    queryFn: () => api.get<Transaction[]>("/billing/transactions"),
-    enabled: tab === "history",
-  });
-  const autoReload = useQuery({
-    queryKey: ["billing-auto-reload"],
-    queryFn: () => api.get<AutoReloadSettings>("/billing/auto-reload-settings"),
-    enabled: tab === "topup",
-  });
 
-  const subscribe = useMutation({
-    mutationFn: (tier: string) => api.post<{ checkout_url: string | null }>("/billing/subscribe", { tier }),
-    onSuccess: (res) => {
-      setError(null);
-      if (res.checkout_url) window.location.href = res.checkout_url;
-    },
-    onError: (e) => setError(e instanceof Error ? e.message : "Gagal membuat langganan"),
-  });
-  const topup = useMutation({
-    mutationFn: (amount: number) => api.post<{ checkout_url: string | null }>("/billing/topup", { amount }),
-    onSuccess: (res) => {
-      setError(null);
-      if (res.checkout_url) window.location.href = res.checkout_url;
-    },
-    onError: (e) => setError(e instanceof Error ? e.message : "Gagal membuat top up"),
-  });
-  const saveAutoReload = useMutation({
-    mutationFn: (body: { enabled: boolean; threshold: number | null; amount: number }) =>
-      api.put<AutoReloadSettings>("/billing/auto-reload-settings", body),
-    onSuccess: () => {
-      setAutoReloadError(null);
-      void autoReload.refetch();
-    },
-    onError: (e) => setAutoReloadError(e instanceof Error ? e.message : "Gagal menyimpan pengaturan"),
-  });
-
-  // Tanpa sort: "Sisa Setelah" adalah saldo berjalan, bermakna dalam urutan waktu.
-  const transactionColumns: Column<Transaction>[] = [
-    { key: "time", header: "Waktu", className: "whitespace-nowrap", cell: (t) => formatDateTime(t.created_at) },
-    { key: "event", header: "Kejadian", cell: (t) => t.ref_event },
-    {
-      key: "amount",
-      header: "Jumlah",
-      numeric: true,
-      cell: (t) => (
-        <span className={t.amount < 0 ? "" : "text-emerald-700 dark:text-emerald-400"}>
-          {t.amount >= 0 ? "+" : ""}
-          {formatRupiah(t.amount)}
-        </span>
-      ),
-    },
-    { key: "after", header: "Sisa Setelah", numeric: true, cell: (t) => formatRupiah(t.balance_after) },
-  ];
+  // Kembali dari halaman checkout (invoice) -> segarkan status sekali.
+  const checkoutHandled = useRef(false);
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    if (!checkout || checkoutHandled.current) return;
+    checkoutHandled.current = true; // StrictMode menjalankan efek dua kali di dev
+    if (checkout === "success") toast.success("Pembayaran diterima. Status akan diperbarui sebentar lagi.");
+    else toast.error("Pembayaran tidak diselesaikan.");
+    invalidate();
+    const next = new URLSearchParams(searchParams);
+    next.delete("checkout");
+    setSearchParams(next, { replace: true });
+    // Sengaja hanya sekali saat halaman dibuka.
+  }, []);
 
   return (
     <div className="space-y-4">
       <PageHeader
         icon={CreditCard}
         title="Pembayaran"
-        subtitle="Langganan, top up saldo, dan riwayat transaksi kredit."
+        subtitle="Langganan, metode bayar, top up saldo, dan kwitansi."
       />
 
-      {balance.data &&
-        (() => {
-          const totalRemaining = balance.data.cycle_remaining + balance.data.credit_balance;
-          const pct =
-            balance.data.cycle_included > 0
-              ? Math.max(0, Math.round((totalRemaining / balance.data.cycle_included) * 100))
-              : null;
-          // Widget besar §1.1 -- kartu berwarna sesuai state, sama seperti
-          // indikator topbar (Layout.tsx), cuma versi lebih besar + rincian.
-          const colorClass =
-            balance.data.state === "empty" ? "p-red" : balance.data.state === "warning" ? "p-orange" : "p-green";
-          return (
-            <div className={`card flex flex-wrap items-center gap-6 border ${colorClass}`}>
-              <div className="flex items-center gap-3">
-                <Zap className="h-8 w-8 shrink-0" />
-                <div>
-                  <p className="text-xs font-medium">Saldo Tersedia</p>
-                  <p className="text-2xl font-bold tabular-nums">{formatRupiah(totalRemaining)}</p>
-                  {pct !== null && <p className="text-xs font-medium">{pct}% dari kuota bulanan</p>}
-                </div>
-              </div>
-              <div className="ml-auto flex flex-wrap gap-6 border-l pl-6" style={{ borderColor: "currentColor" }}>
-                <div>
-                  <p className="text-xs font-medium">Sisa jatah bulan ini</p>
-                  <p className="text-sm font-semibold tabular-nums">
-                    {formatRupiah(balance.data.cycle_remaining)}
-                    <span className="font-normal"> / {formatRupiah(balance.data.cycle_included)}</span>
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium">Saldo top up</p>
-                  <p className="text-sm font-semibold tabular-nums">{formatRupiah(balance.data.credit_balance)}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+      <BillingStatusBanner status={status.data} onNavigate={setTab} />
+
+      {balance.data && <BalanceCard balance={balance.data} />}
 
       <PillTabs
         tabs={[
-          { key: "tier", label: "Pilih Paket" },
-          { key: "topup", label: "Top Up" },
-          { key: "history", label: "Riwayat" },
+          { key: "tier", label: "Paket" },
+          { key: "topup", label: "Top Up & Auto-Reload" },
+          { key: "methods", label: "Metode Bayar & Profil" },
+          { key: "history", label: "Riwayat & Kwitansi" },
         ]}
         value={tab}
-        onChange={(k) => setTab(k as typeof tab)}
+        onChange={(k) => setTab(k as BillingTab)}
       />
 
-      {error && <CalloutBlock tone="danger">{error}</CalloutBlock>}
+      {tab === "tier" && <PlanPicker status={status.data} />}
 
-      {tab === "tier" && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {TIERS.map((t) => (
-            <div key={t.key} className="card space-y-2">
-              <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                {t.label}
-              </p>
-              <p className="text-xl font-bold" style={{ color: "var(--text)" }}>
-                {formatRupiah(t.fee)}
-                <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>
-                  /bulan
-                </span>
-              </p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {t.blurb}
-              </p>
-              <button
-                className="btn w-full"
-                disabled={subscribe.isPending}
-                onClick={() => subscribe.mutate(t.key)}
-              >
-                Pilih {t.label}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "topup" && (
-        <div className="card max-w-sm space-y-3">
-          <label htmlFor="topup_amount" className="block text-sm font-medium" style={{ color: "var(--text)" }}>
-            Jumlah top up (Rp)
-          </label>
-          <input
-            id="topup_amount"
-            className="input w-full"
-            type="number"
-            min={10000}
-            step={10000}
-            value={topupAmount}
-            onChange={(e) => setTopupAmount(e.target.value)}
-          />
-          <button
-            className="btn w-full"
-            disabled={topup.isPending || Number(topupAmount) <= 0}
-            onClick={() => topup.mutate(Number(topupAmount))}
-          >
-            Top Up Sekarang
-          </button>
-        </div>
-      )}
-
-      {tab === "topup" && (
-        <div className="card max-w-sm space-y-3">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-            Pengaturan Auto-Reload
-          </h3>
-          <form
-            key={
-              autoReload.data
-                ? `${autoReload.data.enabled}-${autoReload.data.threshold}-${autoReload.data.amount}`
-                : "loading"
-            }
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              saveAutoReload.mutate({
-                enabled: form.get("enabled") === "on",
-                threshold: form.get("threshold") ? Number(form.get("threshold")) : null,
-                amount: Number(form.get("amount")) || 100_000,
-              });
-            }}
-            className="space-y-3"
-          >
-            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text)" }}>
-              <input
-                name="enabled"
-                type="checkbox"
-                defaultChecked={autoReload.data?.enabled ?? false}
-                className="h-4 w-4"
-              />
-              Aktifkan auto-reload saat saldo menipis
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                Ambang batas (Rp)
-                <input
-                  name="threshold"
-                  type="number"
-                  min={0}
-                  step={10_000}
-                  placeholder="mis. 200000"
-                  defaultValue={autoReload.data?.threshold ?? ""}
-                  className="input mt-1 w-full"
-                />
-              </label>
-              <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                Jumlah reload (Rp)
-                <input
-                  name="amount"
-                  type="number"
-                  min={10_000}
-                  step={10_000}
-                  defaultValue={autoReload.data?.amount ?? 100_000}
-                  className="input mt-1 w-full"
-                />
-              </label>
-            </div>
-            <button className="btn-secondary w-full" disabled={saveAutoReload.isPending}>
-              {saveAutoReload.isPending ? "Menyimpan..." : "Simpan Pengaturan"}
-            </button>
-            {saveAutoReload.isSuccess && !autoReloadError && (
-              <p className="text-xs text-emerald-700 dark:text-emerald-400">Pengaturan tersimpan.</p>
-            )}
-            {autoReloadError && <p className="text-xs text-red-600 dark:text-red-400">{autoReloadError}</p>}
-          </form>
-          <CalloutBlock icon={Info} tone="info">
-            Ini baru menyimpan <b>pengaturan</b> -- eksekusi otomatisnya (charge kartu/GoPay
-            tersimpan) belum tersedia karena belum ada penyimpanan metode pembayaran berulang.
-            Sampai fitur itu aktif, top up tetap perlu dilakukan manual (di atas) walau auto-reload
-            diaktifkan.
+      {tab === "topup" &&
+        (locked ? (
+          <CalloutBlock tone="warning">
+            Top up dan auto-reload hanya tersedia untuk langganan aktif. Selesaikan pembayaran langganan terlebih
+            dahulu di tab Paket.
           </CalloutBlock>
+        ) : (
+          <div className="flex flex-wrap items-start gap-4">
+            <TopupCard />
+            <AutoReloadSettingsCard />
+          </div>
+        ))}
+
+      {tab === "methods" && (
+        <div className="space-y-4">
+          <PaymentMethodsSection />
+          <BillingProfileForm />
         </div>
       )}
 
       {tab === "history" && (
-        <DataTable
-          label="Riwayat transaksi saldo"
-          rows={transactions.data}
-          columns={transactionColumns}
-          rowKey={(t) => t.id}
-          query={transactions}
-          pageSize={50}
-          emptyTitle="Belum ada transaksi."
-        />
+        <div className="space-y-3">
+          {!locked && (
+            <PillTabs
+              tabs={[
+                { key: "transactions", label: "Transaksi saldo" },
+                { key: "receipts", label: "Kwitansi" },
+              ]}
+              value={historyView}
+              onChange={(k) => setHistoryView(k as typeof historyView)}
+            />
+          )}
+          {locked || historyView === "receipts" ? (
+            <>
+              {locked && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Riwayat transaksi saldo tersedia kembali setelah langganan aktif; kwitansi tetap bisa diunduh.
+                </p>
+              )}
+              <ReceiptsTable />
+            </>
+          ) : (
+            <TransactionsTable />
+          )}
+        </div>
       )}
     </div>
   );

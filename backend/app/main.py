@@ -46,7 +46,9 @@ def create_app() -> FastAPI:
         # request cross-origin -- ketahuan saat X-Total-Count (Batch 1c,
         # pagination /candidates & /job-orders) selalu null di frontend
         # meski response header-nya benar (dicek via curl/proxy same-origin).
-        expose_headers=["X-Total-Count", "X-Has-More"],
+        # X-Error-Code: kode stabil billing (subscription_past_due,
+        # subscription_required, metered_blocked) untuk banner gagal bayar.
+        expose_headers=["X-Total-Count", "X-Has-More", "X-Error-Code", "Content-Disposition"],
     )
 
     from app.modules.accounting.router import router as accounting_router
@@ -72,8 +74,9 @@ def create_app() -> FastAPI:
     from app.modules.attendance.router import router as attendance_router
     from app.modules.audit.router import router as audit_router
     from app.modules.auth.router import router as auth_router
+    from app.modules.billing.router import account_router as billing_account_router
     from app.modules.billing.router import router as billing_router
-    from app.modules.billing.router import subscribe_router as billing_subscribe_router
+    from app.modules.billing.router import sandbox_router as billing_sandbox_router
     from app.modules.billing.router import webhook_router as billing_webhook_router
     from app.modules.blacklist.router import router as blacklist_router
     from app.modules.bpjs.router import router as bpjs_router
@@ -259,7 +262,10 @@ def create_app() -> FastAPI:
     app.include_router(google_integration_public_router, prefix="/api/v1")
     app.include_router(billing_webhook_router, prefix="/api/v1")  # webhook: tanpa guard lisensi
     app.include_router(billing_router, prefix="/api/v1")
-    app.include_router(billing_subscribe_router, prefix="/api/v1")
+    # Akun billing (status/paket/subscribe/metode bayar/kwitansi): tanpa syarat
+    # langganan aktif -- tenant menunggak tetap bisa membayar.
+    app.include_router(billing_account_router, prefix="/api/v1")
+    app.include_router(billing_sandbox_router, prefix="/api/v1")  # 404 di luar sandbox
     app.include_router(
         payroll_router,
         prefix="/api/v1",

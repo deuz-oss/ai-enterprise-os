@@ -35,6 +35,12 @@ const AIInterview = lazyPage(() => import("./pages/AIInterview"));
 const AIInterviewSession = lazyPage(() => import("./pages/AIInterviewSession"));
 const Audit = lazyPage(() => import("./pages/Audit"));
 const Billing = lazyPage(() => import("./pages/Billing"));
+const SandboxInvoicePay = lazyPage(() =>
+  import("./pages/SandboxBilling").then((m) => ({ default: m.SandboxInvoicePay }))
+);
+const SandboxPaymentMethodAuthorize = lazyPage(() =>
+  import("./pages/SandboxBilling").then((m) => ({ default: m.SandboxPaymentMethodAuthorize }))
+);
 const Blacklist = lazyPage(() => import("./pages/Blacklist"));
 const Clients = lazyPage(() => import("./pages/Clients"));
 const ClientDetail = lazyPage(() => import("./pages/ClientDetail"));
@@ -125,6 +131,12 @@ export default function App() {
             <Route path="/accounting" element={<Accounting />} />
             <Route path="/rates" element={<Rates />} />
             <Route path="/billing" element={<Billing />} />
+            {/* Simulasi gateway (PAYMENT_PROVIDER=sandbox); endpoint-nya 404 di luar sandbox. */}
+            <Route path="/sandbox/billing/:invoiceId/pay" element={<SandboxInvoicePay />} />
+            <Route
+              path="/sandbox/billing/payment-methods/:referenceId/authorize"
+              element={<SandboxPaymentMethodAuthorize />}
+            />
             <Route path="/audit" element={<Audit />} />
             <Route path="/users" element={<Users />} />
             <Route path="/portal-saya" element={<MyPortal />} />

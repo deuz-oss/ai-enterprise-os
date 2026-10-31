@@ -144,6 +144,12 @@ def generate_invoice(
     if duplicate is not None:
         raise HTTPException(status_code=409, detail="Invoice untuk periode ini sudah ada")
 
+    # Gerbang metered (Opsi G, aturan gagal bayar): cek saldo SEBELUM menulis
+    # apa pun -- di titik ini auto-reload reaktif masih aman dijalankan.
+    from app.modules.billing.service import assert_metered_allowed
+
+    assert_metered_allowed(db, 5_000)
+
     billing_run = _resolve_billing_run(
         db, payload.client_id, payload.year, payload.month, run_id or payload.run_id
     )
@@ -915,6 +921,10 @@ def send_tax_invoice(db: Session, invoice_id: str) -> Invoice:
     # Validasi minimal
     if not inv.no_seri_faktur or not inv.lawan_npwp:
         raise HTTPException(status_code=422, detail="Lawan NPWP dan No Seri Faktur wajib diisi")
+    # Gerbang metered: cek saldo SEBELUM submit ke DJP (bukan sesudahnya).
+    from app.modules.billing.service import assert_metered_allowed
+
+    assert_metered_allowed(db, 8_000)
     if not settings.efaktur_api_url or settings.efaktur_provider == "":
         # Simulasi
         inv.tax_invoice_status = "approved"

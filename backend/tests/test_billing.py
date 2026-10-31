@@ -447,10 +447,10 @@ def test_balance_summary_three_states(client):
     assert empty.json()["state"] == "empty"
 
 
-def test_auto_reload_settings_persist_but_do_not_execute(client):
-    """Preferensi auto-reload cuma disimpan (§0 -- tidak ada data/perilaku
-    fiktif): endpoint ini TIDAK memicu charge apa pun, cuma baca/tulis 3
-    kolom `TenantCreditAccount.auto_reload_*`."""
+def test_auto_reload_settings_require_payment_method_and_fixed_amount(client):
+    """Fase 28 lanjutan: mengaktifkan auto-reload butuh metode bayar default
+    aktif (422 tanpa itu); nominal TETAP Rp100.000 (input `amount` diabaikan,
+    keputusan K3). Alur charge sungguhan dites di test_billing_auto_reload.py."""
     admin = _auth_header(client)
     tenant_id = _default_tenant_id(client)
     _set_commercial(client, tenant_id)
@@ -458,18 +458,27 @@ def test_auto_reload_settings_persist_but_do_not_execute(client):
 
     default = client.get("/api/v1/billing/auto-reload-settings", headers=admin)
     assert default.status_code == 200, default.text
-    assert default.json() == {"enabled": False, "threshold": None, "amount": 100_000}
+    body = default.json()
+    assert body["enabled"] is False
+    assert body["threshold"] is None
+    assert body["amount"] == 100_000
+    assert body["effective"] is False
 
-    updated = client.put(
+    rejected = client.put(
         "/api/v1/billing/auto-reload-settings",
         headers=admin,
         json={"enabled": True, "threshold": 200_000, "amount": 500_000},
     )
-    assert updated.status_code == 200, updated.text
-    assert updated.json() == {"enabled": True, "threshold": 200_000, "amount": 500_000}
+    assert rejected.status_code == 422, rejected.text
 
-    refetched = client.get("/api/v1/billing/auto-reload-settings", headers=admin)
-    assert refetched.json() == {"enabled": True, "threshold": 200_000, "amount": 500_000}
+    disabled = client.put(
+        "/api/v1/billing/auto-reload-settings",
+        headers=admin,
+        json={"enabled": False, "threshold": 200_000, "amount": 500_000},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["threshold"] == 200_000
+    assert disabled.json()["amount"] == 100_000
 
 
 def test_platform_billing_summary_and_subscription_override(client):

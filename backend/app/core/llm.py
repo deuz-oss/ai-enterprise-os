@@ -33,6 +33,15 @@ def ai_configured() -> bool:
     return get_settings().ai_configured
 
 
+def _assert_metered_ai_allowed(feature: str | None) -> None:
+    """Gerbang metered Opsi G sebelum HTTP ke provider LLM: debit `ai_usage`
+    terjadi pasca-fakta, jadi satu-satunya titik memblokir AI saat saldo habis
+    (auto-reload gagal) ada di sini. 402 + header X-Error-Code."""
+    from app.modules.billing.service import assert_ai_allowed
+
+    assert_ai_allowed(feature)
+
+
 def chat_completion(
     system: str,
     user: str,
@@ -114,6 +123,7 @@ def _post_chat(
     payload: dict, *, json_mode: bool, call_type: str, feature: str | None
 ) -> dict | str:
     settings = get_settings()
+    _assert_metered_ai_allowed(feature)
     headers = {"Content-Type": "application/json"}
     if settings.ai_api_key:
         headers["Authorization"] = f"Bearer {settings.ai_api_key}"
@@ -181,6 +191,7 @@ def embed_texts(texts: list[str], *, feature: str | None = None) -> list[list[fl
             status_code=503,
             detail="Fitur AI belum aktif. Set AI_BASE_URL (dan AI_API_KEY) di .env.",
         )
+    _assert_metered_ai_allowed(feature)
     headers = {"Content-Type": "application/json"}
     if settings.ai_api_key:
         headers["Authorization"] = f"Bearer {settings.ai_api_key}"

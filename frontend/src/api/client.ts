@@ -16,10 +16,28 @@ export function clearToken() {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Kode error stabil dari header `X-Error-Code` (mis. `subscription_past_due`,
+   * `metered_blocked`); null bila backend tidak mengirimnya. */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+/** Langganan menunggak (403 `subscription_past_due`): semua modul terkunci,
+ * jadi arahkan ke halaman Pembayaran -- kecuali sudah di sana (Layout tetap
+ * memanggil endpoint ber-guard langganan di /billing; tanpa pengecualian ini
+ * terjadi loop redirect). 402 `metered_blocked` sengaja TIDAK ditangani
+ * global: `detail`-nya sudah pesan siap tampil dan menjadi `message` ApiError
+ * yang ditampilkan pemanggil. */
+function handleSubscriptionPastDue() {
+  const { pathname } = window.location;
+  if (pathname.startsWith("/billing") || pathname.startsWith("/sandbox/billing") || pathname.startsWith("/login")) {
+    return;
+  }
+  window.location.assign("/billing");
 }
 
 /** Path internal yang aman dipakai sebagai tujuan setelah login (`?next=`):
@@ -62,7 +80,9 @@ async function rawRequest(path: string, options: RequestInit = {}): Promise<{ re
       data && typeof data === "object" && "detail" in data
         ? String((data as Record<string, unknown>).detail)
         : resp.statusText;
-    throw new ApiError(resp.status, detail);
+    const code = resp.headers.get("x-error-code");
+    if (resp.status === 403 && code === "subscription_past_due" && token) handleSubscriptionPastDue();
+    throw new ApiError(resp.status, detail, code);
   }
   return { resp, data };
 }
@@ -130,20 +150,26 @@ export async function previewFile(path: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-/** Unduh file (mis. CSV ekspor BPJS) dengan header auth lalu simpan via browser. */
-export async function downloadFile(path: string): Promise<void> {
+/** Unduh file (mis. CSV ekspor BPJS) dengan header auth lalu simpan via browser.
+ * `fallbackName` dipakai bila header Content-Disposition tidak terbaca. */
+export async function downloadFile(path: string, fallbackName = "unduhan.csv"): Promise<void> {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const resp = await fetch(`${API_URL}${path}`, { headers });
-  if (!resp.ok) throw new ApiError(resp.status, `Gagal mengunduh (${resp.status})`);
+  if (!resp.ok) {
+    // Tampilkan `detail` backend bila ada (mis. 409 kwitansi: identitas penjual belum diatur).
+    const body = (await resp.json().catch(() => null)) as { detail?: unknown } | null;
+    const detail = body && typeof body.detail === "string" ? body.detail : `Gagal mengunduh (${resp.status})`;
+    throw new ApiError(resp.status, detail, resp.headers.get("x-error-code"));
+  }
   const disposition = resp.headers.get("content-disposition") ?? "";
   const match = /filename="?([^";]+)"?/.exec(disposition);
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = match?.[1] ?? "unduhan.csv";
+  a.download = match?.[1] ?? fallbackName;
   document.body.appendChild(a);
   a.click();
   a.remove();

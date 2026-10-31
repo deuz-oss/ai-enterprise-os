@@ -1431,6 +1431,11 @@ def match_candidates(
     revisit titik ini.
     """
     jo = _get_job_order(db, job_order_id)
+    if billable:
+        # Gerbang metered (Opsi G): cek saldo sebelum embedding/LLM berjalan.
+        from app.modules.billing.service import assert_metered_allowed
+
+        assert_metered_allowed(db, 2_000)
     candidates = list(
         db.execute(
             select(Candidate).where(Candidate.status != CandidateStatus.archived).limit(500)

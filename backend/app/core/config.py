@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
@@ -141,6 +142,34 @@ class Settings(BaseSettings):
     # statis (BUKAN HMAC-of-body seperti esign_webhook_secret) -- lihat
     # `billing/router.py::_verify_xendit_token`.
     xendit_webhook_token: str | None = None
+    # Public key Xendit untuk tokenisasi kartu DI BROWSER (Xendit.js) --
+    # nomor kartu/CVV dikirim browser langsung ke Xendit, tidak pernah lewat
+    # backend Aeos. Aman diekspos ke frontend (bukan secret key).
+    xendit_public_key: str | None = None
+
+    # Billing Opsi G lanjutan (docs/03-architecture/billing-opsi-g-completion.md).
+    # Diskon tahunan: None (default) = paket tahunan TIDAK ditawarkan sama
+    # sekali (gagal tertutup sampai besaran diskon diputuskan, K1). 0 =
+    # tahunan tersedia tanpa diskon (pilihan sadar). Valid 0 <= x < 100.
+    billing_annual_discount_percent: Decimal | None = None
+    # Flag peluncuran penegakan renewal (K18). false = renewal hanya
+    # menerbitkan invoice + notifikasi, akses tidak pernah dikunci.
+    billing_renewal_enforcement: bool = False
+    billing_renewal_grace_days: int = 0
+    # Toleransi cron renewal telat sebelum guard mengunci akses.
+    billing_renewal_processing_days: int = 1
+    billing_past_due_cancel_days: int = 30
+    # None = tenant wajib mengisi ambang saat mengaktifkan auto-reload (K2).
+    billing_auto_reload_default_threshold: Decimal | None = None
+    # Identitas penjual (Aeos) di kwitansi resmi.
+    aeos_seller_name: str | None = None
+    aeos_seller_npwp: str | None = None
+    aeos_seller_address: str | None = None
+    aeos_seller_email: str | None = None
+    aeos_seller_is_pkp: bool = False
+    # Tarif PPN efektif (mis. 0.11), hanya dipakai bila AEOS_SELLER_IS_PKP=true.
+    # Harga tier diperlakukan SUDAH termasuk PPN. Tidak di-hardcode (K5).
+    billing_ppn_rate: Decimal | None = None
 
     # Validasi rekening bank karyawan (cek status/nama tersamar ke bank
     # sebelum payroll). "" (nonaktif) | "sandbox" | "api_co_id" (Rp50rb/bulan
@@ -182,6 +211,14 @@ class Settings(BaseSettings):
         "google_oauth_client_secret",
         "google_oauth_redirect_uri",
         "bank_validation_api_key",
+        "xendit_public_key",
+        "billing_annual_discount_percent",
+        "billing_auto_reload_default_threshold",
+        "aeos_seller_name",
+        "aeos_seller_npwp",
+        "aeos_seller_address",
+        "aeos_seller_email",
+        "billing_ppn_rate",
         mode="before",
     )
     @classmethod
@@ -189,6 +226,20 @@ class Settings(BaseSettings):
         """Env var kosong (mis. DATABASE_URL=) diperlakukan sebagai tidak disetel."""
         if isinstance(v, str) and v.strip() == "":
             return None
+        return v
+
+    @field_validator("billing_annual_discount_percent")
+    @classmethod
+    def _valid_annual_discount(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and not (Decimal(0) <= v < Decimal(100)):
+            raise ValueError("BILLING_ANNUAL_DISCOUNT_PERCENT harus 0 <= x < 100")
+        return v
+
+    @field_validator("billing_ppn_rate")
+    @classmethod
+    def _valid_ppn_rate(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and not (Decimal(0) <= v < Decimal(1)):
+            raise ValueError("BILLING_PPN_RATE adalah pecahan (mis. 0.11), 0 <= x < 1")
         return v
 
     @property
