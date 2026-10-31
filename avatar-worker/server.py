@@ -10,16 +10,26 @@ rubrik, penilaian) tetap milik agen & backend -- worker hanya "wajah".
 
 Endpoint ditandatangani HMAC LIVEKIT_API_SECRET atas nama room (pola sama
 dengan X-Agent-Signature agen -> backend). Port tidak dibuka ke host.
+
+Foto wajah: per tenant. Agen mengambil foto tenant dari backend dan
+mengirimnya sebagai `reference_image_b64` di body POST; worker menulisnya ke
+file sementara per room (dihapus saat sesi berakhir / start gagal). Tanpa
+field itu (tenant belum punya foto, atau base64 rusak) dipakai foto bawaan
+env `AVATAR_REFERENCE_IMAGE`. Tanda tangan tetap atas room saja: worker
+hanya terjangkau dari jaringan internal Docker (agen), bukan dari host.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import hashlib
 import hmac
 import logging
 import os
+import tempfile
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +56,11 @@ logger = logging.getLogger("avatar-worker")
 # Harus sama dengan AVATAR_IDENTITY di agent/avatar_fallback.py.
 AVATAR_IDENTITY = "ai-interview-avatar"
 SIGNATURE_HEADER = "X-Avatar-Signature"
+# Foto tenant dinormalisasi backend (JPEG <= 1024 px, biasanya < 1 MB);
+# batas longgar untuk foto 5 MB yang belum ternormalisasi. Body POST memuat
+# base64 (+33%), jadi batas body aiohttp (default 1 MB) dinaikkan.
+MAX_REFERENCE_IMAGE_BYTES = 6 * 1024 * 1024
+CLIENT_MAX_SIZE = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -76,6 +91,47 @@ class WorkerSettings:
 
 def sign(secret: str, room: str) -> str:
     return hmac.new(secret.encode(), room.encode(), hashlib.sha256).hexdigest()
+
+
+def decode_reference_image(raw: object) -> bytes | None:
+    """`reference_image_b64` dari agen -> bytes, atau None (pakai foto env)
+    bila tidak ada, bukan base64 sah, kosong, atau terlalu besar."""
+    if raw is None or raw == "":
+        return None
+    if not isinstance(raw, str):
+        logger.warning("reference_image_b64 bukan string -- foto bawaan env dipakai")
+        return None
+    if len(raw) > (MAX_REFERENCE_IMAGE_BYTES // 3 + 1) * 4:
+        logger.warning("reference_image_b64 terlalu besar -- foto bawaan env dipakai")
+        return None
+    try:
+        data = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        logger.warning("reference_image_b64 rusak -- foto bawaan env dipakai")
+        return None
+    return data or None
+
+
+def _write_temp_image(data: bytes) -> Path | None:
+    """File sementara per sesi (renderer menerima path). None = gagal tulis
+    (disk penuh, dsb.) -> foto bawaan env."""
+    try:
+        fd, name = tempfile.mkstemp(prefix="avatar-ref-", suffix=".jpg")
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+    except OSError:
+        logger.warning("Gagal menulis foto avatar sementara -- foto bawaan env", exc_info=True)
+        return None
+    return Path(name)
+
+
+def _discard_temp_image(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("Gagal menghapus foto avatar sementara %s", path, exc_info=True)
 
 
 def avatar_token(settings: WorkerSettings, room: str, agent_identity: str) -> str:
@@ -125,9 +181,11 @@ class AvatarService:
             else:
                 self._start_locks[room] = (lock, users - 1)
 
-    async def start_session(self, room: str, agent_identity: str) -> tuple[int, dict]:
+    async def start_session(
+        self, room: str, agent_identity: str, reference_image: bytes | None = None
+    ) -> tuple[int, dict]:
         async with self._room_lock(room):
-            return await self._start_session_locked(room, agent_identity)
+            return await self._start_session_locked(room, agent_identity, reference_image)
 
     async def release_session(self, room: str) -> None:
         """DELETE dari agen. Lewat lock yang sama dengan start: agen yang
@@ -138,7 +196,9 @@ class AvatarService:
         async with self._room_lock(room):
             await self.stop_session(room)
 
-    async def _start_session_locked(self, room: str, agent_identity: str) -> tuple[int, dict]:
+    async def _start_session_locked(
+        self, room: str, agent_identity: str, reference_image: bytes | None
+    ) -> tuple[int, dict]:
         if room in self.tasks:
             # Job agen diulang untuk room yang sama: avatar lama diganti.
             await self.stop_session(room)
@@ -152,20 +212,29 @@ class AvatarService:
             return 503, {
                 "detail": f"kapasitas avatar penuh ({self.slots.active}/{self.slots.max_sessions})"
             }
+        # File sementara baru ditulis SETELAH slot didapat: permintaan yang
+        # ditolak karena penuh tidak meninggalkan apa pun di disk.
+        temp_image = _write_temp_image(reference_image) if reference_image else None
+        image = temp_image or self.settings.reference_image
         renderer = self._renderer_factory()
         try:
-            await asyncio.wait_for(
-                renderer.start(self.settings.reference_image), self.settings.start_timeout
-            )
+            await asyncio.wait_for(renderer.start(image), self.settings.start_timeout)
         except (RendererUnavailable, TimeoutError, OSError) as exc:
             self.slots.release(room)
             await renderer.aclose()
+            _discard_temp_image(temp_image)
             logger.warning("Renderer tidak siap untuk room %s: %r", room, exc)
             return 503, {"detail": f"renderer tidak siap: {exc}"}
+        except BaseException:
+            _discard_temp_image(temp_image)
+            raise
         task = asyncio.create_task(self._run(room, agent_identity, renderer))
         self.tasks[room] = task
 
         def _done(t: asyncio.Task[None]) -> None:
+            # Callback, bukan `finally` di _run: tetap jalan walau task
+            # dibatalkan sebelum sempat mulai (coroutine tidak pernah masuk).
+            _discard_temp_image(temp_image)
             if self.tasks.get(room) is t:
                 del self.tasks[room]
 
@@ -246,11 +315,14 @@ def create_app(service: AvatarService) -> web.Application:
         try:
             body = await request.json()
             room, agent_identity = str(body["room"]), str(body["agent_identity"])
-        except (ValueError, KeyError, TypeError):
+            raw_image = body.get("reference_image_b64")
+        except (ValueError, KeyError, TypeError, AttributeError):
             return web.json_response({"detail": "body tidak valid"}, status=400)
         if not _verified(request, room, service.settings.api_secret):
             return web.json_response({"detail": "tanda tangan salah"}, status=401)
-        status, payload = await service.start_session(room, agent_identity)
+        status, payload = await service.start_session(
+            room, agent_identity, decode_reference_image(raw_image)
+        )
         return web.json_response(payload, status=status)
 
     async def delete_session(request: web.Request) -> web.Response:
@@ -269,7 +341,7 @@ def create_app(service: AvatarService) -> web.Application:
             }
         )
 
-    app = web.Application()
+    app = web.Application(client_max_size=CLIENT_MAX_SIZE)
     app.add_routes(
         [
             web.post("/sessions", post_session),

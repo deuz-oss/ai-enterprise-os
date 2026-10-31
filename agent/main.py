@@ -41,7 +41,7 @@ from urllib.parse import urlparse
 
 import httpx
 from avatar import setup_avatar
-from avatar_fallback import AvatarSettings, wait_ready
+from avatar_fallback import AvatarSettings, fetch_reference_image, wait_ready
 from interview_flow import (
     ROLE_DISOWNED,
     InterviewFlow,
@@ -84,8 +84,8 @@ DISOWN_RPC_METHOD = "aeos.disown_last_answer"
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "http://backend:8000/api/v1").rstrip("/")
 LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "")
 # Kunci tanda tangan request agent -> backend (endpoint khusus agent:
-# voice/context, voice/complete, voice/recording). Sama dengan yang dipakai
-# backend (`ai_interview.service.agent_signature`); kandidat tidak punya.
+# voice/context, voice/complete, voice/recording, voice/avatar-image). Sama
+# dengan yang dipakai backend (`ai_interview.service.agent_signature`); kandidat tidak punya.
 LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "")
 STT_BASE_URL = os.environ["STT_BASE_URL"]
 # Bahasa dipaksa (bukan deteksi otomatis): Whisper lebih akurat untuk bahasa
@@ -277,6 +277,19 @@ async def _fetch_context(token: str) -> dict:
         )
         resp.raise_for_status()
         return resp.json()
+
+
+async def _fetch_avatar_image(token: str) -> bytes | None:
+    """Foto avatar milik tenant sesi ini (diatur di Pengaturan AI Interview).
+    None = worker memakai foto bawaan env -- gagal/timeout tidak menggagalkan
+    interview (lihat avatar_fallback.fetch_reference_image)."""
+    async with httpx.AsyncClient() as http:
+        return await fetch_reference_image(
+            http,
+            f"{BACKEND_API_URL}/ai-interview/session/{token}/voice/avatar-image",
+            headers=_agent_headers(token),
+            timeout=5.0,
+        )
 
 
 async def _submit_transcript(
@@ -471,7 +484,13 @@ async def entrypoint(ctx: JobContext) -> None:
     if AVATAR.enabled:
         # Sebelum session.start: output audio harus sudah final saat RoomIO
         # & perekam membungkusnya. None = voice-only (sudah dicatat di log).
-        avatar_link = await setup_avatar(ctx, session, AVATAR, LIVEKIT_API_SECRET)
+        avatar_link = await setup_avatar(
+            ctx,
+            session,
+            AVATAR,
+            LIVEKIT_API_SECRET,
+            reference_image=await _fetch_avatar_image(token),
+        )
 
     started_at = time.time()
     await session.start(

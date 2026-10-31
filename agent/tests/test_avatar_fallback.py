@@ -3,6 +3,8 @@ voice-only, dan titik tukar sink audio LiveKit untuk fallback di tengah sesi.
 Jalan tanpa server LiveKit: `python -m pytest agent/tests`."""
 
 import asyncio
+import base64
+import json
 import sys
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from avatar_fallback import (  # noqa: E402
     AVATAR_IDENTITY,
     SIGNATURE_HEADER,
     AvatarSettings,
+    fetch_reference_image,
     parse_provider,
     release_avatar,
     request_avatar,
@@ -66,6 +69,82 @@ def test_request_signed_and_accepted():
     assert decision.enabled and decision.identity == AVATAR_IDENTITY
     assert seen["sig"] == sign("rahasia", "ai-interview-1")
     assert b'"agent_identity":"agent-1"' in seen["body"].replace(b" ", b"")
+
+
+def test_request_without_reference_image_omits_field():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(201, json={"identity": AVATAR_IDENTITY})
+
+    asyncio.run(_request(handler))
+    assert "reference_image_b64" not in seen["body"]
+
+
+def test_request_sends_reference_image_b64():
+    seen = {}
+    photo = b"\xff\xd8\xff\xe0 foto-tenant \x00\x01"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        seen["sig"] = request.headers[SIGNATURE_HEADER]
+        return httpx.Response(201, json={"identity": AVATAR_IDENTITY})
+
+    async def run():
+        async with _client(handler) as http:
+            return await request_avatar(
+                http,
+                SETTINGS,
+                room="ai-interview-1",
+                agent_identity="agent-1",
+                secret="rahasia",
+                reference_image=photo,
+            )
+
+    assert asyncio.run(run()).enabled
+    assert base64.b64decode(seen["body"]["reference_image_b64"]) == photo
+    # Tanda tangan tetap atas nama room saja.
+    assert seen["sig"] == sign("rahasia", "ai-interview-1")
+
+
+async def _fetch(handler):
+    async with _client(handler) as http:
+        return await fetch_reference_image(
+            http, "http://backend/x/voice/avatar-image", headers={"X-Agent-Signature": "sig"}
+        )
+
+
+def test_fetch_reference_image_ok_sends_signature():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["sig"] = request.headers.get("X-Agent-Signature")
+        return httpx.Response(200, content=b"jpeg-bytes")
+
+    assert asyncio.run(_fetch(handler)) == b"jpeg-bytes"
+    assert seen["sig"] == "sig"
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        lambda r: httpx.Response(404, json={"detail": "belum ada"}),
+        lambda r: httpx.Response(500, text="boom"),
+        lambda r: httpx.Response(401, json={"detail": "salah"}),
+        lambda r: httpx.Response(200, content=b""),
+    ],
+)
+def test_fetch_reference_image_failure_is_none(handler):
+    assert asyncio.run(_fetch(handler)) is None
+
+
+@pytest.mark.parametrize("exc", [httpx.ConnectError, httpx.ReadTimeout])
+def test_fetch_reference_image_network_error_is_none(exc):
+    def handler(request):
+        raise exc("gagal", request=request)
+
+    assert asyncio.run(_fetch(handler)) is None
 
 
 @pytest.mark.parametrize(

@@ -23,6 +23,38 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - **Fixed (kontras)**: teks sekunder di panel ekspansi tenant (latar `--hover`) kini `--th-color`; `--text-muted` gagal AA di permukaan itu. Warna redup baris riwayat forecast kini benar-benar tampil (dulu dipasang di `<tr>` dan tertimpa warna `.td`).
 - Pengecualian disengaja dari `DataTable` kini: grid Saltab, forecast arus kas, panel pemakaian & transaksi tenant, dialog tinjauan payroll, rekonsiliasi invoice, cek harga (`dl`).
 
+### Added — Foto avatar pewawancara AI per tenant (Fase 67)
+
+- Sebelumnya wajah avatar hanya dari env `AVATAR_REFERENCE_IMAGE`, satu foto
+  untuk semua tenant. Sekarang admin tiap tenant bisa mengunggah fotonya
+  sendiri di **AI Interview → Pengaturan**, di kartu "Foto avatar
+  pewawancara" (pratinjau, ganti, hapus). Ada checkbox wajib bahwa pengunggah
+  berhak memakai foto tersebut.
+- Backend:
+  - Kolom `avatar_image_key` dan `avatar_image_updated_at` di
+    `ai_interview_settings` (migrasi `57b5ffb1923e`).
+  - Endpoint `PUT·DELETE·GET /ai-interview/settings/avatar-image`, dengan
+    role sama seperti pengaturan retensi.
+  - Validasi: JPEG/PNG/WebP sesuai isi file, maks 5 MB, min 256×256 px,
+    maks 40 MP (dicek dari header sebelum dekode).
+  - Normalisasi ke JPEG ≤1024 px dengan orientasi diperbaiki dan EXIF/GPS
+    dibuang. Objek lama dihapus saat foto diganti.
+  - Audit `ai_interview.avatar_image_changed/removed`.
+  - Pillow kini dependensi langsung (versi tetap 12.3.0).
+- Agen mengambil foto tenant lewat
+  `GET /ai-interview/session/{token}/voice/avatar-image` (X-Agent-Signature +
+  consent sesi, timeout 5 dtk), lalu mengirimnya ke avatar-worker sebagai
+  `reference_image_b64`.
+- Worker menulis foto itu ke file sementara per room, lalu menghapusnya saat
+  sesi selesai atau start gagal. Batas body aiohttp dinaikkan ke 8 MB.
+- Fallback berjenjang: foto tenant → env `AVATAR_REFERENCE_IMAGE` → potret
+  bawaan. Gagal mengambil atau men-decode foto tidak pernah menggagalkan
+  interview.
+- Cek "wajah tunggal" **tidak** dibuat: belum ada util di repo dan OpenCV
+  sengaja tidak ditambahkan. UI hanya memberi panduan foto.
+- **Belum teruji:** E2E dengan LiveKit dan renderer sungguhan, storage
+  S3/MinIO (tes memakai storage lokal), dan kartu di browser.
+
 ### Added — PoC avatar video pewawancara AI self-hosted (Fase 67)
 
 - `AVATAR_PROVIDER=none|self` (default `none` = voice-only, tidak berubah).

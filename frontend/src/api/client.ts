@@ -112,8 +112,9 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
-  upload: <T>(path: string, formData: FormData) =>
-    request<T>(path, { method: "POST", body: formData }),
+  // Content-Type sengaja tidak diset untuk FormData (browser menambah boundary).
+  upload: <T>(path: string, formData: FormData, method: "POST" | "PUT" = "POST") =>
+    request<T>(path, { method, body: formData }),
 };
 
 /** Ambil file dengan header auth, kembalikan object URL untuk dirender inline

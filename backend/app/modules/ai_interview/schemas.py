@@ -421,6 +421,10 @@ class AIInterviewSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     retention_days: int
+    # Foto avatar pewawancara AI milik tenant. Bytes-nya lewat
+    # GET /settings/avatar-image (bukan URL storage) -- object key tidak dibuka.
+    has_avatar_image: bool = False
+    avatar_image_updated_at: datetime | None = None
 
 
 class AIInterviewSettingsUpdate(BaseModel):

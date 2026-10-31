@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import logging
 import secrets
@@ -68,6 +69,7 @@ from app.modules.recruitment.models import (
 )
 from fastapi import HTTPException
 from livekit import api as lk_api
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -271,6 +273,180 @@ def update_interview_settings(
         detail={"old": old, "new": row.retention_days, "by": getattr(user, "email", "?")},
     )
     return row
+
+
+# ---------- Foto avatar pewawancara AI per tenant ----------
+
+AVATAR_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_IMAGE_MIN_SIDE = 256
+# Sisi terpanjang hasil normalisasi. Renderer avatar memotong ke 512x512, jadi
+# 1024 masih menyisakan ruang tanpa menyimpan foto kamera belasan MP.
+AVATAR_IMAGE_MAX_SIDE = 1024
+# Batas piksel dicek dari HEADER sebelum gambar didekode (anti decompression
+# bomb). Sengaja tidak mengubah `Image.MAX_IMAGE_PIXELS` global -- itu ikut
+# berlaku untuk pemakai Pillow lain di proses yang sama (reportlab).
+AVATAR_IMAGE_MAX_PIXELS = 40_000_000
+_AVATAR_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp"}
+_AVATAR_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
+
+
+def _avatar_image_error(detail: str) -> HTTPException:
+    return HTTPException(status_code=422, detail=detail)
+
+
+def _decode_avatar_image(data: bytes) -> tuple[str | None, Image.Image] | str:
+    """Dekode & verifikasi. Mengembalikan pesan galat (str) bila ditolak --
+    HTTPException sengaja dibuat di luar blok try supaya tidak tertelan."""
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            fmt = probe.format
+            width, height = probe.size
+            if width * height > AVATAR_IMAGE_MAX_PIXELS:
+                return "Resolusi foto terlalu besar. Perkecil foto lalu unggah ulang."
+            probe.verify()
+        # verify() membuat objek tidak bisa dipakai lagi -- buka ulang untuk
+        # dekode penuh (load) yang menangkap data piksel terpotong.
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError, ValueError):
+        return "File bukan gambar yang valid atau rusak. Coba unggah foto lain."
+    return fmt, img
+
+
+def normalize_avatar_image(data: bytes, content_type: str) -> tuple[bytes, tuple[int, int]]:
+    """Validasi foto avatar lalu normalisasi ke JPEG RGB tanpa EXIF (lokasi
+    GPS, model kamera, dll. tidak ikut tersimpan), orientasi sudah diputar,
+    sisi terpanjang <= AVATAR_IMAGE_MAX_SIDE. Tidak ada deteksi wajah
+    (keputusan produk: belum ada util, tidak menambah OpenCV)."""
+    mime = (content_type or "").split(";")[0].strip().lower()
+    if mime not in _AVATAR_IMAGE_MIME:
+        raise _avatar_image_error("Format foto harus JPEG, PNG, atau WebP.")
+    if not data:
+        raise _avatar_image_error("File foto kosong.")
+    if len(data) > AVATAR_IMAGE_MAX_BYTES:
+        raise _avatar_image_error("Ukuran foto maksimal 5 MB.")
+    decoded = _decode_avatar_image(data)
+    if isinstance(decoded, str):
+        raise _avatar_image_error(decoded)
+    fmt, img = decoded
+    try:
+        if fmt not in _AVATAR_IMAGE_FORMATS:
+            # MIME dari browser hanya klaim; isi file yang menentukan.
+            raise _avatar_image_error("Format foto harus JPEG, PNG, atau WebP.")
+        oriented = ImageOps.exif_transpose(img) or img
+        if min(oriented.size) < AVATAR_IMAGE_MIN_SIDE:
+            raise _avatar_image_error(
+                f"Foto terlalu kecil. Minimal {AVATAR_IMAGE_MIN_SIDE}x"
+                f"{AVATAR_IMAGE_MIN_SIDE} piksel."
+            )
+        if oriented.mode in ("RGBA", "LA") or (
+            oriented.mode == "P" and "transparency" in oriented.info
+        ):
+            # Area transparan jadi putih, bukan hitam (default convert RGB).
+            rgba = oriented.convert("RGBA")
+            rgb = Image.new("RGB", rgba.size, (255, 255, 255))
+            rgb.paste(rgba, mask=rgba.getchannel("A"))
+        else:
+            rgb = oriented.convert("RGB")
+        rgb.thumbnail((AVATAR_IMAGE_MAX_SIDE, AVATAR_IMAGE_MAX_SIDE), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        # Tanpa argumen exif/icc_profile: metadata asli tidak ikut ditulis.
+        rgb.save(out, format="JPEG", quality=90, optimize=True)
+        return out.getvalue(), rgb.size
+    finally:
+        img.close()
+
+
+def _delete_avatar_object(key: str) -> None:
+    """Objek lama gagal dihapus TIDAK menggagalkan request -- pengaturan
+    sudah menunjuk ke objek baru; sisa objek hanya dicatat untuk dibersihkan."""
+    try:
+        storage.delete_object(key)
+    except Exception:  # noqa: BLE001
+        logger.warning("Gagal menghapus foto avatar lama %s", key, exc_info=True)
+
+
+def set_avatar_image(db: Session, user, *, data: bytes, content_type: str) -> AIInterviewSettings:
+    """Simpan foto avatar tenant (consent sudah dicek di router)."""
+    jpeg, (width, height) = normalize_avatar_image(data, content_type)
+    row = get_interview_settings(db)
+    old_key = row.avatar_image_key
+    key = storage.new_object_key("ai-interview/avatar", "avatar.jpg")
+    storage.put_object(key, jpeg, "image/jpeg")
+    row.avatar_image_key = key
+    row.avatar_image_updated_at = datetime.now(UTC)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        _delete_avatar_object(key)
+        raise
+    db.refresh(row)
+    if old_key and old_key != key:
+        _delete_avatar_object(old_key)
+    audit.log_event(
+        db,
+        action="ai_interview.avatar_image_changed",
+        entity_type="ai_interview_settings",
+        entity_id=row.id,
+        object_key=key,
+        detail={
+            "consent": True,
+            "size": len(jpeg),
+            "width": width,
+            "height": height,
+            "by": getattr(user, "email", "?"),
+        },
+    )
+    return row
+
+
+def remove_avatar_image(db: Session, user) -> AIInterviewSettings:
+    """Hapus foto avatar tenant -> worker kembali ke foto env. Idempoten."""
+    row = get_interview_settings(db)
+    old_key = row.avatar_image_key
+    if old_key is None:
+        return row
+    row.avatar_image_key = None
+    row.avatar_image_updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(row)
+    _delete_avatar_object(old_key)
+    audit.log_event(
+        db,
+        action="ai_interview.avatar_image_removed",
+        entity_type="ai_interview_settings",
+        entity_id=row.id,
+        object_key=old_key,
+        detail={"by": getattr(user, "email", "?")},
+    )
+    return row
+
+
+def _current_avatar_image(db: Session) -> bytes | None:
+    """Bytes foto avatar tenant aktif (konteks tenant sudah terpasang).
+    Tidak membuat baris pengaturan -- baca saja."""
+    row = db.execute(select(AIInterviewSettings)).scalars().first()
+    if row is None or row.avatar_image_key is None:
+        return None
+    return storage.get_object(row.avatar_image_key)
+
+
+def get_avatar_image(db: Session) -> bytes | None:
+    return _current_avatar_image(db)
+
+
+def get_avatar_image_for_token(db: Session, token: str) -> bytes | None:
+    """Khusus agent (tanda tangan dicek di router): foto avatar tenant
+    pemilik sesi interview `token`. Tenant di-resolve dari token, pola
+    set_tenant try/finally sama dengan get_voice_context."""
+    prev_tenant = get_tenant()
+    try:
+        response = _resolve_response_by_token(db, token)
+        _require_consent(response)
+        return _current_avatar_image(db)
+    finally:
+        set_tenant(prev_tenant)
 
 
 def consent_text(retention_days: int) -> str:

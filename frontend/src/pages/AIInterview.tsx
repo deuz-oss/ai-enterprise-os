@@ -6,6 +6,7 @@ import { BlacklistBadge, KpiCard } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate } from "../api/client";
 import { RecordingPlayer, type SeekRequest } from "../components/RecordingPlayer";
+import { AvatarImageCard, type AiInterviewSettings } from "../components/AvatarImageCard";
 
 interface Question {
   id: string;
@@ -870,12 +871,12 @@ export default function AIInterview() {
   // Fase 0 roadmap: masa retensi data interview (UU PDP), per tenant.
   const { data: interviewSettings } = useQuery({
     queryKey: ["ai-interview-settings"],
-    queryFn: () => api.get<{ retention_days: number }>("/ai-interview/settings"),
+    queryFn: () => api.get<AiInterviewSettings>("/ai-interview/settings"),
   });
   const [editingRetention, setEditingRetention] = useState(false);
   const saveRetention = useMutation({
     mutationFn: (retention_days: number) =>
-      api.put<{ retention_days: number }>("/ai-interview/settings", { retention_days }),
+      api.put<AiInterviewSettings>("/ai-interview/settings", { retention_days }),
     onSuccess: () => {
       setEditingRetention(false);
       qc.invalidateQueries({ queryKey: ["ai-interview-settings"] });
@@ -1074,6 +1075,8 @@ export default function AIInterview() {
           </button>
         )}
       </div>
+
+      <AvatarImageCard settings={interviewSettings} />
 
       {linkedJobOrderId &&
         !formState &&

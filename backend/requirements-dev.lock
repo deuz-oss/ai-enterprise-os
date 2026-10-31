@@ -104,7 +104,9 @@ passlib==1.7.4
 pathspec==1.1.1
     # via mypy
 pillow==12.3.0
-    # via reportlab
+    # via
+    #   aeos-backend (pyproject.toml)
+    #   reportlab
 pluggy==1.6.0
     # via pytest
 propcache==0.5.4

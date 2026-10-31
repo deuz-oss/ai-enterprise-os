@@ -23,6 +23,9 @@ dependencies = [
   "reportlab>=4.2.0",
   "livekit-api>=0.7.0",
   "icalendar>=5.0.0",
+  # Foto avatar pewawancara AI per tenant: validasi & normalisasi gambar
+  # (sebelumnya hanya transitif lewat reportlab).
+  "pillow>=10.1",
 ]
 
 [project.optional-dependencies]

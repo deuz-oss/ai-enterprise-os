@@ -98,7 +98,7 @@ menyalakan worker ini.
 | `AVATAR_CANDIDATE_TIMEOUT` (agen) | `120` | batas tunggu kandidat masuk room sebelum sapaan (mode avatar); lewat → job diakhiri, slot avatar dilepas |
 | `AVATAR_RENDERER` | `static` | `static` \| `flashhead` |
 | `AVATAR_MAX_SESSIONS` | `2` | sesi avatar paralel. Penuh → sesi baru **voice-only** (tidak ditolak, tidak antre) |
-| `AVATAR_REFERENCE_IMAGE` | kosong | path **di dalam container**, mis. `/srv/avatar/reference.jpg` (file ditaruh di `./deploy/avatar/`, isinya di-gitignore) |
+| `AVATAR_REFERENCE_IMAGE` | kosong | **fallback** bila tenant belum mengunggah foto; path **di dalam container**, mis. `/srv/avatar/reference.jpg` (file ditaruh di `./deploy/avatar/`, isinya di-gitignore) |
 | `FLASHHEAD_URL` | `ws://flashhead-server:8010/stream` | diisi di compose |
 | `FLASHHEAD_CHUNK_TIMEOUT` / `FLASHHEAD_MAX_BACKLOG` | `5` / `3` | ambang turun ke StaticRenderer |
 | `AVATAR_START_TIMEOUT` / `AVATAR_MAX_SESSION_SEC` | `15` / `3600` | batas siap renderer / durasi sesi |
@@ -111,9 +111,12 @@ untuk dijadikan avatar AI. Untuk varian FlashHead `lite`, lisensi VAE LTX
 juga melarang impersonasi tanpa persetujuan (Attachment A #8). Foto di-mount
 read-only dari `./deploy/avatar/` dan tidak pernah di-commit.
 
-Konfigurasi foto **per tenant belum ada**: itu butuh kolom DB baru, sedangkan
-PoC ini sengaja tidak mengubah skema. Untuk saat ini satu foto per deployment
-lewat env.
+Foto **per tenant** diunggah admin di AI Interview → Pengaturan, dengan
+checkbox izin wajib yang tercatat di audit. Agen mengambilnya dari backend
+dan mengirimnya sebagai `reference_image_b64` di `POST /sessions`. Worker
+menulisnya ke file sementara per room dan menghapusnya saat sesi selesai.
+Urutan sumber foto: foto tenant → env `AVATAR_REFERENCE_IMAGE` → potret
+bawaan.
 
 ## Kapasitas & fallback
 

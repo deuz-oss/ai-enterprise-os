@@ -12,6 +12,7 @@ dan bukan sesi kandidat yang menggantung.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import logging
@@ -89,6 +90,31 @@ class AvatarDecision:
     identity: str = AVATAR_IDENTITY
 
 
+async def fetch_reference_image(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: Mapping[str, str],
+    timeout: float = 5.0,
+) -> bytes | None:
+    """Foto avatar milik tenant dari backend (`GET .../voice/avatar-image`).
+    None = pakai foto bawaan worker (env AVATAR_REFERENCE_IMAGE): tenant belum
+    punya foto (404), backend error, atau timeout. Tidak pernah raise --
+    foto avatar tidak boleh menggagalkan interview."""
+    try:
+        resp = await client.get(url, headers=dict(headers), timeout=timeout)
+    except httpx.HTTPError as exc:
+        logger.warning("Foto avatar tenant gagal diambil (%s) -- foto bawaan", type(exc).__name__)
+        return None
+    if resp.status_code == 404:
+        logger.info("Tenant belum punya foto avatar -- foto bawaan worker dipakai")
+        return None
+    if resp.status_code != 200 or not resp.content:
+        logger.warning("Foto avatar tenant: backend HTTP %d -- foto bawaan", resp.status_code)
+        return None
+    return resp.content
+
+
 async def request_avatar(
     client: httpx.AsyncClient,
     settings: AvatarSettings,
@@ -96,12 +122,19 @@ async def request_avatar(
     room: str,
     agent_identity: str,
     secret: str,
+    reference_image: bytes | None = None,
 ) -> AvatarDecision:
-    """Minta worker menyiapkan avatar untuk `room`. Tidak pernah raise."""
+    """Minta worker menyiapkan avatar untuk `room`. Tidak pernah raise.
+    `reference_image` = foto avatar tenant (JPEG dari backend); dikirim
+    sebagai base64 di body. Tanda tangan tetap atas nama room saja -- port
+    worker tidak dibuka ke host, hanya agen di jaringan internal yang bicara."""
+    body: dict[str, str] = {"room": room, "agent_identity": agent_identity}
+    if reference_image:
+        body["reference_image_b64"] = base64.b64encode(reference_image).decode("ascii")
     try:
         resp = await client.post(
             f"{settings.worker_url}/sessions",
-            json={"room": room, "agent_identity": agent_identity},
+            json=body,
             headers={SIGNATURE_HEADER: sign(secret, room)},
             # Connect dibatasi ketat: worker yang mati tidak boleh menunda
             # sapaan ke kandidat (uji E2E: DNS Docker untuk container mati

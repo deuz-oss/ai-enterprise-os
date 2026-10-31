@@ -40,10 +40,14 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
+    Form,
     Header,
     HTTPException,
     Query,
     Request,
+    Response,
+    UploadFile,
     status,
 )
 from sqlalchemy.orm import Session
@@ -222,6 +226,58 @@ def update_settings(
     return service.update_interview_settings(db, user, payload)
 
 
+# ---------- Foto avatar pewawancara AI per tenant ----------
+
+_AVATAR_CONSENT_DETAIL = "Konfirmasi izin pemakaian foto wajib dicentang"
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+@router.put(
+    "/settings/avatar-image",
+    response_model=AIInterviewSettingsOut,
+    dependencies=[Depends(require_roles(*AI_INTERVIEW_SETTINGS_ROLES))],
+)
+def upload_avatar_image(
+    file: UploadFile | None = File(None),
+    consent: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Ganti wajah avatar pewawancara AI tenant ini. `consent` = pengunggah
+    menyatakan berhak memakai foto tsb (wajah orang = data pribadi).
+    Sengaja `def` (threadpool): dekode Pillow + DB sync tidak boleh
+    memblokir event loop."""
+    if consent.strip().lower() != "true":
+        raise HTTPException(status_code=422, detail=_AVATAR_CONSENT_DETAIL)
+    if file is None:
+        raise HTTPException(status_code=422, detail="Pilih file foto terlebih dahulu.")
+    # Baca paling banyak batas + 1 byte: cukup untuk tahu "terlalu besar"
+    # tanpa memuat file raksasa ke memori.
+    data = file.file.read(service.AVATAR_IMAGE_MAX_BYTES + 1)
+    return service.set_avatar_image(db, user, data=data, content_type=file.content_type or "")
+
+
+@router.delete(
+    "/settings/avatar-image",
+    response_model=AIInterviewSettingsOut,
+    dependencies=[Depends(require_roles(*AI_INTERVIEW_SETTINGS_ROLES))],
+)
+def delete_avatar_image(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return service.remove_avatar_image(db, user)
+
+
+@router.get(
+    "/settings/avatar-image",
+    response_class=Response,
+    dependencies=[Depends(require_roles(*AI_INTERVIEW_SETTINGS_ROLES))],
+)
+def get_avatar_image(db: Session = Depends(get_db)):
+    data = service.get_avatar_image(db)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Foto avatar belum diunggah")
+    return Response(content=data, media_type="image/jpeg", headers=_NO_STORE)
+
+
 @router.post(
     "/retention/run",
     response_model=RetentionRunOut,
@@ -330,6 +386,22 @@ def get_voice_context(
     yang juga dipegang kandidat."""
     service.verify_agent_signature(token, x_agent_signature)
     return service.get_voice_context(db, token)
+
+
+@public_router.get("/{token}/voice/avatar-image", response_class=Response)
+def get_voice_avatar_image(
+    token: str,
+    db: Session = Depends(get_db),
+    x_agent_signature: str | None = Header(default=None),
+):
+    """Khusus agent: foto avatar tenant pemilik sesi, diteruskan agent ke
+    avatar-worker (worker tidak punya akses backend/DB). 404 = tenant belum
+    punya foto -> worker memakai foto bawaan env."""
+    service.verify_agent_signature(token, x_agent_signature)
+    data = service.get_avatar_image_for_token(db, token)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Tenant belum punya foto avatar")
+    return Response(content=data, media_type="image/jpeg", headers=_NO_STORE)
 
 
 @public_router.post("/{token}/voice/complete", response_model=PublicInterviewSessionOut)

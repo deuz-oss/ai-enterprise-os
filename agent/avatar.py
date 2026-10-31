@@ -152,10 +152,16 @@ async def _avatar_published_video(room: rtc.Room, identity: str) -> None:
 
 
 async def setup_avatar(
-    ctx: JobContext, session: AgentSession, settings: AvatarSettings, secret: str
+    ctx: JobContext,
+    session: AgentSession,
+    settings: AvatarSettings,
+    secret: str,
+    *,
+    reference_image: bytes | None = None,
 ) -> AvatarLink | None:
     """Pasang avatar sebelum `session.start`. None = jalan voice-only.
-    Tidak pernah raise: kegagalan avatar tidak boleh menggagalkan interview."""
+    Tidak pernah raise: kegagalan avatar tidak boleh menggagalkan interview.
+    `reference_image` = foto avatar tenant (None = foto bawaan worker)."""
     try:
         # Identitas agen baru ada setelah terhubung; connect() idempoten,
         # session.start nanti tidak menyambung ulang.
@@ -168,6 +174,7 @@ async def setup_avatar(
                 room=room.name,
                 agent_identity=room.local_participant.identity,
                 secret=secret,
+                reference_image=reference_image,
             )
             if not decision.enabled:
                 logger.warning("Avatar tidak dipakai, sesi voice-only: %s", decision.reason)

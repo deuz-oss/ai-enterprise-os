@@ -221,12 +221,24 @@ class AIInterviewSettings(TenantMixin, Base):
     """Pengaturan AI Interview per tenant (satu baris, dibuat on-demand --
     pola sama `HrDocumentSettings`). `retention_days`: berapa lama jawaban,
     transkrip, dan hasil AI disimpan setelah interview dikirim sebelum
-    dihapus otomatis (UU PDP: data disimpan sepanjang diperlukan saja)."""
+    dihapus otomatis (UU PDP: data disimpan sepanjang diperlukan saja).
+
+    `avatar_image_key`: foto referensi wajah avatar pewawancara AI milik
+    tenant (JPEG ternormalisasi di object storage). Kosong = avatar-worker
+    memakai foto bawaan dari env `AVATAR_REFERENCE_IMAGE`."""
 
     __tablename__ = "ai_interview_settings"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     retention_days: Mapped[int] = mapped_column(Integer, default=180)
+    avatar_image_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    avatar_image_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    @property
+    def has_avatar_image(self) -> bool:
+        return self.avatar_image_key is not None

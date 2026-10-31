@@ -1026,8 +1026,24 @@ teks consent.
   tampil sebagai avatar video buatan AI, bukan manusia; kamera kandidat tidak
   dinyalakan, dan video tidak direkam maupun dinilai.
 - Persetujuan versi lama tidak diminta ulang (perilaku lama).
-- Foto referensi hanya lewat env (per tenant ditunda karena butuh kolom DB).
-  Foto wajib milik sendiri atau berizin tertulis.
+- Foto referensi **per tenant** (lanjutan 2026-10-31, §15 Backlog #6):
+  diunggah admin di Pengaturan AI Interview, dengan checkbox izin wajib yang
+  tercatat di audit. Bila tenant belum punya foto, dipakai env
+  `AVATAR_REFERENCE_IMAGE`; bila env juga kosong, potret bawaan. Foto wajib
+  milik sendiri atau berizin tertulis.
+  - **Penyimpanan:** kolom `avatar_image_key` dan `avatar_image_updated_at` di
+    `ai_interview_settings` (sudah `TenantMixin`), migrasi `57b5ffb1923e`.
+  - **Validasi:** JPEG/PNG/WebP, maks 5 MB, min 256×256 px, maks 40 MP.
+    Format dicek dari isi file, bukan hanya MIME.
+  - **Normalisasi:** foto di-encode ulang ke JPEG ≤1024 px tanpa EXIF/GPS.
+  - **Cek wajah tunggal tidak dibuat** karena belum ada util. Menambah
+    OpenCV ditolak; di UI hanya ada panduan foto.
+  - **Alur:** agen mengambil foto lewat
+    `GET /ai-interview/session/{token}/voice/avatar-image`
+    (X-Agent-Signature + consent sesi), lalu mengirimnya sebagai
+    `reference_image_b64` ke avatar-worker. Worker menulisnya ke file
+    sementara per room dan menghapusnya saat sesi selesai. Gagal di titik mana
+    pun berarti foto env, bukan interview gagal.
 
 **Uji E2E kandidat sintetis (pola Fase 66, CPU, StaticRenderer):** dijalankan
 dalam empat skenario.
@@ -2716,6 +2732,6 @@ rujukannya tidak bergeser.
 | 3 | Langganan tahunan | ⏳ Belum | `TenantSubscription` hanya punya `monthly_fee` tanpa periode tagihan; pilihan tier di Billing semuanya bulanan. Besaran diskon tahunan juga belum diputuskan | §4.4.5, Fase 28 item 5 |
 | 4 | Blacklist sebagai blocking check | ✅ Selesai (2026-10-31) | `blacklist/matching.py` (cocokkan `candidate_id` + email/telepon/NIK ternormalisasi, hanya `disetujui`) dipakai `recruitment/service.py` (422 di `create_placement`/`update_placement_status`, filter `match_candidates`), `ai/service.py::match_job_order`, `talentpool/service.py::list_talentpool` (`include_blacklisted`), dan `job_portal/service.py` (ditandai lewat audit, respons publik identik). Flag `is_blacklisted`/`candidate_is_blacklisted` di response internal; test `tests/test_blacklist_enforcement.py` | Fase 29 (lanjutan 2026-10-31); CHANGELOG [Unreleased] |
 | 5 | Validasi GPU | 🟡 Sebagian | **Suara (Fase 30):** wiring, uji E2E kandidat sintetis (Fase 66), dan uji mikrofon sungguhan (2026-09-26, 2026-10-29) sudah dijalankan di CPU; latensi & turn-taking di server GPU belum, dan `docker-compose.prod.gpu.yml` belum diuji di mesin GPU. **Avatar (Fase 67):** wiring CPU (renderer static) terverifikasi E2E dan di Chrome; flashhead-server belum pernah dibangun/dijalankan, jadi lip-sync Bahasa Indonesia, latensi, dan kapasitas/VRAM belum terukur | Fase 30, Fase 66, Fase 67; CHANGELOG "deploy produksi interview suara" & Fase 67 |
-| 6 | Foto avatar per tenant | ⏳ Belum | Satu foto per deployment lewat env `AVATAR_REFERENCE_IMAGE` (`avatar-worker/server.py`); `avatar-worker/README.md`: "per tenant belum ada" karena butuh kolom DB baru, sedangkan PoC sengaja tidak mengubah skema | Fase 67 (Kepatuhan) |
+| 6 | Foto avatar per tenant | ✅ Selesai (2026-10-31) | Kolom `ai_interview_settings.avatar_image_key`/`avatar_image_updated_at` (migrasi `57b5ffb1923e`); `PUT·DELETE·GET /ai-interview/settings/avatar-image` (validasi + normalisasi di `ai_interview/service.py::normalize_avatar_image`, consent wajib, audit `ai_interview.avatar_image_changed/removed`); endpoint agen `voice/avatar-image` → `agent/avatar_fallback.py::fetch_reference_image` → `reference_image_b64` di `avatar-worker/server.py`; kartu `frontend/src/components/AvatarImageCard.tsx`. Fallback env `AVATAR_REFERENCE_IMAGE` tetap. Test `tests/test_ai_interview_avatar.py`, `avatar-worker/tests/test_reference_image.py`. Belum: E2E dengan LiveKit/renderer sungguhan, storage S3/MinIO, cek wajah tunggal (tidak ada util) | Fase 67 (lanjutan 2026-10-31); CHANGELOG [Unreleased] |
 | 7 | Chat presence/typing indicator | ⏳ Belum | Dispesifikasikan di §9.4, tetapi WebSocket chat mengabaikan pesan dari klien (`chat/router.py`: "heartbeat / typing — abaikan v1") dan frontend tidak punya event presence/typing | §9.4, Fase 11 |
 | 8 | "Lupakan kandidat" (UU PDP) belum menghapus NIK; interaksi dengan blacklist | ⏳ Belum (catatan terbuka, 2026-10-31) | `talentpool/service.py::forget_candidate` mengosongkan nama, email, telepon, kota, dan skill, tetapi `ktp_no` (NIK), `address`, `birthdate`, dan `birthplace` tetap tersimpan. Ini potensi celah hak hapus subjek data. Sebaliknya, kalau NIK ikut dihapus, kandidat ter-blacklist yang di-"lupakan" tidak lagi bisa dicocokkan lewat identitas (email/telepon sudah hilang sekarang, jadi tinggal NIK). Perlu keputusan: hapus semua PII, atau simpan identitas minimal (mis. hash NIK) khusus untuk entri blacklist `disetujui` dengan dasar hukum yang jelas | Fase 13 (§10.5), Fase 29 (lanjutan 2026-10-31) |
