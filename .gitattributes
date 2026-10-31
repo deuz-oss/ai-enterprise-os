@@ -1,0 +1,3 @@
+# Skrip shell dijalankan di container/VPS Linux: wajib LF walau di-checkout di
+# Windows (core.autocrlf), kalau tidak bash gagal dengan "/bin/bash^M: bad interpreter".
+*.sh text eol=lf
