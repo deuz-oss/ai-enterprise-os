@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { api, clearToken, formatRupiah, getToken } from "../api/client";
 import CommandPalette, { type PaletteItem } from "./CommandPalette";
+import { ChatRealtimeProvider } from "./chat/ChatRealtimeProvider";
 import { ConfirmDialogHost } from "./ui/ConfirmDialog";
 import { PageFallback } from "./ui/PageFallback";
 
@@ -760,9 +761,17 @@ export default function Layout() {
           {/* pb-24: ruang di bawah supaya FAB "Tanya AEOS AI" tidak menutupi
               baris/tombol terakhir halaman (audit 2026-10-08 §7 U7). */}
           <div className="mx-auto w-full max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pt-6">
-            <Suspense fallback={<PageFallback />}>
-              <Outlet />
-            </Suspense>
+            {/* Koneksi WS chat (presence/typing) di level app, bukan per
+                channel -- supaya tidak putus-sambung tiap pindah halaman.
+                platform_admin tidak punya tenant -> server menolak (1008). */}
+            <ChatRealtimeProvider
+              enabled={Boolean(me.data && me.data.role !== "platform_admin")}
+              selfId={me.data?.id ?? null}
+            >
+              <Suspense fallback={<PageFallback />}>
+                <Outlet />
+              </Suspense>
+            </ChatRealtimeProvider>
           </div>
         </main>
       </div>

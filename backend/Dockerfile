@@ -19,4 +19,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 EXPOSE 8000
 
 # Migrasi dijalankan tiap start (idempoten: upgrade/stamp head), lalu server.
-CMD ["sh", "-c", "python scripts/migrate.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"]
+# UVICORN_WORKERS default 1 dan HARUS tetap 1 sampai RedisEventBus ada: state
+# realtime chat (koneksi WS, presence, typing, fan-out event message.*) masih
+# in-memory per proses (app/modules/chat/realtime/memory.py). Dengan >1 worker,
+# user di worker berbeda tidak saling melihat presence/typing/pesan real-time.
+CMD ["sh", "-c", "python scripts/migrate.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1}"]

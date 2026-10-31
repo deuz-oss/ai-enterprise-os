@@ -1,55 +1,26 @@
-"""Pluggable WebSocket manager untuk chat.
+"""Titik akses manager WebSocket chat (kompatibel dengan caller lama).
 
 Design per PRD §9.4: manager koneksi dibuat pluggable agar scale-out
 multi-instance kelak memakai Redis pub/sub tanpa mengubah caller.
-v1 memakai in-memory dict; kunci: tenant_id + channel_id.
+Implementasinya kini `RealtimeHub` (presence, typing, multi-koneksi per
+user) dengan store & bus in-memory; lihat `realtime/contracts.py` untuk
+Protocol yang perlu diimplementasikan versi Redis.
+
+Selalu ambil hub lewat `get_hub()` (atau atribut modul `manager` saat
+dipanggil) supaya test bisa mengganti instance-nya.
 """
 
-import json
-import logging
-from collections import defaultdict
+from app.modules.chat.realtime.hub import Connection, RealtimeHub
 
-from fastapi import WebSocket
+# Alias lama: test & kode yang masih memakai nama ChatWSManager.
+ChatWSManager = RealtimeHub
 
-logger = logging.getLogger(__name__)
-
-
-class ChatWSManager:
-    def __init__(self) -> None:
-        # tenant_id -> user_id -> WebSocket
-        self._conns: dict[str, dict[str, WebSocket]] = defaultdict(dict)
-        # channel membership cache sederhana untuk routing
-
-    async def connect(self, tenant_id: str, user_id: str, ws: WebSocket) -> None:
-        await ws.accept()
-        self._conns[tenant_id][user_id] = ws
-        logger.info("Chat WS connect tenant=%s user=%s", tenant_id[:8], user_id[:8])
-
-    async def disconnect(self, tenant_id: str, user_id: str) -> None:
-        self._conns.get(tenant_id, {}).pop(user_id, None)
-        logger.info("Chat WS disconnect tenant=%s user=%s", tenant_id[:8], user_id[:8])
-
-    async def broadcast(
-        self, tenant_id: str, payload: dict, user_ids: set[str] | None = None
-    ) -> None:
-        """Kirim ke koneksi milik satu tenant, opsional disaring ke `user_ids`.
-
-        Sebelumnya broadcast() mengirim ke SEMUA tenant tanpa filter — bug
-        kebocoran konten pesan antar tenant lewat WS. Sekarang di-scope ke
-        tenant, dan jika `user_ids` diberikan (audience channel: staff +
-        member eksplisit), hanya user itu yang menerima.
-        """
-        text = json.dumps(payload, ensure_ascii=False)
-        for uid, ws in list(self._conns.get(tenant_id, {}).items()):
-            if user_ids is not None and uid not in user_ids:
-                continue
-            try:
-                await ws.send_text(text)
-            except Exception:
-                pass
-
-    def tenant_store(self) -> dict:
-        return self._conns
+manager = RealtimeHub()
 
 
-manager = ChatWSManager()
+def get_hub() -> RealtimeHub:
+    # Dibaca dari globals modul saat dipanggil -> ikut monkeypatch `manager`.
+    return manager
+
+
+__all__ = ["ChatWSManager", "Connection", "RealtimeHub", "get_hub", "manager"]

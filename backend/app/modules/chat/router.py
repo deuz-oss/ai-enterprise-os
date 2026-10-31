@@ -35,25 +35,44 @@ async def chat_ws(websocket: WebSocket, token: str = Query("")):
         user = db.get(User, _parse(user_id))  # type: ignore[attr-defined]
         # Cek versi token juga di sini: WS tidak lewat get_current_user, jadi
         # tanpa ini token yang sudah dicabut masih bisa membuka chat.
-        active = user is not None and user.is_active and token_version_matches(payload, user)
-        tenant_id = str(user.tenant_id or "platform") if user is not None else ""
+        # Akun tanpa tenant (platform_admin) tidak punya workspace chat — dulu
+        # diberi tenant palsu "platform"; sekarang ditolak.
+        active = (
+            user is not None
+            and user.is_active
+            and user.tenant_id is not None
+            and token_version_matches(payload, user)
+        )
+        tenant_id = str(user.tenant_id) if user is not None else ""
         user_id_str = str(user.id) if user is not None else ""
+        user_name = user.full_name if user is not None else ""
     finally:
         db.close()
     if not active:
         await websocket.close(code=1008)
         return
 
-    from app.modules.chat.ws_manager import manager
+    from app.modules.chat.ws_manager import get_hub
 
-    await manager.connect(tenant_id, user_id_str, websocket)
+    hub = get_hub()
+    conn = await hub.connect(
+        tenant_id, user_id_str, websocket, user_name=user_name, token_payload=payload
+    )
     try:
+        # Protokol pesan (hello/ping/presence.set/typing.*): lihat realtime/hub.py.
         while True:
-            await websocket.receive_text()  # heartbeat / typing — abaikan v1
-    except Exception:
+            text = await websocket.receive_text()
+            if not await hub.handle(conn, text):
+                break
+    except Exception:  # noqa: BLE001 - WebSocketDisconnect / socket putus
         pass
     finally:
-        await manager.disconnect(tenant_id, user_id_str)
+        # Di-shield: bila task koneksi dibatalkan (shutdown server), cleanup
+        # presence/typing tetap tuntas -- tanpa ini user bisa "online" selamanya.
+        import anyio
+
+        with anyio.CancelScope(shield=True):
+            await hub.disconnect(conn)
 
 
 def _parse(value):

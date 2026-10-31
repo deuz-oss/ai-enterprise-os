@@ -28,6 +28,16 @@ import {
   X,
 } from "lucide-react";
 import { confirmToast, promptToast } from "../components/ui";
+import {
+  PresenceDot,
+  TypingIndicator,
+  presenceLabel,
+  useChatConnection,
+  useChatMessageEvents,
+  usePresence,
+  useTypingSender,
+} from "../components/chat/ChatRealtimeProvider";
+import { coalesce, routeChatEvent } from "../lib/chat/chatEvents";
 
 // Index dasar arbitrer yang besar untuk `firstItemIndex` Virtuoso -- pola
 // resmi mereka untuk "reverse infinite scroll" (chat): begitu halaman
@@ -48,6 +58,8 @@ interface ChannelRow {
   unread_count: number;
   mention_count: number;
   notify_level: NotifyLevel;
+  /** Lawan bicara untuk channel DM (null untuk channel biasa). */
+  dm_user_id?: string | null;
 }
 
 interface ChatFileMeta {
@@ -219,6 +231,38 @@ function Avatar({ name, isBot, size = 36 }: { name: string; isBot?: boolean; siz
   );
 }
 
+/** Avatar DM + titik presence (dekoratif; teks status lewat DmPresenceText). */
+function DmAvatar({ userId, name }: { userId: string; name: string }) {
+  const status = usePresence(userId);
+  return (
+    <span className="relative shrink-0">
+      <Avatar name={name} size={20} />
+      <PresenceDot status={status} size={9} />
+    </span>
+  );
+}
+
+/** Status presence untuk pembaca layar, ikut nama tombol channel DM. */
+function DmPresenceText({ userId }: { userId: string }) {
+  const status = usePresence(userId);
+  const label = presenceLabel(status, useChatConnection() === "open");
+  return label ? <span className="sr-only">, {label}</span> : null;
+}
+
+/** Subjudul header DM: titik + teks status (tidak hanya warna). */
+function DmHeaderPresence({ userId }: { userId: string }) {
+  const status = usePresence(userId);
+  const label = presenceLabel(status, useChatConnection() === "open");
+  // Belum tersambung: status tidak diketahui -- jangan tebak "offline".
+  if (!label) return <>Pesan langsung</>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <PresenceDot status={status} size={8} ringColor="transparent" inline />
+      {label}
+    </span>
+  );
+}
+
 function ChannelIcon({ type, className }: { type: string; className?: string }) {
   if (type === "private") return <Lock className={className} />;
   if (type === "broadcast") return <Megaphone className={className} />;
@@ -312,10 +356,14 @@ export default function Chat() {
   const formRef = useRef<HTMLFormElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
+  // Polling tetap jadi fallback; saat WS tersambung cukup jarang (15 dtk).
+  const wsState = useChatConnection();
+  const pollMs = wsState === "open" ? 15000 : 4000;
+
   const { data: channels, isLoading: channelsLoading } = useQuery({
     queryKey: ["chat-channels"],
     queryFn: () => api.get<ChannelRow[]>("/chat/channels"),
-    refetchInterval: 4000,
+    refetchInterval: pollMs,
   });
 
   // Cursor pagination ala Mattermost (before_id + X-Has-More, lihat
@@ -450,10 +498,10 @@ export default function Chat() {
     if (!activeChannel) return;
     const id = setInterval(() => {
       mergeLatestIntoCache();
-    }, 4000);
+    }, pollMs);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChannel, threadParent]);
+  }, [activeChannel, threadParent, pollMs]);
 
   const { data: searchResults, isFetching: searching } = useQuery({
     queryKey: ["chat-search", searchQuery, activeChannel],
@@ -688,45 +736,42 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChannel]);
 
-  // WebSocket real-time (PRD §9.4) — polling tetap sebagai fallback.
-  useEffect(() => {
-    if (!activeChannel) return;
-    const base = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL ?? "/api/v1";
-    const token = localStorage.getItem("aeos_token") ?? "";
-    if (!token) return;
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = base.startsWith("http") ? new URL(base).host : window.location.host;
-    const wsUrl = `${proto}//${host}/api/v1/chat/ws?token=${encodeURIComponent(token)}`;
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(wsUrl);
-      ws.onmessage = (evt) => {
-        qc.invalidateQueries({ queryKey: ["chat-channels"] });
-        let eventChannelId: string | null = null;
-        try {
-          eventChannelId = (JSON.parse(evt.data) as { channel_id?: string }).channel_id ?? null;
-        } catch {
-          // payload tak terduga — tetap refetch pesan channel aktif
-        }
-        if (!eventChannelId || eventChannelId === activeChannel) {
-          // Merge, BUKAN invalidate/refetch mentah -- lihat catatan panjang
-          // di dekat definisi useInfiniteQuery soal bug jendela-geser.
-          mergeLatestIntoCache();
-          // Channel aktif sedang dilihat — jangan biarkan unread menumpuk
-          // untuk pesan yang masuk saat channel ini terbuka.
-          if (activeChannel) markRead.mutate(activeChannel);
-        }
-      };
-    } catch {
-      // abaikan — polling yang menangani
-    }
-    return () => {
-      try {
-        ws?.close();
-      } catch {}
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChannel]);
+  // WebSocket real-time (PRD §9.4) lewat koneksi bersama di Layout
+  // (ChatRealtimeProvider); polling tetap sebagai fallback. Hanya event
+  // `message.*` yang memicu merge/markRead (routeChatEvent) -- presence,
+  // typing, dan pong TIDAK. Tiap aksi digabung per 500 ms supaya rentetan
+  // event (mis. banyak reaksi) tidak jadi badai request. Merge (bukan
+  // invalidate) -- lihat catatan bug jendela-geser di useInfiniteQuery.
+  // Semua lewat ref ke nilai TERBARU: dulu handler menangkap closure saat
+  // channel dibuka, sehingga event saat thread terbuka masuk ke cache
+  // channel induk.
+  const activeChannelRef = useRef(activeChannel);
+  activeChannelRef.current = activeChannel;
+  const mergeRef = useRef(mergeLatestIntoCache);
+  mergeRef.current = mergeLatestIntoCache;
+  const markReadRef = useRef(markRead.mutate);
+  markReadRef.current = markRead.mutate;
+  const [wsActions] = useState(() => ({
+    invalidateChannels: coalesce(() => void qc.invalidateQueries({ queryKey: ["chat-channels"] }), 500),
+    mergeActive: coalesce(() => void mergeRef.current().catch(() => undefined), 500),
+    // Channel aktif sedang dilihat -- jangan biarkan unread menumpuk.
+    markActiveRead: coalesce(() => {
+      const ch = activeChannelRef.current;
+      if (ch) markReadRef.current(ch);
+    }, 500),
+  }));
+  useEffect(
+    () => () => {
+      wsActions.invalidateChannels.cancel();
+      wsActions.mergeActive.cancel();
+      wsActions.markActiveRead.cancel();
+    },
+    [wsActions]
+  );
+  useChatMessageEvents((e) => routeChatEvent(e, { activeChannel: activeChannelRef, ...wsActions }));
+
+  // Indikator "sedang mengetik" untuk composer channel/thread yang terbuka.
+  const typingSender = useTypingSender(activeChannel, threadParent);
 
   // Tutup popover (reaksi / notifikasi) saat klik di luar atau Escape.
   useEffect(() => {
@@ -778,6 +823,7 @@ export default function Chat() {
     const form = new FormData(e.currentTarget);
     const content = String(form.get("content") || "").trim();
     if (!activeChannel || (!content && pendingFiles.length === 0)) return;
+    typingSender.stop();
     sendMessage.mutate({
       content,
       parent_id: threadParent || undefined,
@@ -1196,16 +1242,21 @@ export default function Chat() {
                         className="relative mx-2 flex w-[calc(100%-1rem)] items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover)]"
                         style={{ backgroundColor: isActive ? "var(--accent-tint)" : undefined }}
                       >
-                        <ChannelIcon
-                          type={ch.channel_type}
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        />
+                        {ch.channel_type === "dm" && ch.dm_user_id ? (
+                          <DmAvatar userId={ch.dm_user_id} name={display} />
+                        ) : (
+                          <ChannelIcon
+                            type={ch.channel_type}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                          />
+                        )}
                         <span className="min-w-0 flex-1">
                           <span
                             className={`flex items-center gap-1 truncate text-sm ${hasUnread || isActive ? "font-semibold" : ""}`}
                             style={{ color: isActive ? "var(--accent)" : hasUnread ? "var(--text)" : "var(--text-muted)" }}
                           >
                             <span className="truncate">{display}</span>
+                            {ch.channel_type === "dm" && ch.dm_user_id && <DmPresenceText userId={ch.dm_user_id} />}
                             {ch.notify_level === "none" && (
                               <BellOff className="h-3 w-3 shrink-0" aria-label="Dibisukan" />
                             )}
@@ -1304,7 +1355,11 @@ export default function Chat() {
                 </p>
                 {!threadParent && activeMeta && (
                   <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                    {activeMeta.member_count} anggota
+                    {activeMeta.channel_type === "dm" && activeMeta.dm_user_id ? (
+                      <DmHeaderPresence userId={activeMeta.dm_user_id} />
+                    ) : (
+                      `${activeMeta.member_count} anggota`
+                    )}
                     {activeMeta.notify_level !== "all" && ` · ${notifyCurrent?.label.toLowerCase()}`}
                   </p>
                 )}
@@ -1609,6 +1664,7 @@ export default function Chat() {
               }}
               className="shrink-0 px-3 pb-3 pt-1 md:px-4"
             >
+              <TypingIndicator channelId={activeChannel} parentId={threadParent} />
               <div
                 className="relative rounded-xl transition-shadow focus-within:shadow-[0_0_0_3px_var(--accent-tint)]"
                 style={{ border: "1px solid var(--border)", backgroundColor: "var(--bg-elevated)" }}
@@ -1701,9 +1757,11 @@ export default function Chat() {
                     className="max-h-40 min-h-[32px] flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm leading-5 outline-none"
                     style={{ color: "var(--text)" }}
                     onKeyDown={handleComposerKey}
+                    onBlur={() => typingSender.stop()}
                     onChange={(e) => {
                       autoGrow(e.currentTarget);
                       const val = e.target.value;
+                      typingSender.onInput(val);
                       const atIdx = val.lastIndexOf("@");
                       if (atIdx >= 0) {
                         const after = val.slice(atIdx + 1).split(/\s/)[0];

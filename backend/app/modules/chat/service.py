@@ -23,6 +23,7 @@ from app.modules.chat.models import (
     ChatMessage,
     ChatMessageReaction,
 )
+from app.modules.chat.scope import DirectoryScope, resolve_directory_scope
 
 logger = logging.getLogger(__name__)
 
@@ -99,23 +100,52 @@ def _notify_channel(db: Session, channel: Channel, event: str) -> None:
     Konten pesan sengaja TIDAK dikirim di payload — client cuma dipicu untuk
     refetch REST (yang sudah ter-scope akses dengan benar), jadi payload WS
     aman dilihat siapa pun yang menerimanya secara tidak sengaja.
+
+    Dipanggil dari endpoint sync (threadpool, tanpa event loop): hub yang
+    menjadwalkan pengiriman ke loop WS-nya (`broadcast_threadsafe`).
     """
     try:
-        import asyncio
+        from app.modules.chat.ws_manager import get_hub
 
-        from app.modules.chat.ws_manager import manager as _ws
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return  # tanpa event loop aktif (mis. konteks test sync) — lewati notifikasi WS
+        hub = get_hub()
+        tenant_id = str(channel.tenant_id)
+        if not hub.has_tenant_connections(tenant_id):
+            return
         audience = _channel_audience_ids(db, channel)
         payload = {"event": event, "channel_id": str(channel.id)}
-        loop.create_task(
-            _ws.broadcast(tenant_id=str(channel.tenant_id), payload=payload, user_ids=audience)
-        )
-    except Exception:
-        pass
+        hub.broadcast_threadsafe(tenant_id, payload, audience)
+    except Exception:  # noqa: BLE001 - notifikasi WS tidak boleh menggagalkan REST
+        logger.exception("Notifikasi WS chat gagal")
+
+
+def _realtime_clear_typing(channel: Channel, user_id) -> None:
+    """Pesan terkirim -> indikator typing pengirim di channel ini berhenti."""
+    try:
+        from app.modules.chat.ws_manager import get_hub
+
+        get_hub().clear_typing_threadsafe(str(channel.tenant_id), str(channel.id), str(user_id))
+    except Exception:  # noqa: BLE001
+        logger.exception("Reset typing realtime chat gagal")
+
+
+def _realtime_invalidate_channel(channel: Channel) -> None:
+    """Keanggotaan channel berubah -> buang cache audience/izin typing hub."""
+    try:
+        from app.modules.chat.ws_manager import get_hub
+
+        get_hub().invalidate_channel(str(channel.tenant_id), str(channel.id))
+    except Exception:  # noqa: BLE001
+        logger.exception("Invalidasi cache realtime chat gagal")
+
+
+def invalidate_realtime_scope(tenant_id) -> None:
+    """Scope direktori tenant berubah (placement, role, user nonaktif)."""
+    try:
+        from app.modules.chat.ws_manager import get_hub
+
+        get_hub().invalidate_tenant_scope(str(tenant_id))
+    except Exception:  # noqa: BLE001
+        logger.exception("Invalidasi scope realtime chat gagal")
 
 
 # ---------- Unread counter model (ala Mattermost) ----------
@@ -299,10 +329,30 @@ def create_channel(
     channel_type: str = "public",
     member_ids: list | None = None,
 ) -> Channel:
+    from app.modules.auth.models import User
+
+    creator_id = parse_uuid(str(user.id))
+    # Validasi member SEBELUM channel dibuat, konsisten dengan add_member:
+    # user wajib ada & satu tenant (User tidak ber-TenantMixin), dan karyawan
+    # hanya boleh mengajak user dalam scope direktorinya (PRD §9.2 aturan 4:
+    # DM initiation dipaksakan di server).
+    scope = resolve_directory_scope(db, user)
+    member_uuids: list[UUID] = []
+    seen_ids = {creator_id}
+    for raw_uid in member_ids or []:
+        uid = parse_uuid(str(raw_uid))
+        if uid is None or uid in seen_ids:
+            continue
+        target = db.get(User, uid)
+        if target is None or target.tenant_id != user.tenant_id:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+        if not scope.can_see(uid):
+            raise HTTPException(status_code=403, detail="User di luar scope proyek Anda")
+        seen_ids.add(uid)
+        member_uuids.append(uid)
+
     slug = name.lower().replace(" ", "-").replace("#", "")[:120]
-    ch = Channel(
-        name=name, slug=slug, channel_type=channel_type, created_by_id=parse_uuid(str(user.id))
-    )
+    ch = Channel(name=name, slug=slug, channel_type=channel_type, created_by_id=creator_id)
     db.add(ch)
     db.flush()
     default_notify = _default_notify_level(channel_type)
@@ -310,24 +360,16 @@ def create_channel(
     db.add(
         ChatChannelMember(
             channel_id=ch.id,
-            user_id=parse_uuid(str(user.id)),
+            user_id=creator_id,
             is_admin=True,
             notify_level=default_notify,
         )
     )
-    creator_id = parse_uuid(str(user.id))
-    seen_ids = {creator_id}
-    for raw_uid in member_ids or []:
-        uid = parse_uuid(str(raw_uid))
-        if uid is None or uid in seen_ids:
-            continue
-        seen_ids.add(uid)
+    for uid in member_uuids:
         db.add(ChatChannelMember(channel_id=ch.id, user_id=uid, notify_level=default_notify))
-    # Karyawan non-staff otomatis jadi member private/broadcast channel
-    if channel_type in ("private", "broadcast") and member_ids:
-        pass  # sudah ditambahkan di atas
     db.commit()
     db.refresh(ch)
+    _realtime_invalidate_channel(ch)
     return ch
 
 
@@ -351,6 +393,7 @@ def list_channels(db: Session, user) -> list[dict]:
             )
         ).scalars()
     }
+    dm_partner = _dm_partner_ids(db, user, [c.id for c in channels if c.channel_type == "dm"])
     result = []
     for ch in channels:
         member_count = db.scalar(
@@ -387,8 +430,33 @@ def list_channels(db: Session, user) -> list[dict]:
                 "unread_count": unread,
                 "mention_count": mentions,
                 "notify_level": notify_level,
+                "dm_user_id": dm_partner.get(ch.id),
             }
         )
+    return result
+
+
+def _dm_partner_ids(db: Session, user, dm_channel_ids: list) -> dict:
+    """Lawan DM per channel (untuk indikator presence di sidebar).
+
+    Hanya terisi bila viewer member DM tsb. dan tepat ada satu member lain;
+    staff yang melihat DM orang lain (tanpa jadi member) mendapat None karena
+    "lawan" tidak terdefinisi dari sudut pandangnya."""
+    if not dm_channel_ids:
+        return {}
+    viewer_id = parse_uuid(str(user.id))
+    members: dict = {}
+    for channel_id, member_id in db.execute(
+        select(ChatChannelMember.channel_id, ChatChannelMember.user_id).where(
+            ChatChannelMember.channel_id.in_(dm_channel_ids)
+        )
+    ).all():
+        members.setdefault(channel_id, []).append(member_id)
+    result: dict = {}
+    for channel_id, ids in members.items():
+        others = [m for m in ids if m != viewer_id]
+        if viewer_id in ids and len(others) == 1:
+            result[channel_id] = str(others[0])
     return result
 
 
@@ -421,6 +489,7 @@ def add_member(db: Session, user, channel_id: str, new_user_id) -> dict:
         )
     )
     db.commit()
+    _realtime_invalidate_channel(ch)
     return {"channel_id": str(ch.id), "user_id": str(new_user_id), "added": True}
 
 
@@ -543,6 +612,7 @@ def send_message(
     _apply_all_level_mentions(db, ch, mention_ids=mention_ids, sender_id=user.id)
     _mark_caught_up(db, ch, user.id)
     _notify_channel(db, ch, "message.created")
+    _realtime_clear_typing(ch, user.id)
 
     # Fase 12: slash command dieksekusi server-side; @AEOS memicu asisten AI.
     if content.startswith("/"):
@@ -1289,6 +1359,9 @@ def ensure_project_channel(db: Session, placement) -> Channel | None:
                     )
                 )  # noqa: E501
                 db.commit()
+                _realtime_invalidate_channel(existing)
+            # Placement baru bisa mengubah cohort karyawan (scope direktori).
+            invalidate_realtime_scope(placement.tenant_id)
             return existing
         ch = Channel(
             tenant_id=placement.tenant_id,
@@ -1313,6 +1386,7 @@ def ensure_project_channel(db: Session, placement) -> Channel | None:
             )  # noqa: E501
         db.commit()
         db.refresh(ch)
+        invalidate_realtime_scope(placement.tenant_id)
         return ch
     except Exception:
         db.rollback()
@@ -1438,60 +1512,46 @@ def _search_messages_fts(db: Session, channel_ids: list, q: str, limit: int) -> 
     return [by_id[i] for i in ordered_ids if i in by_id]
 
 
+def _users_in_scope(db: Session, scope: DirectoryScope, q_clean: str, limit: int) -> list:
+    """User aktif dalam scope karyawan (bukan staff), opsional disaring `q_clean`."""
+    from app.modules.auth.models import User
+
+    ids = [uid for raw in scope.user_ids if (uid := parse_uuid(raw)) is not None]
+    if not ids:
+        return []
+    stmt = select(User).where(User.id.in_(ids), User.is_active.is_(True))
+    if q_clean:
+        stmt = stmt.where(
+            (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%"))
+        )
+    return list(db.execute(stmt.limit(limit)).scalars().all())
+
+
+def _user_dict(u) -> dict:
+    return {"id": str(u.id), "full_name": u.full_name, "email": u.email, "role": u.role.value}
+
+
 def search_users_for_mention(db: Session, user, q: str, limit: int = 10) -> list[dict]:
-    """Autocomplete mention: staff melihat semua, karyawan hanya cohort + Ops."""
+    """Autocomplete mention: staff melihat semua, karyawan hanya cohort + Ops.
+
+    Scope dihitung `resolve_directory_scope` (sumber aturan tunggal PRD §9.2,
+    dipakai juga oleh presence/typing WS)."""
     from app.modules.auth.models import User
 
     q_clean = q.strip().lower()
     if not q_clean:
         return []
-    # Tentukan user yang boleh di-mention
-    if is_staff(user):
-        stmt = select(User).where(User.tenant_id == user.tenant_id, User.is_active.is_(True))
-        if q_clean:
-            stmt = stmt.where(
-                (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%"))
-            )
+    scope = resolve_directory_scope(db, user)
+    if scope.all_tenant:
+        stmt = select(User).where(
+            User.tenant_id == user.tenant_id,
+            User.is_active.is_(True),
+            (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%")),
+        )
         users = list(db.execute(stmt.limit(limit)).scalars().all())
     else:
-        # Karyawan: cohort = sesama karyawan se-proyek + tim Ops
-        ops_ids = set(_get_ops_user_ids(db, user.tenant_id))
-        # Cari placement karyawan sendiri
-        from app.modules.hrd.models import Employee
-        from app.modules.recruitment.models import JobOrder, Placement
-
-        emp = db.execute(select(Employee).where(Employee.user_id == user.id)).scalar_one_or_none()
-        cohort_ids: set = set(ops_ids)
-        if emp and emp.placement_id:
-            placement = db.get(Placement, emp.placement_id)
-            if placement:
-                jo = db.get(JobOrder, placement.job_order_id)
-                if jo:
-                    # Semua karyawan ditempatkan di klien yang sama
-                    cohort_emps = (
-                        db.execute(
-                            select(Employee.user_id)
-                            .join(Placement, Employee.placement_id == Placement.id)
-                            .join(JobOrder, Placement.job_order_id == JobOrder.id)
-                            .where(JobOrder.client_id == jo.client_id)
-                            .where(Employee.user_id.is_not(None))
-                        )
-                        .scalars()
-                        .all()
-                    )
-                    cohort_ids.update(cohort_emps)
-        if not cohort_ids:
-            return []
-        stmt = select(User).where(User.id.in_(cohort_ids), User.is_active.is_(True))
-        if q_clean:
-            stmt = stmt.where(
-                (User.full_name.ilike(f"%{q_clean}%")) | (User.email.ilike(f"%{q_clean}%"))
-            )
-        users = list(db.execute(stmt.limit(limit)).scalars().all())
-    return [
-        {"id": str(u.id), "full_name": u.full_name, "email": u.email, "role": u.role.value}
-        for u in users
-    ]
+        users = _users_in_scope(db, scope, q_clean, limit)
+    return [_user_dict(u) for u in users]
 
 
 def _validate_mentions(db: Session, user, channel_id: str, content: str) -> None:
@@ -1501,7 +1561,13 @@ def _validate_mentions(db: Session, user, channel_id: str, content: str) -> None
     mentions = _extract_mention_tokens(content)
     if not mentions:
         return
-    allowed = {u["id"]: u for u in search_users_for_mention(db, user, "", limit=1000)}
+    # Dulu memanggil search_users_for_mention(q="") yang selalu mengembalikan
+    # [] untuk q kosong -> SEMUA @mention personal karyawan ditolak, termasuk
+    # yang se-proyek. Sekarang langsung dari scope direktori.
+    scope = resolve_directory_scope(db, user)
+    if scope.all_tenant:
+        return
+    allowed = {u["id"]: u for u in map(_user_dict, _users_in_scope(db, scope, "", 1000))}
     # Juga izinkan @channel/@here untuk karyawan (broadcast)
     for raw in mentions:
         name = raw.strip().lower()
