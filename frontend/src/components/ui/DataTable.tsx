@@ -218,18 +218,22 @@ export function DataTable<T>({
         })
       )}
       {ready && hasFooter && total > 0 && (
-        <dl className="card grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm font-semibold">
-          {columns
-            .filter((c) => c.footer !== undefined && c.numeric)
-            .map((c) => (
-              <Fragment key={c.key}>
-                <dt style={{ color: "var(--th-color)" }}>Total {c.header}</dt>
-                <dd className="tabular-nums" style={{ color: "var(--text)" }}>
-                  {c.footer}
-                </dd>
-              </Fragment>
-            ))}
-        </dl>
+        // Anak langsung role="list" wajib listitem (axe aria-required-children);
+        // dibungkus div agar semantik <dl> tetap utuh.
+        <div role="listitem">
+          <dl className="card grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm font-semibold">
+            {columns
+              .filter((c) => c.footer !== undefined && c.numeric)
+              .map((c) => (
+                <Fragment key={c.key}>
+                  <dt style={{ color: "var(--th-color)" }}>Total {c.header}</dt>
+                  <dd className="tabular-nums" style={{ color: "var(--text)" }}>
+                    {c.footer}
+                  </dd>
+                </Fragment>
+              ))}
+          </dl>
+        </div>
       )}
     </div>
   );

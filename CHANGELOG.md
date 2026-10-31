@@ -15,6 +15,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 - Response internal mendapat flag boolean `is_blacklisted` (kandidat, hasil match, baris talent pool) dan `candidate_is_blacklisted` (placement) untuk badge "Blacklist". Alasan blacklist tetap hanya bisa dilihat di halaman Blacklist.
 - Catatan terbuka (PRD §15 #8): fitur "lupakan kandidat" belum menghapus NIK, dan keputusan ini berkaitan dengan pencocokan identitas blacklist.
 
+### Changed — Tabel tersisa: migrasi DataTable & tabel mentah sesuai spesifikasi
+
+- Error impor CSV absensi (jumlah baris tak terbatas) dan "Invoice Terbaru" di Dashboard kini `DataTable`: halaman + header sticky untuk error impor; Dashboard membedakan gagal memuat invoice dari "Belum ada invoice." (dulu error query tampil sebagai kosong).
+- Tabel mentah yang dipertahankan kini memakai token & state standar: `<caption>` untuk screen reader, `scope` header kolom/baris, `.th` + `.num` untuk angka, warna status `--success`/`--warning`/`--danger` (bukan palet Tailwind), area gulir yang bisa difokus di layar 390px, serta loading/error lewat `QueryState`. Berlaku untuk grid Saltab (Payroll), forecast arus kas (Finance), panel pemakaian per SKU & transaksi billing tenant (Platform), dialog tinjauan payroll, panel rekonsiliasi invoice, dan cek harga quotation (kini `<dl>`).
+- Cek harga quotation untuk approver kini menampilkan loading/error, bukan diam-diam kosong. Grid Saltab menampilkan error query (dulu tidak dirender) dan tombol ubah/hapus/simpan diberi nama aksesibel.
+- **Fixed (kontras)**: teks sekunder di panel ekspansi tenant (latar `--hover`) kini `--th-color`; `--text-muted` gagal AA di permukaan itu. Warna redup baris riwayat forecast kini benar-benar tampil (dulu dipasang di `<tr>` dan tertimpa warna `.td`).
+- Pengecualian disengaja dari `DataTable` kini: grid Saltab, forecast arus kas, panel pemakaian & transaksi tenant, dialog tinjauan payroll, rekonsiliasi invoice, cek harga (`dl`).
+
 ### Added — PoC avatar video pewawancara AI self-hosted (Fase 67)
 
 - `AVATAR_PROVIDER=none|self` (default `none` = voice-only, tidak berubah).

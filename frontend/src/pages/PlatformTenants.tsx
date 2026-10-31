@@ -9,6 +9,7 @@ import {
   KpiCard,
   type PillTab,
   PillTabs,
+  QueryState,
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
@@ -223,11 +224,12 @@ export default function PlatformTenants() {
     const state = billingByTenant?.[t.id]?.state;
     return state === "warning" || state === "empty";
   }).length;
-  const { data: billingSummary } = useQuery({
+  const billingSummaryQuery = useQuery({
     queryKey: ["tenant-billing", billingExpandedId],
     queryFn: () => api.get<BillingSummary>(`/platform/tenants/${billingExpandedId}/billing-summary`),
     enabled: Boolean(billingExpandedId),
   });
+  const billingSummary = billingSummaryQuery.data;
   const overrideSubscription = useMutation({
     mutationFn: ({ tenantId, tier }: { tenantId: string; tier: string }) =>
       api.patch(`/platform/tenants/${tenantId}/subscription`, { tier }),
@@ -239,7 +241,7 @@ export default function PlatformTenants() {
 
   const [usageExpandedId, setUsageExpandedId] = useState<string | null>(null);
   const [usagePeriod, setUsagePeriod] = useState<string>(currentPeriod);
-  const { data: usage, isLoading: usageLoading } = useQuery({
+  const usageQuery = useQuery({
     queryKey: ["tenant-usage", usageExpandedId, usagePeriod],
     queryFn: () =>
       api.get<UsageReport>(
@@ -247,6 +249,7 @@ export default function PlatformTenants() {
       ),
     enabled: Boolean(usageExpandedId),
   });
+  const usage = usageQuery.data;
 
   if (me.isLoading) return <p className="text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
   if (me.data?.role !== "platform_admin") return <Navigate to="/" replace />;
@@ -272,7 +275,7 @@ export default function PlatformTenants() {
       <div className="space-y-4">
         {t.id === expandedId && (
           <div>
-            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <p className="mb-2 text-xs font-medium" style={{ color: "var(--warning)" }}>
               Legacy Opsi F — tidak lagi ditegakkan sejak Fase 28 (akses sekarang mengikuti
               status langganan, lihat panel "Billing Opsi G"). Dipertahankan untuk riwayat.
             </p>
@@ -351,7 +354,7 @@ export default function PlatformTenants() {
         )}
         {t.id === usageExpandedId && (
           <div>
-            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <p className="mb-2 text-xs font-medium" style={{ color: "var(--warning)" }}>
               Legacy Opsi F — laporan estimasi lama, bukan sumber tagihan aktif sejak Fase 28.
             </p>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -363,61 +366,75 @@ export default function PlatformTenants() {
                 value={usagePeriod}
                 onChange={(e) => setUsagePeriod(e.target.value || currentPeriod())}
                 className="input w-auto py-1 text-xs"
+                aria-label="Periode"
               />
             </div>
-            {usageLoading && (
-              <p className="mt-2 text-xs" style={{ color: "var(--th-color)" }}>Memuat...</p>
-            )}
-            {usage && (
-              <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ color: "var(--th-color)" }}>
-                      <th className="py-1 text-left">SKU</th>
-                      <th className="py-1 text-right">Jumlah</th>
-                      <th className="py-1 text-right">Estimasi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                    {usage.lines.map((line, idx) => (
-                      <tr key={`${line.sku}-${line.metric}-${idx}`}>
-                        <td className="py-1.5" style={{ color: "var(--text)" }}>
-                          {line.label}
-                        </td>
-                        <td className="py-1.5 text-right" style={{ color: "var(--th-color)" }}>
-                          {line.qty !== undefined
-                            ? line.qty
-                            : line.qty_invoice !== undefined
-                              ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
-                              : "—"}
-                        </td>
-                        <td className="py-1.5 text-right font-medium" style={{ color: "var(--text)" }}>
-                          {line.amount !== null ? formatRupiah(line.amount) : (
-                            <span title={line.note} style={{ color: "var(--th-color)" }}>
-                              belum diketahui
-                            </span>
+            {/* Pengecualian sengaja dari DataTable: panel ringkas di dalam baris
+                ekspansi (latar --hover) -- teks sekunder pakai --th-color, bukan
+                --text-muted (gagal AA di --hover). */}
+            <div className="mt-2">
+              <QueryState query={usageQuery} compact>
+                {usage && (
+                  <>
+                    <div
+                      className="overflow-x-auto"
+                      role="region"
+                      aria-label="Pemakaian per SKU"
+                      tabIndex={0}
+                    >
+                      <table className="w-full">
+                        <caption className="sr-only">Estimasi pemakaian per SKU periode {usagePeriod}</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col" className="th">SKU</th>
+                            <th scope="col" className="th num">Jumlah</th>
+                            <th scope="col" className="th num">Estimasi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                          {usage.lines.map((line, idx) => (
+                            <tr key={`${line.sku}-${line.metric}-${idx}`}>
+                              <th scope="row" className="td text-left font-normal">
+                                {line.label}
+                              </th>
+                              <td className="td num" style={{ color: "var(--th-color)" }}>
+                                {line.qty !== undefined
+                                  ? line.qty
+                                  : line.qty_invoice !== undefined
+                                    ? `${line.qty_invoice} inv · ${line.qty_faktur} faktur`
+                                    : "—"}
+                              </td>
+                              <td className="td num font-medium">
+                                {line.amount !== null ? formatRupiah(line.amount) : (
+                                  <span title={line.note} style={{ color: "var(--th-color)" }}>
+                                    belum diketahui
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {usage.lines.length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="td py-8 text-center" style={{ color: "var(--th-color)" }}>
+                                Tidak ada SKU berlisensi untuk periode ini.
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                    {usage.lines.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="py-3 text-center" style={{ color: "var(--th-color)" }}>
-                          Tidak ada SKU berlisensi untuk periode ini.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <p className="mt-2 text-right text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  Total diketahui: {formatRupiah(usage.total_known)}
-                </p>
-              </div>
-            )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="num mt-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Total diketahui: {formatRupiah(usage.total_known)}
+                    </p>
+                  </>
+                )}
+              </QueryState>
+            </div>
           </div>
         )}
         {t.id === billingExpandedId && (
           <div>
+            <QueryState query={billingSummaryQuery} compact>
             {billingSummary && (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-4">
@@ -471,40 +488,48 @@ export default function PlatformTenants() {
                     </select>
                   </div>
                 </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ color: "var(--text-muted)" }}>
-                      <th className="py-1 text-left">Waktu</th>
-                      <th className="py-1 text-left">Kejadian</th>
-                      <th className="py-1 text-right">Jumlah</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                    {billingSummary.recent_transactions.map((tx) => (
-                      <tr key={tx.id}>
-                        <td className="py-1.5" style={{ color: "var(--text-muted)" }}>
-                          {formatDateTime(tx.created_at)}
-                        </td>
-                        <td className="py-1.5" style={{ color: "var(--text)" }}>
-                          {tx.ref_event}
-                        </td>
-                        <td className="py-1.5 text-right" style={{ color: "var(--text)" }}>
-                          {tx.amount >= 0 ? "+" : ""}
-                          {formatRupiah(tx.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                    {billingSummary.recent_transactions.length === 0 && (
+                {/* Pengecualian sengaja dari DataTable (lihat panel pemakaian di atas). */}
+                <div
+                  className="overflow-x-auto"
+                  role="region"
+                  aria-label="Transaksi billing terakhir"
+                  tabIndex={0}
+                >
+                  <table className="w-full">
+                    <caption className="sr-only">Transaksi billing terakhir tenant {t.name}</caption>
+                    <thead>
                       <tr>
-                        <td colSpan={3} className="py-3 text-center" style={{ color: "var(--text-muted)" }}>
-                          Belum ada transaksi.
-                        </td>
+                        <th scope="col" className="th">Waktu</th>
+                        <th scope="col" className="th">Kejadian</th>
+                        <th scope="col" className="th num">Jumlah</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                      {billingSummary.recent_transactions.map((tx) => (
+                        <tr key={tx.id}>
+                          <td className="td whitespace-nowrap" style={{ color: "var(--th-color)" }}>
+                            {formatDateTime(tx.created_at)}
+                          </td>
+                          <td className="td">{tx.ref_event}</td>
+                          <td className="td num">
+                            {tx.amount >= 0 ? "+" : ""}
+                            {formatRupiah(tx.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                      {billingSummary.recent_transactions.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="td py-8 text-center" style={{ color: "var(--th-color)" }}>
+                            Belum ada transaksi.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+            </QueryState>
           </div>
         )}
       </div>

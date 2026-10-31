@@ -24,7 +24,15 @@ import {
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { CalloutBlock } from "../components/workspace";
 import { KpiAnomaliesCard } from "../components/KpiAnomalies";
-import { ErrorState, HeaderCanvas, KpiCard, PageFallback, StatusPill } from "../components/ui";
+import {
+  type Column,
+  DataTable,
+  ErrorState,
+  HeaderCanvas,
+  KpiCard,
+  PageFallback,
+  StatusPill,
+} from "../components/ui";
 import { api, formatRupiah } from "../api/client";
 
 interface Overview {
@@ -395,10 +403,13 @@ export default function Dashboard() {
     queryKey: ["clients"],
     queryFn: () => api.get<ClientRow[]>("/clients"),
   });
-  const { data: invoices } = useQuery({
+  // Objek query disimpan utuh (bukan cuma `data`) supaya DataTable "Invoice
+  // Terbaru" bisa membedakan gagal muat dari memang belum ada invoice.
+  const invoicesQuery = useQuery({
     queryKey: ["invoices"],
     queryFn: () => api.get<InvoiceRow[]>("/finance/invoices"),
   });
+  const invoices = invoicesQuery.data;
   // Endpoint yang sama persis dgn yang sudah dipakai Finance.tsx -- sinyal
   // bisnis baru di Dashboard (audit desain 2026-09-15): "Outstanding &
   // Faktur" sebelumnya cuma 1 angka datar + jumlah overdue, tidak
@@ -426,7 +437,27 @@ export default function Dashboard() {
   const clientName = (id: string) => clients?.find((c) => c.id === id)?.name ?? "—";
   // API sudah mengurutkan created_at DESC (finance/service.py list_invoices);
   // dulu .reverse() di sini membuat "Invoice Terbaru" menampilkan 5 invoice TERLAMA.
-  const recentInvoices = (invoices ?? []).slice(0, 5);
+  const recentInvoices = invoices?.slice(0, 5);
+  // Tanpa sortValue: hanya 5 baris terbaru, urutan API (created_at DESC) yang bermakna.
+  const recentInvoiceColumns: Column<InvoiceRow>[] = [
+    { key: "invoice_no", header: "Invoice", className: "font-mono text-xs", cell: (inv) => inv.invoice_no },
+    { key: "client", header: "Klien", cell: (inv) => clientName(inv.client_id) },
+    { key: "total_due", header: "Jumlah", numeric: true, cell: (inv) => formatRupiah(inv.total_due) },
+    {
+      key: "status",
+      header: "Status",
+      cell: (inv) => <StatusPill domain="invoice" status={inv.status} />,
+    },
+    {
+      key: "faktur",
+      header: "Faktur",
+      cell: (inv) => (
+        <span className="text-xs" style={{ color: "var(--th-color)" }}>
+          {FAKTUR_STATUS_LABEL[inv.tax_invoice_status ?? "belum_buat"] ?? "—"}
+        </span>
+      ),
+    },
+  ];
   const urgentItems = (digest?.items ?? []).filter((i) => i.type in URGENT_DIGEST_DOMAIN);
 
   const revenueShare = pct(data.finance.revenue_mtd, data.finance.revenue_mtd + data.finance.outstanding);
@@ -812,41 +843,15 @@ export default function Dashboard() {
               <p className="mb-2 text-xs font-medium" style={{ color: "var(--text)" }}>
                 Invoice Terbaru
               </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="th">Invoice</th>
-                    <th className="th">Klien</th>
-                    <th className="th num">Jumlah</th>
-                    <th className="th">Status</th>
-                    <th className="th">Faktur</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                  {recentInvoices.map((inv) => (
-                    <tr key={inv.id}>
-                      <td className="td font-mono text-xs">{inv.invoice_no}</td>
-                      <td className="td">{clientName(inv.client_id)}</td>
-                      <td className="td num">{formatRupiah(inv.total_due)}</td>
-                      <td className="td">
-                        <StatusPill domain="invoice" status={inv.status} />
-                      </td>
-                      <td className="td text-xs" style={{ color: "var(--text-muted)" }}>
-                        {FAKTUR_STATUS_LABEL[inv.tax_invoice_status ?? "belum_buat"] ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
-                  {recentInvoices.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="td text-center" style={{ color: "var(--text-muted)" }}>
-                        Belum ada invoice.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              <DataTable
+                plain
+                label="Invoice terbaru"
+                rows={recentInvoices}
+                columns={recentInvoiceColumns}
+                rowKey={(inv) => inv.id}
+                query={invoicesQuery}
+                emptyTitle="Belum ada invoice."
+              />
             </div>
 
             {/* Margin per klien: diganti dari daftar datar jadi ranking bar

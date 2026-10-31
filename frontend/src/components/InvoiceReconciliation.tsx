@@ -62,34 +62,46 @@ export function InvoiceReconciliationPanel({ invoiceId, onClose }: { invoiceId: 
       <QueryState query={query} compact>
         {rec && (
           <>
-            <table className="w-full max-w-xl">
-              <thead>
-                <tr>
-                  <th className="th">Periode {rec.period}</th>
-                  <th className="th num">Ditagih</th>
-                  <th className="th num">Absensi disetujui / slip kini</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="td">Headcount</td>
-                  <td className="td num">{rec.totals.headcount_billed}</td>
-                  <td className="td num">{rec.totals.headcount_approved}</td>
-                </tr>
-                <tr>
-                  <td className="td">Jam lembur</td>
-                  <td className="td num">{rec.totals.overtime_billed}</td>
-                  <td className="td num">{rec.totals.overtime_approved}</td>
-                </tr>
-                <tr>
-                  <td className="td">Payroll</td>
-                  <td className="td num">{formatRupiah(rec.totals.payroll_billed)}</td>
-                  <td className="td num">
-                    {rec.totals.payroll_current === null ? "-" : formatRupiah(rec.totals.payroll_current)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            {/* Pengecualian sengaja dari DataTable: 3 baris tetap di baris ekspansi
+                tabel invoice. Kolom rupiah melebar di 390px -> area gulir fokusabel. */}
+            <div
+              className="max-w-xl overflow-x-auto"
+              role="region"
+              aria-label="Perbandingan tagihan dan absensi"
+              tabIndex={0}
+            >
+              <table className="w-full">
+                <caption className="sr-only">
+                  Tagihan invoice {rec.invoice_no} dibanding absensi disetujui periode {rec.period}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col" className="th">Periode {rec.period}</th>
+                    <th scope="col" className="th num">Ditagih</th>
+                    <th scope="col" className="th num">Absensi disetujui / slip kini</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  <tr>
+                    <th scope="row" className="td whitespace-nowrap text-left font-medium">Headcount</th>
+                    <td className="td num">{rec.totals.headcount_billed}</td>
+                    <td className="td num">{rec.totals.headcount_approved}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row" className="td whitespace-nowrap text-left font-medium">Jam lembur</th>
+                    <td className="td num">{rec.totals.overtime_billed}</td>
+                    <td className="td num">{rec.totals.overtime_approved}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row" className="td whitespace-nowrap text-left font-medium">Payroll</th>
+                    <td className="td num">{formatRupiah(rec.totals.payroll_billed)}</td>
+                    <td className="td num">
+                      {rec.totals.payroll_current === null ? "-" : formatRupiah(rec.totals.payroll_current)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
             {rec.summary && (
               <div className="rounded-lg p-3" style={{ backgroundColor: "var(--accent-tint)" }}>
@@ -102,7 +114,7 @@ export function InvoiceReconciliationPanel({ invoiceId, onClose }: { invoiceId: 
 
             {rec.findings_total === 0 ? (
               <p className="flex items-center gap-1.5" style={{ color: "var(--th-color)" }}>
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "var(--success)" }} aria-hidden="true" />
                 Cocok -- headcount, lembur, dan total payroll sesuai absensi yang disetujui.
               </p>
             ) : (

@@ -12,10 +12,12 @@ import {
   confirmToast,
   currentPeriod,
   DataTable,
+  EmptyState,
   HeaderCanvas,
   KpiCard,
   PeriodPicker,
   PreflightAlert,
+  QueryState,
   StatusPill,
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -255,11 +257,12 @@ function SaltabTable({ runId }: { runId: string | null }) {
   const [addingComponentFor, setAddingComponentFor] = useState<string | null>(null);
   const [holdingFor, setHoldingFor] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const { data: rows, isLoading } = useQuery({
+  const saltabQuery = useQuery({
     queryKey: ["saltab", runId],
     queryFn: () => api.get<SaltabRow[]>(`/payroll/runs/${runId}/saltab`),
     enabled: Boolean(runId),
   });
+  const rows = saltabQuery.data;
   const saveAmount = useMutation({
     mutationFn: ({ id, amount }: { id: string; amount: number }) =>
       api.patch(`/payroll/saltab/components/${id}`, { amount }),
@@ -340,7 +343,16 @@ function SaltabTable({ runId }: { runId: string | null }) {
         Pilih payroll run (klik "Lihat Slip") untuk melihat grid Saltab.
       </p>
     );
-  if (isLoading) return <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Memuat...</p>;
+  // Dulu cuma teks "Memuat..." dan error query tidak dirender sama sekali
+  // (grid kosong terbaca "belum ada slip").
+  if (saltabQuery.isPending || saltabQuery.isError)
+    return (
+      <div className="px-4">
+        <QueryState query={saltabQuery} compact>
+          {null}
+        </QueryState>
+      </div>
+    );
 
   return (
     <>
@@ -414,20 +426,43 @@ function SaltabTable({ runId }: { runId: string | null }) {
               </button>
             </div>
           </div>
-          <table className="mt-1 w-full text-xs">
+          {/* Pengecualian sengaja dari DataTable: grid per karyawan dengan edit
+              nominal inline. Lebar kolom tetap (w-40/w-32) melebar di 390px ->
+              area gulir yang bisa difokus. */}
+          <div
+            className="mt-1 overflow-x-auto"
+            role="region"
+            aria-label={`Komponen gaji ${row.employee_name}`}
+            tabIndex={0}
+          >
+          <table className="w-full text-xs">
+            <caption className="sr-only">Komponen gaji {row.employee_name}</caption>
+            {/* Header hanya untuk screen reader -- tampilan grid tetap ringkas. */}
+            <thead className="sr-only">
+              <tr>
+                <th scope="col">Komponen</th>
+                <th scope="col">Jenis</th>
+                <th scope="col">Nominal</th>
+                <th scope="col">Aksi</th>
+              </tr>
+            </thead>
             <tbody>
               {row.components.map((c) => (
                 <tr key={c.id}>
-                  <td className="py-0.5 pr-2 capitalize" style={{ color: "var(--text-muted)" }}>
+                  <th
+                    scope="row"
+                    className="py-0.5 pr-2 text-left font-normal capitalize"
+                    style={{ color: "var(--th-color)" }}
+                  >
                     {c.name}
                     {c.source === "manual" && (
                       <span className="ml-1 pill p-indigo">manual</span>
                     )}
-                  </td>
-                  <td className="py-0.5 pr-2 uppercase text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  </th>
+                  <td className="py-0.5 pr-2 text-xs uppercase" style={{ color: "var(--th-color)" }}>
                     {c.ctype}
                   </td>
-                  <td className="w-40 py-0.5 text-right font-mono">
+                  <td className="num w-40 py-0.5">
                     {editing === c.id ? null : formatRupiah(c.amount)}
                   </td>
                   <td className="w-32 py-0.5 pl-2 text-right">
@@ -447,9 +482,12 @@ function SaltabTable({ runId }: { runId: string | null }) {
                           name="amount"
                           type="number"
                           defaultValue={c.amount}
+                          aria-label={`Nominal ${c.name}`}
                           className="input w-28 px-1 py-0.5 text-right"
                         />
-                        <button className="btn-secondary px-1.5 py-0.5">✓</button>
+                        <button className="btn-secondary px-1.5 py-0.5" aria-label="Simpan nominal">
+                          ✓
+                        </button>
                       </form>
                     ) : (
                       <span className="inline-flex gap-2">
@@ -460,6 +498,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
                             style={{ color: "var(--accent)" }}
                             className="hover:opacity-80"
                             title="Override manual"
+                            aria-label={`Ubah ${c.name}`}
                           >
                             edit
                           </button>
@@ -472,7 +511,9 @@ function SaltabTable({ runId }: { runId: string | null }) {
                               )
                             }
                             disabled={deleteComponent.isPending}
-                            className="text-rose-600 dark:text-rose-400 hover:text-rose-800"
+                            className="hover:underline"
+                            style={{ color: "var(--danger)" }}
+                            aria-label={`Hapus ${c.name}`}
                           >
                             hapus
                           </button>
@@ -483,24 +524,25 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 </tr>
               ))}
               <tr className="font-semibold">
-                <td className="pt-1">THP</td>
+                <th scope="row" className="pt-1 text-left">THP</th>
                 <td />
-                <td className="pt-1 text-right font-mono">
+                <td className="num pt-1">
                   {formatRupiah(row.total_earnings - row.total_deductions)}
                 </td>
                 <td />
               </tr>
               {row.total_passthrough > 0 && (
-                <tr style={{ color: "var(--text-muted)" }}>
-                  <td className="pr-2" colSpan={2}>
+                <tr style={{ color: "var(--th-color)" }}>
+                  <th scope="row" className="pr-2 text-left font-normal" colSpan={2}>
                     + BPJS perusahaan (pass-through, ditagih ke klien)
-                  </td>
-                  <td className="text-right font-mono">{formatRupiah(row.total_passthrough)}</td>
+                  </th>
+                  <td className="num">{formatRupiah(row.total_passthrough)}</td>
                   <td />
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
 
           {addingComponentFor === row.payslip_id && (
             <form
@@ -605,10 +647,12 @@ function SaltabTable({ runId }: { runId: string | null }) {
           )}
         </div>
       ))}
-      {rows?.length === 0 && (
-        <p className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>Belum ada slip pada run ini.</p>
+      {rows?.length === 0 && <EmptyState title="Belum ada slip pada run ini." compact />}
+      {err && (
+        <p className="px-4 pb-3 text-sm" role="alert" style={{ color: "var(--danger)" }}>
+          {err.message}
+        </p>
       )}
-      {err && <p className="px-4 pb-3 text-sm text-red-600 dark:text-red-400">{err.message}</p>}
     </div>
     {previewUrl && (
       <div

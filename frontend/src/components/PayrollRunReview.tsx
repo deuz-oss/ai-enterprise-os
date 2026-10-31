@@ -49,30 +49,37 @@ export function PayrollRunReview({ review }: { review: RunReview }) {
         {review.compared_to ? ` dibanding run final ${review.compared_to.period}` : " (belum ada run final sebelumnya)"}
       </p>
 
-      <table className="w-full">
-        <thead>
-          <tr>
-            <th className="th">Total</th>
-            <th className="th num">Sekarang</th>
-            <th className="th num">Sebelumnya</th>
-            <th className="th num">Selisih</th>
-          </tr>
-        </thead>
-        <tbody>
-          {TOTAL_ROWS.map(({ key, label, money }) => {
-            const t = review.totals[key];
-            const delta = t.previous === null ? null : t.current - t.previous;
-            return (
-              <tr key={key}>
-                <td className="td">{label}</td>
-                <td className="td num">{fmt(t.current, money)}</td>
-                <td className="td num">{fmt(t.previous, money)}</td>
-                <td className="td num">{delta === null ? "-" : `${delta > 0 ? "+" : ""}${fmt(delta, money)}`}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* Pengecualian sengaja dari DataTable: 4 baris tetap di dalam dialog.
+          Empat kolom rupiah melebar di 390px -> area gulir yang bisa difokus. */}
+      <div className="overflow-x-auto" role="region" aria-label="Perbandingan total payroll" tabIndex={0}>
+        <table className="w-full">
+          <caption className="sr-only">Total payroll sekarang dibanding run final sebelumnya</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="th">Total</th>
+              <th scope="col" className="th num">Sekarang</th>
+              <th scope="col" className="th num">Sebelumnya</th>
+              <th scope="col" className="th num">Selisih</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {TOTAL_ROWS.map(({ key, label, money }) => {
+              const t = review.totals[key];
+              const delta = t.previous === null ? null : t.current - t.previous;
+              return (
+                <tr key={key}>
+                  <th scope="row" className="td whitespace-nowrap text-left font-medium">
+                    {label}
+                  </th>
+                  <td className="td num">{fmt(t.current, money)}</td>
+                  <td className="td num">{fmt(t.previous, money)}</td>
+                  <td className="td num">{delta === null ? "-" : `${delta > 0 ? "+" : ""}${fmt(delta, money)}`}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {review.summary && (
         <div className="rounded-lg p-3" style={{ backgroundColor: "var(--accent-tint)" }}>

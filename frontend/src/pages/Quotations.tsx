@@ -362,6 +362,7 @@ export default function Quotations() {
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <select
+                aria-label="Lead"
                 value={leadId}
                 onChange={(e) => setLeadId(e.target.value)}
                 className="input"
@@ -375,6 +376,7 @@ export default function Quotations() {
                 ))}
               </select>
               <select
+                aria-label="Template quotation"
                 value={templateId}
                 onChange={(e) => {
                   setTemplateId(e.target.value);

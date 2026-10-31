@@ -812,7 +812,9 @@ export default function Finance() {
           <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>AI sedang menganalisis tren arus kas...</p>
         )}
         {runForecast.error && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{(runForecast.error as Error).message}</p>
+          <p className="mt-2 text-sm" role="alert" style={{ color: "var(--danger)" }}>
+            {(runForecast.error as Error).message}
+          </p>
         )}
         {forecast && !runForecast.isPending && (
           <div className="mt-3 space-y-3">
@@ -834,33 +836,53 @@ export default function Finance() {
               </span>
             </div>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>{forecast.summary}</p>
-            <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
+            {/* Pengecualian sengaja dari DataTable: riwayat + proyeksi dibedakan per
+                baris (warna redup vs tint aksen), urutan kronologis tetap. */}
+            <div
+              className="overflow-x-auto rounded-lg border"
+              style={{ borderColor: "var(--border)" }}
+              role="region"
+              aria-label="Tabel forecast arus kas"
+              tabIndex={0}
+            >
               <table className="w-full">
-                <thead style={{ backgroundColor: "var(--hover)" }}>
+                <caption className="sr-only">Arus kas historis dan proyeksi per bulan</caption>
+                <thead>
                   <tr>
-                    <th className="th">Bulan</th>
-                    <th className="th num">Masuk</th>
-                    <th className="th num">Keluar</th>
-                    <th className="th num">Net</th>
+                    <th scope="col" className="th">Bulan</th>
+                    <th scope="col" className="th num">Masuk</th>
+                    <th scope="col" className="th num">Keluar</th>
+                    <th scope="col" className="th num">Net</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  {/* Warna redup riwayat dipasang di tiap sel: `.td` menyetel warna
+                      sendiri, jadi warna di <tr> dulu tidak berefek. */}
                   {forecast.history.map((h) => (
-                    <tr key={`h-${h.year}-${h.month}`} style={{ color: "var(--text-muted)" }}>
-                      <td className="td">{`${h.year}-${String(h.month).padStart(2, "0")}`}</td>
-                      <td className="td num">{formatRupiah(h.inflow)}</td>
-                      <td className="td num">{formatRupiah(h.outflow)}</td>
-                      <td className="td num">{formatRupiah(h.net)}</td>
+                    <tr key={`h-${h.year}-${h.month}`}>
+                      <th
+                        scope="row"
+                        className="td whitespace-nowrap text-left font-normal"
+                        style={{ color: "var(--th-color)" }}
+                      >
+                        {`${h.year}-${String(h.month).padStart(2, "0")}`}
+                      </th>
+                      <td className="td num" style={{ color: "var(--th-color)" }}>{formatRupiah(h.inflow)}</td>
+                      <td className="td num" style={{ color: "var(--th-color)" }}>{formatRupiah(h.outflow)}</td>
+                      <td className="td num" style={{ color: "var(--th-color)" }}>{formatRupiah(h.net)}</td>
                     </tr>
                   ))}
                   {forecast.projection.map((p) => (
                     <tr key={`p-${p.year}-${p.month}`} className="font-medium" style={{ backgroundColor: "var(--accent-tint)" }}>
-                      <td className="td">
+                      <th scope="row" className="td whitespace-nowrap text-left font-medium">
                         {`${p.year}-${String(p.month).padStart(2, "0")}`} (proyeksi)
-                      </td>
+                      </th>
                       <td className="td num">{formatRupiah(p.inflow)}</td>
                       <td className="td num">{formatRupiah(p.outflow)}</td>
-                      <td className={`td num ${p.net >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
+                      <td
+                        className="td num"
+                        style={{ color: p.net >= 0 ? "var(--success)" : "var(--danger)" }}
+                      >
                         {formatRupiah(p.net)}
                       </td>
                     </tr>
@@ -871,11 +893,11 @@ export default function Finance() {
             {(forecast.risks.length > 0 || forecast.recommendations.length > 0) && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {forecast.risks.length > 0 && (
-                  <div className="rounded-lg bg-rose-50 p-3 dark:bg-rose-500/10">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">
+                  <div className="rounded-lg p-3" style={{ backgroundColor: "var(--danger-tint)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--danger)" }}>
                       Risiko
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text)" }}>
                       {forecast.risks.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}
@@ -883,11 +905,11 @@ export default function Finance() {
                   </div>
                 )}
                 {forecast.recommendations.length > 0 && (
-                  <div className="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-500/10">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  <div className="rounded-lg p-3" style={{ backgroundColor: "var(--accent-tint)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--success)" }}>
                       Rekomendasi
                     </p>
-                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <ul className="mt-1 list-disc pl-4 text-xs" style={{ color: "var(--text)" }}>
                       {forecast.recommendations.map((r, i) => (
                         <li key={i}>{r}</li>
                       ))}

@@ -42,8 +42,25 @@ interface SummaryRow {
 interface ImportResult {
   inserted: number;
   updated: number;
-  failed: { row: number; employee_no: string; error: string }[];
+  failed: FailedImportRow[];
 }
+
+interface FailedImportRow {
+  row: number;
+  employee_no: string;
+  error: string;
+}
+
+// Statis (tidak bergantung state) -> di luar komponen agar referensi stabil.
+const failedImportColumns: Column<FailedImportRow>[] = [
+  { key: "row", header: "Baris", numeric: true, cell: (f) => f.row },
+  { key: "employee_no", header: "No Induk", className: "font-mono", cell: (f) => f.employee_no },
+  {
+    key: "error",
+    header: "Error",
+    cell: (f) => <span style={{ color: "var(--danger)" }}>{f.error}</span>,
+  },
+];
 
 const STATUS_LABELS: Record<string, string> = {
   hadir: "Hadir",
@@ -481,24 +498,20 @@ export default function Attendance() {
               </PropertyRow>
             </PropertiesPanel>
             {importResult.failed.length > 0 && (
-              <table className="mt-2 w-full text-xs">
-                <thead>
-                  <tr>
-                    <th className="th">Baris</th>
-                    <th className="th">No Induk</th>
-                    <th className="th">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importResult.failed.map((f, i) => (
-                    <tr key={i}>
-                      <td className="td">{f.row}</td>
-                      <td className="td font-mono">{f.employee_no}</td>
-                      <td className="td text-red-600 dark:text-red-400">{f.error}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="mt-2">
+                {/* Jumlah baris gagal tak terbatas (satu file CSV penuh) -> DataTable
+                    dengan halaman & header sticky, bukan tabel mentah. */}
+                <DataTable
+                  plain
+                  label="Baris CSV yang gagal diimpor"
+                  rows={importResult.failed}
+                  columns={failedImportColumns}
+                  rowKey={(f) => String(f.row)}
+                  pageSize={50}
+                  maxHeight="24rem"
+                  emptyTitle="Tidak ada baris yang gagal."
+                />
+              </div>
             )}
           </div>
         )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2 } from "lucide-react";
 import { api, formatRupiah } from "../api/client";
+import { QueryState } from "./ui";
 
 /** Respons `/quotations/pricing-check` (backend presales/pricing.py). */
 export interface PricingCheck {
@@ -60,39 +61,30 @@ export function PricingCheckPanel({ check }: { check: PricingCheck }) {
       {!ph ? (
         <p style={{ color: "var(--th-color)" }}>Isi gaji pokok dan fee/harga untuk melihat margin.</p>
       ) : (
-        <table className="w-full max-w-md">
-          <tbody>
-            <tr>
-              <td className="py-0.5">Gaji pokok + tunjangan</td>
-              <td className="num py-0.5">{formatRupiah(ph.base_salary + ph.allowance)}</td>
-            </tr>
-            <tr>
-              <td className="py-0.5">BPJS perusahaan (tarif Rates)</td>
-              <td className="num py-0.5">{formatRupiah(ph.bpjs_employer)}</td>
-            </tr>
-            <tr className="font-medium">
-              <td className="py-0.5">Biaya per orang</td>
-              <td className="num py-0.5">{formatRupiah(ph.cost)}</td>
-            </tr>
-            <tr>
-              <td className="py-0.5">Harga tagih per orang</td>
-              <td className="num py-0.5">{formatRupiah(ph.price)}</td>
-            </tr>
-            <tr className="font-semibold">
-              <td className="py-0.5">Margin per orang</td>
-              <td className={`num py-0.5 ${ph.margin < 0 ? "text-rose-700 dark:text-rose-400" : ""}`}>
-                {formatRupiah(ph.margin)}
-                {ph.margin_pct !== null && ` (${pct(ph.margin_pct)})`}
-              </td>
-            </tr>
-            {check.monthly && (
-              <tr>
-                <td className="py-0.5">Margin per bulan ({check.monthly.headcount} orang)</td>
-                <td className="num py-0.5">{formatRupiah(check.monthly.margin)}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        // Pasangan label: nilai, bukan tabel data (tanpa header kolom) -> <dl>.
+        // Label sekunder pakai --th-color: panel ini di atas --hover, dan
+        // --text-muted gagal kontras AA di permukaan itu.
+        <dl className="grid max-w-md grid-cols-[1fr,auto] gap-x-3 gap-y-0.5">
+          <dt style={{ color: "var(--th-color)" }}>Gaji pokok + tunjangan</dt>
+          <dd className="num">{formatRupiah(ph.base_salary + ph.allowance)}</dd>
+          <dt style={{ color: "var(--th-color)" }}>BPJS perusahaan (tarif Rates)</dt>
+          <dd className="num">{formatRupiah(ph.bpjs_employer)}</dd>
+          <dt className="font-medium">Biaya per orang</dt>
+          <dd className="num font-medium">{formatRupiah(ph.cost)}</dd>
+          <dt style={{ color: "var(--th-color)" }}>Harga tagih per orang</dt>
+          <dd className="num">{formatRupiah(ph.price)}</dd>
+          <dt className="font-semibold">Margin per orang</dt>
+          <dd className="num font-semibold" style={ph.margin < 0 ? { color: "var(--danger)" } : undefined}>
+            {formatRupiah(ph.margin)}
+            {ph.margin_pct !== null && ` (${pct(ph.margin_pct)})`}
+          </dd>
+          {check.monthly && (
+            <>
+              <dt style={{ color: "var(--th-color)" }}>Margin per bulan ({check.monthly.headcount} orang)</dt>
+              <dd className="num">{formatRupiah(check.monthly.margin)}</dd>
+            </>
+          )}
+        </dl>
       )}
       {check.history && (
         <p className="text-xs" style={{ color: "var(--th-color)" }}>
@@ -112,7 +104,7 @@ export function PricingCheckPanel({ check }: { check: PricingCheck }) {
       ) : (
         ph && (
           <p className="flex items-center gap-1.5" style={{ color: "var(--th-color)" }}>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "var(--success)" }} aria-hidden="true" />
             Margin di atas batas {pct(check.min_margin_pct)}.
           </p>
         )
@@ -156,5 +148,11 @@ export function StoredPricingCheck({ quotationId }: { quotationId: string }) {
     queryKey: ["pricing-check", quotationId],
     queryFn: () => api.get<PricingCheck>(`/quotations/${quotationId}/pricing-check`),
   });
-  return query.data ? <PricingCheckPanel check={query.data} /> : null;
+  // Approver harus tahu kalau cek margin GAGAL dimuat -- dulu diam-diam null,
+  // terbaca seolah tidak ada peringatan.
+  return (
+    <QueryState query={query} compact>
+      {query.data && <PricingCheckPanel check={query.data} />}
+    </QueryState>
+  );
 }
