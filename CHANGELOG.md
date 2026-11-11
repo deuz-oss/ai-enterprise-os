@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Audit 2026-11-11 Phase 1: fondasi design system
+
+Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` §12 & roadmap Phase 1. Frontend saja.
+
+- **`Dialog`** (`components/ui/Dialog.tsx`): modal umum di atas `<dialog>` native (latar inert, Escape menutup, fokus terkurung dan kembali ke pemicu), pasangan `ConfirmDialog`. Lima overlay buatan tangan (`<div className="fixed inset-0">` tanpa semantik dialog) dimigrasikan: pratinjau slip gaji (Payroll & detail karyawan), alasan placement gugur dan pilihan dokumen onboarding (Job Order), kamera selfie absensi (Portal Saya), dan palet perintah ⌘K.
+- **`FormField`**: label + kontrol + petunjuk + error yang selalu tersambung (`htmlFor`, `aria-describedby`, `aria-invalid`). Dipakai pertama di form Pengguna, yang sebelumnya berlabel placeholder; kolom password kini `type="password"` (dulu teks polos) dan teks bantuannya cocok dengan tombol "Buat Akun".
+- **`PillTabs`**: filter aktif kini ditandai `aria-pressed`, bukan hanya warna.
+- **Token `--shadow-overlay`** (light & dark) menggantikan literal bayangan yang disalin ke 6 overlay.
+- **ESLint** (`eslint.config.js`, `npm run lint`, langkah baru di CI): sengaja sempit — `react-hooks/rules-of-hooks` (error) dan `exhaustive-deps` (warning). Baseline: 0 error, 8 warning yang belum disentuh. Dependensi dev baru: `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks`.
+- Belum termasuk (sengaja, sapuan besar): memakai `CurrencyInput` di ±70 kolom rupiah lain, dan `FormField` di form selain Pengguna.
+
 ### Changed — Audit 2026-11-11: pengaman edit gaji pokok
 
 Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` Top-20 #5. Tanpa migrasi.

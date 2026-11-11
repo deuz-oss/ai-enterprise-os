@@ -53,6 +53,11 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      # Hanya aturan hooks; warning tidak menggagalkan CI (lihat eslint.config.js).
+      - name: Lint (eslint)
+        working-directory: frontend
+        run: npm run lint
+
       - name: Unit tests (vitest)
         working-directory: frontend
         run: npm test

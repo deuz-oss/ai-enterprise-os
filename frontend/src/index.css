@@ -59,10 +59,14 @@
   --danger: #b91c1c;
   --info: #1d4ed8;
   --danger-tint: #fef2f2;
+  /* Elevasi lapisan mengambang (dialog, palet perintah) -- dulu literal
+     yang sama disalin ke 6 overlay. */
+  --shadow-overlay: 0 12px 40px rgba(15, 15, 15, 0.25);
 }
 
 .dark {
   color-scheme: dark;
+  --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.55);
   --bg: #0b1220;
   --bg-elevated: #111827;
   --sidebar: #0f172a;

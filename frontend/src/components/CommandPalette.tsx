@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Dialog } from "./ui/Dialog";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../api/client";
@@ -186,27 +187,14 @@ export default function CommandPalette({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh]"
-      style={{ background: "rgba(15,15,15,0.45)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl overflow-hidden rounded-md"
-        style={{
-          backgroundColor: "var(--bg-elevated)",
-          boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
-          border: "1px solid var(--border)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog title="Palet perintah" onClose={onClose} bare position="top" bodyClassName="overflow-hidden rounded-xl">
+      <>
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") onClose();
-            else if (e.key === "ArrowDown") {
+            if (e.key === "ArrowDown") {
               e.preventDefault();
               setActive((a) => Math.min(a + 1, results.length - 1));
             } else if (e.key === "ArrowUp") {
@@ -217,6 +205,7 @@ export default function CommandPalette({
             }
           }}
           placeholder="Cari halaman, aplikasi, atau entitas (klien/kandidat/JO)..."
+          aria-label="Cari halaman, aplikasi, atau entitas"
           className="w-full px-4 py-3 text-sm focus:outline-none"
           style={{
             backgroundColor: "transparent",
@@ -263,7 +252,7 @@ export default function CommandPalette({
           <span>↑↓ navigasi · Enter buka · Esc tutup</span>
           <span>⌘K</span>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }

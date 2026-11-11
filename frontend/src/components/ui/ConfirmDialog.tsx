@@ -113,7 +113,7 @@ export function ConfirmDialogHost() {
         backgroundColor: "var(--bg-elevated)",
         color: "var(--text)",
         border: "1px solid var(--border)",
-        boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
+        boxShadow: "var(--shadow-overlay)",
       }}
     >
       {options && (

@@ -38,6 +38,7 @@ import {
   Card,
   confirmToast,
   DetailLoadState,
+  Dialog,
   PillTabs,
 } from "../components/ui";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
@@ -1164,120 +1165,93 @@ export default function JobOrderDetail() {
       )}
 
       {pendingTerminal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(15,15,15,0.45)" }}
-          onClick={() => setPendingTerminal(null)}
+        <Dialog
+          title={pendingTerminal.status === "gagal" ? "Tandai Gagal" : "Batalkan Placement"}
+          description="Alasan singkat kenapa kandidat ini gugur -- membantu rekruter lain (atau Anda sendiri nanti) memahami konteksnya tanpa harus menebak dari tahap terakhirnya."
+          onClose={() => setPendingTerminal(null)}
+          size="sm"
         >
-          <div
-            className="w-full max-w-md rounded-md p-4"
-            style={{
-              backgroundColor: "var(--bg-elevated)",
-              boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
-              border: "1px solid var(--border)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              {pendingTerminal.status === "gagal" ? "Tandai Gagal" : "Batalkan Placement"}
-            </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              Alasan singkat kenapa kandidat ini gugur -- membantu rekruter lain (atau Anda
-              sendiri nanti) memahami konteksnya tanpa harus menebak dari tahap terakhirnya.
-            </p>
-            <textarea
-              autoFocus
-              value={terminalNote}
-              onChange={(e) => setTerminalNote(e.target.value)}
-              placeholder="mis. Kandidat mengundurkan diri, dapat tawaran lain"
-              rows={3}
-              className="input mt-3 w-full"
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setPendingTerminal(null)}>
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                loading={changePlacementStatus.isPending}
-                onClick={() => {
-                  changePlacementStatus.mutate({
-                    placementId: pendingTerminal.placementId,
-                    status: pendingTerminal.status,
-                    note: terminalNote.trim() || undefined,
-                  });
-                  setPendingTerminal(null);
-                }}
-              >
-                Simpan
-              </Button>
-            </div>
+          <label htmlFor="terminal-note" className="sr-only">
+            Alasan
+          </label>
+          <textarea
+            id="terminal-note"
+            autoFocus
+            value={terminalNote}
+            onChange={(e) => setTerminalNote(e.target.value)}
+            placeholder="mis. Kandidat mengundurkan diri, dapat tawaran lain"
+            rows={3}
+            className="input w-full"
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setPendingTerminal(null)}>
+              Batal
+            </Button>
+            <Button
+              size="sm"
+              loading={changePlacementStatus.isPending}
+              onClick={() => {
+                changePlacementStatus.mutate({
+                  placementId: pendingTerminal.placementId,
+                  status: pendingTerminal.status,
+                  note: terminalNote.trim() || undefined,
+                });
+                setPendingTerminal(null);
+              }}
+            >
+              Simpan
+            </Button>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {pendingOnboardingInvite && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(15,15,15,0.45)" }}
-          onClick={() => setPendingOnboardingInvite(null)}
+        <Dialog
+          title="Pilih Dokumen yang Diminta"
+          description="Kandidat hanya akan melihat & bisa mengunggah jenis dokumen yang dicentang di sini."
+          onClose={() => setPendingOnboardingInvite(null)}
+          size="sm"
         >
-          <div
-            className="w-full max-w-md rounded-md p-4"
-            style={{
-              backgroundColor: "var(--bg-elevated)",
-              boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
-              border: "1px solid var(--border)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              Pilih Dokumen yang Diminta
-            </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              Kandidat hanya akan melihat & bisa mengunggah jenis dokumen yang dicentang di sini.
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {ONBOARDING_DOC_TYPES.map(({ key, label }) => (
-                <label key={key} className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={onboardingDocTypes.includes(key)}
-                    onChange={(e) =>
-                      setOnboardingDocTypes((prev) =>
-                        e.target.checked ? [...prev, key] : prev.filter((k) => k !== key)
-                      )
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-            {createOnboardingInvite.error && (
-              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                {(createOnboardingInvite.error as Error).message}
-              </p>
-            )}
-            <div className="mt-3 flex justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setPendingOnboardingInvite(null)}>
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={onboardingDocTypes.length === 0}
-                loading={createOnboardingInvite.isPending}
-                onClick={() =>
-                  createOnboardingInvite.mutate({
-                    placementId: pendingOnboardingInvite,
-                    documentTypes: onboardingDocTypes,
-                  })
-                }
-              >
-                Kirim
-              </Button>
-            </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {ONBOARDING_DOC_TYPES.map(({ key, label }) => (
+              <label key={key} className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={onboardingDocTypes.includes(key)}
+                  onChange={(e) =>
+                    setOnboardingDocTypes((prev) =>
+                      e.target.checked ? [...prev, key] : prev.filter((k) => k !== key)
+                    )
+                  }
+                />
+                {label}
+              </label>
+            ))}
           </div>
-        </div>
+          {createOnboardingInvite.error && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
+              {(createOnboardingInvite.error as Error).message}
+            </p>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setPendingOnboardingInvite(null)}>
+              Batal
+            </Button>
+            <Button
+              size="sm"
+              disabled={onboardingDocTypes.length === 0}
+              loading={createOnboardingInvite.isPending}
+              onClick={() =>
+                createOnboardingInvite.mutate({
+                  placementId: pendingOnboardingInvite,
+                  documentTypes: onboardingDocTypes,
+                })
+              }
+            >
+              Kirim
+            </Button>
+          </div>
+        </Dialog>
       )}
     </div>
   );

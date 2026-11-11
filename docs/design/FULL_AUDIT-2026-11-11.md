@@ -56,7 +56,15 @@ frontend `vitest` 117 passed; `tsc && vite build` clean.
 > Observed while verifying, local mode only: on SQLite, timestamps come back
 > without a UTC offset and `formatDateTime` renders them as local time (7
 > hours early in WIB). Columns are `DateTime(timezone=True)`, so PostgreSQL
-> should be unaffected — not verified, not changed. Phases 1–6 untouched.
+> should be unaffected — not verified, not changed.
+> **Phase 1 (2026-11-12):** `Dialog` primitive on native `<dialog>` with the
+> five hand-built overlays migrated (#10), `FormField` (first use: Users
+> form, password now masked — rest of #9), `PillTabs` state semantics,
+> `--shadow-overlay` token, ESLint with the hooks rules in CI (0 errors, 8
+> pre-existing warnings left as is). `CurrencyInput` exists from the salary
+> fix. Not done from Phase 1: adopting `CurrencyInput` / `FormField` across
+> the remaining forms, and z-index tokens (no longer needed for dialogs,
+> which use the top layer). Phases 2–6 untouched apart from the items above.
 
 ---
 

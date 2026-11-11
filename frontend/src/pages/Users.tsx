@@ -8,6 +8,7 @@ import {
   confirmDialog,
   DataTable,
   KpiCard,
+  FormField,
   type PillTab,
   PillTabs,
   TableStateRow,
@@ -116,12 +117,13 @@ export default function Users() {
       <div>
         <PageHeader icon={UserCog} title="Pengguna" />
         <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          Kelola akun tim. Akun baru dibuat lewat tombol "+ Pengguna Baru".
+          Kelola akun tim. Isi form di bawah lalu tekan "Buat Akun" untuk menambah pengguna.
         </p>
       </div>
 
       <form
-        className="card grid grid-cols-1 gap-3 sm:grid-cols-4"
+        className="card grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        aria-label="Buat pengguna baru"
         onSubmit={(e) => {
           e.preventDefault();
           const formEl = e.currentTarget;
@@ -144,21 +146,42 @@ export default function Users() {
           );
         }}
       >
-        <input name="email" type="email" required placeholder="Email *" className="input" />
-        <input name="full_name" required placeholder="Nama lengkap *" className="input" />
-        <input name="password" required minLength={8} placeholder="Password min. 8 karakter *" className="input" />
-        <div className="flex gap-2">
-          <select name="role" className="input" defaultValue="recruiter" aria-label="Role pengguna baru">
-            {ROLES.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-          <button className="btn shrink-0" disabled={createUser.isPending}>
-            + Buat
-          </button>
-        </div>
+        <FormField label="Email" required>
+          {(field) => <input {...field} name="email" type="email" autoComplete="off" className="input" />}
+        </FormField>
+        <FormField label="Nama lengkap" required>
+          {(field) => <input {...field} name="full_name" autoComplete="off" className="input" />}
+        </FormField>
+        {/* type="password" + new-password: dulu type="text" -- password akun baru
+            tampil polos di layar dan bisa tersimpan di riwayat isian browser. */}
+        <FormField label="Password awal" required hint="Minimal 8 karakter.">
+          {(field) => (
+            <input
+              {...field}
+              name="password"
+              type="password"
+              minLength={8}
+              autoComplete="new-password"
+              className="input"
+            />
+          )}
+        </FormField>
+        <FormField label="Role">
+          {(field) => (
+            <div className="flex gap-2">
+              <select {...field} name="role" className="input" defaultValue="recruiter">
+                {ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <button className="btn shrink-0" disabled={createUser.isPending}>
+                Buat Akun
+              </button>
+            </div>
+          )}
+        </FormField>
       </form>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -1,4 +1,4 @@
-import { type Column, DataTable, PeriodPicker } from "../components/ui";
+import { type Column, DataTable, Dialog, PeriodPicker } from "../components/ui";
 import { FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatDateTime, formatRupiah, setToken } from "../api/client";
@@ -259,10 +259,17 @@ function SelfieCameraModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
+    <Dialog
+      title="Kamera selfie absensi"
+      onClose={onCancel}
+      bare
+      size="sm"
+      className="backdrop:bg-black/80"
+      bodyClassName="flex flex-col items-center justify-center gap-4 p-4"
+    >
       {error ? (
         <>
-          <p className="max-w-xs text-center text-sm text-white">{error}</p>
+          <p className="max-w-xs text-center text-sm" role="alert">{error}</p>
           <button onClick={onCancel} className="btn-secondary">Tutup</button>
         </>
       ) : (
@@ -281,7 +288,7 @@ function SelfieCameraModal({
           </div>
         </>
       )}
-    </div>
+    </Dialog>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   confirmToast,
   currentPeriod,
   DataTable,
+  Dialog,
   EmptyState,
   HeaderCanvas,
   KpiCard,
@@ -662,38 +663,9 @@ function SaltabTable({ runId }: { runId: string | null }) {
       )}
     </div>
     {previewUrl && (
-      <div
-        className="fixed inset-0 z-50 flex items-start justify-center pt-[6vh]"
-        style={{ background: "rgba(15,15,15,0.45)" }}
-        onClick={closePreview}
-      >
-        <div
-          className="flex h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-md"
-          style={{
-            backgroundColor: "var(--bg-elevated)",
-            boxShadow: "0 12px 40px rgba(15,15,15,0.25)",
-            border: "1px solid var(--border)",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="flex items-center justify-between px-4 py-2"
-            style={{ borderBottom: "1px solid var(--border)" }}
-          >
-            <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              Preview Slip Gaji
-            </p>
-            <button
-              onClick={closePreview}
-              className="text-xs font-medium hover:underline"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Tutup
-            </button>
-          </div>
-          <iframe src={previewUrl} title="Preview Slip Gaji" className="flex-1" />
-        </div>
-      </div>
+      <Dialog title="Preview Slip Gaji" onClose={closePreview} size="lg" bodyClassName="p-0">
+        <iframe src={previewUrl} title="Preview Slip Gaji" className="block h-[75vh] w-full" />
+      </Dialog>
     )}
     </>
   );
