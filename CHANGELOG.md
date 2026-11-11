@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Audit 2026-11-11: pengaman edit gaji pokok
+
+Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` Top-20 #5. Tanpa migrasi.
+
+- **Dulu** gaji pokok diedit di kolom angka polos tanpa label dan tersimpan dengan satu klik: Rp 6.600.000 bisa menjadi Rp 66.000.000 tanpa konfirmasi, tanpa pesan, tanpa jejak.
+- **Kini** (`components/SalaryEditForm.tsx`): nominal berformat ribuan saat diketik (`CurrencyInput` baru di `components/ui`), lalu dialog konfirmasi menampilkan lama → baru beserta persentasenya. Perubahan besar (naik ≥ 50% atau turun ≥ 30%) diberi peringatan dan tombol merah. Nilai yang tidak berubah menutup form tanpa request; berhasil/gagal selalu diberi toast.
+- **Backend:** perubahan gaji pokok dicatat di audit log (`employee.salary_changed`, detail `old`/`new`); `base_salary` negatif ditolak (422) saat membuat maupun mengubah karyawan.
+- **Riwayat:** tab Riwayat karyawan menampilkan kartu "Perubahan Gaji Pokok" untuk role yang boleh membaca audit (admin/management). HR tetap bisa mengubah gaji tetapi tidak melihat kartu ini.
+- Test: 3 test baru di `tests/test_hrd.py`; Vitest `lib/salary.test.ts`.
+
 ### Changed — Audit 2026-11-11: sidebar & halaman mengikuti izin role
 
 Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` Top-20 #4. Tanpa migrasi.

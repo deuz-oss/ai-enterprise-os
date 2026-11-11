@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime, time
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.modules.hrd.models import (
     ContractSignStatus,
@@ -41,7 +41,7 @@ class EmployeeCreate(BaseModel):
     join_date: date | None = None
     marital_status: MaritalStatus | None = None
     dependents: int = 0
-    base_salary: float = 0
+    base_salary: float = Field(0, ge=0)
     jkk_risk_category: int | None = None
     employment_type: EmploymentType = EmploymentType.eksternal
     grade: str | None = None
@@ -77,7 +77,7 @@ class EmployeeUpdate(BaseModel):
     status: EmployeeStatus | None = None
     marital_status: MaritalStatus | None = None
     dependents: int | None = None
-    base_salary: float | None = None
+    base_salary: float | None = Field(None, ge=0)
     jkk_risk_category: int | None = None
     employment_type: EmploymentType | None = None
     # Taut/lepas akun login self-service (role karyawan); null = lepas tautan.

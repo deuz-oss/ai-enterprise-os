@@ -1095,3 +1095,70 @@ def test_employee_payroll_lock_toggle(client):
     assert unlocked.status_code == 200
     assert unlocked.json()["payroll_locked"] is False
     assert unlocked.json()["payroll_locked_at"] is None
+
+
+def _salary_events(client, headers, employee_id):
+    logs = client.get(
+        f"/api/v1/audit/logs?entity_type=employee&entity_id={employee_id}"
+        "&action_prefix=employee.salary_changed",
+        headers=headers,
+    )
+    assert logs.status_code == 200, logs.text
+    return logs.json()["items"]
+
+
+def test_ubah_gaji_pokok_tercatat_di_audit(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Uji Gaji", "base_salary": 6_600_000},
+    ).json()
+
+    resp = client.patch(
+        f"/api/v1/employees/{emp['id']}", headers=headers, json={"base_salary": 7_000_000}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["base_salary"] == 7_000_000
+
+    events = _salary_events(client, headers, emp["id"])
+    assert len(events) == 1
+    assert events[0]["detail"]["old"] == 6_600_000
+    assert events[0]["detail"]["new"] == 7_000_000
+    assert events[0]["user_id"] is not None
+
+
+def test_simpan_tanpa_mengubah_gaji_tidak_membuat_event(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees",
+        headers=headers,
+        json={"full_name": "Uji Tetap", "base_salary": 5_000_000},
+    ).json()
+
+    same = client.patch(
+        f"/api/v1/employees/{emp['id']}", headers=headers, json={"base_salary": 5_000_000}
+    )
+    other = client.patch(
+        f"/api/v1/employees/{emp['id']}", headers=headers, json={"phone": "08123456789"}
+    )
+
+    assert same.status_code == 200 and other.status_code == 200
+    assert _salary_events(client, headers, emp["id"]) == []
+
+
+def test_gaji_pokok_negatif_ditolak(client):
+    headers = _auth_header(client)
+    emp = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "Uji Negatif"}
+    ).json()
+
+    bad_update = client.patch(
+        f"/api/v1/employees/{emp['id']}", headers=headers, json={"base_salary": -1}
+    )
+    bad_create = client.post(
+        "/api/v1/employees", headers=headers, json={"full_name": "X", "base_salary": -5}
+    )
+
+    assert bad_update.status_code == 422
+    assert bad_create.status_code == 422

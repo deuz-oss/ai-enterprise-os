@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core import bank_validation, storage
 from app.core.config import get_settings
 from app.core.database import assert_not_referenced, parse_uuid
+from app.core.money import to_decimal
 from app.modules import audit
 from app.modules.hrd.models import (
     ContractSignStatus,
@@ -173,6 +174,7 @@ def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> E
     if "user_id" in data:
         data["user_id"] = _resolve_linked_user(db, employee, data["user_id"])
     previous_status = employee.status
+    previous_salary = to_decimal(employee.base_salary)
     for field, value in data.items():
         setattr(employee, field, value)
     if "status" in data and employee.status != previous_status:
@@ -195,6 +197,23 @@ def update_employee(db: Session, employee_id: str, payload: EmployeeUpdate) -> E
         _revalidate_bank_account(db, employee)
     db.commit()
     db.refresh(employee)
+    new_salary = to_decimal(employee.base_salary)
+    if "base_salary" in data and new_salary != previous_salary:
+        # Gaji pokok menggerakkan payroll, BPJS, dan PPh 21 -- dulu berubah
+        # tanpa jejak sama sekali (audit 2026-11-11 Top-20 #5). Dicatat SETELAH
+        # commit di atas: log_event meng-commit sendiri.
+        audit.log_event(
+            db,
+            action="employee.salary_changed",
+            entity_type="employee",
+            entity_id=employee.id,
+            detail={
+                "employee_no": employee.employee_no,
+                "old": float(previous_salary),
+                "new": float(new_salary),
+            },
+        )
+        db.refresh(employee)
     return employee
 
 

@@ -48,7 +48,15 @@ frontend `vitest` 117 passed; `tsc && vite build` clean.
 > `allowed_areas`. Known gap: Overview cards still link to modules the role
 > cannot open. Side finding from that test: `GET /rates/*` is readable by
 > every tenant role, including `karyawan` (only writes are restricted) — not
-> changed. Phases 1–6 untouched.
+> changed.
+> **#5 fixed (same day):** base salary edit uses a formatted `CurrencyInput`
+> and a confirmation showing old → new with the percentage (large changes
+> warned); the backend audits `employee.salary_changed` and rejects negative
+> salaries; admins/management see the change history in the Riwayat tab.
+> Observed while verifying, local mode only: on SQLite, timestamps come back
+> without a UTC offset and `formatDateTime` renders them as local time (7
+> hours early in WIB). Columns are `DateTime(timezone=True)`, so PostgreSQL
+> should be unaffected — not verified, not changed. Phases 1–6 untouched.
 
 ---
 

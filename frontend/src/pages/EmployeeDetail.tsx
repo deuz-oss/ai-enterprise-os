@@ -1,10 +1,12 @@
 import { useMe } from "../api/auth";
 import { useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
-import { api, downloadFile, formatDate, formatRupiah, formatTime, previewFile } from "../api/client";
+import { api, downloadFile, formatDate, formatDateTime, formatRupiah, formatTime, previewFile } from "../api/client";
 import { useClientSiteOptions } from "../api/lookups";
+import { SalaryEditForm } from "../components/SalaryEditForm";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import {
   Badge,
@@ -13,8 +15,10 @@ import {
   confirmToast,
   DataTable,
   DetailLoadState,
+  EmptyState,
   PeriodPicker,
   PillTabs,
+  QueryState,
 } from "../components/ui";
 import type { EmployeeRow } from "./Employees";
 
@@ -242,6 +246,12 @@ type TabKey =
  * dalam mode edit" untuk data sensitif seperti gaji & alamat KTP). Default
  * ke tampilan read-only; klik ikon pensil untuk membuka form yang sama
  * seperti sebelumnya. */
+interface SalaryAuditRow {
+  id: string;
+  created_at: string;
+  detail: { old?: number; new?: number } | null;
+}
+
 function EditableRow({
   icon,
   label,
@@ -492,6 +502,18 @@ export default function EmployeeDetail() {
       qc.invalidateQueries({ queryKey: ["selfservice-accounts"] });
       invalidate();
     },
+  });
+
+  // Jejak perubahan gaji dari audit log -- hanya untuk role yang boleh
+  // membaca audit (management/admin); HR tetap bisa mengubah, tidak membaca.
+  const canReadAudit = Boolean(me?.allowed_areas?.includes("audit"));
+  const salaryAuditQuery = useQuery({
+    queryKey: ["employee-salary-audit", id],
+    queryFn: () =>
+      api.get<{ items: SalaryAuditRow[] }>(
+        `/audit/logs?entity_type=employee&entity_id=${id}&action_prefix=employee.salary_changed`
+      ),
+    enabled: Boolean(id) && tab === "riwayat" && canReadAudit,
   });
 
   const updateEmployee = useMutation({
@@ -963,29 +985,24 @@ export default function EmployeeDetail() {
                     </span>
                   }
                 >
-                  <form
-                    className="flex items-center gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = new FormData(e.currentTarget);
+                  <SalaryEditForm
+                    current={employee.base_salary}
+                    pending={updateEmployee.isPending}
+                    onUnchanged={() => setEditingField(null)}
+                    onSave={(next) =>
                       updateEmployee.mutate(
-                        { empId: id, body: { base_salary: Number(form.get("base_salary")) || 0 } },
-                        { onSuccess: () => setEditingField(null) }
-                      );
-                    }}
-                  >
-                    <input
-                      autoFocus
-                      name="base_salary"
-                      type="number"
-                      min="0"
-                      defaultValue={employee.base_salary}
-                      className="input w-auto py-1 text-xs"
-                    />
-                    <button disabled={updateEmployee.isPending} className="btn-secondary py-1 text-xs">
-                      Simpan
-                    </button>
-                  </form>
+                        { empId: id, body: { base_salary: next } },
+                        {
+                          onSuccess: () => {
+                            setEditingField(null);
+                            qc.invalidateQueries({ queryKey: ["employee-salary-audit", id] });
+                            toast.success(`Gaji pokok diperbarui menjadi ${formatRupiah(next)}`);
+                          },
+                          onError: (e) => toast.error(`Gagal menyimpan gaji: ${(e as Error).message}`),
+                        }
+                      )
+                    }
+                  />
                 </EditableRow>
                 <EditableRow
                   icon={UserRound}
@@ -1943,6 +1960,30 @@ export default function EmployeeDetail() {
 
           {tab === "riwayat" && (
             <div className="space-y-4">
+              {canReadAudit && (
+                <div className="card">
+                  <h2 className="font-semibold" style={{ color: "var(--text)" }}>
+                    Perubahan Gaji Pokok
+                  </h2>
+                  <QueryState
+                    query={salaryAuditQuery}
+                    isEmpty={(salaryAuditQuery.data?.items.length ?? 0) === 0}
+                    empty={<EmptyState title="Belum ada perubahan gaji pokok tercatat." compact />}
+                    compact
+                  >
+                    <ul className="mt-2 divide-y" style={{ borderColor: "var(--border)" }}>
+                      {(salaryAuditQuery.data?.items ?? []).map((log) => (
+                        <li key={log.id} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
+                          <span className="num" style={{ color: "var(--text)" }}>
+                            {formatRupiah(log.detail?.old ?? null)} → {formatRupiah(log.detail?.new ?? null)}
+                          </span>
+                          <span style={{ color: "var(--text-muted)" }}>{formatDateTime(log.created_at)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </QueryState>
+                </div>
+              )}
               <div className="card">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold" style={{ color: "var(--text)" }}>Riwayat Mutasi</h2>
