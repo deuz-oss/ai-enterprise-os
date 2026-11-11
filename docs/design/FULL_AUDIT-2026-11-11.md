@@ -40,8 +40,15 @@ frontend `vitest` 117 passed; `tsc && vite build` clean.
 > Re-verified live: `finance` can pick a client and sees the rejection
 > message; `recruiter` can open the Job Order form; duplicate payroll run and
 > duplicate user email now show the server's message. Still open from the
-> same items: sidebar and page chrome do not yet follow permissions (#4),
-> and the Users password field is still plain text (#9). Phases 1–6 untouched.
+> same items: the Users password field is still plain text (#9).
+> **#4 fixed (same day):** `/auth/me` returns `allowed_areas` from
+> `NAV_AREAS` in `core/permissions.py`; the sidebar is filtered from it and a
+> forbidden route renders one "Tidak ada akses" page. A test calls each
+> area's primary endpoint as every role and checks it against
+> `allowed_areas`. Known gap: Overview cards still link to modules the role
+> cannot open. Side finding from that test: `GET /rates/*` is readable by
+> every tenant role, including `karyawan` (only writes are restricted) — not
+> changed. Phases 1–6 untouched.
 
 ---
 

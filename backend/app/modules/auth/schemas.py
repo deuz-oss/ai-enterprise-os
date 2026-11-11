@@ -36,6 +36,13 @@ class UserOut(BaseModel):
     tenant_name: str | None = None
 
 
+class MeOut(UserOut):
+    """`GET /auth/me`: profil + area navigasi yang boleh dibuka role ini
+    (lihat `core/permissions.py::NAV_AREAS`)."""
+
+    allowed_areas: list[str] = []
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

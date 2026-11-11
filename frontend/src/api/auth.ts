@@ -24,6 +24,9 @@ export interface Me {
   is_active: boolean;
   created_at: string;
   tenant_name: string | null;
+  /** Area navigasi yang boleh dibuka role ini (`lib/navAccess.ts`). Opsional:
+   * backend versi lama belum mengirimnya -> frontend tidak memblokir. */
+  allowed_areas?: string[];
 }
 
 /**

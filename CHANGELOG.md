@@ -6,6 +6,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Audit 2026-11-11: sidebar & halaman mengikuti izin role
+
+Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` Top-20 #4. Tanpa migrasi.
+
+- **Satu sumber kebenaran.** `core/permissions.py` kini punya `NAV_AREAS` (area halaman → role yang lolos guard data utamanya) dan `GET /auth/me` mengirim `allowed_areas`. Sidebar dan quick action ⌘K disaring dari situ (`frontend/src/lib/navAccess.ts`); daftar `roles` per item di `Layout.tsx` yang dulu harus disinkronkan manual (dan separuhnya kosong) dihapus, kecuali Portal Saya & Tenant Management.
+- **Yang berubah bagi user:** role non-admin tidak lagi melihat menu yang pasti 403. Contoh: `finance` kini hanya melihat Overview, Chat, Payment Requests, Finance, Accounting, Rate Configuration, Billing (dulu juga Pipeline, Clients, Quotations, Agreements, Job Orders, Employees, Payroll). Admin tetap melihat semuanya.
+- **Halaman terlarang** yang dibuka lewat URL/bookmark menampilkan satu halaman "Tidak ada akses ke halaman ini" (`ForbiddenPage`), bukan lagi KPI nol + tombol aksi aktif di samping tabel "Tidak ada akses".
+- `EMPLOYEES_VIEW_ROLES` menggantikan literal `(*HRD_ROLES, "operations")` di `hrd/router.py` (perilaku sama).
+- Test: `tests/test_nav_areas.py` memanggil endpoint utama tiap area sebagai tiap role dan mencocokkannya dengan `allowed_areas`, plus memastikan daftar area frontend = backend. Vitest `navAccess.test.ts`.
+- Belum tercakup: tautan "Buka →" di kartu Overview masih muncul untuk modul yang tidak boleh dibuka (mengarah ke halaman "Tidak ada akses").
+
 ### Fixed — Audit 2026-11-11 Phase 0: alur role non-admin & kegagalan yang senyap
 
 Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` (Top-20 #1, #2, #3, #6, #9). Tanpa migrasi.

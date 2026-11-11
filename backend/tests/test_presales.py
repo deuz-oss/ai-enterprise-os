@@ -620,7 +620,7 @@ def test_import_leads_csv_creates_companies_and_leads(client):
 
 def test_import_leads_csv_reports_row_failures(client):
     headers = _auth_header(client)
-    csv_text = "company_name;industry\n" "PT Baris Sukses;Jasa\n" ";Tanpa Nama Perusahaan\n"
+    csv_text = "company_name;industry\nPT Baris Sukses;Jasa\n;Tanpa Nama Perusahaan\n"
     resp = client.post(
         "/api/v1/companies/import",
         headers=headers,

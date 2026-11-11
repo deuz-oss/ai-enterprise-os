@@ -80,6 +80,9 @@ AI_INTERVIEW_SETTINGS_ROLES = ("management",)
 # Fase 28 — lihat komentar pada item `/payroll` di `NAV_ITEMS` Layout.tsx.
 
 HRD_ROLES = ("hr", "management")
+# Daftar & detail karyawan (baca) juga dibuka untuk operations -- lihat
+# `employees_view_router` di hrd/router.py.
+EMPLOYEES_VIEW_ROLES = (*HRD_ROLES, "operations")
 ESIGN_ROLES = ("hr", "management")
 BPJS_ROLES = ("operations", "hr", "finance", "management")
 ATTENDANCE_ROLES = ("admin", "hr", "operations", "management")
@@ -113,3 +116,46 @@ USER_LOOKUP_ROLES = ("business_dev", "recruiter", "management")
 # ---------- Lintas-kategori ----------
 
 APPS_TRIAL_ROLES = ("admin", "management")
+
+# ---------- Area navigasi (sidebar & guard halaman frontend) ----------
+# Kunci = segmen pertama route frontend (`/finance` -> "finance"). Nilainya
+# role yang lolos guard backend untuk DATA UTAMA halaman itu. `GET /auth/me`
+# mengirim `allowed_areas` hasil `allowed_areas()` di bawah, dan frontend
+# (`Layout.tsx`) memakainya untuk menyaring sidebar serta menampilkan "Tidak
+# ada akses" -- menggantikan daftar `roles` terpisah di NAV_ITEMS yang dulu
+# harus disinkronkan manual dan separuhnya kosong (audit 2026-11-11 Top-20 #4:
+# role finance melihat 7 menu yang semuanya 403).
+#
+# Ini TETAP bukan mekanisme keamanan: yang menegakkan akses adalah
+# `require_roles(...)` di tiap router. Halaman tanpa guard role (Overview,
+# Chat, Pages) sengaja tidak ada di sini = selalu tampil.
+NAV_AREAS: dict[str, tuple[str, ...]] = {
+    "leads": PRESALES_ROLES,
+    "clients": CLIENTS_ROLES,
+    "quotations": PRESALES_ROLES,
+    "agreements": PRESALES_ROLES,
+    "suppressed-contacts": PRESALES_ROLES,
+    "job-orders": RECRUITMENT_ROLES,
+    "referral": RECRUITMENT_ROLES,
+    "talent-pool": TALENTPOOL_ROLES,
+    "ai-interview": RECRUITMENT_ROLES,
+    "blacklist": RECRUITMENT_ROLES,
+    "employees": EMPLOYEES_VIEW_ROLES,
+    "attendance": ATTENDANCE_ROLES,
+    "payroll": PAYROLL_ROLES,
+    "payment-requests": PAYMENT_REQUEST_ROLES,
+    "finance": FINANCE_ROLES,
+    "accounting": ACCOUNTING_ROLES,
+    "rates": RATES_ROLES,
+    "billing": BILLING_MANAGE_ROLES,
+    "audit": AUDIT_ROLES,
+    "users": AUTH_ADMIN_ONLY_ROLES,
+}
+
+
+def allowed_areas(role: str) -> list[str]:
+    """Area navigasi yang boleh dibuka `role` (admin tenant: semuanya,
+    selaras bypass admin di `require_roles`)."""
+    if role == "admin":
+        return list(NAV_AREAS)
+    return [area for area, roles in NAV_AREAS.items() if role in roles]

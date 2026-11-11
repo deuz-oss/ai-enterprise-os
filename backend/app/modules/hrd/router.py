@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.permissions import HRD_ROLES
+from app.core.permissions import EMPLOYEES_VIEW_ROLES, HRD_ROLES
 from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_roles
 from app.core.tenancy import get_request_meta
@@ -64,7 +64,7 @@ router = APIRouter(
 employees_view_router = APIRouter(
     prefix="/employees",
     tags=["hrd"],
-    dependencies=[Depends(get_current_user), Depends(require_roles(*HRD_ROLES, "operations"))],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*EMPLOYEES_VIEW_ROLES))],
 )
 
 

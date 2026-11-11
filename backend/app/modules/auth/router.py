@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db, parse_uuid
-from app.core.permissions import AUTH_ADMIN_ONLY_ROLES, USER_LOOKUP_ROLES
+from app.core.permissions import AUTH_ADMIN_ONLY_ROLES, USER_LOOKUP_ROLES, allowed_areas
 from app.core.ratelimit import get_limiter
 from app.core.security import (
     access_token_for,
@@ -22,6 +22,7 @@ from app.modules.auth.schemas import (
     ForgotPasswordAckOut,
     ForgotPasswordIn,
     LoginRequest,
+    MeOut,
     PasswordResetIn,
     PasswordResetIssueOut,
     Token,
@@ -141,14 +142,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=MeOut)
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tenant_name = None
     if current_user.tenant_id is not None:
         tenant_name = db.execute(
             select(Tenant.name).where(Tenant.id == current_user.tenant_id)
         ).scalar_one_or_none()
-    return UserOut.model_validate(current_user).model_copy(update={"tenant_name": tenant_name})
+    return MeOut.model_validate(current_user).model_copy(
+        update={
+            "tenant_name": tenant_name,
+            "allowed_areas": allowed_areas(current_user.role.value),
+        }
+    )
 
 
 @router.post("/change-password", response_model=ChangePasswordOut)

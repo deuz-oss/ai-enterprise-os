@@ -111,6 +111,28 @@ export function ErrorState({
 }
 
 /**
+ * Satu halaman penuh "tidak ada akses" -- dipasang Layout saat role user tidak
+ * boleh membuka area halaman ini (audit 2026-11-11 Top-20 #4). Menggantikan
+ * halaman setengah jadi: KPI nol + tombol aksi aktif + tabel "Tidak ada akses".
+ */
+export function ForbiddenPage() {
+  return (
+    <div className="card mx-auto mt-10 flex max-w-lg flex-col items-center gap-2 py-12 text-center">
+      <Lock className="h-7 w-7" style={{ color: "var(--th-color)" }} aria-hidden="true" />
+      <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+        Tidak ada akses ke halaman ini
+      </h1>
+      <p className="max-w-sm text-sm" style={{ color: "var(--th-color)" }}>
+        Role Anda tidak mencakup modul ini. Hubungi admin workspace bila Anda memerlukannya.
+      </p>
+      <Link to="/" className="btn-secondary mt-3">
+        ← Kembali ke Overview
+      </Link>
+    </div>
+  );
+}
+
+/**
  * Render children hanya kalau data sudah ada; selain itu loading/error/kosong.
  * `isEmpty` dievaluasi setelah sukses -- isi `empty` untuk pesan kosong.
  */

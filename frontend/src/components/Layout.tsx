@@ -48,6 +48,8 @@ import CommandPalette, { type PaletteItem } from "./CommandPalette";
 import { ChatRealtimeProvider } from "./chat/ChatRealtimeProvider";
 import { ConfirmDialogHost } from "./ui/ConfirmDialog";
 import { PageFallback } from "./ui/PageFallback";
+import { ForbiddenPage } from "./ui/states";
+import { canOpenPath, guardedAreaOf } from "../lib/navAccess";
 
 interface NavItem {
   to: string;
@@ -81,12 +83,11 @@ const CATEGORY_ORDER: Category[] = [
   "administration",
 ];
 
-// `roles` di bawah cuma menyembunyikan menu (allowlist ketat, admin TIDAK
-// otomatis lolos di sini) — keamanan sesungguhnya ditegakkan backend lewat
-// `require_roles(...)` per route. Sumber kebenaran role per area ada di
-// `backend/app/core/permissions.py`; kalau ubah salah satu, cek yang lain
-// biar sidebar tidak menyesatkan (menampilkan/menyembunyikan menu yang
-// sebenarnya beda dgn apa yang backend izinkan).
+// Menu area ber-guard (Clients, Payroll, Finance, ...) disaring dari
+// `allowed_areas` kiriman backend (`lib/navAccess.ts`) -- tidak ada lagi daftar
+// role per item yang harus disinkronkan manual. `roles` di bawah hanya untuk
+// dua menu khusus yang bukan area ber-guard: Portal Saya & Tenant Management.
+// Keamanan sesungguhnya tetap `require_roles(...)` di backend.
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Overview", end: true },
   { to: "/leads", label: "Pipeline", bundle: "crm" },
@@ -100,26 +101,22 @@ const NAV_ITEMS: NavItem[] = [
     to: "/talent-pool",
     label: "Talent Pool",
     bundle: "recruitment",
-    roles: ["admin", "recruiter", "operations", "hr", "management"],
   },
   {
     to: "/ai-interview",
     label: "AI Interview",
     bundle: "recruitment",
-    roles: ["admin", "recruiter", "management"],
   },
   {
     to: "/blacklist",
     label: "Blacklist",
     bundle: "recruitment",
-    roles: ["admin", "recruiter", "management"],
   },
   { to: "/employees", label: "Employees", bundle: "workforce" },
   {
     to: "/attendance",
     label: "Attendance",
     bundle: "workforce",
-    roles: ["admin", "hr", "operations", "management"],
   },
   { to: "/chat", label: "Chat" },
   // Payroll sengaja di Workforce, bukan Finance & Accounting -- keputusan
@@ -134,7 +131,6 @@ const NAV_ITEMS: NavItem[] = [
     to: "/payment-requests",
     label: "Payment Requests",
     bundle: "finance_accounting",
-    roles: ["admin", "operations", "hr", "finance", "management"],
   },
   { to: "/finance", label: "Finance", bundle: "finance_accounting" },
   { to: "/accounting", label: "Accounting", bundle: "finance_accounting" },
@@ -142,7 +138,6 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: "/rates",
     label: "Rate Configuration",
-    roles: ["admin", "finance", "management"],
     bundle: "administration",
   },
   // Langganan & saldo kredit Opsi G (Fase 28) — role finance ke atas, sama
@@ -150,14 +145,13 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: "/billing",
     label: "Billing",
-    roles: ["admin", "finance", "management"],
     bundle: "administration",
   },
   // Jejak audit sensitif — disembunyikan dari role non-management.
-  { to: "/audit", label: "Audit", roles: ["admin", "management"], bundle: "administration" },
+  { to: "/audit", label: "Audit", bundle: "administration" },
   // Kelola akun tim & role — hanya admin (dibutuhkan utk buat akun role "karyawan"
   // sebelum bisa ditautkan ke data karyawan di halaman People & Ops).
-  { to: "/users", label: "Users", roles: ["admin"], bundle: "administration" },
+  { to: "/users", label: "Users", bundle: "administration" },
   // Manajemen tenant SaaS — hanya platform_admin (Brian), menu tersendiri
   // (dulu cuma bisa diakses lewat URL langsung, tanpa link menu apa pun).
   { to: "/platform", label: "Tenant Management", roles: ["platform_admin"] },
@@ -355,6 +349,16 @@ export default function Layout() {
     return <Navigate to="/portal-saya" replace />;
   }
 
+  // Selama profil belum termuat, menu ber-guard disembunyikan dulu (lebih
+  // baik muncul belakangan daripada tampil lalu hilang).
+  const navAreas = me.data ? me.data.allowed_areas : [];
+  // Halaman di luar izin role (dibuka lewat URL/bookmark): jangan render
+  // halamannya -- dulu tampil KPI nol + tombol aksi aktif di samping tabel
+  // "Tidak ada akses". Saat profil masih dimuat, tahan dulu dengan fallback.
+  const routeGuarded = guardedAreaOf(location.pathname) !== null;
+  const routeForbidden =
+    Boolean(me.data) && !canOpenPath(location.pathname, me.data?.allowed_areas);
+
   // Visibilitas nav murni role-based sejak Fase 28 -- semua fitur terbuka
   // penuh untuk tenant berlangganan aktif (ditegakkan backend lewat
   // `require_active_subscription()`), tidak ada lagi gating per-app_key.
@@ -362,6 +366,7 @@ export default function Layout() {
     if (isKaryawan && !KARYAWAN_ALLOWED_PATHS.includes(item.to)) return false;
     if (isPlatform && !PLATFORM_ALLOWED_PATHS.includes(item.to)) return false;
     if (item.roles && !(me.data && item.roles.includes(me.data.role))) return false;
+    if (!canOpenPath(item.to, navAreas)) return false;
     return true;
   });
 
@@ -390,7 +395,6 @@ export default function Layout() {
     label: string;
     emoji: string;
     to?: string;
-    roles?: string[];
     action?: () => void;
   }[] = [
     {
@@ -409,27 +413,24 @@ export default function Layout() {
       label: "Absensi hari ini",
       emoji: "📅",
       to: "/attendance",
-      roles: ["admin", "hr", "operations", "management"],
     },
     {
       id: "qa-pr",
       label: "Payment Request",
       emoji: "🧾",
       to: "/payment-requests",
-      roles: ["admin", "operations", "hr", "finance", "management"],
     },
     {
       id: "qa-talent",
       label: "Talent Pool",
       emoji: "🧬",
       to: "/talent-pool",
-      roles: ["admin", "recruiter", "operations", "hr", "management"],
     },
   ];
   const visibleQuickActions = quickActionDefs.filter((qa) => {
     if (isPlatform) return false;
     if (isKaryawan && !(qa.to && KARYAWAN_ALLOWED_PATHS.includes(qa.to))) return false;
-    if (qa.roles && !(me.data && qa.roles.includes(me.data.role))) return false;
+    if (qa.to && !canOpenPath(qa.to, navAreas)) return false;
     return true;
   });
 
@@ -768,9 +769,15 @@ export default function Layout() {
               enabled={Boolean(me.data && me.data.role !== "platform_admin")}
               selfId={me.data?.id ?? null}
             >
-              <Suspense fallback={<PageFallback />}>
-                <Outlet />
-              </Suspense>
+              {routeForbidden ? (
+                <ForbiddenPage />
+              ) : routeGuarded && me.isPending ? (
+                <PageFallback />
+              ) : (
+                <Suspense fallback={<PageFallback />}>
+                  <Outlet />
+                </Suspense>
+              )}
             </ChatRealtimeProvider>
           </div>
         </main>
