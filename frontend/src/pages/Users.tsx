@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { UserCheck, UserCog, UserX } from "lucide-react";
 import { PageHeader } from "../components/workspace";
 import {
@@ -123,14 +124,24 @@ export default function Users() {
         className="card grid grid-cols-1 gap-3 sm:grid-cols-4"
         onSubmit={(e) => {
           e.preventDefault();
-          const form = new FormData(e.currentTarget);
-          createUser.mutate({
-            email: form.get("email"),
-            full_name: form.get("full_name"),
-            password: form.get("password"),
-            role: form.get("role"),
-          });
-          e.currentTarget.reset();
+          const formEl = e.currentTarget;
+          const form = new FormData(formEl);
+          // Reset HANYA saat berhasil: dulu form dikosongkan saat submit, jadi
+          // email duplikat (409) menghapus isian dan tampak seperti sukses.
+          createUser.mutate(
+            {
+              email: form.get("email"),
+              full_name: form.get("full_name"),
+              password: form.get("password"),
+              role: form.get("role"),
+            },
+            {
+              onSuccess: () => {
+                formEl.reset();
+                toast.success(`Akun ${String(form.get("email"))} dibuat`);
+              },
+            }
+          );
         }}
       >
         <input name="email" type="email" required placeholder="Email *" className="input" />

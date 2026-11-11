@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permissions import CLIENTS_ROLES
+from app.core.permissions import (
+    CLIENT_LOOKUP_ROLES,
+    CLIENT_SITE_LOOKUP_ROLES,
+    CLIENTS_ROLES,
+)
 from app.core.ratelimit import get_limiter
 from app.core.security import get_current_user, require_roles
 from app.core.tenancy import get_request_meta
@@ -10,9 +14,11 @@ from app.modules.clients import service
 from app.modules.clients.models import DocumentType
 from app.modules.clients.schemas import (
     ClientCreate,
+    ClientOptionOut,
     ClientOut,
     ClientPortalAccessOut,
     ClientSiteCreate,
+    ClientSiteOptionOut,
     ClientSiteOut,
     ClientSiteUpdate,
     ClientSiteWithClientOut,
@@ -26,6 +32,36 @@ router = APIRouter(
     tags=["clients"],
     dependencies=[Depends(get_current_user), Depends(require_roles(*CLIENTS_ROLES))],
 )
+
+# Lookup baca-saja untuk dropdown modul lain. WAJIB di-include SEBELUM `router`
+# di main.py: path "/clients/options" kalau tidak akan ketangkap
+# `GET /clients/{client_id}` milik `router` (dan ditolak CLIENTS_ROLES).
+lookup_router = APIRouter(
+    prefix="/clients", tags=["clients"], dependencies=[Depends(get_current_user)]
+)
+
+
+@lookup_router.get(
+    "/options",
+    response_model=list[ClientOptionOut],
+    dependencies=[Depends(require_roles(*CLIENT_LOOKUP_ROLES))],
+)
+def list_client_options(db: Session = Depends(get_db)):
+    return service.list_client_options(db)
+
+
+@lookup_router.get(
+    "/site-options",
+    response_model=list[ClientSiteOptionOut],
+    dependencies=[Depends(require_roles(*CLIENT_SITE_LOOKUP_ROLES))],
+)
+def list_site_options(db: Session = Depends(get_db)):
+    return [
+        ClientSiteOptionOut(
+            id=site.id, client_name=client_name, name=site.name, radius_meters=site.radius_meters
+        )
+        for site, client_name in service.list_all_sites(db)
+    ]
 
 
 @router.get("", response_model=list[ClientOut])

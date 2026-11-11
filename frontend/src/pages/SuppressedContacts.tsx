@@ -56,6 +56,7 @@ export default function SuppressedContacts() {
   });
 
   const create = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/suppressed-contacts", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["suppressed-contacts"] });

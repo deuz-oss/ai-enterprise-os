@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatRupiah, parseRupiahInput, safeNextPath } from "./client";
+import {
+  formatDate,
+  formatDateTime,
+  formatErrorDetail,
+  formatRupiah,
+  parseRupiahInput,
+  safeNextPath,
+} from "./client";
+
+describe("formatErrorDetail", () => {
+  it("string dikembalikan apa adanya", () => {
+    expect(formatErrorDetail("Email sudah terdaftar", "x")).toBe("Email sudah terdaftar");
+  });
+
+  it("daftar validasi 422 FastAPI -> 'field: pesan', bukan [object Object]", () => {
+    const detail = [
+      { type: "less_than_equal", loc: ["query", "limit"], msg: "Input should be less than or equal to 1000" },
+      { type: "missing", loc: ["body", "lines", 0, "account_id"], msg: "Field required" },
+    ];
+    expect(formatErrorDetail(detail, "x")).toBe(
+      "limit: Input should be less than or equal to 1000; lines.0.account_id: Field required"
+    );
+  });
+
+  it("bentuk tak dikenal / kosong -> fallback", () => {
+    expect(formatErrorDetail(null, "Gagal")).toBe("Gagal");
+    expect(formatErrorDetail("", "Gagal")).toBe("Gagal");
+    expect(formatErrorDetail([], "Gagal")).toBe("Gagal");
+    expect(formatErrorDetail({ code: 1 }, "Gagal")).toBe("Gagal");
+    expect(formatErrorDetail({ message: "Saldo kurang" }, "Gagal")).toBe("Saldo kurang");
+  });
+});
 
 describe("formatDate", () => {
   it("memformat tanggal Indonesia", () => {

@@ -63,6 +63,7 @@ function riskColor(score: number): string {
 function ScanFakturCard() {
   const [result, setResult] = useState<OcrDraft | null>(null);
   const scan = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
@@ -131,6 +132,7 @@ function RekonsiliasiCard() {
     qc.invalidateQueries({ queryKey: ["bank-statement"] });
 
   const importCsv = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
@@ -614,6 +616,7 @@ function ExecutiveSummaryCard() {
 function AskReportCard() {
   const [question, setQuestion] = useState("");
   const ask = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () =>
       api.post<{ question: string; answer: string; context: string[] }>("/accounting/ai/ask", {
         question,

@@ -142,6 +142,7 @@ export default function Attendance() {
   });
 
   const validateSummary = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, lane }: { id: string; lane: string }) =>
       api.post(`/attendance/summaries/${id}/validate?lane=${lane}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-summaries"] }),

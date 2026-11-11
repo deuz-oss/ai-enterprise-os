@@ -146,6 +146,7 @@ function BrandingCard() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: ["cv-branding"] });
 
   const save = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => {
       const body: Record<string, unknown> = {};
       if (footer !== null) body.footer_text = footer;
@@ -159,6 +160,7 @@ function BrandingCard() {
     },
   });
   const uploadLogo = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
@@ -280,6 +282,7 @@ function FieldSettingsCard() {
   const [open, setOpen] = useState(false);
 
   const save = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (visible_fields: string[]) =>
       api.put("/talentpool/field-settings", { visible_fields }),
     onSuccess: () => {
@@ -459,6 +462,7 @@ export default function TalentPool() {
   const readySoonCount = matchFilteredRows.filter((r) => r.readiness === "segera").length;
 
   const intake = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
@@ -477,6 +481,7 @@ export default function TalentPool() {
   }
 
   const createCandidate = useMutation({
+    meta: { errorHandled: true },
     mutationFn: async ({ body, cv }: { body: Record<string, unknown>; cv: File | null }) => {
       const created = await api.post<{ id: string }>("/recruitment/candidates", body);
       if (cv) {

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatDateTime } from "../api/client";
+import { CLIENT_OPTIONS_KEY } from "../api/lookups";
 import { initials } from "../components/workspace";
 import {
   Badge,
@@ -166,6 +167,8 @@ export default function ClientDetail() {
     mutationFn: (body: Record<string, unknown>) => api.patch(`/clients/${id}`, body),
     onSuccess: () => {
       invalidateClient();
+      // Nama klien dipakai dropdown modul lain (api/lookups.ts).
+      qc.invalidateQueries({ queryKey: CLIENT_OPTIONS_KEY });
       qc.invalidateQueries({ queryKey: ["client-audit", id] });
     },
   });
@@ -199,13 +202,17 @@ export default function ClientDetail() {
     mutationFn: (body: Record<string, unknown>) => api.post(`/clients/${id}/sites`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["client-sites", id] });
+      qc.invalidateQueries({ queryKey: ["client-site-options"] });
       setGpsCoord(null);
       siteFormRef.current?.reset();
     },
   });
   const deleteSite = useMutation({
     mutationFn: (siteId: string) => api.delete(`/clients/sites/${siteId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client-sites", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-sites", id] });
+      qc.invalidateQueries({ queryKey: ["client-site-options"] });
+    },
   });
 
   async function handleUseCurrentLocation() {

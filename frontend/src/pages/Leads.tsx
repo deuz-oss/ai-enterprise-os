@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, downloadFile, formatCurrency, formatRupiah } from "../api/client";
+import { useUserOptions } from "../api/lookups";
 import {
   Briefcase,
   Building2,
@@ -78,11 +79,6 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: "Manual",
   csv_import: "Impor CSV",
 };
-
-interface UserOption {
-  id: string;
-  full_name: string;
-}
 
 const STAGES = ["lead", "kontak", "presentasi", "penawaran", "negosiasi", "deal", "gagal"];
 
@@ -314,15 +310,10 @@ export default function Leads() {
     queryFn: () => api.get<Contact[]>(`/companies/${selectedCompanyId}/contacts`),
     enabled: Boolean(selectedCompanyId),
   });
-  // Untuk avatar+nama "Pemilik Deal" (§1.8) & dropdown assign owner. Endpoint
-  // ini admin-only di backend -- sama seperti dipakai Candidates.tsx untuk
-  // pilihan interviewer, jadi kalau gagal (403) dropdown cuma kosong, tidak
-  // memblokir fitur lain di halaman ini.
-  const { data: users } = useQuery({
-    queryKey: ["users-lite"],
-    queryFn: () => api.get<UserOption[]>("/auth/users"),
-    retry: false,
-  });
+  // Untuk avatar+nama "Pemilik Deal" (§1.8) & dropdown assign owner. Lookup
+  // nama saja (`/auth/users/options`, terbuka utk business_dev) -- dulu
+  // memanggil `/auth/users` yang admin-only sehingga dropdown kosong bagi BD.
+  const { data: users } = useUserOptions();
   const { data: dueTasks } = useQuery({
     queryKey: ["due-tasks"],
     queryFn: () => api.get<DueTask[]>("/leads/activities/due"),
@@ -397,6 +388,7 @@ export default function Leads() {
   });
 
   const importLeads = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (formData: FormData) => api.upload<LeadImportResult>("/companies/import", formData),
     onSuccess: (data) => {
       setImportResult(data);
@@ -427,6 +419,7 @@ export default function Leads() {
   });
 
   const convertLead = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post<{ id: string; name: string }>(`/leads/${id}/convert`, {}),
   });
 
@@ -529,6 +522,7 @@ export default function Leads() {
   });
 
   const addLeadContact = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, contactId, role }: { id: string; contactId: string; role: string }) =>
       api.post(`/leads/${id}/contacts`, { contact_id: contactId, role: role || null }),
     onSuccess: () => {

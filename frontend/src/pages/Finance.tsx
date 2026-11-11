@@ -1,6 +1,5 @@
 import { ReminderDraftDialog, type ReminderDraft } from "../components/ReminderDraftDialog";
 import { InvoiceReconciliationPanel } from "../components/InvoiceReconciliation";
-import type { ClientRow } from "./Clients";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { UrlFilterBar } from "../components/UrlFilterBar";
@@ -18,6 +17,7 @@ import {
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile, formatDate, formatRupiah } from "../api/client";
+import { useClientOptions } from "../api/lookups";
 
 interface InvoiceRow {
   id: string;
@@ -136,10 +136,7 @@ export default function Finance() {
     setClientFilter(searchParams.get("client") ?? "");
   }, [searchParams]);
 
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<ClientRow[]>("/clients"),
-  });
+  const { data: clients } = useClientOptions();
   const invoicesQuery = useQuery({
     queryKey: ["invoices", clientFilter],
     queryFn: () => {
@@ -504,6 +501,7 @@ export default function Finance() {
     onError: (e) => toast.error(`Gagal menyusun draf: ${(e as Error).message}`),
   });
   const updateStatus = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/finance/invoices/${id}`, { status }),
     onSuccess: invalidate,
@@ -513,6 +511,7 @@ export default function Finance() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cashflow"] }),
   });
   const runForecast = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (monthsAhead: number) =>
       api.post<ForecastResult>("/ai/finance/forecast", {
         months_ahead: monthsAhead,
@@ -544,6 +543,7 @@ export default function Finance() {
     },
   });
   const cancelTaxInvoice = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post(`/finance/invoices/${id}/tax-invoice/cancel`),
     onSuccess: invalidate,
   });

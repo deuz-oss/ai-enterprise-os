@@ -110,3 +110,22 @@ class ClientSiteWithClientOut(ClientSiteOut):
     perlu tahu lokasi itu milik klien mana."""
 
     client_name: str
+
+
+class ClientOptionOut(BaseModel):
+    """Baris dropdown lintas modul (`GET /clients/options`) -- sengaja hanya
+    id + nama; NPWP, PIC, dan kontrak tetap di belakang CLIENTS_ROLES."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+
+
+class ClientSiteOptionOut(BaseModel):
+    """Baris dropdown lokasi kerja (`GET /clients/site-options`)."""
+
+    id: UUID
+    client_name: str
+    name: str
+    radius_meters: int

@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense, type ComponentType } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ApiError } from "./api/client";
+import { reportMutationError } from "./api/mutationErrors";
 import Layout from "./components/Layout";
 import { PageFallback } from "./components/ui/PageFallback";
 import Login from "./pages/Login";
@@ -75,6 +76,9 @@ const Pages = lazyPage(() => import("./pages/Pages"));
 const Users = lazyPage(() => import("./pages/Users"));
 
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => reportMutationError(error, mutation),
+  }),
   defaultOptions: {
     queries: {
       // 4xx (403 role, 404, 422) tidak akan berubah kalau diulang -- langsung

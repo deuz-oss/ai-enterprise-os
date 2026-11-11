@@ -108,6 +108,7 @@ export default function Referral() {
   });
 
   const markPaid = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post(`/recruitment/referral-rewards/${id}/mark-paid`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["referral-rewards"] }),
   });

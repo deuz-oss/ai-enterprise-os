@@ -301,6 +301,7 @@ export default function Employees() {
   });
 
   const askAi = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: { question: string; employee_id: string | null }) =>
       api.post<AskResult>("/ai/contracts/ask", body),
     onSuccess: (data) => setAskResult(data),

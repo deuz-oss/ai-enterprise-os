@@ -42,6 +42,7 @@ export function StatementSuggestions({ lineId, onClose }: { lineId: string; onCl
   const bankAccount = bankId || data?.bank_accounts.find((a) => a.code === "1-1100")?.id || data?.bank_accounts[0]?.id || "";
 
   const apply = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (action: Suggestions["actions"][number]) =>
       api.post<{ status: string; warning?: string }>(`/accounting/cashbank/statement/${lineId}/apply`, {
         ...action,

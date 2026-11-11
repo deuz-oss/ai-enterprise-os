@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db, parse_uuid
-from app.core.permissions import AUTH_ADMIN_ONLY_ROLES
+from app.core.permissions import AUTH_ADMIN_ONLY_ROLES, USER_LOOKUP_ROLES
 from app.core.ratelimit import get_limiter
 from app.core.security import (
     access_token_for,
@@ -26,6 +26,7 @@ from app.modules.auth.schemas import (
     PasswordResetIssueOut,
     Token,
     UserCreate,
+    UserOptionOut,
     UserOut,
     UserUpdate,
 )
@@ -296,6 +297,22 @@ def reset_password(payload: PasswordResetIn, db: Session = Depends(get_db)):
         tenant_id=user.tenant_id,
     )
     return user
+
+
+@router.get("/users/options", response_model=list[UserOptionOut])
+def list_user_options(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*USER_LOOKUP_ROLES)),
+):
+    """Nama anggota tim tenant ini untuk dropdown (pemilik lead, pewawancara)."""
+    # Filter tenant manual -- User tidak pakai TenantMixin (lihat list_users).
+    return list(
+        db.execute(
+            select(User)
+            .where(User.tenant_id == user.tenant_id, User.is_active.is_(True))
+            .order_by(User.full_name)
+        ).scalars()
+    )
 
 
 @router.get("/users", response_model=list[UserOut])

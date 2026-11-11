@@ -26,6 +26,37 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Ubah `detail` respons error jadi kalimat yang bisa dibaca.
+ *
+ * FastAPI mengirim `detail` berupa string untuk HTTPException, tapi berupa
+ * DAFTAR objek untuk gagal validasi 422 (`[{loc, msg, ...}]`). Dulu daftar itu
+ * di-`String()` begitu saja sehingga user membaca "[object Object]" (audit
+ * 2026-11-11 Top-20 #3). Bagian `loc` pertama ("body"/"query"/"path") dibuang;
+ * sisanya nama field.
+ */
+export function formatErrorDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail || fallback;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "";
+        const { loc, msg } = item as { loc?: unknown; msg?: unknown };
+        const field = Array.isArray(loc) ? loc.slice(1).join(".") : "";
+        const message = typeof msg === "string" ? msg : "";
+        return field && message ? `${field}: ${message}` : message || field;
+      })
+      .filter(Boolean);
+    return parts.length ? parts.join("; ") : fallback;
+  }
+  if (detail && typeof detail === "object") {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return fallback;
+}
+
 /** Langganan menunggak (403 `subscription_past_due`): semua modul terkunci,
  * jadi arahkan ke halaman Pembayaran -- kecuali sudah di sana (Layout tetap
  * memanggil endpoint ber-guard langganan di /billing; tanpa pengecualian ini
@@ -76,10 +107,11 @@ async function rawRequest(path: string, options: RequestInit = {}): Promise<{ re
       if (token) handleSessionExpired();
       else clearToken();
     }
+    const fallback = resp.statusText || `Permintaan gagal (${resp.status})`;
     const detail =
       data && typeof data === "object" && "detail" in data
-        ? String((data as Record<string, unknown>).detail)
-        : resp.statusText;
+        ? formatErrorDetail((data as Record<string, unknown>).detail, fallback)
+        : fallback;
     const code = resp.headers.get("x-error-code");
     if (resp.status === 403 && code === "subscription_past_due" && token) handleSubscriptionPastDue();
     throw new ApiError(resp.status, detail, code);

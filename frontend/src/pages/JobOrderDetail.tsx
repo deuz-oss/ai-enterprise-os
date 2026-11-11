@@ -30,6 +30,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { api, formatDate, formatDateTime, formatRupiah } from "../api/client";
+import { useClientOptions, useUserOptions } from "../api/lookups";
 import {
   Badge,
   BlacklistBadge,
@@ -41,7 +42,6 @@ import {
 } from "../components/ui";
 import { CalloutBlock, PageHeader, PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import type { JobOrder } from "./JobOrders";
-import type { ClientRow } from "./Clients";
 
 /** Detail Job Order (Fase 21 item 3) — rumah baru untuk unifikasi "satu
  * tombol Jadwalkan Interview" yang bercabang ke sistem human (InterviewSchedule,
@@ -135,11 +135,6 @@ interface Interview {
   score: number | null;
 }
 
-interface UserOption {
-  id: string;
-  full_name: string;
-}
-
 interface JobOrderTemplateT {
   id: string;
   name: string;
@@ -215,10 +210,7 @@ export default function JobOrderDetail() {
     queryKey: ["job-order-templates"],
     queryFn: () => api.get<JobOrderTemplateT[]>("/recruitment/job-order-templates?active_only=true"),
   });
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<ClientRow[]>("/clients"),
-  });
+  const { data: clients } = useClientOptions();
   const { data: placements } = useQuery({
     queryKey: ["placements", id],
     queryFn: () => api.get<Placement[]>(`/recruitment/placements?job_order_id=${id}`),
@@ -254,11 +246,7 @@ export default function JobOrderDetail() {
     queryKey: ["candidates-lookup"],
     queryFn: () => api.get<Candidate[]>("/recruitment/candidates?limit=1000"),
   });
-  const { data: users } = useQuery({
-    queryKey: ["users-for-interview"],
-    queryFn: () => api.get<UserOption[]>("/auth/users"),
-    enabled: Boolean(interviewModeFor),
-  });
+  const { data: users } = useUserOptions({ enabled: Boolean(interviewModeFor) });
   const { data: interviews } = useQuery({
     queryKey: ["interviews-jo", id],
     queryFn: () => api.get<Interview[]>("/recruitment/interviews"),
@@ -283,6 +271,7 @@ export default function JobOrderDetail() {
     qc.invalidateQueries({ queryKey: ["onboarding-invites", selectedPlacementId] });
 
   const scheduleInterview = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/recruitment/interviews", body),
     onSuccess: () => {
       setInterviewModeFor(null);
@@ -305,6 +294,7 @@ export default function JobOrderDetail() {
   // PRD v3.0 §4 aksi 2/3 "Offering": surat penawaran PDF branded -> esign
   // (pindahan dari Candidates.tsx, 2026-09-06).
   const sendOffering = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ placementId, body }: { placementId: string; body: Record<string, unknown> }) =>
       api.post(`/recruitment/placements/${placementId}/offering`, body),
     onSuccess: () => {
@@ -313,6 +303,7 @@ export default function JobOrderDetail() {
     },
   });
   const onboardEmployee = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/employees/onboard", body),
     onSuccess: () => {
       setShowOnboardForm(false);
@@ -320,6 +311,7 @@ export default function JobOrderDetail() {
     },
   });
   const createOnboardingInvite = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ placementId, documentTypes }: { placementId: string; documentTypes: string[] }) =>
       api.post<{ invite: OnboardingInvite; onboarding_url: string }>(
         "/employees/onboarding-invites",
@@ -331,6 +323,7 @@ export default function JobOrderDetail() {
     },
   });
   const applyOnboardingInvite = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (inviteId: string) =>
       api.post(`/employees/onboarding-invites/${inviteId}/apply`, {}),
     onSuccess: () => {
@@ -340,6 +333,7 @@ export default function JobOrderDetail() {
     },
   });
   const requestOnboardingResubmission = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (inviteId: string) =>
       api.post(`/employees/onboarding-invites/${inviteId}/request-resubmission`, {}),
     onSuccess: () => {
@@ -388,6 +382,7 @@ export default function JobOrderDetail() {
     }
   }
   const generateDocument = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () =>
       api.post(`/recruitment/job-orders/${id}/generate-document`, { template_id: docTemplateId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-order", id] }),

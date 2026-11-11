@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
     from app.modules.chat.router import ai_router as chat_ai_router
     from app.modules.chat.router import router as chat_router
     from app.modules.chat.router import ws_router as chat_ws_router
+    from app.modules.clients.router import lookup_router as clients_lookup_router
     from app.modules.clients.router import public_router as clients_public_router
     from app.modules.clients.router import router as clients_router
     from app.modules.dashboard.router import router as dashboard_router
@@ -163,6 +164,12 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         presales_agreements_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_active_subscription())],
+    )
+    # Lookup dulu, baru router utama -- lihat komentar di clients/router.py.
+    app.include_router(
+        clients_lookup_router,
         prefix="/api/v1",
         dependencies=[Depends(require_active_subscription())],
     )

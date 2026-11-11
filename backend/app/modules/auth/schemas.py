@@ -13,6 +13,16 @@ class UserCreate(BaseModel):
     role: UserRole = UserRole.management
 
 
+class UserOptionOut(BaseModel):
+    """Baris dropdown anggota tim (`GET /auth/users/options`) -- tanpa email,
+    role, maupun status; daftar lengkap tetap khusus admin."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

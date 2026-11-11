@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Award, Banknote, Calendar, CreditCard, Gift, Home, IdCard, Mail, Pencil, Percent, Phone, Tag, UserRound } from "lucide-react";
 import { api, downloadFile, formatDate, formatRupiah, formatTime, previewFile } from "../api/client";
+import { useClientSiteOptions } from "../api/lookups";
 import { PropertiesPanel, PropertyRow, initials } from "../components/workspace";
 import {
   Badge,
@@ -50,13 +51,6 @@ interface SelfserviceAccount {
   id: string;
   email: string;
   full_name: string;
-}
-
-interface ClientSiteOption {
-  id: string;
-  client_name: string;
-  name: string;
-  radius_meters: number;
 }
 
 interface LeaveBalanceRow {
@@ -428,11 +422,7 @@ export default function EmployeeDetail() {
     queryFn: () => api.get<SelfserviceAccount[]>("/employees/selfservice-accounts"),
     enabled: !isOpsOnly,
   });
-  const { data: clientSites } = useQuery({
-    queryKey: ["client-sites-all"],
-    queryFn: () => api.get<ClientSiteOption[]>("/clients/sites"),
-    enabled: !isOpsOnly,
-  });
+  const { data: clientSites } = useClientSiteOptions({ enabled: !isOpsOnly });
   const { data: selectedBalance } = useQuery({
     queryKey: ["leave-balance", id],
     queryFn: () =>
@@ -495,6 +485,7 @@ export default function EmployeeDetail() {
   };
 
   const linkAccount = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, userId }: { empId: string; userId: string | null }) =>
       api.patch(`/employees/${empId}`, { user_id: userId }),
     onSuccess: () => {
@@ -504,6 +495,7 @@ export default function EmployeeDetail() {
   });
 
   const updateEmployee = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.patch(`/employees/${empId}`, body),
     onSuccess: invalidate,
@@ -519,6 +511,7 @@ export default function EmployeeDetail() {
     qc.invalidateQueries({ queryKey: ["employee-emergency-contacts", id] });
 
   const createEmergencyContact = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.post(`/employees/${empId}/emergency-contacts`, body),
     onSuccess: () => {
@@ -541,6 +534,7 @@ export default function EmployeeDetail() {
   const invalidateInsurances = () => qc.invalidateQueries({ queryKey: ["employee-insurances", id] });
 
   const createInsurance = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.post(`/employees/${empId}/insurances`, body),
     onSuccess: () => {
@@ -567,12 +561,14 @@ export default function EmployeeDetail() {
   });
 
   const addContract = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.post(`/employees/${empId}/contracts`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employee-contracts", id] }),
   });
 
   const extendContract = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ contractId, body }: { contractId: string; body: Record<string, unknown> }) =>
       api.post(`/employees/contracts/${contractId}/extend`, body),
     onSuccess: () => {
@@ -599,6 +595,7 @@ export default function EmployeeDetail() {
   });
 
   const createWarningLetter = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, formData }: { empId: string; formData: FormData }) =>
       api.upload(`/employees/${empId}/warning-letters`, formData),
     onSuccess: () => {
@@ -608,6 +605,7 @@ export default function EmployeeDetail() {
   });
 
   const generateContractDocument = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({
       contractId,
       templateId,
@@ -664,6 +662,7 @@ export default function EmployeeDetail() {
   };
 
   const sendEsign = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({
       contractId,
       signerName,
@@ -686,12 +685,14 @@ export default function EmployeeDetail() {
   });
 
   const saveBalance = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ empId, body }: { empId: string; body: Record<string, unknown> }) =>
       api.post<LeaveBalanceRow>(`/employees/${empId}/leave-balance`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leave-balance", id] }),
   });
 
   const previewPayslip = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (runId: string) => previewFile(`/payroll/runs/${runId}/employees/${id}/payslip/pdf`),
     onSuccess: setPreviewUrl,
   });
@@ -700,6 +701,7 @@ export default function EmployeeDetail() {
     setPreviewUrl(null);
   }
   const sendPayslipEmail = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/employees/${id}/send-payslip-email`),
   });
 

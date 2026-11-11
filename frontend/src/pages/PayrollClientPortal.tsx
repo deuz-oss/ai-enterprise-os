@@ -61,6 +61,7 @@ export default function PayrollClientPortal() {
   // keputusan, jadi refetch di sini cuma akan menukar tampilan sukses
   // dengan pesan error. State sukses murni lokal dari respons POST.
   const decide = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (approved: boolean) =>
       api.post<{ status: string; decided_by_name: string; decision_note: string | null }>(
         `/payroll/client/${token}/decision`,

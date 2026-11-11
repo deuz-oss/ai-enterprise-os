@@ -152,6 +152,7 @@ export default function Agreements() {
     },
   });
   const sendEmail = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, to_email }: { id: string; to_email: string }) =>
       api.post(`/agreements/${id}/send-email`, { to_email }),
     onSuccess: () => {

@@ -73,6 +73,7 @@ function ApprovalChainPanel() {
   });
 
   const save = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (steps: { approver_role?: string; approver_id?: string }[]) =>
       api.put<{ steps: ChainStep[] }>("/payment-requests/approval-chain", { steps }),
     onSuccess: () => {
@@ -235,6 +236,7 @@ export default function PaymentRequests() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["payment-requests"] });
 
   const act = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, action, note }: { id: string; action: string; note?: string }) =>
       api.post(
         `/payment-requests/${id}/${action}`,

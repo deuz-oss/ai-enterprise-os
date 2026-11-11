@@ -6,6 +6,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Audit 2026-11-11 Phase 0: alur role non-admin & kegagalan yang senyap
+
+Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` (Top-20 #1, #2, #3, #6, #9). Tanpa migrasi.
+
+- **Role non-admin tidak bisa menyelesaikan alurnya.** Dropdown klien di Finance (Generate Invoice), Job Orders, Payroll proyek, Accounting, dan Overview memanggil `GET /clients` yang khusus role CRM, sehingga `finance`/`recruiter`/`hr`/`operations` mendapat dropdown kosong tanpa pesan (dan tombol "+ Job Order Baru" mati). Kini ada lookup baca-saja: `GET /clients/options` (id + nama), `GET /clients/site-options` (lokasi kerja, untuk HR), dan `GET /auth/users/options` (id + nama anggota tim aktif, untuk pemilik lead & pewawancara). Role-nya di `core/permissions.py` (`CLIENT_LOOKUP_ROLES`, `CLIENT_SITE_LOOKUP_ROLES`, `USER_LOOKUP_ROLES`); modul Klien dan daftar akun lengkap **tetap** tertutup seperti sebelumnya. Hook frontend: `src/api/lookups.ts`.
+- **Mutasi yang gagal kini selalu memberi tahu user.** 108 dari 223 mutasi tidak punya jalur error: Run Payroll periode ganda (409), Generate Invoice tanpa payroll (422), buat pengguna dengan email terdaftar (409) gagal tanpa pesan. `MutationCache.onError` global (`src/api/mutationErrors.ts`) menoast pesan backend untuk mutasi yang tidak menanganinya sendiri; yang sudah menampilkan error sendiri ditandai `meta: { errorHandled: true }`. Mutasi baru otomatis ikut jaring ini.
+- **Error validasi terbaca.** `detail` 422 FastAPI (daftar objek) dulu tampil sebagai `[object Object]`; kini `field: pesan` (`formatErrorDetail` di `api/client.ts`).
+- **Form Pengguna** tidak lagi dikosongkan saat server menolak; reset dan toast sukses hanya setelah akun benar-benar dibuat.
+- **Guard produksi.** `APP_ENV=production` menolak start bila `SECRET_KEY` masih nilai bawaan/contoh, kosong, atau < 32 karakter. Bootstrap menolak membuat admin pertama dengan `ADMIN_PASSWORD` bawaan/contoh/kosong/< 8 karakter (instalasi yang adminnya sudah ada tidak terpengaruh). **Perhatian deploy:** pastikan `SECRET_KEY` di `.env.production` minimal 32 karakter sebelum upgrade.
+- Catatan perilaku: dropdown pemilik lead/pewawancara kini hanya memuat pengguna **aktif**.
+- Test: `tests/test_lookups.py`, `tests/test_production_guards.py`, 3 area baru di `test_rbac_matrix.py`; Vitest `mutationErrors.test.ts` + `formatErrorDetail`.
+
 ### Added — Fase 28 lanjutan: billing Opsi G (auto-reload, metode bayar, kwitansi, tahunan, gagal bayar)
 
 Rencana & keputusan: `docs/03-architecture/billing-opsi-g-completion.md` (K1–K19 memakai usulan default). Satu migrasi `4b32d019ebc2`.

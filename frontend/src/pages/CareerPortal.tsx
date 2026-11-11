@@ -92,6 +92,7 @@ export function CareerDetail() {
   });
 
   const apply = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (fd: FormData) =>
       api.upload<{ application_token: string; message: string }>(
         `/public/${tenantSlug}/job-orders/${jobId}/apply`,

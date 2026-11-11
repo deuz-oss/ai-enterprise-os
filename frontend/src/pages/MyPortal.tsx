@@ -611,6 +611,7 @@ export default function MyPortal() {
   const pendingCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const clockMutation = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ direction, formData }: { direction: "in" | "out"; formData: FormData }) =>
       api.upload(`/me/attendance/clock-${direction}`, formData),
     onSuccess: () => {
@@ -662,6 +663,7 @@ export default function MyPortal() {
   };
 
   const createCorrection = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) =>
       api.post("/me/attendance-corrections", body),
     onSuccess: invalidateCorrections,
@@ -672,6 +674,7 @@ export default function MyPortal() {
   });
 
   const submitOvertime = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/me/overtime-requests", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me-overtime"] }),
   });
@@ -681,10 +684,14 @@ export default function MyPortal() {
   });
 
   const markNotification = useMutation({
+    // Latar belakang (tanda sudah-dibaca): gagal tidak perlu toast.
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post(`/me/notifications/${id}/read`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me-notifications"] }),
   });
   const markAllNotifications = useMutation({
+    // Latar belakang (tanda sudah-dibaca): gagal tidak perlu toast.
+    meta: { errorHandled: true },
     mutationFn: () => api.post<{ marked: number }>("/me/notifications/read-all"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me-notifications"] }),
   });
@@ -695,6 +702,7 @@ export default function MyPortal() {
   };
 
   const submitLeave = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/me/leave-requests", body),
     onSuccess: invalidateLeaves,
   });

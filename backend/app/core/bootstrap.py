@@ -63,6 +63,13 @@ def run_bootstrap(db: Session) -> None:
 
         # 1) Admin tenant default
         if _find_user_unfiltered(db, settings.admin_email) is None:
+            # Dicek hanya saat admin BENAR-BENAR akan dibuat: instalasi lama
+            # yang adminnya sudah ada tidak terpengaruh walau env-nya kosong.
+            if settings.app_env == "production" and settings.admin_password_is_insecure:
+                raise RuntimeError(
+                    "ADMIN_PASSWORD wajib diisi (minimal 8 karakter) di produksi sebelum "
+                    "admin pertama dibuat; nilai bawaan/contoh ditolak."
+                )
             admin = User(
                 email=settings.admin_email,
                 full_name="Administrator",

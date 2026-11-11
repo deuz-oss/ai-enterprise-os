@@ -555,6 +555,7 @@ export default function Chat() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadFile = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
@@ -616,6 +617,8 @@ export default function Chat() {
   });
 
   const markRead = useMutation({
+    // Latar belakang (tanda sudah-dibaca): gagal tidak perlu toast.
+    meta: { errorHandled: true },
     mutationFn: (channelId: string) => api.post(`/chat/channels/${channelId}/read-all`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-channels"] }),
   });

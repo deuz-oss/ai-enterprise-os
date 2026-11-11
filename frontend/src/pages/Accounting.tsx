@@ -3,6 +3,7 @@ import { BarChart3, Bot, BookOpen, Clock, FolderTree, Landmark, Lock, Package, S
 import { PageHeader, CalloutBlock } from "../components/workspace";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate, formatRupiah, parseRupiahInput } from "../api/client";
+import { useClientOptions } from "../api/lookups";
 import { toast } from "sonner";
 import {
   confirmDialog,
@@ -83,10 +84,7 @@ export default function Accounting() {
     queryFn: () => api.get<AccountRow[]>("/accounting/accounts"),
   });
   const accounts = accountsQuery.data;
-  const clients = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<{ id: string; name: string }[]>("/clients"),
-  });
+  const clients = useClientOptions();
   const periodsQuery = useQuery({
     queryKey: ["periods"],
     queryFn: () => api.get<PeriodRow[]>("/accounting/periods"),
@@ -124,6 +122,7 @@ export default function Accounting() {
   });
 
   const postEntry = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post(`/accounting/journal/${id}/post`, {}),
     onSuccess: invalidateAll,
   });
@@ -145,6 +144,7 @@ export default function Accounting() {
   });
 
   const closePeriod = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (p: { y: number; m: number }) =>
       api.post(`/accounting/periods/${p.y}/${p.m}/close`, {}),
     onSuccess: invalidateAll,
@@ -873,6 +873,7 @@ function FixedAssetsPanel() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["fixed-assets"] });
 
   const createAsset = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/accounting/assets", body),
     onSuccess: () => {
       setShowForm(false);
@@ -881,6 +882,7 @@ function FixedAssetsPanel() {
   });
 
   const depreciateOne = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, year, month }: { id: string; year: number; month: number }) =>
       api.post(`/accounting/assets/${id}/depreciate`, { year, month }),
     onSuccess: invalidate,
@@ -895,6 +897,7 @@ function FixedAssetsPanel() {
   });
 
   const disposeAsset = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, proceeds }: { id: string; proceeds: number }) =>
       api.post(`/accounting/assets/${id}/dispose`, { proceeds }),
     onSuccess: invalidate,
@@ -1152,6 +1155,7 @@ function PurchasesPanel() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-bills"] });
 
   const createBill = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/accounting/purchases", body),
     onSuccess: () => {
       setShowForm(false);
@@ -1160,6 +1164,7 @@ function PurchasesPanel() {
   });
 
   const payBill = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, bankAccountId }: { id: string; bankAccountId: string }) =>
       api.post(`/accounting/purchases/${id}/pay`, { bank_account_id: bankAccountId }),
     onSuccess: () => {
@@ -1377,6 +1382,7 @@ function CashBankPanel() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["bank-transactions"] });
 
   const createTx = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/accounting/cashbank/transactions", body),
     onSuccess: () => {
       setShowForm(false);

@@ -875,6 +875,7 @@ export default function AIInterview() {
   });
   const [editingRetention, setEditingRetention] = useState(false);
   const saveRetention = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (retention_days: number) =>
       api.put<AiInterviewSettings>("/ai-interview/settings", { retention_days }),
     onSuccess: () => {
@@ -901,6 +902,7 @@ export default function AIInterview() {
   };
 
   const createTemplate = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) =>
       api.post<Template>("/ai-interview/templates", body),
     onSuccess: (created) => {
@@ -911,6 +913,7 @@ export default function AIInterview() {
   });
 
   const updateTemplate = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch<Template>(`/ai-interview/templates/${id}`, body),
     onSuccess: () => {

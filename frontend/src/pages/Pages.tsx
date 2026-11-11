@@ -86,6 +86,7 @@ export default function Pages() {
   });
 
   const updatePage = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/pages/${id}`, body),
     onSuccess: invalidate,

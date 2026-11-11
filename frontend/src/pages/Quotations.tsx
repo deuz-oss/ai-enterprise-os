@@ -143,10 +143,12 @@ export default function Quotations() {
     onSuccess: invalidate,
   });
   const send = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) => api.post(`/quotations/${id}/send`, {}),
     onSuccess: invalidate,
   });
   const sendEmail = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, to_email }: { id: string; to_email: string }) =>
       api.post(`/quotations/${id}/send-email`, { to_email }),
     onSuccess: () => {

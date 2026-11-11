@@ -61,6 +61,7 @@ function ConsentCard({ session, token }: { session: PublicSession; token: string
   const [agreed, setAgreed] = useState(false);
   const [declined, setDeclined] = useState(false);
   const give = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => api.post(`/ai-interview/session/${token}/consent`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-interview-session", token] }),
   });
@@ -143,6 +144,7 @@ function WithdrawConsent({ token }: { token: string }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const withdraw = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => api.post(`/ai-interview/session/${token}/withdraw-consent`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-interview-session", token] }),
   });
@@ -210,6 +212,7 @@ export default function AIInterviewSession() {
   });
 
   const submit = useMutation({
+    meta: { errorHandled: true },
     mutationFn: async () => {
       await api.post(`/ai-interview/session/${token}/start`);
       for (const q of data?.questions ?? []) {

@@ -189,6 +189,7 @@ export function AIInterviewRecording({ token, questions, recorded, maxAttempts, 
   }
 
   const upload = useMutation({
+    meta: { errorHandled: true },
     mutationFn: async () => {
       if (!blob || !question) return;
       const res = await fetch(
@@ -207,6 +208,7 @@ export function AIInterviewRecording({ token, questions, recorded, maxAttempts, 
   });
 
   const submit = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => api.post(`/ai-interview/session/${token}/submit`),
     onSuccess: onSubmitted,
   });

@@ -911,6 +911,8 @@ function InboxPanel({ onDone }: { onDone: () => void }) {
       >("/me/notifications?unread_only=true"),
   });
   const readAll = useMutation({
+    // Latar belakang (tanda sudah-dibaca): gagal tidak perlu toast.
+    meta: { errorHandled: true },
     mutationFn: () => api.post("/me/notifications/read-all", {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["notif-list"] });

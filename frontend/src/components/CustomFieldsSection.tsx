@@ -105,6 +105,7 @@ export function CustomFieldsSection({
   });
 
   const createDef = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/custom-fields/definitions", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: defsKey });

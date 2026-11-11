@@ -30,6 +30,9 @@ ALL_ROLES = list(UserRole)
 # core/permissions.py utk pemetaan area -> file:line.
 REGISTRY_AREAS = {
     "CLIENTS_ROLES": permissions.CLIENTS_ROLES,
+    "CLIENT_LOOKUP_ROLES": permissions.CLIENT_LOOKUP_ROLES,
+    "CLIENT_SITE_LOOKUP_ROLES": permissions.CLIENT_SITE_LOOKUP_ROLES,
+    "USER_LOOKUP_ROLES": permissions.USER_LOOKUP_ROLES,
     "PRESALES_ROLES": permissions.PRESALES_ROLES,
     "AI_PRESALES_ROLES": permissions.AI_PRESALES_ROLES,
     "RECRUITMENT_ROLES": permissions.RECRUITMENT_ROLES,

@@ -2,8 +2,15 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Nilai bawaan kode & contoh di .env.example -- tertulis di repo, jadi tidak
+# boleh pernah dipakai di produksi (lihat guard di Settings & bootstrap).
+DEFAULT_SECRET_KEY = "dev-secret-key-change-me"
+INSECURE_SECRET_KEYS = frozenset({DEFAULT_SECRET_KEY, "change-me-generate-a-random-64-char-hex"})
+DEFAULT_ADMIN_PASSWORD = "admin1234"
+INSECURE_ADMIN_PASSWORDS = frozenset({DEFAULT_ADMIN_PASSWORD, "change-me-strong-password"})
 
 # Root proyek (folder yang dibuka di VS Code). Semua path relatif
 # (.env, data/, dll.) dihitung dari sini agar konsisten terlepas dari
@@ -19,12 +26,12 @@ class Settings(BaseSettings):
     # internal = semua fitur aktif tanpa cek lisensi (fase internal sekarang)
     # commercial = lisensi per bundle (PRD v2.0)
     app_mode: str = "internal"
-    secret_key: str = "dev-secret-key-change-me"
+    secret_key: str = DEFAULT_SECRET_KEY
     access_token_expire_minutes: int = 480
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     admin_email: str = "admin@example.com"
-    admin_password: str = "admin1234"
+    admin_password: str = DEFAULT_ADMIN_PASSWORD
 
     # Akun pengelola SaaS (tanpa tenant) — dibuat otomatis saat start.
     platform_admin_email: str = "platform@example.com"
@@ -241,6 +248,30 @@ class Settings(BaseSettings):
         if v is not None and not (Decimal(0) <= v < Decimal(1)):
             raise ValueError("BILLING_PPN_RATE adalah pecahan (mis. 0.11), 0 <= x < 1")
         return v
+
+    @model_validator(mode="after")
+    def _no_placeholder_secret_in_production(self) -> "Settings":
+        """Produksi menolak start dengan SECRET_KEY bawaan, contoh, atau kosong.
+
+        Tanpa ini, env var yang lupa diisi membuat JWT ditandatangani kunci
+        yang tertulis di repo -- siapa pun bisa memalsukan token admin (audit
+        2026-11-11 Top-20 #6). Gagal keras saat start lebih baik daripada
+        berjalan diam-diam.
+        """
+        if self.app_env == "production" and (
+            self.secret_key in INSECURE_SECRET_KEYS or len(self.secret_key) < 32
+        ):
+            raise ValueError(
+                "SECRET_KEY wajib diisi nilai acak minimal 32 karakter di produksi "
+                "(mis. `openssl rand -hex 32`); nilai bawaan/contoh ditolak."
+            )
+        return self
+
+    @property
+    def admin_password_is_insecure(self) -> bool:
+        """Password admin bawaan/contoh/terlalu pendek -- dicek bootstrap saat
+        admin pertama dibuat di produksi."""
+        return self.admin_password in INSECURE_ADMIN_PASSWORDS or len(self.admin_password) < 8
 
     @property
     def cors_origin_list(self) -> list[str]:

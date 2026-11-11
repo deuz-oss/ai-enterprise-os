@@ -56,6 +56,11 @@ def list_clients(db: Session, q: str | None = None) -> list[tuple[Client, int]]:
     return [(cl, count) for cl, count in db.execute(stmt).all()]
 
 
+def list_client_options(db: Session) -> list[Client]:
+    """Semua klien urut nama -- untuk dropdown lintas modul (id + nama saja)."""
+    return list(db.execute(select(Client).order_by(Client.name)).scalars())
+
+
 def get_client(db: Session, client_id: str) -> Client:
     return _get(db, client_id)
 

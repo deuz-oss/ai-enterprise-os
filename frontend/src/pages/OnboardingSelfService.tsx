@@ -186,6 +186,7 @@ export default function OnboardingSelfService() {
   }, [view.data, prefilled]);
 
   const submit = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () =>
       api.post(`/onboarding/${token}`, {
         phone,
@@ -206,6 +207,7 @@ export default function OnboardingSelfService() {
   });
 
   const uploadDoc = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ documentType, file }: { documentType: string; file: File }) => {
       const fd = new FormData();
       fd.append("file", file);

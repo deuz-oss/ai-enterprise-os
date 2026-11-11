@@ -66,6 +66,7 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
   };
 
   const review = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () =>
       api.post(`/talentpool/intake/${intakeId}/review`, {
         corrections: edits,
@@ -78,10 +79,12 @@ export function IntakeReviewPanel({ intakeId }: { intakeId: string }) {
     },
   });
   const finalize = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => api.post(`/talentpool/intake/${intakeId}/finalize`, {}),
     onSuccess: invalidate,
   });
   const reprocess = useMutation({
+    meta: { errorHandled: true },
     mutationFn: () => api.post(`/talentpool/intake/${intakeId}/reprocess`, {}),
     onSuccess: invalidate,
   });
@@ -241,6 +244,7 @@ export function ScreeningPanel({
     queryFn: () => api.get<Screening[]>(`/ai/candidates/${candidateId}/screenings`),
   });
   const runScreening = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (joId: string) =>
       api.post<Screening>(`/ai/candidates/${candidateId}/screen`, { job_order_id: joId || null }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["screenings", candidateId] }),

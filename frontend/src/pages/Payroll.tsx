@@ -1,5 +1,4 @@
 import { PayrollRunReview, type RunReview } from "../components/PayrollRunReview";
-import type { ClientRow } from "./Clients";
 import { useMe } from "../api/auth";
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AlertCircle, Landmark, ShieldAlert, Users } from "lucide-react";
@@ -23,6 +22,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPLOYEE_LOOKUP_LIMIT, useEmployeeLookup } from "../api/employees";
 import { api, downloadFile, formatDateTime, formatRupiah, previewFile } from "../api/client";
+import { useClientOptions } from "../api/lookups";
 
 interface EmployeeRow {
   id: string;
@@ -220,6 +220,7 @@ function HeldSalaryBadge({
       api.get<SalaryHold[]>(`/payroll/employees/${employeeId}/holds?status=held`),
   });
   const release = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (holdId: string) =>
       api.post(`/payroll/slips/${targetPayslipId}/holds/${holdId}/release`, {}),
     onSuccess: () => {
@@ -264,6 +265,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
   });
   const rows = saltabQuery.data;
   const saveAmount = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ id, amount }: { id: string; amount: number }) =>
       api.patch(`/payroll/saltab/components/${id}`, { amount }),
     onSuccess: () => {
@@ -273,6 +275,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
     },
   });
   const addComponent = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({
       payslipId,
       ctype,
@@ -293,6 +296,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
     },
   });
   const deleteComponent = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (componentId: string) =>
       api.delete(`/payroll/saltab/components/${componentId}`),
     onSuccess: () => {
@@ -301,6 +305,7 @@ function SaltabTable({ runId }: { runId: string | null }) {
     },
   });
   const createHold = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({
       payslipId,
       amount,
@@ -318,10 +323,12 @@ function SaltabTable({ runId }: { runId: string | null }) {
     },
   });
   const sendPayslip = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (employeeId: string) =>
       api.post(`/payroll/runs/${runId}/employees/${employeeId}/send-payslip-email`),
   });
   const previewPayslip = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (employeeId: string) =>
       previewFile(`/payroll/runs/${runId}/employees/${employeeId}/payslip/pdf`),
     onSuccess: setPreviewUrl,
@@ -701,10 +708,7 @@ export default function Payroll() {
   const [createClientId, setCreateClientId] = useState("");
   const [clientLink, setClientLink] = useState<{ link: string; expires: string } | null>(null);
 
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<ClientRow[]>("/clients"),
-  });
+  const { data: clients } = useClientOptions();
 
   const {
     data: employees,
@@ -835,6 +839,7 @@ export default function Payroll() {
     onSuccess: invalidateAll,
   });
   const finalizeRun = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (runId: string) => api.post(`/payroll/runs/${runId}/finalize`, {}),
     onSuccess: invalidateAll,
   });
@@ -967,6 +972,7 @@ export default function Payroll() {
   });
   const [showSendSaltab, setShowSendSaltab] = useState(false);
   const sendSaltabToClient = useMutation({
+    meta: { errorHandled: true },
     mutationFn: ({ runId, recipientEmail }: { runId: string; recipientEmail: string }) =>
       api.post(`/payroll/runs/${runId}/send-to-client`, { recipient_email: recipientEmail }),
     onSuccess: () => setShowSendSaltab(false),

@@ -54,6 +54,14 @@ dengan siapa yang benar-benar boleh akses.
 # ---------- CRM ----------
 
 CLIENTS_ROLES = ("business_dev", "management")
+# Lookup baca-saja (id + nama) untuk dropdown lintas modul. Modul Klien
+# sendiri tetap milik CRM, tapi alur role lain butuh MEMILIH klien: finance
+# membuat invoice, recruiter membuat job order, HR/operations menjalankan
+# payroll proyek. Sebelum ada lookup ini `GET /clients` menolak mereka (403)
+# sehingga dropdown kosong tanpa pesan (audit 2026-11-11 Top-20 #1).
+CLIENT_LOOKUP_ROLES = ("business_dev", "management", "recruiter", "hr", "operations", "finance")
+# Lokasi kerja (geofencing) dipilih HR di halaman Karyawan.
+CLIENT_SITE_LOOKUP_ROLES = ("business_dev", "management", "hr")
 PRESALES_ROLES = ("business_dev", "management")
 AI_PRESALES_ROLES = ("business_dev", "management")
 
@@ -97,6 +105,10 @@ BILLING_MANAGE_ROLES = ("finance", "management")
 # Kosong disengaja: HANYA admin yang lolos, murni lewat bypass admin
 # `require_roles` (lihat poin 1 di docstring atas) — bukan lupa isi.
 AUTH_ADMIN_ONLY_ROLES: tuple[str, ...] = ()
+# Lookup baca-saja (id + nama) anggota tim: pemilik lead (business_dev) dan
+# pewawancara (recruiter). Daftar akun lengkap (`GET /auth/users`: email,
+# role, status) tetap khusus admin.
+USER_LOOKUP_ROLES = ("business_dev", "recruiter", "management")
 
 # ---------- Lintas-kategori ----------
 

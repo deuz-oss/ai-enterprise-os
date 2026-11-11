@@ -122,6 +122,7 @@ export default function PlatformTenants() {
   const isLoading = tenantsQuery.isPending;
 
   const provision = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) =>
       api.post<Provisioned>("/platform/tenants", body),
     onSuccess: (data) => {

@@ -1,4 +1,3 @@
-import type { ClientRow } from "./Clients";
 import { useMe } from "../api/auth";
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -34,6 +33,7 @@ import {
   StatusPill,
 } from "../components/ui";
 import { api, formatRupiah } from "../api/client";
+import { useClientOptions } from "../api/lookups";
 
 interface Overview {
   leads: {
@@ -399,10 +399,7 @@ export default function Dashboard() {
     queryKey: ["chat-digest"],
     queryFn: () => api.get<Digest>("/chat/digest"),
   });
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<ClientRow[]>("/clients"),
-  });
+  const { data: clients } = useClientOptions();
   // Objek query disimpan utuh (bukan cuma `data`) supaya DataTable "Invoice
   // Terbaru" bisa membedakan gagal muat dari memang belum ada invoice.
   const invoicesQuery = useQuery({

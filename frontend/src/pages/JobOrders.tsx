@@ -17,8 +17,8 @@ import {
 } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatRupiah } from "../api/client";
+import { useClientOptions } from "../api/lookups";
 import { ScoreBadge } from "../components/Ai";
-import type { ClientRow } from "./Clients";
 
 export interface JobOrder {
   id: string;
@@ -126,6 +126,7 @@ function HrDocumentSettingsCard() {
   const [open, setOpen] = useState(false);
 
   const save = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (return_emails: string) =>
       api.put("/recruitment/hr-document-settings", { return_emails }),
     onSuccess: () => {
@@ -248,10 +249,7 @@ export default function JobOrders() {
   const staleCount = allRows.filter((jo) => jo.is_stale).length;
   const openCount = allRows.filter((jo) => jo.business_status === "dibuka").length;
   const filledCount = allRows.filter((jo) => jo.business_status === "terisi").length;
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => api.get<ClientRow[]>("/clients"),
-  });
+  const { data: clients } = useClientOptions();
   const { data: matchCandidates } = useQuery({
     queryKey: ["candidates-for-match"],
     queryFn: () => api.get<MatchCandidateRow[]>("/recruitment/candidates"),
@@ -272,6 +270,7 @@ export default function JobOrders() {
   });
 
   const extractDoc = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
@@ -290,6 +289,7 @@ export default function JobOrders() {
   });
 
   const match = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (id: string) =>
       api.post<MatchItem[]>(
         `/recruitment/job-orders/${id}/match${

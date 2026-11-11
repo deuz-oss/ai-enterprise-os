@@ -5,6 +5,7 @@ import { PageHeader } from "../components/workspace";
 import { DataTable, KpiCard, PillTabs, type Column, type PillTab } from "../components/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate } from "../api/client";
+import { CLIENT_OPTIONS_KEY } from "../api/lookups";
 
 export interface ClientRow {
   id: string;
@@ -61,10 +62,12 @@ export default function Clients() {
   }, [activeClients]);
 
   const createClient = useMutation({
+    meta: { errorHandled: true },
     mutationFn: (body: Record<string, unknown>) => api.post("/clients", body),
     onSuccess: () => {
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: CLIENT_OPTIONS_KEY });
       qc.invalidateQueries({ queryKey: ["overview"] });
     },
   });
