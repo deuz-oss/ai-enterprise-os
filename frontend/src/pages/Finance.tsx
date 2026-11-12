@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   type Column,
   confirmDialog,
+  CurrencyInput,
   DataTable,
   KpiCard,
   MONTH_NAMES,
@@ -298,13 +299,13 @@ export default function Finance() {
           placeholder="Alamat lawan transaksi"
           className="input"
         />
-        <input
+        <CurrencyInput
           name="dpp_amount"
-          type="number"
           defaultValue={i.dpp_amount ?? Number(i.total_due)}
-          placeholder="DPP (Rp)"
+          placeholder="DPP"
+          aria-label="DPP (rupiah)"
           required
-          className="input"
+          block
         />
         <select name="kode_transaksi" defaultValue={i.kode_transaksi ?? "01"} className="input">
           {KODE_TRANSAKSI_OPTIONS.map((k) => (
@@ -577,13 +578,24 @@ export default function Finance() {
 
   function handleCashflow(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    addCashflow.mutate({
-      direction: form.get("direction"),
-      category: form.get("category"),
-      amount: Number(form.get("amount") || 0),
-      entry_date: form.get("entry_date") || null,
-    });
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
+    addCashflow.mutate(
+      {
+        direction: form.get("direction"),
+        category: form.get("category"),
+        amount: Number(form.get("amount") || 0),
+        entry_date: form.get("entry_date") || null,
+      },
+      {
+        // Dulu isian tetap tinggal setelah tersimpan -- menekan "Catat" sekali
+        // lagi mencatat entri yang sama dua kali.
+        onSuccess: () => {
+          formEl.reset();
+          toast.success("Arus kas dicatat");
+        },
+      }
+    );
   }
 
   return (
@@ -623,7 +635,7 @@ export default function Finance() {
           </label>
           <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
             <span>Fee management (Rp)</span>
-            <input name="fee_amount" type="number" min={0} className="input" />
+            <CurrencyInput name="fee_amount" aria-label="Fee management (rupiah)" block />
           </label>
           <button type="submit" disabled={generateInvoice.isPending} className="btn sm:col-span-4">
             Buat Invoice dari Payrol
@@ -764,7 +776,13 @@ export default function Finance() {
             <option value="keluar">Keluar</option>
           </select>
           <input name="category" required placeholder="Kategori" className="input w-auto" />
-          <input name="amount" type="number" required placeholder="Jumlah (Rp)" className="input w-40" />
+          <CurrencyInput
+            name="amount"
+            required
+            placeholder="Jumlah"
+            aria-label="Jumlah arus kas (rupiah)"
+            className="input w-40"
+          />
           <input name="entry_date" type="date" className="input w-auto" aria-label="Tanggal entri" />
           <button className="btn-secondary">Catat</button>
         </form>

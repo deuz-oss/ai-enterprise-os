@@ -10,6 +10,7 @@ import {
   confirmDialog,
   confirmToast,
   currentPeriod,
+  CurrencyInput,
   DataTable,
   Dialog,
   EmptyState,
@@ -486,11 +487,10 @@ function SaltabTable({ runId }: { runId: string | null }) {
                           });
                         }}
                       >
-                        <input
+                        <CurrencyInput
                           name="amount"
-                          type="number"
                           defaultValue={c.amount}
-                          aria-label={`Nominal ${c.name}`}
+                          aria-label={`Nominal ${c.name} (rupiah)`}
                           className="input w-28 px-1 py-0.5 text-right"
                         />
                         <button className="btn-secondary px-1.5 py-0.5" aria-label="Simpan nominal">
@@ -592,11 +592,11 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 <option value="earnings">Earnings (menambah THP)</option>
                 <option value="deduction">Deduction (mengurangi THP)</option>
               </select>
-              <input
+              <CurrencyInput
                 name="amount"
-                type="number"
                 required
                 placeholder="Nominal"
+                aria-label="Nominal komponen (rupiah)"
                 className="input w-32 py-1 text-xs"
               />
               <Button size="sm" type="submit" loading={addComponent.isPending}>
@@ -627,11 +627,11 @@ function SaltabTable({ runId }: { runId: string | null }) {
                 });
               }}
             >
-              <input
+              <CurrencyInput
                 name="amount"
-                type="number"
                 required
                 placeholder="Nominal ditahan"
+                aria-label="Nominal gaji ditahan (rupiah)"
                 className="input w-32 py-1 text-xs"
               />
               <input

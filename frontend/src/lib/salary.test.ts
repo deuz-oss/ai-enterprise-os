@@ -35,4 +35,9 @@ describe("input nominal", () => {
     expect(formatAmountInput(6_600_000)).toBe("6.600.000");
     expect(formatAmountInput(null)).toBe("");
   });
+
+  it("nilai desimal dibulatkan, tidak menjadi 10x saat dibaca ulang", () => {
+    expect(formatAmountInput(3500.5)).toBe("3.501");
+    expect(digitsToAmount(formatAmountInput(3500.5))).toBe(3501);
+  });
 });

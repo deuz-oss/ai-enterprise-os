@@ -6,6 +6,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Kolom rupiah berformat di Finance & Payroll
+
+Lanjutan audit 2026-11-11 Phase 1 (§9). Frontend saja.
+
+- `CurrencyInput` kini juga bekerja di form berbasis `FormData` (`name` + `defaultValue`): angka polos dikirim lewat input tersembunyi, jadi kode pembaca form tidak berubah, dan `form.reset()` ikut mengosongkannya.
+- Enam kolom nominal berpindah dari `<input type="number">` ke `CurrencyInput` (pemisah ribuan saat diketik, awalan "Rp", label aksesibel): Finance — DPP faktur pajak, fee management, jumlah arus kas; Payroll (Saltab) — nominal komponen (edit & tambah), nominal gaji ditahan.
+- Nilai desimal dibulatkan ke rupiah sebelum ditampilkan di kolom; tanpa itu `3500,5` terbaca ulang sebagai `35005`.
+- Form Arus Kas dikosongkan dan memberi toast setelah tersimpan (dulu isian tertinggal, mudah tercatat dua kali).
+- Belum disentuh: Accounting (aset, tagihan, kas/bank, dan baris jurnal debit/kredit), Rates, dan form lain.
+
 ### Added — Audit 2026-11-11 Phase 1: fondasi design system
 
 Sumber: `docs/design/FULL_AUDIT-2026-11-11.md` §12 & roadmap Phase 1. Frontend saja.

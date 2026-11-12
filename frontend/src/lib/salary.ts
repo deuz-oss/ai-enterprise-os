@@ -35,5 +35,7 @@ export function digitsToAmount(raw: string): number | null {
 
 /** 6600000 -> "6.600.000" (tanpa "Rp", untuk isi kolom input). */
 export function formatAmountInput(value: number | null): string {
-  return value === null ? "" : new Intl.NumberFormat("id-ID").format(value);
+  // Dibulatkan dulu: 3500.5 kalau diformat apa adanya menjadi "3.500,5", lalu
+  // saat diketik ulang terbaca 35005 (koma ikut terbuang sebagai non-digit).
+  return value === null ? "" : new Intl.NumberFormat("id-ID").format(Math.round(value));
 }
