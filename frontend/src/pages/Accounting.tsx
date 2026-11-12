@@ -7,6 +7,7 @@ import { useClientOptions } from "../api/lookups";
 import { toast } from "sonner";
 import {
   confirmDialog,
+  CurrencyInput,
   confirmToast,
   DataTable,
   MONTH_NAMES,
@@ -1086,7 +1087,13 @@ function FixedAssetsPanel() {
             ))}
           </select>
           <input name="acquisition_date" type="date" className="input" />
-          <input name="cost" type="number" required placeholder="Harga perolehan (Rp) *" className="input" />
+          <CurrencyInput
+            name="cost"
+            required
+            placeholder="Harga perolehan *"
+            aria-label="Harga perolehan (rupiah)"
+            block
+          />
           <input
             name="useful_life_months"
             type="number"
@@ -1313,7 +1320,13 @@ function PurchasesPanel() {
             ))}
           </select>
           <input name="bill_number" placeholder="No. tagihan" className="input" />
-          <input name="amount" type="number" required placeholder="Jumlah (Rp) *" className="input" />
+          <CurrencyInput
+            name="amount"
+            required
+            placeholder="Jumlah *"
+            aria-label="Jumlah tagihan (rupiah)"
+            block
+          />
           <input name="ppn_rate" type="number" step="0.01" placeholder="Tarif PPN (0-1)" className="input" />
           <input name="entry_date" type="date" className="input" />
           <input name="due_date" type="date" placeholder="Jatuh tempo" className="input" />
@@ -1513,7 +1526,13 @@ function CashBankPanel() {
               </option>
             ))}
           </select>
-          <input name="amount" type="number" required placeholder="Jumlah (Rp) *" className="input" />
+          <CurrencyInput
+            name="amount"
+            required
+            placeholder="Jumlah *"
+            aria-label="Jumlah transaksi kas/bank (rupiah)"
+            block
+          />
           <input name="tx_date" type="date" className="input" />
           <input name="description" placeholder="Keterangan" className="input sm:col-span-3" />
           {createTx.error && (
