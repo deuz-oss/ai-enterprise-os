@@ -6,6 +6,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — Kolom rupiah di Rate Configuration & tautan Overview mengikuti izin
+
+Lanjutan audit 2026-11-11. Frontend saja.
+
+- **Rates:** delapan kolom rupiah memakai `CurrencyInput` -- batas atas lapisan tarif PPh 21/TER, PTKP (diri, kawin, per tanggungan), batas upah BPJS Kesehatan dan JP, serta biaya transfer bank (edit & tambah). Kolom persentase/tarif, hari jatuh tempo, dan kategori JKK tetap kolom angka biasa.
+- **Overview:** tautan "Buka →" pada kartu domain dan "Lihat detail →" pada ringkasan mendesak hanya tampil bila role boleh membuka modul tujuannya (`canOpenPath`), tidak lagi mengantar ke halaman "Tidak ada akses".
+
 ### Fixed — Form tidak lagi dikosongkan sebelum tahu hasilnya
 
 Lanjutan audit 2026-11-11 (C3). Tujuh form memanggil `reset()` saat submit, sehingga isian hilang walau server menolak dan terlihat seperti berhasil. Kini reset hanya di `onSuccess`: Portal Saya (koreksi absensi, pengajuan lembur, pengajuan cuti/izin, ganti password), tautkan akun portal di detail karyawan, tambah bank di Rate Configuration, dan riwayat pengalaman di panel Talent Pool. Pesan penolakannya sudah ditangani handler error mutasi global.

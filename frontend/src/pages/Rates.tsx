@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, formatDate } from "../api/client";
 import { Calculator } from "lucide-react";
 import { CalloutBlock, PageHeader } from "../components/workspace";
-import { type Column, DataTable, type PillTab, PillTabs } from "../components/ui";
+import { type Column, CurrencyInput, DataTable, type PillTab, PillTabs } from "../components/ui";
 
 interface Pph21Row {
   id: string;
@@ -109,15 +109,14 @@ function BracketRowsEditor({
               <span className="w-4 shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
                 {i + 1}
               </span>
-              <input
-                type="number"
-                min={1}
-                placeholder="Batas atas (Rp)"
+              <CurrencyInput
+                block
+                placeholder="Batas atas"
                 aria-label={`${label} baris ${i + 1} batas atas (Rp)`}
-                className="input flex-1 text-xs"
-                value={row.upper}
+                className="input text-xs"
+                value={row.upper === "" ? null : Number(row.upper)}
                 disabled={unbounded}
-                onChange={(e) => updateRow(i, { upper: e.target.value })}
+                onChange={(v) => updateRow(i, { upper: v === null ? "" : String(v) })}
               />
               <input
                 type="number"
@@ -414,9 +413,14 @@ export default function Rates() {
             <h2 className="font-semibold" style={{ color: "var(--text)" }}>Versi Baru PPh 21</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
               <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (PPh 21)" />
-              <input name="ptkp_diri" type="number" required placeholder="PTKP diri (Rp)" className="input" />
-              <input name="ptkp_kawin" type="number" placeholder="PTKP kawin (Rp)" className="input" />
-              <input name="ptkp_tanggungan" type="number" placeholder="PTKP per tanggungan" className="input" />
+              <CurrencyInput name="ptkp_diri" required placeholder="PTKP diri" aria-label="PTKP diri (rupiah)" block />
+              <CurrencyInput name="ptkp_kawin" placeholder="PTKP kawin" aria-label="PTKP kawin (rupiah)" block />
+              <CurrencyInput
+                name="ptkp_tanggungan"
+                placeholder="PTKP per tanggungan"
+                aria-label="PTKP per tanggungan (rupiah)"
+                block
+              />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <BracketRowsEditor label="Pasal 17" rows={pasal17Rows} onChange={setPasal17Rows} />
@@ -448,12 +452,17 @@ export default function Rates() {
               <input name="effective_from" type="date" required className="input" aria-label="Berlaku sejak (BPJS)" />
               <input name="kesehatan_employer" type="number" step="0.0001" placeholder="Kes psk (0.04)" className="input" />
               <input name="kesehatan_employee" type="number" step="0.0001" placeholder="Kes pyd (0.01)" className="input" />
-              <input name="kesehatan_cap" type="number" placeholder="Cap kes" className="input" />
+              <CurrencyInput
+                name="kesehatan_cap"
+                placeholder="Cap kes"
+                aria-label="Batas upah BPJS Kesehatan (rupiah)"
+                block
+              />
               <input name="jht_employer" type="number" step="0.0001" placeholder="JHT psk" className="input" />
               <input name="jht_employee" type="number" step="0.0001" placeholder="JHT pyd" className="input" />
               <input name="jp_employer" type="number" step="0.0001" placeholder="JP psk" className="input" />
               <input name="jp_employee" type="number" step="0.0001" placeholder="JP pyd" className="input" />
-              <input name="jp_cap" type="number" placeholder="Cap JP" className="input" />
+              <CurrencyInput name="jp_cap" placeholder="Cap JP" aria-label="Batas upah JP (rupiah)" block />
               <input name="jkm_rate" type="number" step="0.0001" placeholder="JKM" className="input" />
             </div>
             <div className="flex gap-2">
@@ -512,7 +521,12 @@ export default function Rates() {
                 }}
               >
                 <span className="w-48 truncate text-sm">{f.bank_name}</span>
-                <input name="fee" type="number" defaultValue={Number(f.fee)} className="input w-32" />
+                <CurrencyInput
+                  name="fee"
+                  defaultValue={Number(f.fee)}
+                  aria-label={`Biaya transfer ${f.bank_name} (rupiah)`}
+                  className="input w-32"
+                />
                 <button className="btn-secondary text-xs">Simpan</button>
               </form>
             ))}
@@ -532,7 +546,12 @@ export default function Rates() {
               }}
             >
               <input name="bank_name" required placeholder="Nama bank baru" className="input w-48" />
-              <input name="fee" type="number" defaultValue={3500} className="input w-32" />
+              <CurrencyInput
+                name="fee"
+                defaultValue={3500}
+                aria-label="Biaya transfer bank baru (rupiah)"
+                className="input w-32"
+              />
               <button className="btn text-xs">+ Tambah Bank</button>
             </form>
           </div>

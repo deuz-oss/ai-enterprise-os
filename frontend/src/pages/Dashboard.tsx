@@ -1,4 +1,5 @@
 import { useMe } from "../api/auth";
+import { canOpenPath } from "../lib/navAccess";
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -225,6 +226,7 @@ function SectionCard({
 }) {
   const meta = CATEGORY[category];
   const Icon = meta.icon;
+  const { data: me } = useMe();
   return (
     <div
       className="rounded-xl p-4"
@@ -259,13 +261,17 @@ function SectionCard({
             )}
           </div>
         </div>
-        <Link
-          to={meta.to}
-          className="shrink-0 text-xs font-medium hover:underline"
-          style={{ color: meta.accent }}
-        >
-          Buka →
-        </Link>
+        {/* Tautan hanya untuk modul yang boleh dibuka role ini -- kalau tidak,
+            "Buka" hanya mengantar ke halaman "Tidak ada akses". */}
+        {canOpenPath(meta.to, me?.allowed_areas) && (
+          <Link
+            to={meta.to}
+            className="shrink-0 text-xs font-medium hover:underline"
+            style={{ color: meta.accent }}
+          >
+            Buka →
+          </Link>
+        )}
       </div>
       {children}
     </div>
@@ -551,13 +557,16 @@ export default function Dashboard() {
                   <p className="mt-2 text-xs" style={{ color: "#78350F" }}>
                     {item.detail}
                   </p>
-                  <Link
-                    to={URGENT_DIGEST_LINK[item.type] ?? "#"}
-                    className="mt-2 inline-block text-xs font-medium hover:underline"
-                    style={{ color: "#92400E" }}
-                  >
-                    Lihat detail →
-                  </Link>
+                  {URGENT_DIGEST_LINK[item.type] &&
+                    canOpenPath(URGENT_DIGEST_LINK[item.type], me?.allowed_areas) && (
+                      <Link
+                        to={URGENT_DIGEST_LINK[item.type]}
+                        className="mt-2 inline-block text-xs font-medium hover:underline"
+                        style={{ color: "#92400E" }}
+                      >
+                        Lihat detail →
+                      </Link>
+                    )}
                 </div>
               );
             })}
