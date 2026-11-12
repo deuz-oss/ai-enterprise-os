@@ -1118,15 +1118,16 @@ export default function MyPortal() {
           className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_auto_auto_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            const form = new FormData(e.currentTarget);
+            // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+            const formEl = e.currentTarget;
+            const form = new FormData(formEl);
             createCorrection.mutate({
               year: Number(form.get("year")),
               month: Number(form.get("month")),
               requested_present_days: Number(form.get("present_days") || 0),
               requested_overtime_hours: Number(form.get("overtime_hours") || 0),
               reason: form.get("reason") || null,
-            });
-            e.currentTarget.reset();
+            }, { onSuccess: () => formEl.reset() });
           }}
         >
           {/* Label terlihat: dulu placeholder saja, padahal bulan/tahun berisi
@@ -1191,13 +1192,14 @@ export default function MyPortal() {
           className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_auto_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            const form = new FormData(e.currentTarget);
+            // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+            const formEl = e.currentTarget;
+            const form = new FormData(formEl);
             submitOvertime.mutate({
               date: form.get("date"),
               requested_hours: Number(form.get("requested_hours") || 0),
               reason: form.get("reason") || null,
-            });
-            e.currentTarget.reset();
+            }, { onSuccess: () => formEl.reset() });
           }}
         >
 <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
@@ -1267,14 +1269,15 @@ export default function MyPortal() {
           className="mt-3 grid grid-cols-1 items-end gap-2 sm:grid-cols-[auto_1fr_1fr_1fr_auto]"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            const form = new FormData(e.currentTarget);
+            // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+            const formEl = e.currentTarget;
+            const form = new FormData(formEl);
             submitLeave.mutate({
               leave_type: form.get("leave_type"),
               start_date: form.get("start_date"),
               end_date: form.get("end_date"),
               reason: form.get("reason") || null,
-            });
-            e.currentTarget.reset();
+            }, { onSuccess: () => formEl.reset() });
           }}
         >
 <label className="space-y-1 text-xs font-medium" style={{ color: "var(--th-color)" }}>
@@ -1380,12 +1383,13 @@ export default function MyPortal() {
           className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            const form = new FormData(e.currentTarget);
+            // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+            const formEl = e.currentTarget;
+            const form = new FormData(formEl);
             changePassword.mutate({
               old_password: form.get("old_password"),
               new_password: form.get("new_password"),
-            });
-            e.currentTarget.reset();
+            }, { onSuccess: () => formEl.reset() });
           }}
         >
           <input

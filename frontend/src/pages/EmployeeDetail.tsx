@@ -2433,11 +2433,12 @@ export default function EmployeeDetail() {
                       className="flex flex-wrap gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        const form = new FormData(e.currentTarget);
+                        // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+                        const formEl = e.currentTarget;
+                        const form = new FormData(formEl);
                         const userId = String(form.get("user_id") || "");
                         if (userId) {
-                          linkAccount.mutate({ empId: employee.id, userId });
-                          e.currentTarget.reset();
+                          linkAccount.mutate({ empId: employee.id, userId }, { onSuccess: () => formEl.reset() });
                         }
                       }}
                     >

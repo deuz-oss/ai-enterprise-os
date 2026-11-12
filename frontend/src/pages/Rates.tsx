@@ -521,13 +521,14 @@ export default function Rates() {
               style={{ borderColor: "var(--border)" }}
               onSubmit={(e) => {
                 e.preventDefault();
-                const form = new FormData(e.currentTarget);
+                // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+                const formEl = e.currentTarget;
+                const form = new FormData(formEl);
                 saveBankFee.mutate({
                   bank_name: String(form.get("bank_name") || ""),
                   fee: Number(form.get("fee") || 3500),
                   is_mandiri_group: false,
-                });
-                e.currentTarget.reset();
+                }, { onSuccess: () => formEl.reset() });
               }}
             >
               <input name="bank_name" required placeholder="Nama bank baru" className="input w-48" />

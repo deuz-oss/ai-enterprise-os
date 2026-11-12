@@ -6,6 +6,10 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — Form tidak lagi dikosongkan sebelum tahu hasilnya
+
+Lanjutan audit 2026-11-11 (C3). Tujuh form memanggil `reset()` saat submit, sehingga isian hilang walau server menolak dan terlihat seperti berhasil. Kini reset hanya di `onSuccess`: Portal Saya (koreksi absensi, pengajuan lembur, pengajuan cuti/izin, ganti password), tautkan akun portal di detail karyawan, tambah bank di Rate Configuration, dan riwayat pengalaman di panel Talent Pool. Pesan penolakannya sudah ditangani handler error mutasi global.
+
 ### Changed — Kolom rupiah berformat di Finance & Payroll
 
 Lanjutan audit 2026-11-11 Phase 1 (§9). Frontend saja.

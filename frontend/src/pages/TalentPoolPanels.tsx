@@ -330,14 +330,15 @@ export function HistoryPanel({ candidateId }: { candidateId: string }) {
           className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            const form = new FormData(e.currentTarget);
+            // Reset hanya saat berhasil: dulu isian dihapus walau ditolak server.
+            const formEl = e.currentTarget;
+            const form = new FormData(formEl);
             createExperience.mutate({
               company: form.get("company"),
               position: form.get("position"),
               start_date: form.get("start_date") || null,
               end_date: form.get("end_date") || null,
-            });
-            e.currentTarget.reset();
+            }, { onSuccess: () => formEl.reset() });
           }}
         >
           <input name="company" required placeholder="Perusahaan" className="input py-1 text-xs" />
