@@ -15,7 +15,8 @@ Lanjutan audit 2026-11-11 Phase 1 (§9). Frontend saja.
 - Nilai desimal dibulatkan ke rupiah sebelum ditampilkan di kolom; tanpa itu `3500,5` terbaca ulang sebagai `35005`.
 - Form Arus Kas dikosongkan dan memberi toast setelah tersimpan (dulu isian tertinggal, mudah tercatat dua kali).
 - Accounting menyusul: harga perolehan aset, jumlah tagihan pembelian, dan jumlah transaksi kas/bank.
-- Belum disentuh: baris jurnal debit/kredit (kolom lama menerima desimal; `CurrencyInput` hanya rupiah bulat), Rates, dan form lain.
+- Baris jurnal debit/kredit juga memakai `CurrencyInput` (rupiah bulat; jurnal tidak memakai sen -- keputusan 2026-11-12), dengan total berjalan "Debit · Kredit · Seimbang/Selisih" di bawah baris. Form akun baru (COA) hanya direset saat berhasil.
+- Belum disentuh: Rates dan form lain.
 
 ### Added — Audit 2026-11-11 Phase 1: fondasi design system
 

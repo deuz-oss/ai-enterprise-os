@@ -363,18 +363,20 @@ export default function Accounting() {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
+                {/* Rupiah bulat (jurnal tidak memakai sen -- keputusan 2026-11-12).
+                    Mengisi satu sisi mengosongkan sisi lain, seperti sebelumnya. */}
+                <CurrencyInput
                   placeholder="Debit"
-                  value={line.debit || ""}
-                  onChange={(e) => updateLine(i, { debit: Number(e.target.value), credit: 0 })}
+                  aria-label={`Debit baris ${i + 1} (rupiah)`}
+                  value={line.debit || null}
+                  onChange={(v) => updateLine(i, { debit: v ?? 0, credit: 0 })}
                   className="input w-36"
                 />
-                <input
-                  type="number"
+                <CurrencyInput
                   placeholder="Kredit"
-                  value={line.credit || ""}
-                  onChange={(e) => updateLine(i, { credit: Number(e.target.value), debit: 0 })}
+                  aria-label={`Kredit baris ${i + 1} (rupiah)`}
+                  value={line.credit || null}
+                  onChange={(v) => updateLine(i, { credit: v ?? 0, debit: 0 })}
                   className="input w-36"
                 />
                 <select
@@ -393,6 +395,25 @@ export default function Accounting() {
                 </select>
               </div>
             ))}
+            {(() => {
+              // Total berjalan: selisih terlihat sebelum disimpan, bukan baru
+              // ketahuan dari penolakan server.
+              const debit = lines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0);
+              const credit = lines.reduce((sum, l) => sum + (Number(l.credit) || 0), 0);
+              const diff = debit - credit;
+              return (
+                <p className="num text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+                  Debit {formatRupiah(debit)} · Kredit {formatRupiah(credit)} ·{" "}
+                  {debit === 0 && credit === 0 ? (
+                    <span>Belum diisi</span>
+                  ) : (
+                    <span style={{ color: diff === 0 ? "var(--success)" : "var(--danger)" }}>
+                      {diff === 0 ? "Seimbang" : `Selisih ${formatRupiah(Math.abs(diff))}`}
+                    </span>
+                  )}
+                </p>
+              );
+            })()}
             <div className="flex gap-2">
               <button
                 type="button"
@@ -419,14 +440,18 @@ export default function Accounting() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const f = new FormData(e.currentTarget);
-              createAccount.mutate({
-                code: f.get("code"),
-                name: f.get("name"),
-                group_type: f.get("group_type"),
-                normal_balance: f.get("normal_balance"),
-              });
-              e.currentTarget.reset();
+              const formEl = e.currentTarget;
+              const f = new FormData(formEl);
+              // Reset hanya saat berhasil (dulu dikosongkan walau ditolak server).
+              createAccount.mutate(
+                {
+                  code: f.get("code"),
+                  name: f.get("name"),
+                  group_type: f.get("group_type"),
+                  normal_balance: f.get("normal_balance"),
+                },
+                { onSuccess: () => formEl.reset() }
+              );
             }}
             className="card grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_auto_auto_auto]"
           >
