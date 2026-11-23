@@ -1,0 +1,82 @@
+name: Mobile APK
+
+# Build APK Android untuk distribusi internal (ditandatangani debug key, BUKAN
+# untuk Play Store). Dijalankan manual: Actions -> "Mobile APK" -> Run workflow,
+# isi URL API backend produksi. Hasilnya muncul di halaman Releases repo.
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "URL API backend produksi, mis. https://api.perusahaan.com/api/v1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validasi URL API
+        env:
+          API_URL: ${{ inputs.api_url }}
+        run: |
+          case "$API_URL" in
+            https://*) ;;
+            *) echo "api_url harus diawali https://"; exit 1 ;;
+          esac
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate folder platform Android
+        run: flutter create . --org id.aeos --platforms=android
+
+      - name: Tambah izin internet, kamera, dan lokasi
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          PERMS='<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.CAMERA"/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>'
+          sed -i "0,/<application/s|<application|${PERMS}\n    <application|" "$MANIFEST"
+          grep -n "uses-permission" "$MANIFEST"
+
+      - name: Install dependensi
+        run: flutter pub get
+
+      - name: Analisis statis
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build APK
+        env:
+          API_URL: ${{ inputs.api_url }}
+        run: flutter build apk --release --dart-define=AEOS_API_URL="$API_URL"
+
+      - name: Ganti nama APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk ../aeos-mobile.apk
+
+      - name: Publikasi ke GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ inputs.api_url }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          TAG="mobile-v${RUN_NUMBER}"
+          gh release create "$TAG" ../aeos-mobile.apk \
+            --title "AEOS Mobile $TAG" \
+            --notes "APK Android internal. API: ${API_URL}. Commit: ${SHA}. Aktifkan 'install dari sumber tidak dikenal' untuk memasang."
