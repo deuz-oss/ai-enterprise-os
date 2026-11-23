@@ -49,7 +49,7 @@ class _ChatTabState extends State<ChatTab> {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty || _selectedChannelId == null) return;
     try {
-      await ApiClient.instance.post('/chat/channels/$_selectedChannelId/messages', body: {'content': text});
+      await ApiClient.instance.post('/chat/channels/$_selectedChannelId/messages', {'content': text});
       _msgCtrl.clear();
       await _loadMessages(_selectedChannelId!);
     } catch (e) {
