@@ -3,7 +3,13 @@ name: Mobile APK
 # Build APK Android untuk distribusi internal (ditandatangani debug key, BUKAN
 # untuk Play Store). Dijalankan manual: Actions -> "Mobile APK" -> Run workflow,
 # isi URL API backend produksi. Hasilnya muncul di halaman Releases repo.
+# Pada pull request yang menyentuh mobile/ workflow hanya membangun APK uji
+# (URL placeholder, tanpa Release) supaya error build ketahuan sebelum merge.
 on:
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-apk.yml"
   workflow_dispatch:
     inputs:
       api_url:
@@ -25,6 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validasi URL API
+        if: github.event_name == 'workflow_dispatch'
         env:
           API_URL: ${{ inputs.api_url }}
         run: |
@@ -46,7 +53,10 @@ jobs:
           cache: true
 
       - name: Generate folder platform Android
-        run: flutter create . --org id.aeos --platforms=android
+        run: |
+          flutter create . --org id.aeos --platforms=android
+          # Tes bawaan template merujuk MyApp, sedangkan root widget kita AeosMobileApp.
+          rm -f test/widget_test.dart
 
       - name: Tambah izin internet, kamera, dan lokasi
         run: |
@@ -63,13 +73,22 @@ jobs:
 
       - name: Build APK
         env:
-          API_URL: ${{ inputs.api_url }}
+          API_URL: ${{ inputs.api_url || 'https://example.invalid/api/v1' }}
         run: flutter build apk --release --dart-define=AEOS_API_URL="$API_URL"
 
       - name: Ganti nama APK
         run: cp build/app/outputs/flutter-apk/app-release.apk ../aeos-mobile.apk
 
+      - name: Unggah APK sebagai artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeos-mobile-apk
+          path: aeos-mobile.apk
+          retention-days: 7
+
       - name: Publikasi ke GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           API_URL: ${{ inputs.api_url }}
