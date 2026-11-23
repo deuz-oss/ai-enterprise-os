@@ -46,7 +46,7 @@ class _SelfAttendanceScreenState extends State<SelfAttendanceScreen> {
     }
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        desiredAccuracy: LocationAccuracy.high,
       );
       setState(() {
         _position = position;
