@@ -105,9 +105,16 @@ def call(method: str, path: str, body=None, token: str | None = None):
 
 
 def port_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex(("127.0.0.1", port)) == 0
+    """Dipakai program lain di IPv4 (127.0.0.1) atau IPv6 (::1)?"""
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                if s.connect_ex((host, port)) == 0:
+                    return True
+        except OSError:
+            continue  # IPv6 tidak tersedia di mesin ini
+    return False
 
 
 def pick_free_port(start: int) -> int:
@@ -266,7 +273,7 @@ def main() -> int:
         print(
             f"""
 ==================== DEMO SIAP ====================
-Buka di browser:  http://localhost:{FRONTEND_PORT}   (backend: port {BACKEND_PORT})
+Buka di browser:  http://127.0.0.1:{FRONTEND_PORT}   (jangan pakai "localhost"; backend: port {BACKEND_PORT})
 Cek otomatis     : {check}
 
 Login admin    : {admin_email} / {admin_password}
@@ -274,7 +281,7 @@ Login HR       : {DEMO_ACCOUNTS['hr'][0]} / {DEMO_PASSWORD}
 Login karyawan : {DEMO_ACCOUNTS['karyawan'][0]} / {DEMO_PASSWORD}
 
 Coba absen: login sebagai karyawan -> menu portal "Saya" -> Absensi ->
-Clock-in (izinkan kamera + lokasi di browser; harus lewat localhost).
+Clock-in (izinkan kamera + lokasi di browser).
 Lihat hasilnya: login sebagai HR/admin -> menu Absensi.
 
 Tekan Ctrl+C untuk berhenti.
