@@ -20,6 +20,7 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -101,15 +102,43 @@ def call(method: str, path: str, body=None, token: str | None = None):
             return e.code, raw.decode(errors="replace")
 
 
+def port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def check_ports(skip_frontend: bool) -> None:
+    """Hentikan lebih awal bila port dipakai program lain (bukan backend demo ini)."""
+    busy = [p for p in ((8000,) if skip_frontend else (8000, 5173)) if port_in_use(p)]
+    if not busy:
+        return
+    ports = " dan ".join(str(p) for p in busy)
+    hint = (
+        "netstat -ano | findstr :{port}   lalu   taskkill /PID <PID> /F"
+        if IS_WIN
+        else "lsof -i :{port}   lalu   kill <PID>"
+    )
+    sys.exit(
+        f"Port {ports} sedang dipakai program lain (mungkin backend/frontend AEOS lama).\n"
+        f"Tutup dulu program itu. Cara cari: {hint.format(port=busy[0])}"
+    )
+
+
 def wait_backend(proc: subprocess.Popen) -> None:
+    """Tunggu sampai backend KITA yang melayani /health/live."""
+    ok_since = None
     for _ in range(90):
         if proc.poll() is not None:
             sys.exit("Backend berhenti mendadak -- lihat pesan error di atas.")
         try:
             with urllib.request.urlopen("http://127.0.0.1:8000/health/live", timeout=2):
-                return
+                ok_since = ok_since or time.time()
+                if time.time() - ok_since >= 2:  # proses kita masih hidup 2 dtk setelah OK
+                    return
         except OSError:
-            time.sleep(1)
+            ok_since = None
+        time.sleep(1)
     sys.exit("Backend tidak merespons dalam 90 detik.")
 
 
@@ -117,7 +146,12 @@ def seed(admin_email: str, admin_password: str) -> None:
     log("Mengisi data contoh")
     status, body = call("POST", "/auth/login", {"email": admin_email, "password": admin_password})
     if status != 200:
-        sys.exit(f"Login admin gagal ({status}). Cek ADMIN_EMAIL/ADMIN_PASSWORD di .env.")
+        sys.exit(
+            f"Login admin gagal ({status}): {body}\n"
+            "Kemungkinan: database data/aeos.db lama dengan admin berbeda, atau ADMIN_EMAIL/"
+            "ADMIN_PASSWORD di .env tidak cocok. Hapus folder data/ lalu jalankan ulang untuk "
+            "mulai dari nol."
+        )
     token = body["access_token"]
 
     for role, (email, name) in DEMO_ACCOUNTS.items():
@@ -166,6 +200,7 @@ def main() -> int:
     if not npm and not skip_frontend:
         sys.exit("Node/npm tidak ditemukan. Pasang Node 20+ dari nodejs.org.")
 
+    check_ports(skip_frontend)
     ensure_backend_env()
     env_values = ensure_dotenv()
     admin_email = env_values.get("ADMIN_EMAIL", DEMO_ADMIN_EMAIL)
