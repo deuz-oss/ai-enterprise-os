@@ -3,6 +3,20 @@
 Panduan setup lingkungan pengembangan. Prasyarat: Python 3.12+ dan Node 20+.
 Docker hanya diperlukan jika ingin memakai PostgreSQL + MinIO.
 
+## Demo lokal sekali jalan
+
+Untuk mencoba aplikasi cepat (backend + frontend + data contoh), dari root repo:
+
+```bash
+python scripts/demo_local.py
+```
+
+Skrip memasang dependensi (pertama kali), membuat `.env` demo, menjalankan
+backend (:8000) dan frontend (:5173), lalu mengisi akun admin, HR, dan satu
+karyawan yang siap absen. Kredensial dicetak di terminal. Buka
+http://localhost:5173 (kamera dan GPS browser hanya aktif lewat `localhost`).
+Hentikan dengan Ctrl+C.
+
 ## Mode lokal (tanpa Docker)
 
 1. Buka folder proyek ini di VS Code.
