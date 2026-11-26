@@ -7,7 +7,7 @@ Jalankan dari root repo (Windows / macOS / Linux):
 Prasyarat: Python 3.12+ dan Node 20+. Skrip ini:
   1. membuat backend/.venv + memasang dependensi terkunci (sekali saja),
   2. membuat .env demo bila belum ada (SECRET_KEY acak, admin demo),
-  3. menjalankan backend (:8000) dan frontend (:5173),
+  3. menjalankan backend (:8000) dan frontend (:5173); port otomatis bergeser bila terpakai,
   4. mengisi akun admin, HR, dan satu karyawan demo yang siap absen.
 
 Data tersimpan di folder data/ (SQLite, tidak masuk git). Hentikan dengan Ctrl+C.
@@ -31,7 +31,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
-API = "http://127.0.0.1:8000/api/v1"
+BACKEND_PORT = 8000  # diganti otomatis bila terpakai
+FRONTEND_PORT = 5173
+API = f"http://127.0.0.1:{BACKEND_PORT}/api/v1"
 IS_WIN = os.name == "nt"
 VENV_PY = BACKEND / ".venv" / ("Scripts/python.exe" if IS_WIN else "bin/python")
 
@@ -108,21 +110,18 @@ def port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def check_ports(skip_frontend: bool) -> None:
-    """Hentikan lebih awal bila port dipakai program lain (bukan backend demo ini)."""
-    busy = [p for p in ((8000,) if skip_frontend else (8000, 5173)) if port_in_use(p)]
-    if not busy:
-        return
-    ports = " dan ".join(str(p) for p in busy)
-    hint = (
-        "netstat -ano | findstr :{port}   lalu   taskkill /PID <PID> /F"
-        if IS_WIN
-        else "lsof -i :{port}   lalu   kill <PID>"
-    )
-    sys.exit(
-        f"Port {ports} sedang dipakai program lain (mungkin backend/frontend AEOS lama).\n"
-        f"Tutup dulu program itu. Cara cari: {hint.format(port=busy[0])}"
-    )
+def pick_free_port(start: int) -> int:
+    """Port kosong pertama mulai dari `start` (cek bind, bukan hanya connect)."""
+    for port in range(start, start + 50):
+        if port_in_use(port):
+            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    sys.exit(f"Tidak ada port kosong di sekitar {start}.")
 
 
 def wait_backend(proc: subprocess.Popen) -> None:
@@ -132,7 +131,7 @@ def wait_backend(proc: subprocess.Popen) -> None:
         if proc.poll() is not None:
             sys.exit("Backend berhenti mendadak -- lihat pesan error di atas.")
         try:
-            with urllib.request.urlopen("http://127.0.0.1:8000/health/live", timeout=2):
+            with urllib.request.urlopen(f"http://127.0.0.1:{BACKEND_PORT}/health/live", timeout=2):
                 ok_since = ok_since or time.time()
                 if time.time() - ok_since >= 2:  # proses kita masih hidup 2 dtk setelah OK
                     return
@@ -200,7 +199,12 @@ def main() -> int:
     if not npm and not skip_frontend:
         sys.exit("Node/npm tidak ditemukan. Pasang Node 20+ dari nodejs.org.")
 
-    check_ports(skip_frontend)
+    global BACKEND_PORT, FRONTEND_PORT, API
+    BACKEND_PORT = pick_free_port(8000)
+    FRONTEND_PORT = pick_free_port(5173)
+    API = f"http://127.0.0.1:{BACKEND_PORT}/api/v1"
+    if BACKEND_PORT != 8000:
+        print(f"Port 8000 terpakai program lain -> backend demo memakai port {BACKEND_PORT}")
     ensure_backend_env()
     env_values = ensure_dotenv()
     admin_email = env_values.get("ADMIN_EMAIL", DEMO_ADMIN_EMAIL)
@@ -214,7 +218,7 @@ def main() -> int:
     try:
         log("Menjalankan backend")
         backend = subprocess.Popen(
-            [str(VENV_PY), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+            [str(VENV_PY), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
             cwd=BACKEND,
         )
         procs.append(backend)
@@ -223,12 +227,19 @@ def main() -> int:
 
         if not skip_frontend:
             log("Menjalankan frontend")
-            procs.append(subprocess.Popen([npm, "run", "dev", "--", "--host", "127.0.0.1"], cwd=FRONTEND))
+            procs.append(
+                subprocess.Popen(
+                    [npm, "run", "dev", "--", "--host", "127.0.0.1",
+                     "--port", str(FRONTEND_PORT), "--strictPort"],
+                    cwd=FRONTEND,
+                    env={**os.environ, "AEOS_BACKEND_URL": f"http://127.0.0.1:{BACKEND_PORT}"},
+                )
+            )
 
         print(
             f"""
 ==================== DEMO SIAP ====================
-Buka di browser:  http://localhost:5173
+Buka di browser:  http://localhost:{FRONTEND_PORT}
 
 Login admin    : {admin_email} / {admin_password}
 Login HR       : {DEMO_ACCOUNTS['hr'][0]} / {DEMO_PASSWORD}
