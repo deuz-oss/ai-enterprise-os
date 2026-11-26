@@ -141,6 +141,32 @@ def wait_backend(proc: subprocess.Popen) -> None:
     sys.exit("Backend tidak merespons dalam 90 detik.")
 
 
+def verify_via_frontend() -> str:
+    """Coba login karyawan demo LEWAT frontend, persis seperti yang dilakukan browser."""
+    base = f"http://127.0.0.1:{FRONTEND_PORT}"
+    for _ in range(40):
+        try:
+            with urllib.request.urlopen(base + "/", timeout=2):
+                break
+        except OSError:
+            time.sleep(1)
+    else:
+        return "GAGAL: frontend tidak merespons dalam 40 detik"
+    body = json.dumps(
+        {"email": DEMO_ACCOUNTS["karyawan"][0], "password": DEMO_PASSWORD}
+    ).encode()
+    req = urllib.request.Request(
+        base + "/api/v1/auth/login", data=body, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20):
+            return "OK: login karyawan lewat frontend berhasil"
+    except urllib.error.HTTPError as e:
+        return f"GAGAL: login lewat frontend dibalas {e.code}: {e.read().decode(errors='replace')[:200]}"
+    except OSError as e:
+        return f"GAGAL: {e}"
+
+
 def seed(admin_email: str, admin_password: str) -> None:
     log("Mengisi data contoh")
     status, body = call("POST", "/auth/login", {"email": admin_email, "password": admin_password})
@@ -236,10 +262,12 @@ def main() -> int:
                 )
             )
 
+        check = "(frontend dilewati)" if skip_frontend else verify_via_frontend()
         print(
             f"""
 ==================== DEMO SIAP ====================
-Buka di browser:  http://localhost:{FRONTEND_PORT}
+Buka di browser:  http://localhost:{FRONTEND_PORT}   (backend: port {BACKEND_PORT})
+Cek otomatis     : {check}
 
 Login admin    : {admin_email} / {admin_password}
 Login HR       : {DEMO_ACCOUNTS['hr'][0]} / {DEMO_PASSWORD}
