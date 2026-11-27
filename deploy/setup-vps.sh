@@ -103,18 +103,31 @@ if [[ $GPU -eq 1 ]] && ! command -v nvidia-ctk >/dev/null 2>&1; then
 fi
 
 log "2/5 Firewall (ufw)"
-apt-get install -y ufw >/dev/null
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-if [[ $VOICE -eq 1 ]]; then
-  # Harus sama dengan deploy/livekit.yaml & docker-compose.prod.yml.
-  ufw allow 7881/tcp
-  ufw allow 50000:50100/udp
-  ufw allow 3478/udp
-  ufw allow 40000:40100/udp
+# SKIP_FIREWALL=1 melewati langkah ini (mis. provider mengatur firewall sendiri).
+if [[ "${SKIP_FIREWALL:-}" == "1" ]]; then
+  echo "SKIP_FIREWALL=1 -- firewall server dilewati (atur di panel provider)."
+else
+  apt-get install -y ufw >/dev/null
+  fw() { ufw "$@" || echo "PERINGATAN: 'ufw $*' gagal -- lanjut."; }
+  # Jangan mengunci diri: buka port SSH yang SEBENARNYA dipakai sshd dan sesi ini
+  # (bukan hanya 22 -- provider sering memakai port lain).
+  ssh_ports="22"
+  if command -v sshd >/dev/null 2>&1; then
+    ssh_ports+=" $(sshd -T 2>/dev/null | awk '/^port /{print $2}')"
+  fi
+  [[ -n "${SSH_CONNECTION:-}" ]] && ssh_ports+=" $(awk '{print $4}' <<<"$SSH_CONNECTION")"
+  for p in $(tr ' ' '\n' <<<"$ssh_ports" | sort -un); do fw allow "$p/tcp"; done
+  fw allow 80/tcp
+  fw allow 443/tcp
+  if [[ $VOICE -eq 1 ]]; then
+    # Harus sama dengan deploy/livekit.yaml & docker-compose.prod.yml.
+    fw allow 7881/tcp
+    fw allow 50000:50100/udp
+    fw allow 3478/udp
+    fw allow 40000:40100/udp
+  fi
+  fw --force enable
 fi
-ufw --force enable
 # Catatan: Docker memublikasikan port lewat iptables sendiri; firewall di
 # panel provider cloud (security group) juga harus membuka port yang sama.
 
