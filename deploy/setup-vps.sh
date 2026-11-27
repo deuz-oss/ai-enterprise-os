@@ -27,20 +27,49 @@ die() { printf '\033[1;31mGAGAL: %s\033[0m\n' "$*" >&2; exit 1; }
 . /etc/os-release
 [[ "${ID:-}" == "ubuntu" ]] || die "skrip ini untuk Ubuntu (terdeteksi: ${ID:-?})"
 
-read -rp "Domain aplikasi (mis. aeos.perusahaan.co.id): " DOMAIN
-[[ -n "$DOMAIN" ]] || die "domain wajib diisi"
-read -rp "Email admin pertama: " ADMIN_EMAIL
-[[ -n "$ADMIN_EMAIL" ]] || die "email admin wajib diisi"
-read -rp "Aktifkan interview suara AI (LiveKit + STT)? [y/N]: " VOICE
-VOICE=$([[ "${VOICE,,}" == "y" ]] && echo 1 || echo 0)
+# Mode tanpa pertanyaan: isi lewat environment, mis.
+#   sudo DOMAIN=aeos.contoh.co.id VOICE=y GPU_CHOICE=y bash setup-vps.sh
+# Variabel: DOMAIN (wajib), ADMIN_EMAIL (default admin@DOMAIN), VOICE=y|n,
+# GPU_CHOICE=y|n (default: otomatis bila nvidia-smi ada), ASSUME_YES=1 (lewati konfirmasi).
+if [[ -z "${DOMAIN:-}" ]]; then
+  read -rp "Domain aplikasi (mis. aeos.perusahaan.co.id): " DOMAIN
+fi
+[[ -n "${DOMAIN:-}" ]] || die "domain wajib diisi"
+if [[ -z "${ADMIN_EMAIL:-}" ]]; then
+  if [[ -t 0 ]]; then
+    read -rp "Email admin pertama: " ADMIN_EMAIL
+  else
+    ADMIN_EMAIL="admin@${DOMAIN}"
+  fi
+fi
+[[ -n "${ADMIN_EMAIL:-}" ]] || die "email admin wajib diisi"
+if [[ -z "${VOICE:-}" ]]; then
+  read -rp "Aktifkan interview suara AI (LiveKit + STT)? [y/N]: " VOICE
+fi
+VOICE=$([[ "${VOICE,,}" == "y" || "${VOICE:-}" == "1" ]] && echo 1 || echo 0)
 GPU=0
 if [[ $VOICE -eq 1 ]]; then
-  read -rp "Server punya GPU NVIDIA + NVIDIA Container Toolkit? [y/N]: " G
-  GPU=$([[ "${G,,}" == "y" ]] && echo 1 || echo 0)
+  G="${GPU_CHOICE:-}"
+  if [[ -z "$G" ]]; then
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+      G=y; echo "GPU NVIDIA terdeteksi -- memakai konfigurasi GPU."
+    elif [[ -t 0 ]]; then
+      read -rp "Server punya GPU NVIDIA + driver? [y/N]: " G
+    else
+      G=n
+    fi
+  fi
+  GPU=$([[ "${G,,}" == "y" || "$G" == "1" ]] && echo 1 || echo 0)
+  if [[ $GPU -eq 1 ]] && ! nvidia-smi -L >/dev/null 2>&1; then
+    echo "PERINGATAN: driver NVIDIA tidak terdeteksi (nvidia-smi gagal) -- lanjut tanpa GPU (STT di CPU)."
+    GPU=0
+  fi
   cpus=$(nproc); mem_gb=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 / 1024 ))
   if (( cpus < 4 || mem_gb < 7 )); then
     printf 'PERINGATAN: %s vCPU / %s GB RAM. Interview suara di CPU butuh >= 4 vCPU / 8 GB.\n' "$cpus" "$mem_gb"
-    read -rp "Tetap lanjut? [y/N]: " C; [[ "${C,,}" == "y" ]] || die "dibatalkan"
+    if [[ "${ASSUME_YES:-}" != "1" ]]; then
+      read -rp "Tetap lanjut? [y/N]: " C; [[ "${C,,}" == "y" ]] || die "dibatalkan"
+    fi
   fi
 fi
 
@@ -59,6 +88,19 @@ else
   echo "Docker sudah terpasang: $(docker --version)"
 fi
 command -v git >/dev/null 2>&1 || apt-get install -y git
+
+if [[ $GPU -eq 1 ]] && ! command -v nvidia-ctk >/dev/null 2>&1; then
+  log "1b/5 NVIDIA Container Toolkit"
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+    | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+    > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  apt-get update -y
+  apt-get install -y nvidia-container-toolkit
+  nvidia-ctk runtime configure --runtime=docker
+  systemctl restart docker
+fi
 
 log "2/5 Firewall (ufw)"
 apt-get install -y ufw >/dev/null
